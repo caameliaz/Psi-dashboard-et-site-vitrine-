@@ -1,0 +1,156 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── CATÉGORIE ───────────────────────────────────────
+model Category {
+  id        String    @id @default(cuid())
+  name      String    @unique
+  products  Product[]
+  createdAt DateTime  @default(now())
+}
+
+// ─── PRODUIT ─────────────────────────────────────────
+model Product {
+  id         String      @id @default(cuid())
+  reference  String      @unique  // ex: "80/80"
+  width      Int                  // largeur en mm
+  length     Int                  // longueur en m
+  usage      String               // ex: "Imprimantes thermiques, commerces"
+  price      Float                // prix unitaire
+  photo      String?              // URL image
+  active     Boolean     @default(true)
+  category   Category    @relation(fields: [categoryId], references: [id])
+  categoryId String
+  orderItems OrderItem[]
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+}
+
+// ─── CLIENT ──────────────────────────────────────────
+model Client {
+  id          String    @id @default(cuid())
+  name        String
+  company     String?
+  email       String?
+  phone       String
+  wilaya      String
+  address     String?
+  nif         String?   // facultatif, rempli après contact
+  rc          String?   // facultatif, rempli après contact
+  orders      Order[]
+  quotes      Quote[]
+  contacts    ContactRequest[]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+// ─── COMMANDE ────────────────────────────────────────
+model Order {
+  id          String      @id @default(cuid())
+  client      Client      @relation(fields: [clientId], references: [id])
+  clientId    String
+  items       OrderItem[]
+  status      OrderStatus @default(EN_ATTENTE)
+  notes       String?     // notes internes admin
+  contactedAt DateTime?   // date où on a appelé le client
+  validatedAt DateTime?
+  deliveredAt DateTime?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+}
+
+model OrderItem {
+  id        String  @id @default(cuid())
+  order     Order   @relation(fields: [orderId], references: [id])
+  orderId   String
+  product   Product @relation(fields: [productId], references: [id])
+  productId String
+  quantity  Int
+  unitPrice Float   // prix au moment de la commande (snapshot)
+}
+
+enum OrderStatus {
+  EN_ATTENTE
+  CONTACTE
+  VALIDE
+  ANNULE
+  LIVRE
+}
+
+// ─── DEVIS ───────────────────────────────────────────
+model Quote {
+  id          String      @id @default(cuid())
+  client      Client      @relation(fields: [clientId], references: [id])
+  clientId    String
+  width       Int?        // dimensions voulues
+  length      Int?
+  quantity    Int?
+  message     String      // description libre
+  status      QuoteStatus @default(EN_ATTENTE)
+  notes       String?     // notes internes admin
+  contactedAt DateTime?
+  validatedAt DateTime?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+}
+
+enum QuoteStatus {
+  EN_ATTENTE
+  CONTACTE
+  VALIDE
+  ANNULE
+}
+
+// ─── CONTACT / RDV ───────────────────────────────────
+model ContactRequest {
+  id        String        @id @default(cuid())
+  client    Client        @relation(fields: [clientId], references: [id])
+  clientId  String
+  type      ContactType
+  message   String?
+  status    ContactStatus @default(EN_ATTENTE)
+  notes     String?
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+}
+
+enum ContactType {
+  RDV
+  CALLBACK
+  INFO
+}
+
+enum ContactStatus {
+  EN_ATTENTE
+  TRAITE
+}
+
+// ─── CONTENU SITE ────────────────────────────────────
+model SiteContent {
+  id        String   @id @default(cuid())
+  key       String   @unique  // ex: "hero_title", "about_text"
+  value     String
+  updatedAt DateTime @updatedAt
+}
+
+// ─── UTILISATEUR ADMIN ───────────────────────────────
+model User {
+  id        String   @id @default(cuid())
+  name      String
+  email     String   @unique
+  password  String   // hashé avec bcrypt
+  role      Role     @default(EMPLOYEE)
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+}
+
+enum Role {
+  ADMIN
+  EMPLOYEE
+}
