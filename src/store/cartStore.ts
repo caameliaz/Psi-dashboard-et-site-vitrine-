@@ -4,7 +4,7 @@ export interface CartItem {
   productId: string;
   quantity: number;
   reference: string;
-  price: number;
+  unitPrice: number;
 }
 
 interface CartStore {
@@ -56,6 +56,6 @@ export const useCartStore = create<CartStore>((set, get) => ({
 
   getTotalPrice: () => {
     const state = get();
-    return state.items.reduce((sum, item) => sum + item.price * item.quantity, 0);
+    return state.items.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
   },
 }));

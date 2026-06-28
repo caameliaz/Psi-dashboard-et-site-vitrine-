@@ -1,5 +1,5 @@
-import { SessionProvider } from 'next-auth/react';
 import { Sidebar } from '@/components/Sidebar';
+import { RoleProvider } from '@/lib/role-context';
 
 export default function AdminLayout({
   children,
@@ -7,11 +7,17 @@ export default function AdminLayout({
   children: React.ReactNode;
 }) {
   return (
-    <SessionProvider>
-      <div className="flex min-h-screen">
+    <RoleProvider>
+      <div className="flex min-h-screen" style={{ background: '#F5F8FC' }}>
         <Sidebar />
-        <main className="flex-1 bg-zinc-50 p-8">{children}</main>
+        <div className="flex-1 flex flex-col min-w-0">
+          <header
+            className="border-b border-[#E4EBF5]"
+            style={{ background: '#FAFCFF', height: 80, minHeight: 80 }}
+          />
+          <main className="flex-1 p-8">{children}</main>
+        </div>
       </div>
-    </SessionProvider>
+    </RoleProvider>
   );
 }

@@ -4,6 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useCartStore } from '@/store/cartStore';
 import { useRouter } from 'next/navigation';
+import { inputClass, labelClass } from '@/lib/utils';
 
 export default function CheckoutPage() {
   const router = useRouter();
@@ -34,9 +35,6 @@ export default function CheckoutPage() {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
-  const inputClass =
-    'w-full px-4 py-3 border border-[#ABBED1] rounded-xl text-[15px] text-[#263238] placeholder-[#89939E] focus:outline-none focus:ring-2 focus:ring-[#4CAF4F]/40 focus:border-[#4CAF4F] transition-colors bg-white';
-  const labelClass = 'block text-[13px] font-semibold text-[#4D4D4D] mb-1.5 uppercase tracking-wide';
 
   return (
     <div className="min-h-screen bg-[#F5F7FA] py-12 px-6">
@@ -126,7 +124,7 @@ export default function CheckoutPage() {
                       <p className="text-[14px] font-semibold text-[#263238]">Réf. {item.reference}</p>
                       <p className="text-[12px] text-[#89939E]">× {item.quantity}</p>
                     </div>
-                    <p className="text-[14px] font-bold text-[#263238]">{item.price * item.quantity} DA</p>
+                    <p className="text-[14px] font-bold text-[#263238]">{item.unitPrice * item.quantity} DA</p>
                   </div>
                 ))}
               </div>

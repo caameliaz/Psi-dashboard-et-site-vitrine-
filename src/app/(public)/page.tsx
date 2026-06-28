@@ -29,7 +29,7 @@ export default function Home() {
             </div>
 
             {/* Boutons */}
-            <div className="flex flex-row gap-4 mt-4">
+            <div className="flex flex-row flex-wrap gap-4 mt-4">
               <a
                 href="#products"
                 className="flex items-center gap-2 bg-[#4CAF4F] text-white text-[15px] font-semibold px-8 py-4 rounded shadow-[0px_4px_14px_rgba(76,175,79,0.5)] hover:bg-[#43A047] transition-all"
@@ -39,6 +39,12 @@ export default function Home() {
                   <path d="M3 8h10M9 4l4 4-4 4" stroke="white" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
                 </svg>
               </a>
+              <Link
+                href="/checkout"
+                className="flex items-center gap-2 bg-white text-[#4CAF4F] text-[15px] font-semibold px-8 py-4 rounded hover:bg-white/90 transition-all"
+              >
+                Passer une commande
+              </Link>
               <Link
                 href="/quote"
                 className="flex items-center gap-2 border-2 border-white/70 text-white text-[15px] font-semibold px-8 py-4 rounded hover:bg-white hover:text-[#4CAF4F] transition-all"

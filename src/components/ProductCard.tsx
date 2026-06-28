@@ -1,7 +1,7 @@
 'use client';
 
 import { useCartStore } from '@/store/cartStore';
-import type { Product } from '@/lib/mock-data';
+import type { Product } from '@/types';
 
 export function ProductCard({ product }: { product: Product }) {
   const addItem = useCartStore((s) => s.addItem);
@@ -34,7 +34,7 @@ export function ProductCard({ product }: { product: Product }) {
 
         {/* Bouton pleine largeur */}
         <button
-          onClick={() => addItem({ productId: product.id, quantity: 1, reference: product.reference, price: product.price })}
+          onClick={() => addItem({ productId: product.id, quantity: 1, reference: product.reference, unitPrice: product.price })}
           className="w-full h-9 bg-[#4CAF4F] text-white rounded flex items-center justify-center gap-1.5 hover:bg-[#43A047] transition-colors mt-auto"
         >
           <svg width="13" height="13" viewBox="0 0 13 13" fill="none">

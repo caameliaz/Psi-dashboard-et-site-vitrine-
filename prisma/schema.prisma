@@ -7,123 +7,193 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// ─── CATÉGORIE ───────────────────────────────────────
+// ─── CATÉGORIE ───────────────────────────────────────────────────────────────
 model Category {
   id        String    @id @default(cuid())
   name      String    @unique
+  order     Int       @default(0)
   products  Product[]
   createdAt DateTime  @default(now())
 }
 
-// ─── PRODUIT ─────────────────────────────────────────
+// ─── PRODUIT ─────────────────────────────────────────────────────────────────
 model Product {
-  id         String      @id @default(cuid())
-  reference  String      @unique  // ex: "80/80"
-  width      Int                  // largeur en mm
-  length     Int                  // longueur en m
-  usage      String               // ex: "Imprimantes thermiques, commerces"
-  price      Float                // prix unitaire
-  photo      String?              // URL image
-  active     Boolean     @default(true)
-  category   Category    @relation(fields: [categoryId], references: [id])
-  categoryId String
-  orderItems OrderItem[]
-  createdAt  DateTime    @default(now())
-  updatedAt  DateTime    @updatedAt
+  id           String               @id @default(cuid())
+  reference    String               @unique
+  width        Int                  // largeur en mm
+  length       Int                  // longueur en m
+  usage        String
+  price        Float
+  photo        String?
+  active       Boolean              @default(true)
+  category     Category             @relation(fields: [categoryId], references: [id])
+  categoryId   String
+  customFields ProductCustomField[]
+  orderItems   OrderItem[]
+  quoteItems   QuoteItem[]
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
 }
 
-// ─── CLIENT ──────────────────────────────────────────
+// Valeurs des champs custom pour chaque produit
+model ProductCustomField {
+  id           String          @id @default(cuid())
+  product      Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  productId    String
+  definition   ProductFieldDef @relation(fields: [definitionId], references: [id], onDelete: Cascade)
+  definitionId String
+  value        String
+
+  @@unique([productId, definitionId])
+}
+
+// Définition des champs custom (créés par l'admin depuis les paramètres)
+model ProductFieldDef {
+  id        String               @id @default(cuid())
+  label     String               // ex: "Grammage", "Diamètre mandrin"
+  type      FieldType            @default(TEXT)
+  required  Boolean              @default(false)
+  order     Int                  @default(0)
+  values    ProductCustomField[]
+  createdAt DateTime             @default(now())
+}
+
+enum FieldType {
+  TEXT
+  NUMBER
+  BOOLEAN
+}
+
+// ─── CLIENT ──────────────────────────────────────────────────────────────────
 model Client {
-  id          String    @id @default(cuid())
-  name        String
-  company     String?
-  email       String?
-  phone       String
-  wilaya      String
-  address     String?
-  nif         String?   // facultatif, rempli après contact
-  rc          String?   // facultatif, rempli après contact
-  orders      Order[]
-  quotes      Quote[]
-  contacts    ContactRequest[]
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  id        String           @id @default(cuid())
+  name      String
+  company   String?
+  email     String?
+  wilaya    String
+  address   String?
+  photo     String?
+  phones    ClientPhone[]
+  orders    Order[]
+  quotes    Quote[]
+  contacts  ContactRequest[]
+  notes     ClientNote[]
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
 }
 
-// ─── COMMANDE ────────────────────────────────────────
+// Numéros de téléphone (plusieurs par client, chacun avec un label)
+model ClientPhone {
+  id        String   @id @default(cuid())
+  client    Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  clientId  String
+  number    String
+  label     String   @default("Principal") // ex: "Secrétaire", "Directeur", "Mobile"
+  primary   Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+// Notes internes sur un client (visibles dans la fiche client)
+model ClientNote {
+  id        String   @id @default(cuid())
+  client    Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  clientId  String
+  author    User     @relation("ClientNoteAuthor", fields: [authorId], references: [id])
+  authorId  String
+  content   String
+  createdAt DateTime @default(now())
+}
+
+// ─── COMMANDE ────────────────────────────────────────────────────────────────
 model Order {
-  id          String      @id @default(cuid())
-  client      Client      @relation(fields: [clientId], references: [id])
-  clientId    String
-  items       OrderItem[]
-  status      OrderStatus @default(EN_ATTENTE)
-  notes       String?     // notes internes admin
-  contactedAt DateTime?   // date où on a appelé le client
-  validatedAt DateTime?
-  deliveredAt DateTime?
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
+  id            String         @id @default(cuid())
+  client        Client         @relation(fields: [clientId], references: [id])
+  clientId      String
+  items         OrderItem[]
+  status        RequestStatus  @default(EN_ATTENTE)
+  source        OrderSource    @default(SITE)
+  cancelReason  String?
+  notes         String?
+  createdBy     User?          @relation("OrderCreatedBy", fields: [createdById], references: [id])
+  createdById   String?        // null si commande du site public
+  notifications Notification[]
+  auditLogs     AuditLog[]     @relation("AuditOrder")
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
 }
 
 model OrderItem {
   id        String  @id @default(cuid())
-  order     Order   @relation(fields: [orderId], references: [id])
+  order     Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
   orderId   String
   product   Product @relation(fields: [productId], references: [id])
   productId String
   quantity  Int
-  unitPrice Float   // prix au moment de la commande (snapshot)
+  unitPrice Float   // snapshot du prix au moment de la commande
 }
 
-enum OrderStatus {
-  EN_ATTENTE
-  CONTACTE
-  VALIDE
-  ANNULE
-  LIVRE
+enum OrderSource {
+  SITE
+  WHATSAPP
+  TELEPHONE
+  AUTRE
 }
 
-// ─── DEVIS ───────────────────────────────────────────
+// ─── DEVIS ───────────────────────────────────────────────────────────────────
 model Quote {
-  id          String      @id @default(cuid())
-  client      Client      @relation(fields: [clientId], references: [id])
-  clientId    String
-  width       Int?        // dimensions voulues
-  length      Int?
-  quantity    Int?
-  message     String      // description libre
-  status      QuoteStatus @default(EN_ATTENTE)
-  notes       String?     // notes internes admin
-  contactedAt DateTime?
-  validatedAt DateTime?
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
+  id               String         @id @default(cuid())
+  client           Client         @relation(fields: [clientId], references: [id])
+  clientId         String
+  items            QuoteItem[]
+  message          String         // description libre du client
+  status           RequestStatus  @default(EN_ATTENTE)
+  source           OrderSource    @default(SITE)
+  cancelReason     String?
+  // Champs admin (remplis après discussion avec le client)
+  proposedPrice    Float?
+  deliveryDelay    String?        // ex: "5 à 7 jours"
+  paymentTerms     String?        // ex: "50% à la commande"
+  adminRemarks     String?
+  notes            String?        // notes internes
+  convertedOrderId String?        // id de la commande créée si converti
+  createdBy        User?          @relation("QuoteCreatedBy", fields: [createdById], references: [id])
+  createdById      String?
+  notifications    Notification[]
+  auditLogs        AuditLog[]     @relation("AuditQuote")
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
 }
 
-enum QuoteStatus {
+model QuoteItem {
+  id          String   @id @default(cuid())
+  quote       Quote    @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  quoteId     String
+  product     Product? @relation(fields: [productId], references: [id])
+  productId   String?
+  description String?  // si produit hors catalogue ou format spécial
+  width       Int?
+  length      Int?
+  quantity    Int
+}
+
+enum RequestStatus {
   EN_ATTENTE
   CONTACTE
   VALIDE
   ANNULE
 }
 
-// ─── CONTACT / RDV ───────────────────────────────────
+// ─── CONTACT ─────────────────────────────────────────────────────────────────
+// Les messages de contact n'ont pas de cancelReason — on les traite ou pas, pas d'annulation
 model ContactRequest {
   id        String        @id @default(cuid())
   client    Client        @relation(fields: [clientId], references: [id])
   clientId  String
-  type      ContactType
-  message   String?
+  message   String
   status    ContactStatus @default(EN_ATTENTE)
   notes     String?
   createdAt DateTime      @default(now())
   updatedAt DateTime      @updatedAt
-}
-
-enum ContactType {
-  RDV
-  CALLBACK
-  INFO
 }
 
 enum ContactStatus {
@@ -131,26 +201,125 @@ enum ContactStatus {
   TRAITE
 }
 
-// ─── CONTENU SITE ────────────────────────────────────
+// ─── STATUTS PERSONNALISÉS ───────────────────────────────────────────────────
+model CustomStatus {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  color     String   // ex: "#F59E0B"
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+}
+
+// ─── TEMPLATES MESSAGES ──────────────────────────────────────────────────────
+model MessageTemplate {
+  id        String           @id @default(cuid())
+  title     String
+  content   String           // avec variables : [Nom], [Référence], [Wilaya]
+  category  TemplateCategory @default(AUTRE)
+  order     Int              @default(0)
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+}
+
+enum TemplateCategory {
+  CONFIRMATION
+  RELANCE
+  LIVRAISON
+  DEVIS
+  AUTRE
+}
+
+// ─── CONTENU SITE ────────────────────────────────────────────────────────────
 model SiteContent {
   id        String   @id @default(cuid())
-  key       String   @unique  // ex: "hero_title", "about_text"
+  key       String   @unique
   value     String
   updatedAt DateTime @updatedAt
 }
 
-// ─── UTILISATEUR ADMIN ───────────────────────────────
+// ─── UTILISATEUR ADMIN ───────────────────────────────────────────────────────
 model User {
-  id        String   @id @default(cuid())
-  name      String
-  email     String   @unique
-  password  String   // hashé avec bcrypt
-  role      Role     @default(EMPLOYEE)
-  active    Boolean  @default(true)
-  createdAt DateTime @default(now())
+  id              String             @id @default(cuid())
+  name            String
+  email           String             @unique
+  password        String
+  role            Role               @default(EMPLOYEE)
+  active          Boolean            @default(true)
+  phone           String?
+  photo           String?
+  sessionVersion  Int                @default(0) // incrémenté pour invalider tous les cookies
+  ordersCreated   Order[]            @relation("OrderCreatedBy")
+  quotesCreated   Quote[]            @relation("QuoteCreatedBy")
+  clientNotes     ClientNote[]       @relation("ClientNoteAuthor")
+  notifications   NotificationRead[]
+  auditLogs       AuditLog[]
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
 }
 
 enum Role {
   ADMIN
   EMPLOYEE
+}
+
+// ─── NOTIFICATIONS ───────────────────────────────────────────────────────────
+model Notification {
+  id        String             @id @default(cuid())
+  type      NotifType
+  title     String
+  message   String
+  orderId   String?
+  quoteId   String?
+  order     Order?             @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  quote     Quote?             @relation(fields: [quoteId], references: [id], onDelete: SetNull)
+  reads     NotificationRead[]
+  createdAt DateTime           @default(now())
+}
+
+// Suivi de lecture par utilisateur (chacun a son propre état lu/non lu)
+model NotificationRead {
+  id             String       @id @default(cuid())
+  notification   Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+  notificationId String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId         String
+  read           Boolean      @default(false)
+  readAt         DateTime?
+
+  @@unique([notificationId, userId])
+}
+
+enum NotifType {
+  SITE_COMMANDE // bleu — nouvelle commande site public
+  SITE_DEVIS    // bleu — nouveau devis site public
+  ACTION_PERSO  // gris — action de l'utilisateur lui-même
+  ACTION_AUTRE  // orange — action d'un autre utilisateur (admin only)
+  ANNULATION    // rouge — annulation proposée (admin only)
+}
+
+// ─── HISTORIQUE DES ACTIONS ──────────────────────────────────────────────────
+model AuditLog {
+  id        String      @id @default(cuid())
+  user      User        @relation(fields: [userId], references: [id])
+  userId    String
+  action    String      // ex: "Commande validée", "Produit modifié"
+  entity    AuditEntity
+  entityId  String?     // id de l'entité concernée
+  detail    String?
+  orderId   String?
+  quoteId   String?
+  order     Order?      @relation("AuditOrder", fields: [orderId], references: [id], onDelete: SetNull)
+  quote     Quote?      @relation("AuditQuote", fields: [quoteId], references: [id], onDelete: SetNull)
+  createdAt DateTime    @default(now())
+}
+
+enum AuditEntity {
+  COMMANDE
+  DEVIS
+  PRODUIT
+  CLIENT
+  UTILISATEUR
+  CONTENU
+  TEMPLATE
+  STATUT
 }

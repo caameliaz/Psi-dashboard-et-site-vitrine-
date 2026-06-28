@@ -62,7 +62,7 @@ export function Footer() {
                   <circle cx="12" cy="10" r="3" stroke="#4CAF4F" strokeWidth="1.8"/>
                 </svg>
               </div>
-              <span className="text-[13px] text-[#89939E] leading-relaxed">Centre El Qods, Niveau M1<br/>Chéraga, Alger</span>
+              <span className="text-[13px] text-[#89939E] leading-relaxed">Centre El Qods, Niveau M1<br/>Chéraga, Alger — Wilaya 16</span>
             </li>
             <li className="flex items-center gap-3">
               <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center shrink-0">
@@ -75,14 +75,28 @@ export function Footer() {
                 contact@psi-algerie.com
               </a>
             </li>
+            <li className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center shrink-0">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                  <path d="M12 2C8 2 5 5 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-4-3-7-7-7z" stroke="#4CAF4F" strokeWidth="1.8"/>
+                  <circle cx="12" cy="9" r="2.5" stroke="#4CAF4F" strokeWidth="1.8"/>
+                </svg>
+              </div>
+              <span className="text-[13px] text-[#89939E]">Dim – Jeu : 8h00 – 17h00</span>
+            </li>
           </ul>
         </div>
       </div>
 
       <div className="border-t border-white/10">
-        <p className="text-center text-[13px] text-[#89939E]/60 py-5 px-6">
-          © 2026 PSI — Paper Solutions Industry. Tous droits réservés.
-        </p>
+        <div className="max-w-[1280px] mx-auto px-6 md:px-12 py-5 flex flex-col sm:flex-row items-center justify-between gap-2">
+          <p className="text-[13px] text-[#89939E]/60">
+            © 2026 PSI — Paper Solutions Industry. Tous droits réservés.
+          </p>
+          <div className="flex items-center gap-4">
+            <span className="text-[12px] text-[#89939E]/40">RC Alger · NIF · Registre du commerce</span>
+          </div>
+        </div>
       </div>
     </footer>
   );

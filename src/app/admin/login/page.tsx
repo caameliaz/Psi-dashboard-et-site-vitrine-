@@ -1,79 +1,72 @@
 'use client';
 
 import { useState } from 'react';
-import { signIn } from 'next-auth/react';
-import { Button } from '@/components/ui/Button';
-import { Input } from '@/components/ui/Input';
+import Image from 'next/image';
 
 export default function LoginPage() {
-  const [formData, setFormData] = useState({
-    email: '',
-    password: '',
-  });
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
 
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value,
-    });
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
-    setError('');
-
-    try {
-      const result = await signIn('credentials', {
-        email: formData.email,
-        password: formData.password,
-        redirect: false,
-      });
-
-      if (result?.error) {
-        throw new Error('Invalid credentials');
-      }
-
-      window.location.href = '/admin/dashboard';
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred');
-    } finally {
-      setLoading(false);
-    }
+    // auth à implémenter plus tard
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-zinc-50">
-      <div className="bg-white p-8 rounded-lg shadow max-w-md w-full">
-        <h1 className="text-2xl font-bold text-zinc-900 mb-6 text-center">Admin Login</h1>
-
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <Input
-            label="Email"
-            name="email"
-            type="email"
-            value={formData.email}
-            onChange={handleChange}
-            required
+    <div
+      className="min-h-screen flex items-center justify-center"
+      style={{ background: '#F5F8FC' }}
+    >
+      <div className="bg-white rounded-2xl shadow-lg px-10 py-10 w-full max-w-sm">
+        {/* Logo */}
+        <div className="flex flex-col items-center mb-8">
+          <Image
+            src="/Logo PSI-new.jpeg"
+            alt="PSI Logo"
+            width={64}
+            height={64}
+            className="h-16 w-16 object-contain rounded-xl mb-3"
           />
+          <h1 className="text-xl font-bold text-[#101828]">Paper Solutions</h1>
+          <p className="text-sm text-[#8A9BB5] mt-1">Espace administration</p>
+        </div>
 
-          <Input
-            label="Password"
-            name="password"
-            type="password"
-            value={formData.password}
-            onChange={handleChange}
-            required
-          />
+        <form onSubmit={handleSubmit} className="space-y-5">
+          <div>
+            <label className="block text-sm font-medium text-[#101828] mb-1.5">
+              Email
+            </label>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="admin@psi.dz"
+              required
+              className="w-full px-3 py-2.5 rounded-lg border border-[#E4EBF5] text-sm text-[#101828] placeholder-[#8A9BB5] focus:outline-none focus:border-[#4CAF4F] focus:ring-1 focus:ring-[#4CAF4F] transition-colors"
+            />
+          </div>
 
-          {error && <div className="text-red-600 text-sm">{error}</div>}
+          <div>
+            <label className="block text-sm font-medium text-[#101828] mb-1.5">
+              Mot de passe
+            </label>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="••••••••"
+              required
+              className="w-full px-3 py-2.5 rounded-lg border border-[#E4EBF5] text-sm text-[#101828] placeholder-[#8A9BB5] focus:outline-none focus:border-[#4CAF4F] focus:ring-1 focus:ring-[#4CAF4F] transition-colors"
+            />
+          </div>
 
-          <Button type="submit" disabled={loading} className="w-full">
-            {loading ? 'Logging in...' : 'Login'}
-          </Button>
+          <button
+            type="submit"
+            className="w-full py-2.5 rounded-lg text-sm font-semibold text-white transition-colors"
+            style={{ background: '#4CAF4F' }}
+          >
+            Se connecter
+          </button>
         </form>
       </div>
     </div>

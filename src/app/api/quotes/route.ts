@@ -8,37 +8,44 @@ export async function GET() {
 
   try {
     const quotes = await prisma.quote.findMany({
-      include: { client: true },
+      include: {
+        client: { include: { phones: true } },
+        items: { include: { product: true } },
+        createdBy: { select: { id: true, name: true } },
+      },
       orderBy: { createdAt: 'desc' },
     });
-
     return NextResponse.json(quotes);
   } catch (error) {
     console.error('Error fetching quotes:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch quotes' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Failed to fetch quotes' }, { status: 500 });
   }
 }
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
+    const session = await auth();
 
-    // Create or find client
-    let client = await prisma.client.findFirst({
-      where: { email: body.email },
-    });
+    const primaryPhone: string = body.phone ?? '';
+    let client = primaryPhone
+      ? await prisma.client.findFirst({
+          where: { phones: { some: { number: primaryPhone } } },
+        })
+      : null;
 
     if (!client) {
       client = await prisma.client.create({
         data: {
           name: body.name,
-          email: body.email,
-          phone: body.phone,
-          company: body.company,
-          wilaya: body.wilaya || 'Non spécifié',
+          company: body.company ?? null,
+          email: body.email ?? null,
+          wilaya: body.wilaya ?? 'Non spécifié',
+          phones: {
+            create: primaryPhone
+              ? [{ number: primaryPhone, label: 'Principal', primary: true }]
+              : [],
+          },
         },
       });
     }
@@ -46,19 +53,31 @@ export async function POST(request: NextRequest) {
     const quote = await prisma.quote.create({
       data: {
         clientId: client.id,
-        width: body.width ? parseInt(body.width) : null,
-        length: body.length ? parseInt(body.length) : null,
-        quantity: body.quantity ? parseInt(body.quantity) : null,
-        message: body.message,
+        message: body.message ?? '',
+        source: body.source ?? 'SITE',
+        createdById: session?.user?.id ?? null,
+        items: {
+          create: (body.items ?? []).map((item: {
+            productId?: string;
+            description?: string;
+            width?: number;
+            length?: number;
+            quantity: number;
+          }) => ({
+            productId: item.productId ?? null,
+            description: item.description ?? null,
+            width: item.width ?? null,
+            length: item.length ?? null,
+            quantity: item.quantity,
+          })),
+        },
       },
+      include: { items: true, client: { include: { phones: true } } },
     });
 
     return NextResponse.json(quote, { status: 201 });
   } catch (error) {
     console.error('Error creating quote:', error);
-    return NextResponse.json(
-      { error: 'Failed to create quote' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Failed to create quote' }, { status: 500 });
   }
 }

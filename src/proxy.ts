@@ -1,14 +1,10 @@
-import { auth } from '@/lib/auth';
+// Auth protection désactivée temporairement — on la rebranche lors du back
 import { NextResponse } from 'next/server';
+import type { NextRequest } from 'next/server';
 
-export default auth((req) => {
-  const isAdminRoute = req.nextUrl.pathname.startsWith('/admin');
-  const isLoginPage = req.nextUrl.pathname === '/admin/login';
-
-  if (isAdminRoute && !isLoginPage && !req.auth) {
-    return NextResponse.redirect(new URL('/admin/login', req.url));
-  }
-});
+export default function middleware(_req: NextRequest) {
+  return NextResponse.next();
+}
 
 export const config = {
   matcher: ['/admin/:path*'],

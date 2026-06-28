@@ -9,65 +9,68 @@ export async function GET() {
   try {
     const orders = await prisma.order.findMany({
       include: {
-        client: true,
+        client: { include: { phones: true } },
         items: { include: { product: true } },
+        createdBy: { select: { id: true, name: true } },
       },
       orderBy: { createdAt: 'desc' },
     });
-
     return NextResponse.json(orders);
   } catch (error) {
     console.error('Error fetching orders:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch orders' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Failed to fetch orders' }, { status: 500 });
   }
 }
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
+    const session = await auth();
 
-    // Create or find client
-    let client = body.client.email
-      ? await prisma.client.findFirst({ where: { email: body.client.email } })
+    // Identifier le client par téléphone principal (pas email — schéma ClientPhone)
+    const primaryPhone: string = body.client?.phone ?? '';
+    let client = primaryPhone
+      ? await prisma.client.findFirst({
+          where: { phones: { some: { number: primaryPhone } } },
+        })
       : null;
 
     if (!client) {
       client = await prisma.client.create({
         data: {
           name: body.client.name,
-          email: body.client.email,
-          phone: body.client.phone,
-          company: body.client.company,
+          company: body.client.company ?? null,
+          email: body.client.email ?? null,
           wilaya: body.client.wilaya,
-          address: body.client.address,
+          address: body.client.address ?? null,
+          phones: {
+            create: primaryPhone
+              ? [{ number: primaryPhone, label: 'Principal', primary: true }]
+              : [],
+          },
         },
       });
     }
 
-    // Create order with items
     const order = await prisma.order.create({
       data: {
         clientId: client.id,
+        source: body.source ?? 'SITE',
+        createdById: session?.user?.id ?? null,
         items: {
-          create: body.items.map((item: any) => ({
+          create: body.items.map((item: { productId: string; quantity: number; unitPrice: number }) => ({
             productId: item.productId,
             quantity: item.quantity,
             unitPrice: item.unitPrice,
           })),
         },
       },
-      include: { items: true },
+      include: { items: true, client: { include: { phones: true } } },
     });
 
     return NextResponse.json(order, { status: 201 });
   } catch (error) {
     console.error('Error creating order:', error);
-    return NextResponse.json(
-      { error: 'Failed to create order' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Failed to create order' }, { status: 500 });
   }
 }

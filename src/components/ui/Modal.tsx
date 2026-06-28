@@ -1,28 +1,21 @@
 import { ReactNode } from 'react';
 
 interface ModalProps {
-  isOpen: boolean;
-  onClose: () => void;
   title: string;
+  onClose: () => void;
   children: ReactNode;
 }
 
-export function Modal({ isOpen, onClose, title, children }: ModalProps) {
-  if (!isOpen) return null;
-
+export function Modal({ title, onClose, children }: ModalProps) {
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg max-w-md w-full mx-4">
-        <div className="flex justify-between items-center p-6 border-b">
-          <h2 className="text-lg font-semibold">{title}</h2>
-          <button
-            onClick={onClose}
-            className="text-zinc-500 hover:text-zinc-900 text-2xl leading-none"
-          >
-            ×
-          </button>
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/30 backdrop-blur-[2px]" onClick={onClose} />
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-[#E2E8F0] bg-[#F8FAFC]">
+          <h3 className="text-[15px] font-bold text-[#0F172A]">{title}</h3>
+          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-[#E2E8F0] text-[#8A9BB5] transition-colors text-lg">&#x2715;</button>
         </div>
-        <div className="p-6">{children}</div>
+        <div className="px-6 py-5">{children}</div>
       </div>
     </div>
   );

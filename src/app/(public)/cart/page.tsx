@@ -76,7 +76,7 @@ export default function CartPage() {
                 {/* Infos */}
                 <div className="flex-1 min-w-0">
                   <p className="text-[16px] font-semibold text-[#263238]">Réf. {item.reference}</p>
-                  <p className="text-[13px] text-[#89939E] mt-0.5">{item.price} DA / rouleau</p>
+                  <p className="text-[13px] text-[#89939E] mt-0.5">{item.unitPrice} DA / rouleau</p>
                 </div>
 
                 {/* Quantité */}
@@ -98,7 +98,7 @@ export default function CartPage() {
 
                 {/* Sous-total */}
                 <div className="text-right min-w-[80px]">
-                  <p className="text-[16px] font-bold text-[#263238]">{item.price * item.quantity} DA</p>
+                  <p className="text-[16px] font-bold text-[#263238]">{item.unitPrice * item.quantity} DA</p>
                 </div>
 
                 {/* Supprimer */}
@@ -123,7 +123,7 @@ export default function CartPage() {
                 {items.map((item) => (
                   <div key={item.productId} className="flex justify-between text-[#717171]">
                     <span>{item.quantity}× Réf. {item.reference}</span>
-                    <span className="font-medium text-[#4D4D4D]">{item.price * item.quantity} DA</span>
+                    <span className="font-medium text-[#4D4D4D]">{item.unitPrice * item.quantity} DA</span>
                   </div>
                 ))}
               </div>
