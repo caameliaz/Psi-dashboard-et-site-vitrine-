@@ -1,7 +1,20 @@
-import { products } from '@/lib/mock-data';
 import { ProductCard } from '@/components/ProductCard';
 
-export default function ProductsPage() {
+async function getProducts() {
+  try {
+    const res = await fetch(`${process.env.NEXTAUTH_URL ?? 'http://localhost:3000'}/api/products`, {
+      next: { revalidate: 60 },
+    });
+    if (!res.ok) return [];
+    return res.json();
+  } catch {
+    return [];
+  }
+}
+
+export default async function ProductsPage() {
+  const products = await getProducts();
+
   return (
     <div className="bg-[#F5F7FA] min-h-screen">
 
@@ -27,11 +40,15 @@ export default function ProductsPage() {
 
       {/* Grille produits */}
       <div className="max-w-[1280px] mx-auto px-6 md:px-12 py-14">
-        <div className="grid grid-cols-2 lg:grid-cols-3 gap-5 md:gap-7">
-          {products.map((product) => (
-            <ProductCard key={product.id} product={product} />
-          ))}
-        </div>
+        {products.length === 0 ? (
+          <p className="text-center text-[#717171] py-20">Aucun produit disponible pour le moment.</p>
+        ) : (
+          <div className="grid grid-cols-2 lg:grid-cols-3 gap-5 md:gap-7">
+            {products.map((product: any) => (
+              <ProductCard key={product.id} product={product} />
+            ))}
+          </div>
+        )}
 
         {/* CTA bas de page */}
         <div className="mt-16 bg-white rounded-2xl shadow-[0_4px_24px_rgba(171,190,209,0.35)] p-8 md:p-10 flex flex-col md:flex-row items-center justify-between gap-6">

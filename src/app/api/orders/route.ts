@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { createNotif } from '@/lib/notifications';
 
 export async function GET() {
   const session = await auth();
@@ -66,6 +67,13 @@ export async function POST(request: NextRequest) {
         },
       },
       include: { items: true, client: { include: { phones: true } } },
+    });
+
+    await createNotif({
+      type: 'SITE_COMMANDE',
+      title: 'Nouvelle commande',
+      message: `${client.company ?? client.name} — ${body.items?.length ?? 0} article(s)`,
+      orderId: order.id,
     });
 
     return NextResponse.json(order, { status: 201 });

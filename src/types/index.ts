@@ -1,7 +1,7 @@
 // ─── ENUMS ───────────────────────────────────────────────────────────────────
 
 export type Role = 'ADMIN' | 'EMPLOYEE';
-export type RequestStatus = 'EN_ATTENTE' | 'CONTACTE' | 'VALIDE' | 'ANNULE';
+export type RequestStatus = 'EN_ATTENTE' | 'CONTACTE' | 'VALIDE' | 'LIVRE' | 'ANNULE';
 export type OrderSource = 'SITE' | 'WHATSAPP' | 'TELEPHONE' | 'AUTRE';
 export type FieldType = 'TEXT' | 'NUMBER' | 'BOOLEAN';
 export type TemplateCategory = 'CONFIRMATION' | 'RELANCE' | 'LIVRAISON' | 'DEVIS' | 'AUTRE';
@@ -13,7 +13,8 @@ export type ContactStatus = 'EN_ATTENTE' | 'TRAITE';
 export const STATUS_LABELS: Record<RequestStatus, string> = {
   EN_ATTENTE: 'En attente',
   CONTACTE:   'Contacté',
-  VALIDE:     'Validé',
+  VALIDE:     'Confirmé',
+  LIVRE:      'Livré',
   ANNULE:     'Annulé',
 };
 
@@ -93,6 +94,7 @@ export interface Client {
   photo: string | null;
   phones: ClientPhone[];
   notes: ClientNote[];
+  contacts?: ContactRequest[];
   createdAt: string;
   updatedAt: string;
   // Agrégats calculés (non stockés, retournés par l'API)
@@ -122,6 +124,7 @@ export interface Order {
   cancelReason: string | null;
   notes: string | null;
   createdBy: { id: string; name: string } | null;
+  createdById: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -179,6 +182,7 @@ export interface CustomStatus {
   name: string;
   color: string;
   order: number;
+  createdAt: string;
 }
 
 // ─── TEMPLATES MESSAGES ──────────────────────────────────────────────────────
@@ -189,6 +193,7 @@ export interface MessageTemplate {
   content: string;
   category: TemplateCategory;
   order: number;
+  createdAt: string;
   updatedAt: string;
 }
 
@@ -227,6 +232,8 @@ export interface AuditLog {
   entity: AuditEntity;
   entityId: string | null;
   detail: string | null;
+  orderId: string | null;
+  quoteId: string | null;
   createdAt: string;
 }
 

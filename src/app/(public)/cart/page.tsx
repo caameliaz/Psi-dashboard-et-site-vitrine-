@@ -61,10 +61,10 @@ export default function CartPage() {
             {items.map((item) => (
               <div
                 key={item.productId}
-                className="bg-white rounded-2xl shadow-[0_2px_12px_rgba(171,190,209,0.25)] p-5 flex items-center gap-5"
+                className="bg-white rounded-2xl shadow-[0_2px_12px_rgba(171,190,209,0.25)] p-3 md:p-5 flex items-center gap-3 md:gap-5"
               >
-                {/* Icône rouleau */}
-                <div className="w-14 h-14 bg-[#F5F7FA] rounded-xl flex items-center justify-center shrink-0">
+                {/* Icône rouleau — cachée sur mobile */}
+                <div className="hidden md:flex w-14 h-14 bg-[#F5F7FA] rounded-xl items-center justify-center shrink-0">
                   <div className="relative w-8 h-8">
                     <div className="absolute inset-0 rounded-full bg-[#E8F5E9] border-2 border-[#4CAF4F]" />
                     <div className="absolute inset-[18%] rounded-full bg-[#C8E6C9] border border-[#4CAF4F]" />
@@ -75,39 +75,35 @@ export default function CartPage() {
 
                 {/* Infos */}
                 <div className="flex-1 min-w-0">
-                  <p className="text-[16px] font-semibold text-[#263238]">Réf. {item.reference}</p>
-                  <p className="text-[13px] text-[#89939E] mt-0.5">{item.unitPrice} DA / rouleau</p>
+                  <p className="text-[13px] md:text-[16px] font-semibold text-[#263238] truncate">Réf. {item.reference}</p>
+                  <p className="text-[11px] md:text-[13px] text-[#89939E] mt-0.5">{item.unitPrice} DA / u.</p>
                 </div>
 
                 {/* Quantité */}
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5 md:gap-2 shrink-0">
                   <button
                     onClick={() => updateQuantity(item.productId, Math.max(1, item.quantity - 1))}
-                    className="w-8 h-8 rounded-lg border border-[#ABBED1] flex items-center justify-center text-[#4D4D4D] hover:border-[#4CAF4F] hover:text-[#4CAF4F] transition-colors text-[18px] leading-none"
-                  >
-                    −
-                  </button>
-                  <span className="w-8 text-center text-[15px] font-semibold text-[#263238]">{item.quantity}</span>
+                    className="w-7 h-7 md:w-8 md:h-8 rounded-lg border border-[#ABBED1] flex items-center justify-center text-[#4D4D4D] hover:border-[#4CAF4F] hover:text-[#4CAF4F] transition-colors text-[16px] leading-none"
+                  >−</button>
+                  <span className="w-6 text-center text-[13px] md:text-[15px] font-semibold text-[#263238]">{item.quantity}</span>
                   <button
                     onClick={() => updateQuantity(item.productId, item.quantity + 1)}
-                    className="w-8 h-8 rounded-lg border border-[#ABBED1] flex items-center justify-center text-[#4D4D4D] hover:border-[#4CAF4F] hover:text-[#4CAF4F] transition-colors text-[18px] leading-none"
-                  >
-                    +
-                  </button>
+                    className="w-7 h-7 md:w-8 md:h-8 rounded-lg border border-[#ABBED1] flex items-center justify-center text-[#4D4D4D] hover:border-[#4CAF4F] hover:text-[#4CAF4F] transition-colors text-[16px] leading-none"
+                  >+</button>
                 </div>
 
                 {/* Sous-total */}
-                <div className="text-right min-w-[80px]">
-                  <p className="text-[16px] font-bold text-[#263238]">{item.unitPrice * item.quantity} DA</p>
+                <div className="text-right shrink-0 min-w-[60px] md:min-w-[80px]">
+                  <p className="text-[12px] md:text-[16px] font-bold text-[#263238]">{item.unitPrice * item.quantity} DA</p>
                 </div>
 
                 {/* Supprimer */}
                 <button
                   onClick={() => removeItem(item.productId)}
-                  className="w-8 h-8 rounded-lg hover:bg-[#FFF0F0] flex items-center justify-center transition-colors group"
+                  className="w-7 h-7 md:w-8 md:h-8 rounded-lg hover:bg-[#FFF0F0] flex items-center justify-center transition-colors group shrink-0"
                 >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-                    <path d="M18 6L6 18M6 6l12 12" stroke="#ABBED1" strokeWidth="1.8" strokeLinecap="round" className="group-hover:stroke-[#EF5350]"/>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" className="stroke-[#ABBED1] group-hover:stroke-[#EF5350] transition-colors">
+                    <path d="M18 6L6 18M6 6l12 12" strokeWidth="1.8" strokeLinecap="round"/>
                   </svg>
                 </button>
               </div>

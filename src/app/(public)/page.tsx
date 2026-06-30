@@ -1,8 +1,20 @@
 import Link from 'next/link';
-import { products } from '@/lib/mock-data';
 import { ProductCard } from '@/components/ProductCard';
 
-export default function Home() {
+async function getProducts() {
+  try {
+    const res = await fetch(`${process.env.NEXTAUTH_URL ?? 'http://localhost:3000'}/api/products`, {
+      next: { revalidate: 60 },
+    });
+    if (!res.ok) return [];
+    return res.json();
+  } catch {
+    return [];
+  }
+}
+
+export default async function Home() {
+  const products = await getProducts();
   return (
     <div className="bg-white">
 
@@ -10,6 +22,7 @@ export default function Home() {
           HERO  — image plein écran, 70vh min, overlay sombre
       ════════════════════════════════════════════════════════════ */}
       <section
+        id="hero"
         className="relative min-h-[70vh] bg-cover bg-center flex items-center"
         style={{ backgroundImage: 'url(/photo%202.avif)' }}
       >
@@ -39,12 +52,6 @@ export default function Home() {
                   <path d="M3 8h10M9 4l4 4-4 4" stroke="white" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
                 </svg>
               </a>
-              <Link
-                href="/checkout"
-                className="flex items-center gap-2 bg-white text-[#4CAF4F] text-[15px] font-semibold px-8 py-4 rounded hover:bg-white/90 transition-all"
-              >
-                Passer une commande
-              </Link>
               <Link
                 href="/quote"
                 className="flex items-center gap-2 border-2 border-white/70 text-white text-[15px] font-semibold px-8 py-4 rounded hover:bg-white hover:text-[#4CAF4F] transition-all"
@@ -80,10 +87,25 @@ export default function Home() {
 
           {/* Grille */}
           <div className="grid grid-cols-2 lg:grid-cols-3 gap-5 md:gap-7">
-            {products.map((product) => (
+            {products.slice(0, 6).map((product: any) => (
               <ProductCard key={product.id} product={product} />
             ))}
           </div>
+
+          {/* Bouton "Voir plus" si plus de 6 produits */}
+          {products.length > 6 && (
+            <div className="flex justify-center">
+              <Link
+                href="/products"
+                className="flex items-center gap-2 border-2 border-[#4CAF4F] text-[#4CAF4F] text-[15px] font-semibold px-8 py-3.5 rounded-xl hover:bg-[#4CAF4F] hover:text-white transition-all"
+              >
+                Voir tous les produits
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                  <path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              </Link>
+            </div>
+          )}
         </div>
       </section>
 
@@ -91,21 +113,20 @@ export default function Home() {
           QUALITÉ & CONFORMITÉ
       ════════════════════════════════════════════════════════════ */}
       <section className="bg-[#EBF4FF] py-16 px-6 md:px-12">
-        <div className="max-w-[1280px] mx-auto flex flex-col lg:flex-row items-start lg:items-center gap-12">
+        <div className="max-w-[1280px] mx-auto flex flex-col items-center gap-10 text-center">
 
           {/* Texte */}
-          <div className="flex flex-col gap-4 lg:max-w-[380px]">
+          <div className="flex flex-col gap-3">
             <h2 className="text-[28px] md:text-[32px] font-bold text-[#4D4D4D] leading-snug">
-              Notre engagement<br/>
-              <span className="text-[#4CAF4F]">qualité & conformité</span>
+              Notre engagement <span className="text-[#4CAF4F]">qualité & conformité</span>
             </h2>
-            <p className="text-[16px] text-[#717171] leading-relaxed">
+            <p className="text-[16px] text-[#717171] leading-relaxed max-w-[480px] mx-auto">
               Des produits sélectionnés pour leur fiabilité et leur conformité aux standards européens les plus exigeants.
             </p>
           </div>
 
           {/* Badges */}
-          <div className="flex items-start gap-6 md:gap-12 flex-wrap">
+          <div className="flex items-start justify-center gap-10 md:gap-20 flex-wrap">
             {[
               {
                 label: '55 gr/m²',
@@ -212,13 +233,6 @@ export default function Home() {
             >
               Demander un devis
             </Link>
-          </div>
-          <div className="flex flex-col sm:flex-row items-center gap-6 mt-6 text-[14px] text-[#E8F5E9]">
-            <span>📍 Centre El Qods, Niveau M1, Chéraga, Alger</span>
-            <span className="hidden sm:block opacity-40">•</span>
-            <a href="mailto:contact@psi-algerie.com" className="hover:text-white transition-colors">
-              ✉️ contact@psi-algerie.com
-            </a>
           </div>
         </div>
       </section>

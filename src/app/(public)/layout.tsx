@@ -2,7 +2,7 @@ import { Navbar } from '@/components/Navbar';
 import { Footer } from '@/components/Footer';
 import { CartSummary } from '@/components/CartSummary';
 
-const WHATSAPP_NUMBER = '213555100200';
+const WHATSAPP_NUMBER = '213770150656';
 const WHATSAPP_MSG = encodeURIComponent('Bonjour, je souhaite obtenir des informations sur vos produits PSI.');
 
 export default function PublicLayout({
@@ -22,7 +22,7 @@ export default function PublicLayout({
         href={`https://wa.me/${WHATSAPP_NUMBER}?text=${WHATSAPP_MSG}`}
         target="_blank"
         rel="noopener noreferrer"
-        className="fixed bottom-6 right-6 z-50 flex items-center justify-center w-14 h-14 rounded-full shadow-[0_4px_20px_rgba(37,211,102,0.5)] hover:scale-110 transition-transform"
+        className="fixed bottom-24 right-4 md:bottom-6 md:right-6 z-50 flex items-center justify-center w-12 h-12 md:w-14 md:h-14 rounded-full shadow-[0_4px_20px_rgba(37,211,102,0.5)] hover:scale-110 transition-transform"
         style={{ background: '#25D366' }}
         aria-label="Nous contacter sur WhatsApp"
       >

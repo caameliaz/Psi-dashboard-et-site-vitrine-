@@ -180,6 +180,7 @@ enum RequestStatus {
   EN_ATTENTE
   CONTACTE
   VALIDE
+  LIVRE
   ANNULE
 }
 

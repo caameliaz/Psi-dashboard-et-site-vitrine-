@@ -1,9 +1,15 @@
-﻿'use client';
+'use client';
 
 import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { inputClass, labelClass } from '@/lib/utils';
+import { WilayaSelect } from '@/components/ui/WilayaSelect';
+
+const WHATSAPP_NUMBER = '213770150656';
+const WHATSAPP_MSG = encodeURIComponent('Bonjour, je souhaite obtenir des informations sur vos produits PSI.');
+const PHONE = '+213770150656';
+const EMAIL = 'contact@psi-algerie.com';
 
 export default function QuotePage() {
   const router = useRouter();
@@ -22,9 +28,32 @@ export default function QuotePage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-    alert('Demande de devis envoyee ! Notre equipe vous contactera rapidement.');
-    router.push('/');
+    try {
+      const res = await fetch('/api/quotes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: formData.name,
+          company: formData.company || undefined,
+          phone: formData.phone,
+          wilaya: formData.wilaya,
+          message: formData.message,
+          items: formData.width || formData.length || formData.quantity
+            ? [{ width: formData.width ? Number(formData.width) : undefined, length: formData.length ? Number(formData.length) : undefined, quantity: formData.quantity ? Number(formData.quantity) : 1 }]
+            : [],
+          source: 'SITE',
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        alert(err.error ?? 'Erreur lors de l\'envoi. Veuillez réessayer.');
+        return;
+      }
+      alert('Demande de devis envoyée ! Notre équipe vous contactera rapidement.');
+      router.push('/');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleChange = (
@@ -32,7 +61,6 @@ export default function QuotePage() {
   ) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
-
 
   return (
     <div className="min-h-screen bg-[#F5F7FA] py-12 px-6">
@@ -48,21 +76,21 @@ export default function QuotePage() {
           Retour
         </Link>
 
-        <h1 className="text-[36px] md:text-[42px] font-bold text-[#263238] mb-2">Demander un devis</h1>
-        <p className="text-[16px] text-[#717171] mb-10">
-          Remplissez le formulaire ci-dessous et notre equipe vous recontactera rapidement.
+        <h1 className="text-[24px] md:text-[42px] font-bold text-[#263238] mb-2">Demander un devis</h1>
+        <p className="text-[14px] md:text-[16px] text-[#717171] mb-6 md:mb-10">
+          Remplissez le formulaire ci-dessous et notre équipe vous recontactera rapidement.
         </p>
 
         <div className="flex flex-col lg:flex-row gap-8">
 
           <form onSubmit={handleSubmit} className="flex-1">
             <div className="bg-white rounded-2xl shadow-[0_4px_24px_rgba(171,190,209,0.35)] p-8 flex flex-col gap-6">
-              <h2 className="text-[18px] font-bold text-[#263238]">Vos coordonnees</h2>
+              <h2 className="text-[18px] font-bold text-[#263238]">Vos coordonnées</h2>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                 <div>
                   <label className={labelClass}>Nom complet *</label>
-                  <input type="text" name="name" value={formData.name} onChange={handleChange} placeholder="Votre nom et prenom" required className={inputClass} />
+                  <input type="text" name="name" value={formData.name} onChange={handleChange} placeholder="Votre nom et prénom" required className={inputClass} />
                 </div>
                 <div>
                   <label className={labelClass}>Entreprise</label>
@@ -72,19 +100,23 @@ export default function QuotePage() {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                 <div>
-                  <label className={labelClass}>Telephone *</label>
+                  <label className={labelClass}>Téléphone *</label>
                   <input type="tel" name="phone" value={formData.phone} onChange={handleChange} placeholder="+213 XXX XXX XXX" required className={inputClass} />
                 </div>
                 <div>
                   <label className={labelClass}>Wilaya *</label>
-                  <input type="text" name="wilaya" value={formData.wilaya} onChange={handleChange} placeholder="Ex : Alger, Oran..." required className={inputClass} />
+                  <WilayaSelect
+                    name="wilaya"
+                    value={formData.wilaya}
+                    onChange={(v) => setFormData({ ...formData, wilaya: v })}
+                    required
+                  />
                 </div>
               </div>
 
               <div className="border-t border-[#F0F4F8] pt-6">
-                <h2 className="text-[18px] font-bold text-[#263238] mb-5">Specifications du produit</h2>
-
-                <div className="grid grid-cols-3 gap-4">
+                <h2 className="text-[18px] font-bold text-[#263238] mb-5">Spécifications du produit</h2>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <div>
                     <label className={labelClass}>Largeur (mm)</label>
                     <input type="number" name="width" value={formData.width} onChange={handleChange} placeholder="Ex : 80" className={inputClass} />
@@ -94,19 +126,19 @@ export default function QuotePage() {
                     <input type="number" name="length" value={formData.length} onChange={handleChange} placeholder="Ex : 80" className={inputClass} />
                   </div>
                   <div>
-                    <label className={labelClass}>Quantite</label>
+                    <label className={labelClass}>Quantité</label>
                     <input type="number" name="quantity" value={formData.quantity} onChange={handleChange} placeholder="Ex : 500" className={inputClass} />
                   </div>
                 </div>
               </div>
 
               <div>
-                <label className={labelClass}>Message complementaire</label>
+                <label className={labelClass}>Message complémentaire</label>
                 <textarea
                   name="message"
                   value={formData.message}
                   onChange={handleChange}
-                  placeholder="Decrivez vos besoins, conditions de livraison, delais..."
+                  placeholder="Décrivez vos besoins, conditions de livraison, délais..."
                   rows={4}
                   required
                   className={inputClass + ' resize-none'}
@@ -128,42 +160,67 @@ export default function QuotePage() {
             </div>
           </form>
 
-          <div className="lg:w-[300px] shrink-0 flex flex-col gap-5">
+          {/* Sidebar contact */}
+          <div className="lg:w-[300px] shrink-0 flex flex-col gap-4">
 
-            <div className="bg-white rounded-2xl shadow-[0_4px_24px_rgba(171,190,209,0.35)] p-6">
-              <h3 className="text-[16px] font-bold text-[#263238] mb-4">Pourquoi choisir PSI ?</h3>
-              <ul className="flex flex-col gap-3">
-                {[
-                  { icon: '🇩🇪', text: 'Papier origine Europe certifie' },
-                  { icon: '🛡️', text: 'BPA Free — securite sanitaire' },
-                  { icon: '📦', text: 'Livraison dans toute Algerie' },
-                  { icon: '⚡', text: 'Reponse sous 24h' },
-                  { icon: '🤝', text: 'Prix competitifs volume' },
-                ].map((item) => (
-                  <li key={item.text} className="flex items-start gap-3 text-[14px] text-[#717171]">
-                    <span className="text-[16px] shrink-0">{item.icon}</span>
-                    <span>{item.text}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
+            <div className="bg-white rounded-2xl shadow-[0_4px_24px_rgba(171,190,209,0.35)] p-6 flex flex-col gap-3">
+              <p className="text-[15px] font-bold text-[#263238] mb-1">Une question ?</p>
 
-            <div className="bg-[#263238] rounded-2xl p-6 flex flex-col gap-4">
-              <p className="text-[15px] font-semibold text-white">Une question ?</p>
-              <p className="text-[13px] text-[#89939E] leading-relaxed">
-                Notre equipe est disponible du dimanche au jeudi, 8h - 17h.
-              </p>
+              {/* WhatsApp */}
               <a
-                href="mailto:contact@psi-algerie.com"
-                className="flex items-center gap-2 text-[#4CAF4F] text-[14px] font-medium hover:text-[#81C784] transition-colors"
+                href={`https://wa.me/${WHATSAPP_NUMBER}?text=${WHATSAPP_MSG}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-4 p-4 rounded-xl border border-[#F0F4F8] hover:border-[#25D366] hover:bg-[#F0FDF4] transition-all group"
               >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-                  <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" stroke="currentColor" strokeWidth="1.8"/>
-                  <path d="M22 6l-10 7L2 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
-                </svg>
-                contact@psi-algerie.com
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ background: '#25D366' }}>
+                  <svg width="20" height="20" viewBox="0 0 32 32" fill="none">
+                    <path d="M16 3C9.373 3 4 8.373 4 15c0 2.385.663 4.61 1.816 6.51L4 29l7.697-1.794A12.94 12.94 0 0016 28c6.627 0 12-5.373 12-12S22.627 3 16 3z" fill="white"/>
+                    <path d="M22.5 19.5c-.3-.15-1.77-.87-2.04-.97-.27-.1-.47-.15-.67.15-.2.3-.77.97-.94 1.17-.17.2-.35.22-.65.07-.3-.15-1.26-.46-2.4-1.47-.89-.79-1.49-1.76-1.66-2.06-.17-.3-.02-.46.13-.61.13-.13.3-.35.45-.52.15-.17.2-.3.3-.5.1-.2.05-.37-.02-.52-.07-.15-.67-1.6-.92-2.2-.24-.57-.49-.5-.67-.5h-.57c-.2 0-.52.07-.79.37-.27.3-1.02 1-1.02 2.43s1.05 2.82 1.2 3.02c.15.2 2.06 3.15 5 4.42.7.3 1.24.48 1.67.62.7.22 1.34.19 1.84.12.56-.08 1.77-.72 2.02-1.42.25-.7.25-1.3.17-1.42-.07-.12-.27-.2-.57-.35z" fill="#25D366"/>
+                  </svg>
+                </div>
+                <div>
+                  <p className="text-[14px] font-semibold text-[#263238]">WhatsApp</p>
+                  <p className="text-[12px] text-[#89939E]">+213 770 150 656</p>
+                </div>
               </a>
+
+              {/* Téléphone */}
+              <a
+                href={`tel:${PHONE}`}
+                className="flex items-center gap-4 p-4 rounded-xl border border-[#F0F4F8] hover:border-[#3B82F6] hover:bg-[#EFF6FF] transition-all group"
+              >
+                <div className="w-10 h-10 rounded-xl bg-[#EFF6FF] flex items-center justify-center shrink-0">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                    <path d="M6.62 10.79a15.05 15.05 0 006.59 6.59l2.2-2.2a1 1 0 011.01-.24c1.12.37 2.33.57 3.58.57a1 1 0 011 1V20a1 1 0 01-1 1C9.61 21 3 14.39 3 6a1 1 0 011-1h3.5a1 1 0 011 1c0 1.25.2 2.45.57 3.57a1 1 0 01-.25 1.02l-2.2 2.2z" stroke="#3B82F6" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                </div>
+                <div>
+                  <p className="text-[14px] font-semibold text-[#263238]">Appeler</p>
+                  <p className="text-[12px] text-[#89939E]">+213 770 150 656</p>
+                </div>
+              </a>
+
+              {/* Email */}
+              <a
+                href={`mailto:${EMAIL}`}
+                className="flex items-center gap-4 p-4 rounded-xl border border-[#F0F4F8] hover:border-[#F97316] hover:bg-[#FFF7ED] transition-all group"
+              >
+                <div className="w-10 h-10 rounded-xl bg-[#FFF7ED] flex items-center justify-center shrink-0">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                    <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" stroke="#F97316" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                    <path d="M22 6l-10 7L2 6" stroke="#F97316" strokeWidth="1.8" strokeLinecap="round"/>
+                  </svg>
+                </div>
+                <div>
+                  <p className="text-[14px] font-semibold text-[#263238]">Email</p>
+                  <p className="text-[12px] text-[#89939E]">{EMAIL}</p>
+                </div>
+              </a>
+
+              <p className="text-[12px] text-[#ABBED1] pt-1">Dim – Jeu : 8h00 – 17h00</p>
             </div>
+
           </div>
         </div>
       </div>

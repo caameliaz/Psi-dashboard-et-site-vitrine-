@@ -1,21 +1,21 @@
-﻿'use client';
+'use client';
 
-import React, { createContext, useContext, useState } from 'react';
-
-type Role = 'Admin' | 'Employe';
+import React, { createContext, useContext } from 'react';
+import { useSession } from 'next-auth/react';
+import type { Role } from '@/types';
 
 interface RoleContextType {
   role: Role;
-  setRole: (r: Role) => void;
   isAdmin: boolean;
 }
 
-const RoleContext = createContext<RoleContextType>({ role: 'Admin', setRole: () => {}, isAdmin: true });
+const RoleContext = createContext<RoleContextType>({ role: 'ADMIN', isAdmin: true });
 
 export function RoleProvider({ children }: { children: React.ReactNode }) {
-  const [role, setRole] = useState<Role>('Admin');
+  const { data: session } = useSession();
+  const role: Role = (session?.user?.role as Role) ?? 'EMPLOYEE';
   return (
-    <RoleContext.Provider value={{ role, setRole, isAdmin: role === 'Admin' }}>
+    <RoleContext.Provider value={{ role, isAdmin: role === 'ADMIN' }}>
       {children}
     </RoleContext.Provider>
   );

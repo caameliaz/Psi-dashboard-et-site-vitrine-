@@ -1,40 +1,14 @@
-﻿'use client';
-
-import { useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { inputClass, labelClass } from '@/lib/utils';
+
+const WHATSAPP_NUMBER = '213770150656';
+const WHATSAPP_MSG = encodeURIComponent('Bonjour, je souhaite obtenir des informations sur vos produits PSI.');
+const PHONE = '+213770150656';
+const EMAIL = 'contact@psi-algerie.com';
 
 export default function ContactPage() {
-  const router = useRouter();
-  const [formData, setFormData] = useState({
-    name: '',
-    company: '',
-    phone: '',
-    email: '',
-    wilaya: '',
-    message: '',
-  });
-  const [loading, setLoading] = useState(false);
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-    alert('Message envoye ! Notre equipe vous contactera rapidement.');
-    router.push('/');
-  };
-
-  const handleChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
-  ) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
-  };
-
-
   return (
     <div className="min-h-screen bg-[#F5F7FA] py-12 px-6">
-      <div className="max-w-[1100px] mx-auto">
+      <div className="max-w-[600px] mx-auto">
 
         <Link
           href="/"
@@ -46,135 +20,99 @@ export default function ContactPage() {
           Retour
         </Link>
 
-        <h1 className="text-[36px] md:text-[42px] font-bold text-[#263238] mb-2">Contactez-nous</h1>
+        <h1 className="text-[36px] md:text-[42px] font-bold text-[#263238] mb-2">Nous contacter</h1>
         <p className="text-[16px] text-[#717171] mb-10">
-          Remplissez le formulaire ci-dessous et notre equipe vous recontactera rapidement.
+          Choisissez le moyen qui vous convient le mieux.
         </p>
 
-        <div className="flex flex-col lg:flex-row gap-8">
+        {/* Boutons de contact */}
+        <div className="flex flex-col gap-4 mb-10">
 
-          <form onSubmit={handleSubmit} className="flex-1">
-            <div className="bg-white rounded-2xl shadow-[0_4px_24px_rgba(171,190,209,0.35)] p-8 flex flex-col gap-6">
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                <div>
-                  <label className={labelClass}>Nom complet *</label>
-                  <input type="text" name="name" value={formData.name} onChange={handleChange} placeholder="Votre nom et prenom" required className={inputClass} />
-                </div>
-                <div>
-                  <label className={labelClass}>Entreprise</label>
-                  <input type="text" name="company" value={formData.company} onChange={handleChange} placeholder="Nom de votre entreprise" className={inputClass} />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                <div>
-                  <label className={labelClass}>Telephone *</label>
-                  <input type="tel" name="phone" value={formData.phone} onChange={handleChange} placeholder="+213 XXX XXX XXX" required className={inputClass} />
-                </div>
-                <div>
-                  <label className={labelClass}>Email</label>
-                  <input type="email" name="email" value={formData.email} onChange={handleChange} placeholder="votre@email.com" className={inputClass} />
-                </div>
-              </div>
-
-              <div>
-                <label className={labelClass}>Wilaya *</label>
-                <input type="text" name="wilaya" value={formData.wilaya} onChange={handleChange} placeholder="Ex : Alger, Oran, Constantine..." required className={inputClass} />
-              </div>
-
-              <div>
-                <label className={labelClass}>Votre message *</label>
-                <textarea
-                  name="message"
-                  value={formData.message}
-                  onChange={handleChange}
-                  placeholder="Decrivez votre besoin, posez votre question..."
-                  rows={5}
-                  required
-                  className={inputClass + ' resize-none'}
-                />
-              </div>
-
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full bg-[#4CAF4F] text-white text-[16px] font-semibold py-4 rounded-xl shadow-[0_4px_14px_rgba(76,175,79,0.4)] hover:bg-[#43A047] transition-all disabled:opacity-50 flex items-center justify-center gap-2"
-              >
-                <span>{loading ? 'Envoi en cours...' : 'Envoyer le message'}</span>
-                {!loading && (
-                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                    <path d="M3 8h10M9 4l4 4-4 4" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                )}
-              </button>
+          {/* WhatsApp */}
+          <a
+            href={`https://wa.me/${WHATSAPP_NUMBER}?text=${WHATSAPP_MSG}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-5 bg-white rounded-2xl shadow-[0_4px_24px_rgba(171,190,209,0.35)] p-6 hover:shadow-[0_8px_32px_rgba(171,190,209,0.5)] transition-all group"
+          >
+            <div className="w-14 h-14 rounded-2xl flex items-center justify-center shrink-0" style={{ background: '#25D366' }}>
+              <svg width="28" height="28" viewBox="0 0 32 32" fill="none">
+                <path d="M16 3C9.373 3 4 8.373 4 15c0 2.385.663 4.61 1.816 6.51L4 29l7.697-1.794A12.94 12.94 0 0016 28c6.627 0 12-5.373 12-12S22.627 3 16 3z" fill="white"/>
+                <path d="M22.5 19.5c-.3-.15-1.77-.87-2.04-.97-.27-.1-.47-.15-.67.15-.2.3-.77.97-.94 1.17-.17.2-.35.22-.65.07-.3-.15-1.26-.46-2.4-1.47-.89-.79-1.49-1.76-1.66-2.06-.17-.3-.02-.46.13-.61.13-.13.3-.35.45-.52.15-.17.2-.3.3-.5.1-.2.05-.37-.02-.52-.07-.15-.67-1.6-.92-2.2-.24-.57-.49-.5-.67-.5h-.57c-.2 0-.52.07-.79.37-.27.3-1.02 1-1.02 2.43s1.05 2.82 1.2 3.02c.15.2 2.06 3.15 5 4.42.7.3 1.24.48 1.67.62.7.22 1.34.19 1.84.12.56-.08 1.77-.72 2.02-1.42.25-.7.25-1.3.17-1.42-.07-.12-.27-.2-.57-.35z" fill="#25D366"/>
+              </svg>
             </div>
-          </form>
-
-          {/* Sidebar coordonnees */}
-          <div className="lg:w-[300px] shrink-0 flex flex-col gap-5">
-
-            {/* Adresse */}
-            <div className="bg-white rounded-2xl shadow-[0_4px_24px_rgba(171,190,209,0.35)] p-6 flex flex-col gap-5">
-              <h3 className="text-[16px] font-bold text-[#263238]">Nos coordonnees</h3>
-
-              <div className="flex items-start gap-3">
-                <div className="w-9 h-9 rounded-xl bg-[#E8F5E9] flex items-center justify-center shrink-0">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-                    <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z" stroke="#4CAF4F" strokeWidth="1.8"/>
-                    <circle cx="12" cy="10" r="3" stroke="#4CAF4F" strokeWidth="1.8"/>
-                  </svg>
-                </div>
-                <div>
-                  <p className="text-[14px] font-semibold text-[#263238]">Adresse</p>
-                  <p className="text-[13px] text-[#717171] mt-0.5 leading-relaxed">Centre El Qods, Niveau M1<br/>Cheraga, Alger</p>
-                </div>
-              </div>
-
-              <div className="flex items-start gap-3">
-                <div className="w-9 h-9 rounded-xl bg-[#E8F5E9] flex items-center justify-center shrink-0">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-                    <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" stroke="#4CAF4F" strokeWidth="1.8"/>
-                    <path d="M22 6l-10 7L2 6" stroke="#4CAF4F" strokeWidth="1.8" strokeLinecap="round"/>
-                  </svg>
-                </div>
-                <div>
-                  <p className="text-[14px] font-semibold text-[#263238]">Email</p>
-                  <a href="mailto:contact@psi-algerie.com" className="text-[13px] text-[#4CAF4F] hover:underline mt-0.5 block">
-                    contact@psi-algerie.com
-                  </a>
-                </div>
-              </div>
-
-              <div className="flex items-start gap-3">
-                <div className="w-9 h-9 rounded-xl bg-[#E8F5E9] flex items-center justify-center shrink-0">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-                    <path d="M12 22C6.48 22 2 17.52 2 12S6.48 2 12 2s10 4.48 10 10-4.48 10-10 10z" stroke="#4CAF4F" strokeWidth="1.8"/>
-                    <path d="M12 6v6l4 2" stroke="#4CAF4F" strokeWidth="1.8" strokeLinecap="round"/>
-                  </svg>
-                </div>
-                <div>
-                  <p className="text-[14px] font-semibold text-[#263238]">Horaires</p>
-                  <p className="text-[13px] text-[#717171] mt-0.5">Dim - Jeu : 8h a 17h</p>
-                </div>
-              </div>
+            <div className="flex-1">
+              <p className="text-[17px] font-bold text-[#263238]">WhatsApp</p>
+              <p className="text-[14px] text-[#717171] mt-0.5">+213 770 150 656</p>
             </div>
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none" className="text-[#ABBED1] group-hover:text-[#4CAF4F] transition-colors">
+              <path d="M5 10h10M11 6l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </a>
 
-            {/* Devis rapide CTA */}
-            <div className="bg-[#4CAF4F] rounded-2xl p-6 flex flex-col gap-3">
-              <p className="text-[15px] font-bold text-white">Besoin urgent ?</p>
-              <p className="text-[13px] text-[#E8F5E9] leading-relaxed">
-                Demandez directement un devis personnalise avec vos specifications.
-              </p>
-              <Link
-                href="/quote"
-                className="mt-1 bg-white text-[#4CAF4F] text-[14px] font-bold py-2.5 rounded-xl text-center hover:bg-[#F5F7FA] transition-colors"
-              >
-                Demander un devis →
-              </Link>
+          {/* Téléphone */}
+          <a
+            href={`tel:${PHONE}`}
+            className="flex items-center gap-5 bg-white rounded-2xl shadow-[0_4px_24px_rgba(171,190,209,0.35)] p-6 hover:shadow-[0_8px_32px_rgba(171,190,209,0.5)] transition-all group"
+          >
+            <div className="w-14 h-14 rounded-2xl bg-[#EFF6FF] flex items-center justify-center shrink-0">
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none">
+                <path d="M6.62 10.79a15.05 15.05 0 006.59 6.59l2.2-2.2a1 1 0 011.01-.24c1.12.37 2.33.57 3.58.57a1 1 0 011 1V20a1 1 0 01-1 1C9.61 21 3 14.39 3 6a1 1 0 011-1h3.5a1 1 0 011 1c0 1.25.2 2.45.57 3.57a1 1 0 01-.25 1.02l-2.2 2.2z" stroke="#3B82F6" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
             </div>
-          </div>
+            <div className="flex-1">
+              <p className="text-[17px] font-bold text-[#263238]">Appeler</p>
+              <p className="text-[14px] text-[#717171] mt-0.5">+213 770 150 656</p>
+            </div>
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none" className="text-[#ABBED1] group-hover:text-[#3B82F6] transition-colors">
+              <path d="M5 10h10M11 6l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </a>
+
+          {/* Email */}
+          <a
+            href={`mailto:${EMAIL}`}
+            className="flex items-center gap-5 bg-white rounded-2xl shadow-[0_4px_24px_rgba(171,190,209,0.35)] p-6 hover:shadow-[0_8px_32px_rgba(171,190,209,0.5)] transition-all group"
+          >
+            <div className="w-14 h-14 rounded-2xl bg-[#FFF7ED] flex items-center justify-center shrink-0">
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none">
+                <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" stroke="#F97316" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M22 6l-10 7L2 6" stroke="#F97316" strokeWidth="1.8" strokeLinecap="round"/>
+              </svg>
+            </div>
+            <div className="flex-1">
+              <p className="text-[17px] font-bold text-[#263238]">Email</p>
+              <p className="text-[14px] text-[#717171] mt-0.5">{EMAIL}</p>
+            </div>
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none" className="text-[#ABBED1] group-hover:text-[#F97316] transition-colors">
+              <path d="M5 10h10M11 6l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </a>
         </div>
+
+        {/* Adresse */}
+        <div className="flex items-start gap-3 text-[14px] text-[#717171] mb-10">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" className="shrink-0 mt-0.5">
+            <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z" stroke="#ABBED1" strokeWidth="1.8"/>
+            <circle cx="12" cy="10" r="3" stroke="#ABBED1" strokeWidth="1.8"/>
+          </svg>
+          <a href="https://maps.google.com/?q=Centre+El+Qods+Cheraga+Alger" target="_blank" rel="noopener noreferrer" className="hover:text-[#263238] transition-colors underline underline-offset-2">Centre El Qods, Niveau M1, Chéraga, Alger</a>
+        </div>
+
+        {/* CTA Devis */}
+        <div className="bg-[#4CAF4F] rounded-2xl p-6 flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div>
+            <p className="text-[16px] font-bold text-white">Besoin d'un devis ?</p>
+            <p className="text-[13px] text-[#E8F5E9] mt-1">Envoyez-nous vos spécifications et on vous répond rapidement.</p>
+          </div>
+          <Link
+            href="/quote"
+            className="shrink-0 bg-white text-[#4CAF4F] text-[14px] font-bold px-6 py-3 rounded-xl hover:bg-[#F5F7FA] transition-colors whitespace-nowrap"
+          >
+            Demander un devis →
+          </Link>
+        </div>
+
       </div>
     </div>
   );

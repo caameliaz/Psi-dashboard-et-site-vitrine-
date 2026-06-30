@@ -1,48 +1,155 @@
 'use client';
 
 import Link from 'next/link';
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useCartStore } from '@/store/cartStore';
+import { usePathname, useRouter } from 'next/navigation';
+
+const NAV_LINKS = [
+  { label: 'Accueil',  href: '/',        sectionId: 'hero' },
+  { label: 'Produits', href: '/products', sectionId: 'products' },
+  { label: 'Devis',    href: '/quote',    sectionId: 'about' },
+  { label: 'Contact',  href: '/contact',  sectionId: 'contact' },
+];
 
 export function Navbar() {
   const totalItems = useCartStore((state) => state.getTotalItems());
   const [open, setOpen] = useState(false);
+  const pathname = usePathname();
+  const router = useRouter();
+  const [activeSection, setActiveSection] = useState<string | null>(null);
+  const observerRef = useRef<IntersectionObserver | null>(null);
+  const navRef = useRef<HTMLElement>(null);
+
+  const isHome = pathname === '/';
+
+  // Fermer le menu si on clique en dehors
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (navRef.current && !navRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Fermer le menu au changement de route
+  useEffect(() => {
+    setOpen(false);
+    const start = window.scrollY;
+    if (start === 0) return;
+    const duration = 400;
+    let startTime: number | null = null;
+    const ease = (t: number) => t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
+    const step = (ts: number) => {
+      if (!startTime) startTime = ts;
+      const progress = Math.min((ts - startTime) / duration, 1);
+      window.scrollTo(0, start * (1 - ease(progress)));
+      if (progress < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  }, [pathname]);
+
+  // IntersectionObserver pour sections home
+  useEffect(() => {
+    if (!isHome) { setActiveSection(null); return; }
+
+    const sections = ['hero', 'products', 'about', 'contact'];
+    const visible = new Map<string, number>();
+
+    observerRef.current = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((e) => visible.set(e.target.id, e.intersectionRatio));
+        let topId: string | null = null;
+        let topRatio = 0;
+        visible.forEach((ratio, id) => { if (ratio > topRatio) { topRatio = ratio; topId = id; } });
+        if (topId) setActiveSection(topId);
+      },
+      { threshold: [0, 0.25, 0.5, 0.75, 1] }
+    );
+
+    sections.forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) observerRef.current!.observe(el);
+    });
+
+    return () => observerRef.current?.disconnect();
+  }, [isHome]);
+
+  const scrollTo = (sectionId: string) => {
+    const el = document.getElementById(sectionId);
+    if (!el) return;
+    const navHeight = navRef.current?.offsetHeight ?? 0;
+    const top = el.getBoundingClientRect().top + window.scrollY - navHeight;
+    const start = window.scrollY;
+    const dist = top - start;
+    const duration = 600;
+    let startTime: number | null = null;
+    const ease = (t: number) => t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
+    const step = (ts: number) => {
+      if (!startTime) startTime = ts;
+      const elapsed = ts - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+      window.scrollTo(0, start + dist * ease(progress));
+      if (progress < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  };
+
+  const handleNavClick = (l: typeof NAV_LINKS[0], closeMenu = false) => {
+    if (closeMenu) setOpen(false);
+    if (isHome && l.sectionId) {
+      scrollTo(l.sectionId);
+    } else if (!isHome && l.sectionId) {
+      router.push('/');
+      setTimeout(() => scrollTo(l.sectionId!), 400);
+    } else {
+      router.push(l.href);
+    }
+  };
+
+  const isActive = (l: typeof NAV_LINKS[0]) => {
+    if (isHome) {
+      if (l.sectionId === 'hero') return activeSection === 'hero' || activeSection === null;
+      return activeSection === l.sectionId;
+    }
+    return l.href === '/' ? pathname === '/' : pathname.startsWith(l.href);
+  };
 
   return (
-    <nav className="bg-white shadow-[0_2px_20px_rgba(171,190,209,0.35)] sticky top-0 z-50">
-      <div className="max-w-[1280px] mx-auto px-6 md:px-12 h-[90px] flex items-center justify-between gap-8">
+    <nav ref={navRef} className="bg-white shadow-[0_2px_20px_rgba(171,190,209,0.35)] sticky top-0 z-50">
+      <div className="max-w-[1280px] mx-auto px-6 md:px-12 h-[65px] md:h-[90px] flex items-center justify-between gap-8">
 
         {/* ── Logo ── */}
         <Link href="/" className="flex items-center shrink-0">
-          <img src="/Logo PSI-new.jpeg" alt="PSI" className="h-16 w-auto object-contain" />
+          <img src="/Logo PSI-new.jpeg" alt="PSI" className="h-10 md:h-16 w-auto object-contain" style={{ maskImage: 'radial-gradient(ellipse 80% 80% at 50% 50%, black 55%, transparent 100%)', WebkitMaskImage: 'radial-gradient(ellipse 80% 80% at 50% 50%, black 55%, transparent 100%)' }} />
         </Link>
 
         {/* ── Desktop nav ── */}
         <div className="hidden md:flex items-center gap-10 flex-1 justify-end">
           <div className="flex items-center gap-8">
-            {[
-              { label: 'Accueil', href: '/#' },
-              { label: 'Produits', href: '/#products' },
-              { label: 'À propos', href: '/#about' },
-              { label: 'Contact', href: '/#contact' },
-            ].map((l) => (
-              <Link
-                key={l.label}
-                href={l.href}
-                className="text-[15px] font-medium text-[#4D4D4D] hover:text-[#4CAF4F] transition-colors relative group"
-              >
-                {l.label}
-                <span className="absolute -bottom-0.5 left-0 w-0 h-0.5 bg-[#4CAF4F] group-hover:w-full transition-all duration-200" />
-              </Link>
-            ))}
+            {NAV_LINKS.map((l) => {
+              const active = isActive(l);
+              return (
+                <button
+                  key={l.label}
+                  onClick={() => handleNavClick(l)}
+                  className={`text-[15px] font-medium transition-colors relative group ${active ? 'text-[#4CAF4F]' : 'text-[#4D4D4D] hover:text-[#4CAF4F]'}`}
+                >
+                  {l.label}
+                  <span className={`absolute -bottom-0.5 left-0 h-0.5 bg-[#4CAF4F] transition-all duration-200 ${active ? 'w-full' : 'w-0 group-hover:w-full'}`} />
+                </button>
+              );
+            })}
           </div>
 
           {/* Panier */}
-          <Link href="/cart" className="relative p-2 hover:bg-[#F5F7FA] rounded-lg transition-colors">
+          <Link href="/cart" className={`relative p-2 rounded-lg transition-colors ${pathname === '/cart' ? 'bg-[#F0FDF4]' : 'hover:bg-[#F5F7FA]'}`}>
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
-              <path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z" stroke="#4D4D4D" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-              <line x1="3" y1="6" x2="21" y2="6" stroke="#4D4D4D" strokeWidth="1.5" strokeLinecap="round"/>
-              <path d="M16 10a4 4 0 01-8 0" stroke="#4D4D4D" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+              <path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z" stroke={pathname === '/cart' ? '#4CAF4F' : '#4D4D4D'} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+              <line x1="3" y1="6" x2="21" y2="6" stroke={pathname === '/cart' ? '#4CAF4F' : '#4D4D4D'} strokeWidth="1.5" strokeLinecap="round"/>
+              <path d="M16 10a4 4 0 01-8 0" stroke={pathname === '/cart' ? '#4CAF4F' : '#4D4D4D'} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
             {totalItems > 0 && (
               <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] bg-[#4CAF4F] rounded-full text-white text-[10px] font-bold flex items-center justify-center px-1 shadow-sm">
@@ -52,10 +159,7 @@ export function Navbar() {
           </Link>
 
           {/* CTA */}
-          <Link
-            href="/quote"
-            className="bg-[#4CAF4F] text-white text-[15px] font-semibold px-7 py-2.5 rounded-lg flex items-center gap-2 hover:bg-[#43A047] shadow-[0_4px_14px_rgba(76,175,79,0.4)] hover:shadow-[0_6px_20px_rgba(76,175,79,0.5)] transition-all"
-          >
+          <Link href="/quote" className="bg-[#4CAF4F] text-white text-[15px] font-semibold px-7 py-2.5 rounded-lg flex items-center gap-2 hover:bg-[#43A047] shadow-[0_4px_14px_rgba(76,175,79,0.4)] hover:shadow-[0_6px_20px_rgba(76,175,79,0.5)] transition-all">
             Commander
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
               <path d="M3 8h10M9 4l4 4-4 4" stroke="white" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
@@ -77,7 +181,7 @@ export function Navbar() {
               </span>
             )}
           </Link>
-          <button onClick={() => setOpen(!open)} className="p-2 hover:bg-[#F5F7FA] rounded-lg transition-colors">
+          <button onClick={() => setOpen(!open)} className="p-3 hover:bg-[#F5F7FA] rounded-lg transition-colors">
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
               {open
                 ? <path d="M18 6L6 18M6 6l12 12" stroke="#263238" strokeWidth="2" strokeLinecap="round"/>
@@ -91,26 +195,16 @@ export function Navbar() {
       {/* ── Mobile menu ── */}
       {open && (
         <div className="md:hidden bg-white border-t border-[#F0F4F8] px-6 py-6 flex flex-col gap-5 shadow-lg">
-          {[
-            { label: 'Accueil', href: '/#' },
-            { label: 'Produits', href: '/#products' },
-            { label: 'À propos', href: '/#about' },
-            { label: 'Contact', href: '/#contact' },
-          ].map((l) => (
-            <Link
+          {NAV_LINKS.map((l) => (
+            <button
               key={l.label}
-              href={l.href}
-              onClick={() => setOpen(false)}
-              className="text-[17px] font-medium text-[#4D4D4D] hover:text-[#4CAF4F] transition-colors"
+              onClick={() => handleNavClick(l, true)}
+              className={`text-left text-[17px] font-medium transition-colors ${isActive(l) ? 'text-[#4CAF4F]' : 'text-[#4D4D4D] hover:text-[#4CAF4F]'}`}
             >
               {l.label}
-            </Link>
+            </button>
           ))}
-          <Link
-            href="/quote"
-            onClick={() => setOpen(false)}
-            className="mt-2 w-full bg-[#4CAF4F] text-white text-[16px] font-semibold px-6 py-3.5 rounded-xl text-center shadow-[0_4px_14px_rgba(76,175,79,0.4)]"
-          >
+          <Link href="/quote" onClick={() => setOpen(false)} className="mt-2 w-full bg-[#4CAF4F] text-white text-[16px] font-semibold px-6 py-3.5 rounded-xl text-center shadow-[0_4px_14px_rgba(76,175,79,0.4)]">
             Commander →
           </Link>
         </div>

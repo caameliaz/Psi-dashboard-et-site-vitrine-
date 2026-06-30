@@ -4,6 +4,34 @@ import { auth } from '@/lib/auth';
 
 type Ctx = { params: Promise<{ id: string }> };
 
+// PATCH /api/products/fields/[id] — modifier une définition de champ (admin)
+export async function PATCH(request: NextRequest, { params }: Ctx) {
+  // TODO: remettre auth avant prod
+  // const session = await auth();
+  // if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+  const { id } = await params;
+
+  try {
+    const body = await request.json();
+
+    const field = await prisma.productFieldDef.update({
+      where: { id },
+      data: {
+        ...(body.label !== undefined && { label: body.label }),
+        ...(body.type !== undefined && { type: body.type }),
+        ...(body.required !== undefined && { required: body.required }),
+        ...(body.order !== undefined && { order: body.order }),
+      },
+    });
+
+    return NextResponse.json(field);
+  } catch (e) {
+    console.error(e);
+    return NextResponse.json({ error: 'Failed to update field definition' }, { status: 500 });
+  }
+}
+
 // DELETE /api/products/fields/[id] — supprimer une définition de champ (admin)
 export async function DELETE(_request: NextRequest, { params }: Ctx) {
   // TODO: remettre auth avant prod

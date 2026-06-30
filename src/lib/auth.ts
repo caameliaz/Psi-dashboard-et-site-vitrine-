@@ -42,6 +42,18 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     async jwt({ token, user }) {
       if (user) {
         token.role = user.role as Role;
+        // Stocker sessionVersion initial pour pouvoir détecter une invalidation
+        const dbUser = await prisma.user.findUnique({ where: { id: user.id } });
+        token.sessionVersion = dbUser?.sessionVersion ?? 0;
+      } else {
+        // À chaque requête : vérifier que sessionVersion n'a pas changé
+        const dbUser = await prisma.user.findUnique({
+          where: { id: token.sub! },
+          select: { sessionVersion: true, active: true },
+        });
+        if (!dbUser || !dbUser.active || dbUser.sessionVersion !== token.sessionVersion) {
+          return null;
+        }
       }
       return token;
     },

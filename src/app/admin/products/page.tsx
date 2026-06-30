@@ -1,7 +1,8 @@
 ﻿'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Modal } from '@/components/ui/Modal';
+import { AdminSelect } from '@/components/ui/AdminSelect';
 
 function IconPencil() {
   return (
@@ -23,14 +24,21 @@ function IconTrash() {
 
 function Toggle({ active, onToggle }: { active: boolean; onToggle: () => void }) {
   return (
-    <button onClick={onToggle} className="relative w-10 h-5 rounded-full transition-colors" style={{ background: active ? '#4CAF4F' : '#D0D5DD' }}>
-      <span className="absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform" style={{ transform: active ? 'translateX(20px)' : 'translateX(2px)' }} />
+    <button
+      onClick={onToggle}
+      className="relative flex-shrink-0 rounded-full transition-colors duration-200"
+      style={{ width: 44, height: 26, background: active ? '#4CAF4F' : '#D0D5DD' }}
+    >
+      <span
+        className="absolute top-[3px] left-[3px] w-5 h-5 rounded-full bg-white shadow-sm transition-all duration-200"
+        style={{ transform: active ? 'translateX(18px)' : 'translateX(0px)' }}
+      />
     </button>
   );
 }
 
 interface Product {
-  id: number;
+  id: string;
   reference: string;
   largeur: string;
   longueur: string;
@@ -38,15 +46,16 @@ interface Product {
   actif: boolean;
 }
 
-const initialProducts: Product[] = [
-  { id: 1, reference: '80/80', largeur: '80mm', longueur: '80m', categorie: 'Thermique', actif: true },
-  { id: 2, reference: '57/40', largeur: '57mm', longueur: '40m', categorie: 'Thermique', actif: true },
-  { id: 3, reference: '110/50', largeur: '110mm', longueur: '50m', categorie: 'Standard', actif: false },
-  { id: 4, reference: '76/60', largeur: '76mm', longueur: '60m', categorie: 'Premium', actif: true },
-  { id: 5, reference: '44/40', largeur: '44mm', longueur: '40m', categorie: 'Standard', actif: false },
-];
-
-const initialCategories = ['Thermique', 'Standard', 'Premium', 'Spécial'];
+function dbProductToProduct(p: any): Product {
+  return {
+    id: p.id,
+    reference: p.reference ?? '—',
+    largeur: p.width ? `${p.width}mm` : '—',
+    longueur: p.length ? `${p.length}m` : '—',
+    categorie: p.category?.name ?? 'Standard',
+    actif: p.active ?? true,
+  };
+}
 
 const emptyForm = { reference: '', largeur: '', longueur: '', categorie: 'Thermique' };
 
@@ -134,29 +143,77 @@ function DeleteModal({ product, onDeactivate, onDelete, onClose }: {
 }
 
 export default function ProductsPage() {
-  const [products, setProducts] = useState<Product[]>(initialProducts);
-  const [categories, setCategories] = useState<string[]>(initialCategories);
-  const [newCat, setNewCat] = useState('');
-  const [search, setSearch] = useState('');
+  const [products, setProducts] = useState<Product[]>([]);
+  const [categories, setCategories] = useState<string[]>([]);
+  const [loading, setLoading]   = useState(true);
+  const [newCat, setNewCat]     = useState('');
+  const [search, setSearch]     = useState('');
   const [filterCat, setFilterCat] = useState('all');
   const [filterActif, setFilterActif] = useState<'all' | 'actif' | 'inactif'>('all');
 
-  const [showAdd, setShowAdd] = useState(false);
-  const [editProduct, setEditProduct] = useState<Product | null>(null);
+  const [showAdd, setShowAdd]           = useState(false);
+  const [editProduct, setEditProduct]   = useState<Product | null>(null);
   const [deleteProduct, setDeleteProduct] = useState<Product | null>(null);
-  const [addForm, setAddForm] = useState(emptyForm);
+  const [addForm, setAddForm]   = useState(emptyForm);
   const [editForm, setEditForm] = useState(emptyForm);
 
-  const toggleProduct = (id: number) => setProducts((p) => p.map((x) => x.id === id ? { ...x, actif: !x.actif } : x));
+  const fetchProducts = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await fetch('/api/products?all=true');
+      if (res.ok) {
+        const data = await res.json();
+        const mapped: Product[] = data.map(dbProductToProduct);
+        setProducts(mapped);
+        const cats = [...new Set(mapped.map((p) => p.categorie))];
+        setCategories(cats.length ? cats : ['Standard']);
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { fetchProducts(); }, [fetchProducts]);
+
+  const toggleProduct = async (id: string) => {
+    const p = products.find((x) => x.id === id);
+    if (!p) return;
+    await fetch(`/api/products/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ active: !p.actif }),
+    });
+    await fetchProducts();
+  };
 
   const addCategory = () => {
     const t = newCat.trim();
     if (t && !categories.includes(t)) { setCategories((p) => [...p, t]); setNewCat(''); }
   };
 
-  const handleAdd = () => {
+  const handleAdd = async () => {
     if (!addForm.reference.trim()) return;
-    setProducts((p) => [...p, { id: Date.now(), ...addForm, actif: true }]);
+    const widthStr  = addForm.largeur.replace('mm', '').trim();
+    const lengthStr = addForm.longueur.replace('m', '').trim();
+    // Récupérer categoryId via /api/categories
+    const catRes = await fetch('/api/categories');
+    const cats   = catRes.ok ? await catRes.json() : [];
+    const cat    = cats.find((c: any) => c.name === addForm.categorie) ?? cats[0];
+    if (!cat) return;
+    await fetch('/api/products', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        reference: addForm.reference.trim(),
+        width: widthStr ? Number(widthStr) : 0,
+        length: lengthStr ? Number(lengthStr) : 0,
+        usage: '',
+        price: 0,
+        categoryId: cat.id,
+        active: true,
+      }),
+    });
+    await fetchProducts();
     setAddForm(emptyForm);
     setShowAdd(false);
   };
@@ -166,21 +223,38 @@ export default function ProductsPage() {
     setEditProduct(p);
   };
 
-  const handleEdit = () => {
+  const handleEdit = async () => {
     if (!editProduct) return;
-    setProducts((p) => p.map((x) => x.id === editProduct.id ? { ...x, ...editForm } : x));
+    const widthStr  = editForm.largeur.replace('mm', '').trim();
+    const lengthStr = editForm.longueur.replace('m', '').trim();
+    await fetch(`/api/products/${editProduct.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        reference: editForm.reference.trim(),
+        width: widthStr ? Number(widthStr) : undefined,
+        length: lengthStr ? Number(lengthStr) : undefined,
+      }),
+    });
+    await fetchProducts();
     setEditProduct(null);
   };
 
-  const handleDeactivate = () => {
+  const handleDeactivate = async () => {
     if (!deleteProduct) return;
-    setProducts((p) => p.map((x) => x.id === deleteProduct.id ? { ...x, actif: false } : x));
+    await fetch(`/api/products/${deleteProduct.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ active: false }),
+    });
+    await fetchProducts();
     setDeleteProduct(null);
   };
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (!deleteProduct) return;
-    setProducts((p) => p.filter((x) => x.id !== deleteProduct.id));
+    await fetch(`/api/products/${deleteProduct.id}`, { method: 'DELETE' });
+    await fetchProducts();
     setDeleteProduct(null);
   };
 
@@ -199,7 +273,7 @@ export default function ProductsPage() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-[22px] font-bold text-[#0F172A]">Produits</h1>
-          <p className="text-[13px] text-[#8A9BB5] mt-0.5">{filteredProducts.length} produit{filteredProducts.length !== 1 ? 's' : ''}</p>
+          <p className="text-[13px] text-[#8A9BB5] mt-0.5">{loading ? 'Chargement…' : `${filteredProducts.length} produit${filteredProducts.length !== 1 ? 's' : ''}`}</p>
         </div>
         <button onClick={() => { setAddForm(emptyForm); setShowAdd(true); }} className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white transition-colors" style={{ background: '#4CAF4F' }}>
           + Nouveau produit
@@ -214,55 +288,85 @@ export default function ProductsPage() {
           </svg>
           <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Rechercher reference..." className={inputClass + " pl-8 w-[200px]"} />
         </div>
-        <select value={filterCat} onChange={(e) => setFilterCat(e.target.value)} className={inputClass}>
-          <option value="all">Toutes categories</option>
-          {categories.map((c) => <option key={c} value={c}>{c}</option>)}
-        </select>
-        <select value={filterActif} onChange={(e) => setFilterActif(e.target.value as typeof filterActif)} className={inputClass}>
-          <option value="all">Actif + Inactif</option>
-          <option value="actif">Actifs seulement</option>
-          <option value="inactif">Inactifs seulement</option>
-        </select>
+        <AdminSelect
+          value={filterCat}
+          onChange={setFilterCat}
+          options={[{ value: 'all', label: 'Toutes catégories' }, ...categories.map((c) => ({ value: c, label: c }))]}
+        />
+        <AdminSelect
+          value={filterActif}
+          onChange={(v) => setFilterActif(v as typeof filterActif)}
+          options={[{ value: 'all', label: 'Actif + Inactif' }, { value: 'actif', label: 'Actifs seulement' }, { value: 'inactif', label: 'Inactifs seulement' }]}
+        />
       </div>
 
-      <div className="bg-white rounded-2xl border border-[#E2E8F0] overflow-hidden shadow-sm mb-8">
-        <table className="w-full">
-          <thead>
-            <tr style={{ background: '#F8FAFC' }}>
-              {['Référence', 'Largeur', 'Longueur', 'Catégorie', 'Actif', 'Actions'].map((h) => (
-                <th key={h} className="px-6 py-3.5 text-left font-semibold text-[#8A9BB5] uppercase tracking-wider" style={{ fontSize: 11 }}>{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {filteredProducts.length === 0
-              ? <tr><td colSpan={6} className="px-6 py-14 text-center text-[13px] text-[#8A9BB5]">Aucun produit trouve</td></tr>
-              : filteredProducts.map((p) => (
-              <tr key={p.id} className="border-t border-[#F2F4F7] hover:bg-[#F8FAFC] transition-colors">
-                <td className="px-6 py-4 text-[13px] font-bold text-[#0F172A]">{p.reference}</td>
-                <td className="px-6 py-4 text-[13px] text-[#8A9BB5]">{p.largeur}</td>
-                <td className="px-6 py-4 text-[13px] text-[#8A9BB5]">{p.longueur}</td>
-                <td className="px-6 py-4 text-[13px] text-[#8A9BB5]">{p.categorie}</td>
-                <td className="px-6 py-4"><Toggle active={p.actif} onToggle={() => toggleProduct(p.id)} /></td>
-                <td className="px-6 py-4">
-                  <div className="flex items-center gap-3">
-                    <button onClick={() => openEdit(p)} className="hover:opacity-70 transition-opacity"><IconPencil /></button>
-                    <button onClick={() => setDeleteProduct(p)} className="hover:opacity-70 transition-opacity"><IconTrash /></button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      {filteredProducts.length === 0 ? (
+        <div className="text-center py-20 text-[#8A9BB5] mb-8">
+          <p className="text-[15px] font-semibold">Aucun produit trouvé</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 mb-8">
+          {filteredProducts.map((p) => (
+            <div
+              key={p.id}
+              className="bg-white rounded-2xl shadow-[0_4px_24px_rgba(171,190,209,0.35)] hover:shadow-[0_8px_32px_rgba(171,190,209,0.5)] transition-all flex flex-col overflow-hidden"
+              style={{ opacity: p.actif ? 1 : 0.5 }}
+            >
+              {/* Visuel rouleau (identique site public) */}
+              <div className="bg-[#F5F7FA] h-36 flex items-center justify-center">
+                <div className="relative w-20 h-20">
+                  <div className="absolute inset-0 rounded-full bg-[#E8F5E9] border-2 border-[#4CAF4F]" />
+                  <div className="absolute inset-[15%] rounded-full bg-[#C8E6C9] border-[1.5px] border-[#4CAF4F]" />
+                  <div className="absolute inset-[30%] rounded-full bg-[#4CAF4F]" />
+                  <div className="absolute inset-[43%] rounded-full bg-white" />
+                </div>
+              </div>
+
+              {/* Infos */}
+              <div className="p-4 flex flex-col gap-3 flex-1">
+                <div>
+                  <h3 className="text-[16px] font-semibold text-[#263238]">Réf. {p.reference}</h3>
+                  <p className="text-[13px] font-medium text-[#4D4D4D]">{p.largeur} × {p.longueur}</p>
+                  <p className="text-[12px] text-[#8A9BB5] mt-0.5">{p.categorie}</p>
+                </div>
+
+                {/* Toggle actif */}
+                <div className="flex items-center justify-between mt-auto pt-3 border-t border-[#F2F4F7]">
+                  <span className="text-[12px] font-semibold" style={{ color: p.actif ? '#4CAF4F' : '#9CA3AF' }}>
+                    {p.actif ? 'Actif' : 'Inactif'}
+                  </span>
+                  <Toggle active={p.actif} onToggle={() => toggleProduct(p.id)} />
+                </div>
+
+                {/* Actions */}
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => openEdit(p)}
+                    className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg border border-[#E2E8F0] hover:border-[#4CAF4F] hover:bg-[#F0FDF4] transition-colors"
+                  >
+                    <IconPencil />
+                    <span className="text-[12px] font-semibold text-[#8A9BB5]">Modifier</span>
+                  </button>
+                  <button
+                    onClick={() => setDeleteProduct(p)}
+                    className="flex items-center justify-center w-9 rounded-lg border border-[#E2E8F0] hover:border-[#EF4444] hover:bg-[#FEF2F2] transition-colors"
+                  >
+                    <IconTrash />
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       <div className="bg-white rounded-2xl border border-[#E2E8F0] p-6 shadow-sm">
         <h2 className="text-[15px] font-bold text-[#0F172A] mb-4">Catégories</h2>
         <div className="flex flex-wrap gap-2 mb-4">
           {categories.map((cat) => (
-            <span key={cat} className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-medium bg-[#F0FDF4] text-[#166534]">
+            <span key={cat} className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium bg-[#F0FDF4] text-[#166534]">
               {cat}
-              <button onClick={() => setCategories((p) => p.filter((c) => c !== cat))} className="text-[#4CAF4F] hover:text-[#991B1B] transition-colors font-bold">×</button>
+              <button onClick={() => setCategories((p) => p.filter((c) => c !== cat))} className="w-5 h-5 flex items-center justify-center rounded-full text-[#4CAF4F] hover:bg-[#DCFCE7] hover:text-[#991B1B] transition-colors font-bold text-base leading-none">×</button>
             </span>
           ))}
         </div>

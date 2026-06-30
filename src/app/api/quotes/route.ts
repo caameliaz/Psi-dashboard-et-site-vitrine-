@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { createNotif } from '@/lib/notifications';
 
 export async function GET() {
   const session = await auth();
@@ -73,6 +74,13 @@ export async function POST(request: NextRequest) {
         },
       },
       include: { items: true, client: { include: { phones: true } } },
+    });
+
+    await createNotif({
+      type: 'SITE_DEVIS',
+      title: 'Nouveau devis',
+      message: `${client.company ?? client.name} — ${body.message?.slice(0, 60) ?? ''}`,
+      quoteId: quote.id,
     });
 
     return NextResponse.json(quote, { status: 201 });

@@ -1,6 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { auth } from '@/lib/auth';
 
+// GET /api/contact — liste tous les messages de contact (admin + employé)
+export async function GET() {
+  const session = await auth();
+  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+  try {
+    const contacts = await prisma.contactRequest.findMany({
+      include: { client: { include: { phones: true } } },
+      orderBy: { createdAt: 'desc' },
+    });
+    return NextResponse.json(contacts);
+  } catch (e) {
+    console.error(e);
+    return NextResponse.json({ error: 'Failed to fetch contacts' }, { status: 500 });
+  }
+}
+
+// POST /api/contact — envoyer un message de contact (public)
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();

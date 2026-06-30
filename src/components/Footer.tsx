@@ -8,7 +8,7 @@ export function Footer() {
         {/* Brand */}
         <div className="flex flex-col gap-5">
           <div className="flex items-center gap-3">
-            <img src="/Logo PSI-new.jpeg" alt="PSI" className="h-[72px] w-[72px] object-contain rounded-xl" />
+            <img src="/Logo PSI-new.jpeg" alt="PSI" className="h-[72px] w-[72px] object-contain" style={{ maskImage: 'radial-gradient(ellipse 80% 80% at 50% 50%, black 55%, transparent 100%)', WebkitMaskImage: 'radial-gradient(ellipse 80% 80% at 50% 50%, black 55%, transparent 100%)' }} />
             <div className="flex flex-col">
               <span className="text-white text-[20px] font-bold tracking-tight leading-none">PSI</span>
               <span className="text-[#89939E] text-[12px] mt-0.5">psi-algerie.com</span>
@@ -19,15 +19,22 @@ export function Footer() {
           </p>
           {/* Réseaux */}
           <div className="flex items-center gap-3">
-            {[
-              <path key="fb" d="M18 2h-3a5 5 0 00-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 011-1h3z" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>,
-              <><rect key="ig1" x="2" y="2" width="20" height="20" rx="5" stroke="white" strokeWidth="1.5"/><circle key="ig2" cx="12" cy="12" r="4" stroke="white" strokeWidth="1.5"/><circle key="ig3" cx="17.5" cy="6.5" r="1" fill="white"/></>,
-              <path key="li" d="M16 8a6 6 0 016 6v7h-4v-7a2 2 0 00-2-2 2 2 0 00-2 2v7h-4v-7a6 6 0 016-6zM2 9h4v12H2z M4 4a2 2 0 100 4 2 2 0 000-4z" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>,
-            ].map((icon, i) => (
-              <a key={i} href="#" className="w-9 h-9 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none">{icon}</svg>
-              </a>
-            ))}
+            <a href="https://www.facebook.com/PSI" target="_blank" rel="noopener noreferrer"
+              className="w-9 h-9 rounded-lg bg-white/10 hover:bg-[#1877F2]/30 flex items-center justify-center transition-colors group"
+              title="PSI sur Facebook · 82K abonnés">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                <path d="M18 2h-3a5 5 0 00-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 011-1h3z" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </a>
+            <a href="https://www.instagram.com/psi04_2026" target="_blank" rel="noopener noreferrer"
+              className="w-9 h-9 rounded-lg bg-white/10 hover:bg-[#E1306C]/30 flex items-center justify-center transition-colors group"
+              title="@psi04_2026 sur Instagram">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                <rect x="2" y="2" width="20" height="20" rx="5" stroke="white" strokeWidth="1.5"/>
+                <circle cx="12" cy="12" r="4" stroke="white" strokeWidth="1.5"/>
+                <circle cx="17.5" cy="6.5" r="1" fill="white"/>
+              </svg>
+            </a>
           </div>
         </div>
 
@@ -62,7 +69,7 @@ export function Footer() {
                   <circle cx="12" cy="10" r="3" stroke="#4CAF4F" strokeWidth="1.8"/>
                 </svg>
               </div>
-              <span className="text-[13px] text-[#89939E] leading-relaxed">Centre El Qods, Niveau M1<br/>Chéraga, Alger — Wilaya 16</span>
+              <a href="https://maps.google.com/?q=Centre+El+Qods+Cheraga+Alger" target="_blank" rel="noopener noreferrer" className="text-[13px] text-[#89939E] leading-relaxed hover:text-white transition-colors">Centre El Qods, Niveau M1<br/>Chéraga, Alger</a>
             </li>
             <li className="flex items-center gap-3">
               <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center shrink-0">

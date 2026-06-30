@@ -28,6 +28,8 @@
     font-family: Inter, sans-serif;
     -webkit-font-smoothing: antialiased;
     scroll-behavior: smooth;
+    -webkit-overflow-scrolling: touch;
+    font-size: 100%;
   }
 
   body {
