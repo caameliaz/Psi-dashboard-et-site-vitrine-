@@ -1,6 +1,24 @@
 import Link from 'next/link';
 
-export function Footer() {
+async function getContent(): Promise<Record<string, string>> {
+  try {
+    const base = process.env.NEXTAUTH_URL ?? 'http://localhost:3000';
+    const res = await fetch(`${base}/api/content`, { next: { revalidate: 60 } });
+    if (!res.ok) return {};
+    return res.json();
+  } catch {
+    return {};
+  }
+}
+
+export async function Footer() {
+  const content = await getContent();
+
+  const adresse   = content['contact_adresse']   ?? 'Centre El Qods, Niveau M1, Chéraga, Alger';
+  const email     = content['contact_email']     ?? 'contact@psi-algerie.com';
+  const facebook  = content['contact_facebook']  ?? 'https://www.facebook.com/PSI';
+  const instagram = content['contact_instagram'] ?? 'https://www.instagram.com/psi04_2026';
+
   return (
     <footer className="bg-[#263238]">
       <div className="max-w-[1280px] mx-auto px-6 md:px-12 py-14 grid grid-cols-1 sm:grid-cols-3 gap-10">
@@ -19,14 +37,14 @@ export function Footer() {
           </p>
           {/* Réseaux */}
           <div className="flex items-center gap-3">
-            <a href="https://www.facebook.com/PSI" target="_blank" rel="noopener noreferrer"
+            <a href={facebook} target="_blank" rel="noopener noreferrer"
               className="w-9 h-9 rounded-lg bg-white/10 hover:bg-[#1877F2]/30 flex items-center justify-center transition-colors group"
               title="PSI sur Facebook · 82K abonnés">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
                 <path d="M18 2h-3a5 5 0 00-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 011-1h3z" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
               </svg>
             </a>
-            <a href="https://www.instagram.com/psi04_2026" target="_blank" rel="noopener noreferrer"
+            <a href={instagram} target="_blank" rel="noopener noreferrer"
               className="w-9 h-9 rounded-lg bg-white/10 hover:bg-[#E1306C]/30 flex items-center justify-center transition-colors group"
               title="@psi04_2026 sur Instagram">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
@@ -69,7 +87,7 @@ export function Footer() {
                   <circle cx="12" cy="10" r="3" stroke="#4CAF4F" strokeWidth="1.8"/>
                 </svg>
               </div>
-              <a href="https://maps.google.com/?q=Centre+El+Qods+Cheraga+Alger" target="_blank" rel="noopener noreferrer" className="text-[13px] text-[#89939E] leading-relaxed hover:text-white transition-colors">Centre El Qods, Niveau M1<br/>Chéraga, Alger</a>
+              <a href={`https://maps.google.com/?q=${encodeURIComponent(adresse)}`} target="_blank" rel="noopener noreferrer" className="text-[13px] text-[#89939E] leading-relaxed hover:text-white transition-colors">{adresse}</a>
             </li>
             <li className="flex items-center gap-3">
               <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center shrink-0">
@@ -78,8 +96,8 @@ export function Footer() {
                   <path d="M22 6l-10 7L2 6" stroke="#4CAF4F" strokeWidth="1.8" strokeLinecap="round"/>
                 </svg>
               </div>
-              <a href="mailto:contact@psi-algerie.com" className="text-[13px] text-[#89939E] hover:text-white transition-colors">
-                contact@psi-algerie.com
+              <a href={`mailto:${email}`} className="text-[13px] text-[#89939E] hover:text-white transition-colors">
+                {email}
               </a>
             </li>
             <li className="flex items-center gap-3">

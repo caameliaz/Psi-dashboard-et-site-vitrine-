@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { revalidatePath } from 'next/cache';
 import { prisma } from '@/lib/prisma';
 import { auth } from '@/lib/auth';
 
@@ -39,6 +40,9 @@ export async function PUT(request: NextRequest) {
         update: { value: String(value) },
       });
     }
+
+    revalidatePath('/');
+    revalidatePath('/contact');
 
     return NextResponse.json({ success: true });
   } catch (error) {

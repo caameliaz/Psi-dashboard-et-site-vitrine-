@@ -6,21 +6,23 @@ import { Modal } from '@/components/ui/Modal';
 import { AdminSelect } from '@/components/ui/AdminSelect';
 
 const ALL_PERMISSIONS = [
-  { key: 'voir_commandes',     label: 'Voir les commandes & devis' },
-  { key: 'modifier_statuts',   label: 'Modifier les statuts' },
-  { key: 'voir_clients',       label: 'Voir les fiches clients' },
-  { key: 'modifier_clients',   label: 'Modifier / ajouter des clients' },
-  { key: 'voir_produits',      label: 'Voir les produits' },
-  { key: 'modifier_produits',  label: 'Modifier les produits' },
-  { key: 'voir_historique',    label: "Voir l'historique" },
-  { key: 'modifier_contenu',   label: 'Modifier le contenu du site' },
-  { key: 'gerer_utilisateurs', label: 'Gérer les utilisateurs' },
+  { key: 'voir_commandes',     label: 'Voir les commandes & devis',    short: 'Voir commandes'      },
+  { key: 'modifier_statuts',   label: 'Modifier les statuts',          short: 'Modifier statuts'    },
+  { key: 'voir_clients',       label: 'Voir les fiches clients',        short: 'Voir clients'        },
+  { key: 'modifier_clients',   label: 'Modifier / ajouter des clients', short: 'Modifier clients'   },
+  { key: 'voir_produits',      label: 'Voir les produits',              short: 'Voir produits'       },
+  { key: 'modifier_produits',  label: 'Modifier les produits',          short: 'Modifier produits'  },
+  { key: 'voir_historique',    label: "Voir l'historique",              short: 'Voir historique'     },
+  { key: 'modifier_contenu',   label: 'Modifier le contenu du site',   short: 'Modifier contenu'    },
+  { key: 'gerer_utilisateurs', label: 'Gérer les utilisateurs',         short: 'Gérer utilisateurs' },
 ] as const;
 
 type PermKey = typeof ALL_PERMISSIONS[number]['key'];
 
 const ADMIN_PERMS: PermKey[]   = ALL_PERMISSIONS.map((p) => p.key);
 const EMPLOYE_PERMS: PermKey[] = ['voir_commandes', 'modifier_statuts', 'voir_clients', 'voir_produits', 'voir_historique'];
+
+interface CustomRole { id: string; nom: string; permissions: PermKey[]; }
 
 interface User {
   id: number;
@@ -38,7 +40,9 @@ function dbUserToUser(u: any): User {
     email: u.email ?? '—',
     role: u.role === 'ADMIN' ? 'Admin' : 'Employe',
     statut: u.active ? 'Actif' : 'Inactif',
-    permissions: u.role === 'ADMIN' ? [...ADMIN_PERMS] : [...EMPLOYE_PERMS],
+    permissions: u.role === 'ADMIN'
+      ? [...ADMIN_PERMS]
+      : (u.permissions?.length ? u.permissions : [...EMPLOYE_PERMS]),
   };
 }
 
@@ -83,6 +87,81 @@ function PermToggle({ checked, onChange, disabled }: { checked: boolean; onChang
         </svg>
       )}
     </button>
+  );
+}
+
+/* ─── Overlay création de rôle personnalisé ─── */
+function RoleCreatorOverlay({ onClose, onCreate }: { onClose: () => void; onCreate: (role: CustomRole) => void }) {
+  const [nom, setNom] = useState('');
+  const [perms, setPerms] = useState<PermKey[]>([]);
+
+  const toggle = (key: PermKey) =>
+    setPerms((p) => p.includes(key) ? p.filter((k) => k !== key) : [...p, key]);
+
+  const handleCreate = () => {
+    if (!nom.trim()) return;
+    onCreate({ id: Date.now().toString(), nom: nom.trim(), permissions: perms });
+  };
+
+  return (
+    <div className="fixed inset-0 z-[200] flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-[2px]" onClick={onClose} />
+      <div className="relative bg-white rounded-2xl shadow-2xl w-[480px] max-h-[90vh] overflow-y-auto p-6 flex flex-col gap-5 mx-4">
+
+        <div className="flex items-center justify-between">
+          <h3 className="text-[16px] font-bold text-[#0F172A]">Nouveau rôle</h3>
+          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-[#F2F4F7] text-[#8A9BB5] transition-colors">
+            <svg width={14} height={14} viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
+          </button>
+        </div>
+
+        <div>
+          <label className="block text-[12px] font-semibold text-[#374151] mb-1.5">Titre du rôle</label>
+          <input
+            value={nom}
+            onChange={(e) => setNom(e.target.value)}
+            placeholder="ex : Gestionnaire commercial…"
+            className="w-full px-3 py-2.5 rounded-xl border border-[#E2E8F0] text-sm text-[#0F172A] focus:outline-none focus:border-[#4CAF4F] focus:ring-[3px] focus:ring-[#4CAF4F]/15 transition-all bg-white"
+          />
+        </div>
+
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <label className="text-[12px] font-semibold text-[#374151]">Autorisations</label>
+            <div className="flex gap-2">
+              <button onClick={() => setPerms([...ADMIN_PERMS])} className="text-[11px] font-semibold text-[#4CAF4F] hover:underline">Tout</button>
+              <span className="text-[#E2E8F0]">·</span>
+              <button onClick={() => setPerms([])} className="text-[11px] font-semibold text-[#8A9BB5] hover:underline">Aucun</button>
+            </div>
+          </div>
+          <div className="flex flex-col gap-1">
+            {ALL_PERMISSIONS.map((perm) => {
+              const checked = perms.includes(perm.key);
+              return (
+                <div key={perm.key} onClick={() => toggle(perm.key)}
+                  className="flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer transition-all"
+                  style={{ background: checked ? '#F0FDF4' : '#F8FAFC', border: `1.5px solid ${checked ? '#BBF7D0' : '#F2F4F7'}` }}>
+                  <div className="w-4 h-4 rounded flex-shrink-0 border-2 flex items-center justify-center transition-all"
+                    style={{ background: checked ? '#4CAF4F' : 'white', borderColor: checked ? '#4CAF4F' : '#D1D5DB' }}>
+                    {checked && <svg width={8} height={8} viewBox="0 0 12 12" fill="none"><path d="M2 6L5 9L10 3" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                  </div>
+                  <span className="text-[12px] font-medium" style={{ color: checked ? '#166534' : '#374151' }}>{perm.label}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="flex gap-3 pt-1">
+          <button onClick={onClose} className="flex-1 px-4 py-2.5 rounded-xl border border-[#E2E8F0] text-[13px] font-semibold text-[#374151] hover:bg-[#F8FAFC] transition-colors">Annuler</button>
+          <button onClick={handleCreate} disabled={!nom.trim()}
+            className="flex-1 px-4 py-2.5 rounded-xl text-[13px] font-bold text-white transition-opacity disabled:opacity-40"
+            style={{ background: '#4CAF4F' }}>
+            Créer le rôle
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -133,22 +212,33 @@ function CredsModal({ nom, email, password, onClose }: { nom: string; email: str
   );
 }
 
-/* ─── Formulaire de création (multi-étapes) ─── */
-interface AddFormData { nom: string; email: string; role: 'Admin' | 'Employe'; motdepasse: string; permissions: PermKey[]; }
+/* ─── Formulaire de création (une seule étape) ─── */
+interface AddFormData { nom: string; email: string; role: string; motdepasse: string; permissions: PermKey[]; }
 
-function CreateUserForm({ onSubmit, onClose }: { onSubmit: (data: AddFormData) => void; onClose: () => void }) {
-  const [step, setStep] = useState<1 | 2>(1);
+function CreateUserForm({ onSubmit, onClose, customRoles, onAddCustomRole }: {
+  onSubmit: (data: AddFormData) => void;
+  onClose: () => void;
+  customRoles: CustomRole[];
+  onAddCustomRole: (role: CustomRole) => void;
+}) {
   const [data, setData] = useState<AddFormData>({ nom: '', email: '', role: 'Employe', motdepasse: genPassword(), permissions: [...EMPLOYE_PERMS] });
+  const [showRoleCreator, setShowRoleCreator] = useState(false);
 
   const inputClass = "w-full px-3 py-2.5 rounded-xl border border-[#E2E8F0] text-sm text-[#0F172A] focus:outline-none focus:border-[#4CAF4F] focus:ring-[3px] focus:ring-[#4CAF4F]/15 transition-all bg-white";
 
-  const setRole = (role: 'Admin' | 'Employe') => {
-    setData({ ...data, role, permissions: role === 'Admin' ? [...ADMIN_PERMS] : [...EMPLOYE_PERMS] });
+  const selectRole = (roleId: string) => {
+    if (roleId === 'Admin') {
+      setData({ ...data, role: 'Admin', permissions: [...ADMIN_PERMS] });
+    } else if (roleId === 'Employe') {
+      setData({ ...data, role: 'Employe', permissions: [...EMPLOYE_PERMS] });
+    } else {
+      const cr = customRoles.find((r) => r.id === roleId);
+      setData({ ...data, role: roleId, permissions: cr ? [...cr.permissions] : [] });
+    }
   };
 
   const togglePerm = (perm: PermKey) => {
-    const isAdmin = data.role === 'Admin';
-    if (isAdmin) return;
+    if (data.role === 'Admin') return;
     setData((d) => ({
       ...d,
       permissions: d.permissions.includes(perm)
@@ -157,8 +247,23 @@ function CreateUserForm({ onSubmit, onClose }: { onSubmit: (data: AddFormData) =
     }));
   };
 
-  if (step === 1) {
-    return (
+  const handleCreateRole = (role: CustomRole) => {
+    onAddCustomRole(role);
+    setData({ ...data, role: role.id, permissions: [...role.permissions] });
+    setShowRoleCreator(false);
+  };
+
+  const isAdmin   = data.role === 'Admin';
+  const showPerms = !isAdmin;
+
+  const allRoles = [
+    { id: 'Admin',   label: 'Admin',   color: { active: { background: '#F3E8FF', borderColor: '#7C3AED', color: '#6B21A8' } } },
+    { id: 'Employe', label: 'Employé', color: { active: { background: '#F0FDF4', borderColor: '#4CAF4F', color: '#166534' } } },
+    ...customRoles.map((cr) => ({ id: cr.id, label: cr.nom, color: { active: { background: '#EFF6FF', borderColor: '#3B82F6', color: '#1D4ED8' } } })),
+  ];
+
+  return (
+    <>
       <div className="space-y-4">
         <div>
           <label className="block text-[12px] font-semibold text-[#374151] mb-1.5">Nom complet</label>
@@ -177,62 +282,80 @@ function CreateUserForm({ onSubmit, onClose }: { onSubmit: (data: AddFormData) =
             </button>
           </div>
         </div>
+
+        {/* Rôle */}
         <div>
-          <label className="block text-[12px] font-semibold text-[#374151] mb-1.5">Rôle</label>
-          <div className="flex gap-3">
-            {(['Admin', 'Employe'] as const).map((r) => (
-              <button key={r} onClick={() => setRole(r)} className="flex-1 py-2.5 rounded-xl text-[13px] font-semibold border-2 transition-all"
-                style={data.role === r ? { background: r === 'Admin' ? '#F3E8FF' : '#F0FDF4', borderColor: r === 'Admin' ? '#7C3AED' : '#4CAF4F', color: r === 'Admin' ? '#6B21A8' : '#166534' } : { background: '#F8FAFC', borderColor: '#E2E8F0', color: '#8A9BB5' }}>
-                {r === 'Admin' ? 'Admin' : 'Employé'}
-              </button>
-            ))}
+          <div className="flex items-center justify-between mb-1.5">
+            <label className="text-[12px] font-semibold text-[#374151]">Rôle</label>
+            <button onClick={() => setShowRoleCreator(true)} className="text-[11px] font-semibold text-[#4CAF4F] hover:underline">
+              + Ajouter un rôle
+            </button>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {allRoles.map((r) => {
+              const isActive = data.role === r.id;
+              return (
+                <button key={r.id} onClick={() => selectRole(r.id)}
+                  className="px-3 py-2 rounded-xl text-[13px] font-semibold border-2 transition-all"
+                  style={isActive ? r.color.active : { background: '#F8FAFC', borderColor: '#E2E8F0', color: '#8A9BB5' }}>
+                  {r.label}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Autorisations inline (grille 3 colonnes) — toujours rendu, animé par max-height */}
+          <div style={{
+            maxHeight: showPerms ? '400px' : '0',
+            opacity: showPerms ? 1 : 0,
+            overflow: 'hidden',
+            transition: 'max-height 0.28s ease, opacity 0.2s ease',
+            marginTop: showPerms ? '12px' : '0',
+          }}>
+            <div className="rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] p-3">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[11px] font-bold text-[#8A9BB5] uppercase tracking-widest">Autorisations</span>
+                <div className="flex gap-2">
+                  <button onClick={() => setData((d) => ({ ...d, permissions: [...ADMIN_PERMS] }))} className="text-[10px] font-semibold text-[#4CAF4F] hover:underline">Tout</button>
+                  <span className="text-[#E2E8F0]">·</span>
+                  <button onClick={() => setData((d) => ({ ...d, permissions: [] }))} className="text-[10px] font-semibold text-[#8A9BB5] hover:underline">Aucun</button>
+                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-1.5">
+                {ALL_PERMISSIONS.map((perm) => {
+                  const checked = data.permissions.includes(perm.key);
+                  return (
+                    <button key={perm.key} onClick={() => togglePerm(perm.key)}
+                      className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-[11px] font-medium text-left transition-all"
+                      style={{ background: checked ? '#F0FDF4' : 'white', border: `1.5px solid ${checked ? '#4CAF4F' : '#E2E8F0'}`, color: checked ? '#166534' : '#6B7280' }}>
+                      <div className="w-3 h-3 rounded flex-shrink-0 border flex items-center justify-center"
+                        style={{ background: checked ? '#4CAF4F' : 'white', borderColor: checked ? '#4CAF4F' : '#D1D5DB' }}>
+                        {checked && <svg width={7} height={7} viewBox="0 0 10 10" fill="none"><path d="M2 5L4 7.5L8 2.5" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                      </div>
+                      {perm.short}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
           </div>
         </div>
-        <div className="flex gap-3 pt-2">
+
+        <div className="flex gap-3 pt-1">
           <button onClick={onClose} className="flex-1 px-4 py-2.5 rounded-xl border border-[#E2E8F0] text-[13px] font-semibold text-[#374151] hover:bg-[#F8FAFC] transition-colors">Annuler</button>
-          <button onClick={() => { if (data.nom.trim() && data.email.trim()) setStep(2); }} className="flex-1 px-4 py-2.5 rounded-xl text-[13px] font-bold text-white" style={{ background: '#4CAF4F' }}>
-            Suivant — Autorisations
+          <button
+            onClick={() => { if (data.nom.trim() && data.email.trim()) onSubmit(data); }}
+            className="flex-1 px-4 py-2.5 rounded-xl text-[13px] font-bold text-white"
+            style={{ background: '#4CAF4F' }}>
+            Créer le compte
           </button>
         </div>
       </div>
-    );
-  }
 
-  // Step 2 : permissions
-  const isAdmin = data.role === 'Admin';
-  return (
-    <div>
-      <div className="flex items-center justify-between mb-3">
-        <p className="text-[12px] font-bold text-[#8A9BB5] uppercase tracking-widest">Autorisations</p>
-        {!isAdmin && (
-          <div className="flex gap-2">
-            <button onClick={() => setData({ ...data, permissions: [...ADMIN_PERMS] })} className="text-[11px] font-semibold text-[#4CAF4F] hover:underline">Tout cocher</button>
-            <span className="text-[#E2E8F0]">·</span>
-            <button onClick={() => setData({ ...data, permissions: [] })} className="text-[11px] font-semibold text-[#8A9BB5] hover:underline">Tout décocher</button>
-          </div>
-        )}
-        {isAdmin && <span className="text-[11px] text-[#ABBED1]">Toutes (Admin)</span>}
-      </div>
-
-      <div className="flex flex-col gap-2 mb-5">
-        {ALL_PERMISSIONS.map((perm) => {
-          const checked = data.permissions.includes(perm.key);
-          return (
-            <div key={perm.key} onClick={() => togglePerm(perm.key)}
-              className="flex items-center gap-3 px-4 py-3 rounded-xl transition-all"
-              style={{ background: checked ? '#F0FDF4' : '#F8FAFC', border: `1.5px solid ${checked ? '#BBF7D0' : '#F2F4F7'}`, cursor: isAdmin ? 'default' : 'pointer' }}>
-              <PermToggle checked={checked} onChange={() => togglePerm(perm.key)} disabled={isAdmin} />
-              <span className="text-[13px] font-medium" style={{ color: checked ? '#166534' : '#374151' }}>{perm.label}</span>
-            </div>
-          );
-        })}
-      </div>
-
-      <div className="flex gap-3">
-        <button onClick={() => setStep(1)} className="flex-1 px-4 py-2.5 rounded-xl border border-[#E2E8F0] text-[13px] font-semibold text-[#374151] hover:bg-[#F8FAFC] transition-colors">Retour</button>
-        <button onClick={() => onSubmit(data)} className="flex-1 px-4 py-2.5 rounded-xl text-[13px] font-bold text-white" style={{ background: '#4CAF4F' }}>Créer le compte</button>
-      </div>
-    </div>
+      {showRoleCreator && (
+        <RoleCreatorOverlay onClose={() => setShowRoleCreator(false)} onCreate={handleCreateRole} />
+      )}
+    </>
   );
 }
 
@@ -256,7 +379,7 @@ function EditUserForm({ form, setForm, onSubmit, onClose }: {
         <div className="flex gap-3">
           {(['Admin', 'Employe'] as const).map((r) => (
             <button key={r} onClick={() => setForm({ ...form, role: r })} className="flex-1 py-2.5 rounded-xl text-[13px] font-semibold border-2 transition-all"
-              style={form.role === r ? { background: r === 'Admin' ? '#F3E8FF' : '#F0FDF4', borderColor: r === 'Admin' ? '#7C3AED' : '#4CAF4F', color: r === 'Admin' ? '#6B21A8' : '#166534' } : { background: '#F8FAFC', borderColor: '#E2E8F0', color: '#8A9BB5' }}>
+              style={form.role === r ? { background: r === 'Admin' ? '#F3E8FF' : '#F0FDF4', borderColor: r === 'Admin' ? '#7C3AED' : '#4CAF4F', color: r === 'Admin' ? '#6B21A8' : '#166634' } : { background: '#F8FAFC', borderColor: '#E2E8F0', color: '#8A9BB5' }}>
               {r === 'Admin' ? 'Admin' : 'Employé'}
             </button>
           ))}
@@ -394,6 +517,7 @@ export default function UsersPage() {
   const [profilUser, setProfilUser] = useState<User | null>(null);
   const [editForm, setEditForm]     = useState(emptyForm);
   const [newCreds, setNewCreds]     = useState<{ nom: string; email: string; password: string } | null>(null);
+  const [customRoles, setCustomRoles] = useState<CustomRole[]>([]);
 
   const fetchUsers = useCallback(async () => {
     setLoading(true);
@@ -408,22 +532,36 @@ export default function UsersPage() {
     }
   }, []);
 
-  useEffect(() => { fetchUsers(); }, [fetchUsers]);
+  const fetchRoles = useCallback(async () => {
+    try {
+      const res = await fetch('/api/roles');
+      if (res.ok) setCustomRoles(await res.json());
+    } catch {}
+  }, []);
+
+  useEffect(() => { fetchUsers(); fetchRoles(); }, [fetchUsers, fetchRoles]);
 
   const handlePermChange = (userId: string | number, perm: PermKey, value: boolean) => {
+    let newPerms: PermKey[] = [];
     setUsers((prev) => prev.map((u) => {
       if (u.id !== userId) return u;
-      const perms = value ? [...new Set([...u.permissions, perm])] : u.permissions.filter((p) => p !== perm);
-      return { ...u, permissions: perms };
+      newPerms = value ? [...new Set([...u.permissions, perm])] : u.permissions.filter((p) => p !== perm);
+      return { ...u, permissions: newPerms };
     }));
     setProfilUser((prev) => {
       if (!prev || prev.id !== userId) return prev;
-      const perms = value ? [...new Set([...prev.permissions, perm])] : prev.permissions.filter((p) => p !== perm);
-      return { ...prev, permissions: perms };
+      newPerms = value ? [...new Set([...prev.permissions, perm])] : prev.permissions.filter((p) => p !== perm);
+      return { ...prev, permissions: newPerms };
+    });
+    fetch(`/api/users/${userId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ permissions: newPerms }),
     });
   };
 
   const handleAdd = async (data: AddFormData) => {
+    const dbRole = data.role === 'Admin' ? 'ADMIN' : 'EMPLOYEE';
     const res = await fetch('/api/users', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -431,13 +569,26 @@ export default function UsersPage() {
         name: data.nom,
         email: data.email,
         password: data.motdepasse,
-        role: data.role === 'Admin' ? 'ADMIN' : 'EMPLOYEE',
+        role: dbRole,
+        permissions: dbRole === 'ADMIN' ? [] : data.permissions,
       }),
     });
     if (res.ok) {
       await fetchUsers();
       setShowAdd(false);
       setNewCreds({ nom: data.nom, email: data.email, password: data.motdepasse });
+    }
+  };
+
+  const handleAddCustomRole = async (role: CustomRole) => {
+    const res = await fetch('/api/roles', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: role.nom, permissions: role.permissions }),
+    });
+    if (res.ok) {
+      const saved = await res.json();
+      setCustomRoles((prev) => [...prev, { id: saved.id, nom: saved.name, permissions: saved.permissions }]);
     }
   };
 
@@ -524,7 +675,6 @@ export default function UsersPage() {
                 style={{ opacity: isInactif ? 0.6 : 1 }}>
 
                 <div className="p-5">
-                  {/* Avatar + statut */}
                   <div className="flex items-start justify-between mb-4">
                     <div className="w-14 h-14 rounded-2xl flex items-center justify-center text-[18px] font-extrabold" style={{ background: ac.bg, color: ac.text }}>
                       {initials(u.nom)}
@@ -532,14 +682,11 @@ export default function UsersPage() {
                     <StatutBadge statut={u.statut} />
                   </div>
 
-                  {/* Nom + email */}
                   <p className="text-[15px] font-bold text-[#0F172A] leading-tight group-hover:text-[#4CAF4F] transition-colors">{u.nom}</p>
                   <p className="text-[11px] text-[#8A9BB5] mt-0.5 truncate">{u.email}</p>
 
-                  {/* Séparateur */}
                   <div className="h-px bg-[#F2F4F7] my-3" />
 
-                  {/* Rôle + autorisations */}
                   <div className="flex items-center justify-between">
                     <RoleBadge role={u.role} />
                     <span className="text-[11px] text-[#ABBED1]">
@@ -547,7 +694,6 @@ export default function UsersPage() {
                     </span>
                   </div>
 
-                  {/* Actions */}
                   <div className="flex gap-2 mt-4" onClick={(e) => e.stopPropagation()}>
                     <button onClick={() => openEdit(u)}
                       className="flex-1 py-1.5 rounded-lg border border-[#E2E8F0] text-[11px] font-semibold text-[#374151] hover:bg-[#F8FAFC] transition-colors">
@@ -573,7 +719,12 @@ export default function UsersPage() {
 
       {showAdd && (
         <Modal title="Nouvel utilisateur" onClose={() => setShowAdd(false)}>
-          <CreateUserForm onSubmit={handleAdd} onClose={() => setShowAdd(false)} />
+          <CreateUserForm
+            onSubmit={handleAdd}
+            onClose={() => setShowAdd(false)}
+            customRoles={customRoles}
+            onAddCustomRole={handleAddCustomRole}
+          />
         </Modal>
       )}
 

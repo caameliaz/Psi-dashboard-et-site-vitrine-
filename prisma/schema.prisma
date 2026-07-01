@@ -107,6 +107,7 @@ model ClientNote {
 // ─── COMMANDE ────────────────────────────────────────────────────────────────
 model Order {
   id            String         @id @default(cuid())
+  ref           String?        @unique
   client        Client         @relation(fields: [clientId], references: [id])
   clientId      String
   items         OrderItem[]
@@ -142,6 +143,7 @@ enum OrderSource {
 // ─── DEVIS ───────────────────────────────────────────────────────────────────
 model Quote {
   id               String         @id @default(cuid())
+  ref              String?        @unique
   client           Client         @relation(fields: [clientId], references: [id])
   clientId         String
   items            QuoteItem[]
@@ -239,6 +241,13 @@ model SiteContent {
 }
 
 // ─── UTILISATEUR ADMIN ───────────────────────────────────────────────────────
+model CustomRole {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  permissions String[]
+  createdAt   DateTime @default(now())
+}
+
 model User {
   id              String             @id @default(cuid())
   name            String
@@ -248,6 +257,7 @@ model User {
   active          Boolean            @default(true)
   phone           String?
   photo           String?
+  permissions     String[]           @default([])
   sessionVersion  Int                @default(0) // incrémenté pour invalider tous les cookies
   ordersCreated   Order[]            @relation("OrderCreatedBy")
   quotesCreated   Quote[]            @relation("QuoteCreatedBy")

@@ -25,23 +25,26 @@ const inputClass = "w-full px-3 py-2.5 rounded-lg border border-[#E2E8F0] text-s
 export default function ContentPage() {
   const [hero,    setHero]    = useState({ titre: '', soustitre: '' });
   const [about,   setAbout]   = useState({ texte: '' });
-  const [contact, setContact] = useState({ adresse: '', email: '', telephone: '' });
+  const [contact, setContact] = useState({ adresse: '', email: '', telephone: '', facebook: '', instagram: '' });
   const [saved,   setSaved]   = useState<Record<string, boolean>>({});
   const [saving,  setSaving]  = useState<Record<string, boolean>>({});
   const [loaded,  setLoaded]  = useState(false);
 
-  // Charger le contenu depuis l'API
   useEffect(() => {
     fetch('/api/content').then((r) => r.json()).then((data: Record<string, string>) => {
       setHero({
-        titre:     data['hero_titre']     ?? 'Bienvenue chez PSI',
-        soustitre: data['hero_soustitre'] ?? 'Des solutions papier thermique de qualité supérieure',
+        titre:     data['hero_titre']     ?? 'PSI',
+        soustitre: data['hero_soustitre'] ?? 'Spécialiste du papier thermique professionnel en Algérie',
       });
-      setAbout({ texte: data['about_texte'] ?? '' });
+      setAbout({
+        texte: data['about_texte'] ?? 'PSI (Paper Solutions Industry) est une entreprise algérienne spécialisée dans la transformation et la distribution de papier thermique professionnel. Basée à Alger, nous servons commerces, banques, restaurants et pharmacies à travers tout le territoire national.\n\nNous nous approvisionnons exclusivement auprès de fournisseurs européens certifiés, garantissant à nos clients des produits de qualité supérieure, conformes aux normes sanitaires les plus strictes.\n\nNotre mission est d\'offrir des solutions papier fiables, rapides et accessibles à tous les professionnels qui en ont besoin, avec un service client réactif et de proximité.',
+      });
       setContact({
-        adresse:   data['contact_adresse']   ?? '',
-        email:     data['contact_email']     ?? '',
-        telephone: data['contact_telephone'] ?? '',
+        adresse:   data['contact_adresse']   ?? 'Centre El Qods, Niveau M1, Chéraga, Alger',
+        email:     data['contact_email']     ?? 'contact@psi-algerie.com',
+        telephone: data['contact_telephone'] ?? '+213770150656',
+        facebook:  data['contact_facebook']  ?? 'https://www.facebook.com/PSI',
+        instagram: data['contact_instagram'] ?? 'https://www.instagram.com/psi04_2026',
       });
       setLoaded(true);
     }).catch(() => setLoaded(true));
@@ -134,9 +137,17 @@ export default function ContentPage() {
                 <label className="block text-[12px] font-semibold text-[#374151] mb-1.5">Téléphone</label>
                 <input value={contact.telephone} onChange={(e) => setContact({ ...contact, telephone: e.target.value })} className={inputClass} placeholder="Téléphone..." />
               </div>
+              <div>
+                <label className="block text-[12px] font-semibold text-[#374151] mb-1.5">Facebook (URL)</label>
+                <input value={contact.facebook} onChange={(e) => setContact({ ...contact, facebook: e.target.value })} className={inputClass} placeholder="https://www.facebook.com/..." />
+              </div>
+              <div>
+                <label className="block text-[12px] font-semibold text-[#374151] mb-1.5">Instagram (URL)</label>
+                <input value={contact.instagram} onChange={(e) => setContact({ ...contact, instagram: e.target.value })} className={inputClass} placeholder="https://www.instagram.com/..." />
+              </div>
               <div className="flex justify-end pt-1">
                 <SaveButton
-                  onClick={() => save('contact', { contact_adresse: contact.adresse, contact_email: contact.email, contact_telephone: contact.telephone })}
+                  onClick={() => save('contact', { contact_adresse: contact.adresse, contact_email: contact.email, contact_telephone: contact.telephone, contact_facebook: contact.facebook, contact_instagram: contact.instagram })}
                   saved={!!saved['contact']} loading={!!saving['contact']} />
               </div>
             </div>

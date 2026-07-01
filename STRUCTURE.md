@@ -115,6 +115,8 @@
 | `/api/templates/[id]` | PATCH, DELETE | Modifier / supprimer template |
 | `/api/statuses` | GET, POST | Statuts personnalisés |
 | `/api/statuses/[id]` | PATCH, DELETE | Modifier / supprimer statut |
+| `/api/roles` | GET, POST | Rôles personnalisés |
+| `/api/roles/[id]` | DELETE | Supprimer un rôle personnalisé |
 
 ## Auth & Middleware
 

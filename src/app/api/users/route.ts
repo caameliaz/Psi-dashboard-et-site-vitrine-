@@ -11,14 +11,8 @@ export async function GET() {
   try {
     const users = await prisma.user.findMany({
       select: {
-        id: true,
-        name: true,
-        email: true,
-        role: true,
-        active: true,
-        phone: true,
-        photo: true,
-        createdAt: true,
+        id: true, name: true, email: true, role: true,
+        active: true, phone: true, photo: true, permissions: true, createdAt: true,
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -55,10 +49,11 @@ export async function POST(request: NextRequest) {
         password: hashed,
         role: body.role ?? 'EMPLOYEE',
         phone: body.phone ?? null,
+        permissions: body.permissions ?? [],
       },
       select: {
         id: true, name: true, email: true, role: true,
-        active: true, phone: true, photo: true, createdAt: true,
+        active: true, phone: true, photo: true, permissions: true, createdAt: true,
       },
     });
 

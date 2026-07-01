@@ -22,6 +22,7 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
     if (body.active !== undefined) data.active = body.active;
     if (body.phone !== undefined) data.phone = body.phone;
     if (body.photo !== undefined) data.photo = body.photo;
+    if (body.permissions !== undefined) data.permissions = body.permissions;
     if (body.password !== undefined) data.password = await bcrypt.hash(body.password, 10);
 
     const user = await prisma.user.update({
@@ -29,7 +30,7 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
       data,
       select: {
         id: true, name: true, email: true, role: true,
-        active: true, phone: true, photo: true, createdAt: true,
+        active: true, phone: true, photo: true, permissions: true, createdAt: true,
       },
     });
 

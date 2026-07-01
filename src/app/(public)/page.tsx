@@ -1,11 +1,11 @@
 import Link from 'next/link';
 import { ProductCard } from '@/components/ProductCard';
 
+const BASE = process.env.NEXTAUTH_URL ?? 'http://localhost:3000';
+
 async function getProducts() {
   try {
-    const res = await fetch(`${process.env.NEXTAUTH_URL ?? 'http://localhost:3000'}/api/products`, {
-      next: { revalidate: 60 },
-    });
+    const res = await fetch(`${BASE}/api/products`, { next: { revalidate: 60 } });
     if (!res.ok) return [];
     return res.json();
   } catch {
@@ -13,8 +13,22 @@ async function getProducts() {
   }
 }
 
+async function getContent(): Promise<Record<string, string>> {
+  try {
+    const res = await fetch(`${BASE}/api/content`, { next: { revalidate: 60 } });
+    if (!res.ok) return {};
+    return res.json();
+  } catch {
+    return {};
+  }
+}
+
 export default async function Home() {
-  const products = await getProducts();
+  const [products, content] = await Promise.all([getProducts(), getContent()]);
+
+  const heroTitre     = content['hero_titre']     ?? 'PSI';
+  const heroSoustitre = content['hero_soustitre'] ?? 'Spécialiste du papier thermique professionnel en Algérie';
+  const aboutTexte    = content['about_texte']    ?? '';
   return (
     <div className="bg-white">
 
@@ -34,10 +48,10 @@ export default async function Home() {
             {/* Titre */}
             <div className="flex flex-col gap-2">
               <h1 className="text-[56px] md:text-[72px] font-extrabold text-white leading-none tracking-tight">
-                PSI
+                {heroTitre}
               </h1>
               <p className="text-[18px] md:text-[22px] font-light text-white/80 mt-1 leading-relaxed">
-                Spécialiste du papier thermique<br className="hidden md:block"/> professionnel en Algérie
+                {heroSoustitre}
               </p>
             </div>
 
@@ -184,15 +198,14 @@ export default async function Home() {
           </h2>
           <div className="flex flex-col lg:flex-row gap-10 lg:gap-16 items-start">
             <div className="flex flex-col gap-5 text-[16px] md:text-[17px] text-[#717171] leading-[1.75] flex-1">
-              <p>
-                PSI (Paper Solutions Industry) est une entreprise algérienne spécialisée dans la transformation et la distribution de papier thermique professionnel. Basée à Alger, nous servons commerces, banques, restaurants et pharmacies à travers tout le territoire national.
-              </p>
-              <p>
-                Nous nous approvisionnons exclusivement auprès de fournisseurs européens certifiés, garantissant à nos clients des produits de qualité supérieure, conformes aux normes sanitaires les plus strictes.
-              </p>
-              <p>
-                Notre mission est d'offrir des solutions papier fiables, rapides et accessibles à tous les professionnels qui en ont besoin, avec un service client réactif et de proximité.
-              </p>
+              {aboutTexte
+                ? aboutTexte.split('\n\n').map((para, i) => <p key={i}>{para}</p>)
+                : <>
+                    <p>PSI (Paper Solutions Industry) est une entreprise algérienne spécialisée dans la transformation et la distribution de papier thermique professionnel. Basée à Alger, nous servons commerces, banques, restaurants et pharmacies à travers tout le territoire national.</p>
+                    <p>Nous nous approvisionnons exclusivement auprès de fournisseurs européens certifiés, garantissant à nos clients des produits de qualité supérieure, conformes aux normes sanitaires les plus strictes.</p>
+                    <p>Notre mission est d'offrir des solutions papier fiables, rapides et accessibles à tous les professionnels qui en ont besoin, avec un service client réactif et de proximité.</p>
+                  </>
+              }
             </div>
             {/* Image */}
             <div className="lg:w-[460px] shrink-0 w-full">
