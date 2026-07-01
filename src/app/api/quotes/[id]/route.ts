@@ -60,9 +60,10 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
 
     if (body.status !== undefined) {
       notifyStatusChange({
+        actorId: session.user.id!,
         actorName: session.user.name ?? session.user.email ?? 'Agent',
         entityType: 'devis',
-        ref: quote.ref ?? id.slice(0, 8),
+        clientLabel: quote.client?.company ?? quote.client?.name ?? '—',
         newStatus: body.status,
         quoteId: quote.id,
       }).catch(() => {});

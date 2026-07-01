@@ -134,9 +134,25 @@ Le collègue fait : `npm install` → copie le `.env` → `npx prisma generate` 
 
 ---
 
+## Bugs corrigés (suite)
+
+- **Suppression client crashait** : `clientId` non nullable sur Order/Quote → FK constraint error. Fix : `clientId String?` + `onDelete: SetNull` + champs snapshot `clientName/clientCompany/clientWilaya` pour garder le nom dans l'export après suppression.
+- **Notifs changement statut** : logique finale — changement statut → tout le monde sauf l'acteur. Annulation → tout le monde (type ANNULATION rouge). Nouvelles commandes/devis site → tout le monde.
+- **Rôle affiché "Employé" au chargement** : fallback `'EMPLOYEE'` pendant `useSession` loading. Fix : fallback `'ADMIN'` pendant le chargement.
+- **`cmrXXXXX` dans les notifs** : commandes sans `ref` (créées avant la génération auto). Fix : fallback `(sans réf)` puis remplacé par `clientLabel` dans le message.
+- **Ronds à gauche dans le panel notifs** : supprimés (ligne 208 TopBar.tsx).
+- **Annulation sans confirmation** : ajout `window.confirm()` avant d'annuler dans RequestPanel.
+
+---
+
 ## Ce qui reste à faire
 - [ ] Page `/admin/content` — gestion des templates WA/MAIL (CRUD) à finaliser
 - [x] Notifications dans le header admin (cloche) ✓
-- [x] Restriction par rôle sur les pages admin ✓ (produits + users sécurisés)
+- [x] Restriction par rôle sur les pages admin ✓
 - [x] Création commande admin fonctionnelle ✓
-- [ ] Tests end-to-end avec le collègue (workflow commande complète)
+- [x] Suppression client sans détruire les commandes ✓
+- [x] Filtre période dans /requests ✓
+- [x] Snapshot clientName sur commandes ✓
+- [x] TESTS.md complet ✓
+- [ ] Merger le travail du collègue
+- [ ] Tests end-to-end checklist TESTS.md

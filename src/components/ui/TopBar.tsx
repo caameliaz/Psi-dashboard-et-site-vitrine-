@@ -205,7 +205,6 @@ export function TopBar() {
                       >
                         <div className="flex items-start justify-between gap-3">
                           <div className="flex items-start gap-2.5 flex-1 min-w-0">
-                            <span className="w-2 h-2 rounded-full flex-shrink-0 mt-1.5" style={{ background: cfg.dot }} />
                             <div className="min-w-0">
                               <p className="text-[13px] font-bold text-[#0F172A] leading-snug">{n.title}</p>
                               <p className="text-[12px] text-[#374151] mt-0.5 leading-snug">{n.message}</p>

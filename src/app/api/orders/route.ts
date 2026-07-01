@@ -81,6 +81,9 @@ export async function POST(request: NextRequest) {
       data: {
         ref,
         clientId: client.id,
+        clientName: client.name,
+        clientCompany: client.company ?? null,
+        clientWilaya: client.wilaya ?? null,
         source: body.source ?? 'SITE',
         createdById: session?.user?.id ?? null,
         ...(validItems.length > 0 && {

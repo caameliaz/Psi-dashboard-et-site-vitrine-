@@ -9,6 +9,8 @@ export async function createNotif({
   actorId,
   orderId,
   quoteId,
+  adminOnly,
+  actorOnly,
 }: {
   type: NotifType;
   title: string;
@@ -16,11 +18,21 @@ export async function createNotif({
   actorId?: string | null;
   orderId?: string;
   quoteId?: string;
+  adminOnly?: boolean;
+  actorOnly?: boolean;
 }) {
-  const users = await prisma.user.findMany({
-    where: { active: true },
-    select: { id: true },
-  });
+  const users = actorOnly && actorId
+    ? [{ id: actorId }]
+    : await prisma.user.findMany({
+        where: {
+          active: true,
+          ...(adminOnly && { role: 'ADMIN' }),
+          ...(actorId && type !== 'SITE_COMMANDE' && type !== 'SITE_DEVIS'
+            ? { NOT: { id: actorId } }
+            : {}),
+        },
+        select: { id: true },
+      });
 
   const notif = await prisma.notification.create({
     data: {

@@ -548,7 +548,7 @@ export function RequestPanel({ item, onClose, onStatusChange, onConvertToOrder }
                         Convertir en commande
                       </button>
                     )}
-                    <button onClick={() => { onStatusChange(item.ref, 'Annulé'); onClose(); }}
+                    <button onClick={() => { if (window.confirm(`Annuler ${item.type.toLowerCase()} de ${item.entreprise || item.client} ?`)) { onStatusChange(item.ref, 'Annulé'); onClose(); } }}
                       className="px-3 py-1.5 rounded-lg text-[12px] font-semibold border border-[#FECACA] text-[#EF4444] hover:bg-[#FEF2F2] transition-colors">
                       Annuler
                     </button>

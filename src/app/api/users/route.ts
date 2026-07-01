@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import bcrypt from 'bcryptjs';
+import { notifyUserCreated } from '@/lib/notify-activity';
 
 // GET /api/users — liste tous les utilisateurs (admin uniquement)
 export async function GET() {
@@ -61,6 +62,12 @@ export async function POST(request: NextRequest) {
         active: true, phone: true, photo: true, createdAt: true,
       },
     });
+
+    notifyUserCreated({
+      actorId: session.user.id!,
+      actorName: session.user.name ?? session.user.email ?? 'Admin',
+      userName: user.name,
+    }).catch(() => {});
 
     return NextResponse.json(user, { status: 201 });
   } catch (e) {

@@ -106,15 +106,18 @@ model ClientNote {
 
 // ─── COMMANDE ────────────────────────────────────────────────────────────────
 model Order {
-  id            String         @id @default(cuid())
-  ref           String?        @unique
-  client        Client         @relation(fields: [clientId], references: [id])
-  clientId      String
-  items         OrderItem[]
-  status        RequestStatus  @default(EN_ATTENTE)
-  source        OrderSource    @default(SITE)
-  cancelReason  String?
-  notes         String?
+  id              String         @id @default(cuid())
+  ref             String?        @unique
+  client          Client?        @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  clientId        String?
+  clientName      String?        // snapshot au moment de la création
+  clientCompany   String?
+  clientWilaya    String?
+  items           OrderItem[]
+  status          RequestStatus  @default(EN_ATTENTE)
+  source          OrderSource    @default(SITE)
+  cancelReason    String?
+  notes           String?
   createdBy     User?          @relation("OrderCreatedBy", fields: [createdById], references: [id])
   createdById   String?        // null si commande du site public
   notifications Notification[]
@@ -145,8 +148,11 @@ enum OrderSource {
 model Quote {
   id               String         @id @default(cuid())
   ref              String?        @unique
-  client           Client         @relation(fields: [clientId], references: [id])
-  clientId         String
+  client           Client?        @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  clientId         String?
+  clientName       String?        // snapshot au moment de la création
+  clientCompany    String?
+  clientWilaya     String?
   items            QuoteItem[]
   message          String         // description libre du client
   status           RequestStatus  @default(EN_ATTENTE)

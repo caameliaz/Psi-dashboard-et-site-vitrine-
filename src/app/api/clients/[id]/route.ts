@@ -63,7 +63,6 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
       include: { phones: true, _count: { select: { orders: true, quotes: true } } },
     });
 
-    // Mise à jour du téléphone principal si fourni
     if (body.phone !== undefined) {
       const existing = await prisma.clientPhone.findFirst({ where: { clientId: id, primary: true } });
       if (existing) {
@@ -80,22 +79,28 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
   }
 }
 
-// DELETE /api/clients/[id] — supprimer un client (admin uniquement)
+// DELETE /api/clients/[id] — supprime le client, les commandes/devis restent (clientId → null)
 export async function DELETE(_request: NextRequest, { params }: Ctx) {
   const session = await auth();
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  if (session.user.role !== 'ADMIN') return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  if ((session.user as { role?: string }).role !== 'ADMIN') return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
   const { id } = await params;
 
   try {
-    const client = await prisma.client.findUnique({ where: { id }, select: { name: true, company: true } });
+    const client = await prisma.client.findUnique({
+      where: { id },
+      select: { name: true, company: true },
+    });
+    if (!client) return NextResponse.json({ error: 'Client introuvable' }, { status: 404 });
+
     await prisma.client.delete({ where: { id } });
 
     notifyDeletion({
+      actorId: session.user.id!,
       actorName: session.user.name ?? session.user.email ?? 'Admin',
       entityType: 'client',
-      label: client?.company ?? client?.name ?? id.slice(0, 8),
+      label: client.company ?? client.name,
     }).catch(() => {});
 
     return NextResponse.json({ success: true });

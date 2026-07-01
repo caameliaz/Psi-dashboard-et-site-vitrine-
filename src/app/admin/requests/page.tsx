@@ -370,6 +370,7 @@ export default function RequestsPage() {
   const [loading, setLoading]     = useState(true);
   const [search, setSearch]       = useState('');
   const [filterStatut, setFilterStatut] = useState('all');
+  const [filterPeriode, setFilterPeriode] = useState('mois');
   const [selected, setSelected]   = useState<RequestDetail | null>(null);
   const [showCreate, setShowCreate] = useState(false);
 
@@ -401,11 +402,25 @@ export default function RequestsPage() {
   const allStatuts = activeTab === 'tous' ? ALL_STATUTS_COMMANDE : isDevis ? ALL_STATUTS_DEVIS : ALL_STATUTS_COMMANDE;
 
   const sorted = sortItems(rawItems);
+
+  const periodeStart = (() => {
+    const now = new Date();
+    if (filterPeriode === 'mois')   { const d = new Date(now); d.setDate(1); d.setHours(0,0,0,0); return d; }
+    if (filterPeriode === '3mois')  { const d = new Date(now); d.setMonth(d.getMonth() - 3); return d; }
+    if (filterPeriode === '6mois')  { const d = new Date(now); d.setMonth(d.getMonth() - 6); return d; }
+    if (filterPeriode === 'annee')  { const d = new Date(now); d.setFullYear(d.getFullYear() - 1); return d; }
+    return null;
+  })();
+
   const filtered = sorted.filter((r) => {
     const q = search.toLowerCase();
     const matchSearch = !q || r.client.toLowerCase().includes(q) || r.entreprise.toLowerCase().includes(q) || r.ref.toLowerCase().includes(q);
     const matchStatut = filterStatut === 'all' || r.statut === filterStatut;
-    return matchSearch && matchStatut;
+    const matchPeriode = !periodeStart || (() => {
+      const [d, m, y] = r.date.split('/').map(Number);
+      return new Date(y, m - 1, d) >= periodeStart;
+    })();
+    return matchSearch && matchStatut && matchPeriode;
   });
 
   const handleStatusChange = async (ref: string, newStatut: string) => {
@@ -537,7 +552,7 @@ export default function RequestsPage() {
             const isActive = activeTab === tab.key;
             const pendingCount = tab.key === 'commandes' ? attente.commandes : tab.key === 'devis' ? attente.devis : attente.commandes + attente.devis;
             return (
-              <button key={tab.key} onClick={() => { setActiveTab(tab.key as typeof activeTab); setFilterStatut('all'); setSearch(''); }}
+              <button key={tab.key} onClick={() => { setActiveTab(tab.key as typeof activeTab); setFilterStatut('all'); setSearch(''); setFilterPeriode('mois'); }}
                 className="flex items-center gap-2 px-5 py-2 rounded-xl text-[13px] font-semibold transition-all"
                 style={{ background: isActive ? '#fff' : 'transparent', color: isActive ? '#0F172A' : '#94A3B8', boxShadow: isActive ? '0 2px 8px rgba(0,0,0,0.08)' : 'none' }}>
                 {tab.label}
@@ -588,8 +603,19 @@ export default function RequestsPage() {
           onChange={setFilterStatut}
           options={[{ value: 'all', label: 'Tous les statuts' }, ...allStatuts.map((s) => ({ value: s, label: s }))]}
         />
-        {(search || filterStatut !== 'all') && (
-          <button onClick={() => { setSearch(''); setFilterStatut('all'); }} className="text-[12px] font-semibold text-[#8A9BB5] hover:text-[#374151]">Effacer</button>
+        <AdminSelect
+          value={filterPeriode}
+          onChange={setFilterPeriode}
+          options={[
+            { value: 'mois',  label: 'Ce mois' },
+            { value: '3mois', label: '3 derniers mois' },
+            { value: '6mois', label: '6 derniers mois' },
+            { value: 'annee', label: 'Cette année' },
+            { value: 'tout',  label: 'Tout afficher' },
+          ]}
+        />
+        {(search || filterStatut !== 'all' || filterPeriode !== 'mois') && (
+          <button onClick={() => { setSearch(''); setFilterStatut('all'); setFilterPeriode('mois'); }} className="text-[12px] font-semibold text-[#8A9BB5] hover:text-[#374151]">Effacer</button>
         )}
       </div>
 
