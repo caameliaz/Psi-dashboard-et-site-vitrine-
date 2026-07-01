@@ -107,6 +107,7 @@ model ClientNote {
 // ─── COMMANDE ────────────────────────────────────────────────────────────────
 model Order {
   id            String         @id @default(cuid())
+  ref           String?        @unique
   client        Client         @relation(fields: [clientId], references: [id])
   clientId      String
   items         OrderItem[]
@@ -134,6 +135,7 @@ model OrderItem {
 
 enum OrderSource {
   SITE
+  ADMIN
   WHATSAPP
   TELEPHONE
   AUTRE
@@ -142,6 +144,7 @@ enum OrderSource {
 // ─── DEVIS ───────────────────────────────────────────────────────────────────
 model Quote {
   id               String         @id @default(cuid())
+  ref              String?        @unique
   client           Client         @relation(fields: [clientId], references: [id])
   clientId         String
   items            QuoteItem[]

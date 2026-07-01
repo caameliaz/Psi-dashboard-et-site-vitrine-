@@ -3,6 +3,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { StatusPill } from '@/components/ui/StatusPill';
 import { RequestPanel, type RequestDetail } from '@/components/ui/RequestPanel';
+import { exportTableauExcel } from '@/lib/export-tableau';
+import { useSSE } from '@/lib/use-sse';
 
 const DB_TO_UI: Record<string, string> = {
   EN_ATTENTE: 'En attente', CONTACTE: 'Contacté',
@@ -58,7 +60,53 @@ const STAT_CONFIG = [
   { key: 'livrees',    label: 'Livrées',           sub: 'ce mois',  color: '#8B5CF6', bg: '#F5F3FF' },
 ];
 
-const TOP_COLORS = ['#4CAF4F', '#3B82F6', '#8B5CF6', '#F59E0B', '#EF4444'];
+const TOP_COLORS = ['#0D9488', '#3B82F6', '#8B5CF6'];
+
+const SOURCE_CONFIG = [
+  { key: 'site',      label: 'Site web',    color: '#0D9488', icon: '🌐' },
+  { key: 'admin',     label: 'Manuel',      color: '#3B82F6', icon: '✏️' },
+  { key: 'whatsapp',  label: 'WhatsApp',    color: '#25D366', icon: '💬' },
+  { key: 'telephone', label: 'Téléphone',   color: '#F59E0B', icon: '📞' },
+  { key: 'autre',     label: 'Autre',       color: '#8A9BB5', icon: '•'  },
+] as const;
+
+function SourceChart({ stats }: { stats: Record<string, number> }) {
+  const total = Object.values(stats).reduce((a, b) => a + b, 0);
+  const items = SOURCE_CONFIG.map(s => ({
+    ...s,
+    count: stats[s.key] ?? 0,
+    pct: total > 0 ? Math.round(((stats[s.key] ?? 0) / total) * 100) : 0,
+  })).filter(s => s.count > 0);
+
+  if (total === 0) return <p className="text-[12px] text-[#ABBED1]">Aucune donnée</p>;
+
+  return (
+    <div className="flex flex-col gap-3">
+      {/* Barre empilée */}
+      <div className="flex h-3 rounded-full overflow-hidden gap-px">
+        {items.map(s => (
+          <div key={s.key} style={{ width: `${s.pct}%`, background: s.color }} title={`${s.label} : ${s.count}`} />
+        ))}
+      </div>
+      {/* Légende */}
+      <div className="flex flex-col gap-2.5">
+        {items.map(s => (
+          <div key={s.key} className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: s.color }} />
+              <span className="text-[12px] font-semibold text-[#374151]">{s.label}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-[12px] font-bold tabular-nums" style={{ color: s.color }}>{s.count}</span>
+              <span className="text-[10px] text-[#ABBED1] w-8 text-right">{s.pct}%</span>
+            </div>
+          </div>
+        ))}
+      </div>
+      <p className="text-[10px] text-[#ABBED1] pt-1 border-t border-[#F2F4F7]">Total : {total} demandes</p>
+    </div>
+  );
+}
 
 function IconTrendUp() {
   return (
@@ -78,6 +126,44 @@ function TypeChip({ type }: { type: string }) {
   );
 }
 
+function PieChart({ data }: { data: { ref: string; qty: number; color: string }[] }) {
+  const total = data.reduce((s, d) => s + d.qty, 0);
+  if (total === 0) return <p className="text-[12px] text-[#8A9BB5] py-4">Aucune commande</p>;
+  const r = 52, cx = 64, cy = 64, gap = 0.06;
+  let angle = -Math.PI / 2;
+  const slices = data.map((d) => {
+    const sweep = (d.qty / total) * (2 * Math.PI) * (1 - gap * data.length / (2 * Math.PI));
+    const x1 = cx + r * Math.cos(angle);
+    const y1 = cy + r * Math.sin(angle);
+    angle += sweep + gap;
+    const x2 = cx + r * Math.cos(angle);
+    const y2 = cy + r * Math.sin(angle);
+    const large = sweep > Math.PI ? 1 : 0;
+    return { ...d, path: `M${cx},${cy} L${x1},${y1} A${r},${r} 0 ${large},1 ${x2},${y2} Z`, pct: Math.round((d.qty / total) * 100) };
+  });
+  return (
+    <div className="flex items-center gap-5">
+      <svg width="128" height="128" viewBox="0 0 128 128">
+        {slices.map((s, i) => <path key={i} d={s.path} fill={s.color} opacity={0.9} />)}
+        <circle cx={cx} cy={cy} r={36} fill="white" />
+        <text x={cx} y={cy - 5} textAnchor="middle" fontSize="13" fontWeight="800" fill="#0F172A">{total}</text>
+        <text x={cx} y={cy + 11} textAnchor="middle" fontSize="9" fill="#8A9BB5">roul.</text>
+      </svg>
+      <div className="flex flex-col gap-2.5 flex-1">
+        {slices.map((s, i) => (
+          <div key={i} className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: s.color }} />
+              <span className="text-[12px] font-bold text-[#374151] font-mono truncate">{s.ref}</span>
+            </div>
+            <span className="text-[12px] font-bold tabular-nums" style={{ color: s.color }}>{s.pct}%</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 type SortKey = 'client' | 'date' | 'statut' | null;
 
 export default function DashboardPage() {
@@ -93,6 +179,7 @@ export default function DashboardPage() {
   const [stats, setStats]       = useState({ commandes: 0, devis: 0, clients: 0, livrees: 0 });
   const [todayStats, setTodayStats] = useState({ commandes: 0, attente: 0, contactes: 0 });
   const [topProduits, setTopProduits] = useState<{ ref: string; qty: number; color: string }[]>([]);
+  const [sourceStats, setSourceStats] = useState({ site: 0, admin: 0, whatsapp: 0, telephone: 0, autre: 0 });
   const [loading, setLoading]   = useState(true);
 
   useEffect(() => {
@@ -167,9 +254,21 @@ export default function DashboardPage() {
       });
       const sorted = Object.entries(refCount)
         .sort((a, b) => b[1] - a[1])
-        .slice(0, 5)
+        .slice(0, 3)
         .map(([ref, qty], i) => ({ ref, qty, color: TOP_COLORS[i] ?? '#8A9BB5' }));
       setTopProduits(sorted);
+
+      // Source des commandes
+      const src = { site: 0, admin: 0, whatsapp: 0, telephone: 0, autre: 0 };
+      [...orders, ...quotes].forEach((o: any) => {
+        const s = (o.source ?? 'SITE').toLowerCase();
+        if (s === 'site') src.site++;
+        else if (s === 'admin') src.admin++;
+        else if (s === 'whatsapp') src.whatsapp++;
+        else if (s === 'telephone') src.telephone++;
+        else src.autre++;
+      });
+      setSourceStats(src);
 
     } finally {
       setLoading(false);
@@ -177,6 +276,7 @@ export default function DashboardPage() {
   }, []);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+  useSSE(useCallback(() => { fetchData(); }, [fetchData]));
 
   const handleSort = (key: SortKey) => {
     if (sortKey === key) setSortAsc((a) => !a);
@@ -194,8 +294,6 @@ export default function DashboardPage() {
     <span className="ml-1 inline-block opacity-40 text-[10px]">{sortKey === col ? (sortAsc ? '▲' : '▼') : '⇅'}</span>
   );
 
-  const totalTopQty = topProduits[0]?.qty ?? 1;
-
   return (
     <div className="w-full">
 
@@ -206,7 +304,7 @@ export default function DashboardPage() {
       </div>
 
       {/* 3 colonnes */}
-      <div className="grid grid-cols-3 gap-5 mb-8 items-start">
+      <div className="grid grid-cols-2 xl:grid-cols-4 gap-5 mb-8 items-stretch">
 
         {/* Post-it — stats du jour */}
         <div className="rounded-xl p-5 shadow-[4px_6px_18px_rgba(0,0,0,0.10)] relative" style={{ background: '#FFFDE7', transform: 'rotate(-1deg)', borderTop: '4px solid #FDD835' }}>
@@ -267,32 +365,19 @@ export default function DashboardPage() {
           <p className="text-[13px] font-semibold text-[#0F172A] mb-5">Références les plus commandées</p>
           {loading ? (
             <p className="text-[12px] text-[#8A9BB5] py-4">Chargement…</p>
-          ) : topProduits.length === 0 ? (
-            <p className="text-[12px] text-[#8A9BB5] py-4">Aucune commande ce mois</p>
           ) : (
-            <div className="flex flex-col gap-3">
-              {topProduits.map((p, i) => {
-                const pct = Math.round((p.qty / totalTopQty) * 100);
-                const rankColors = ['#F59E0B', '#9CA3AF', '#CD7C2F'];
-                const medalColor = i < 3 ? rankColors[i] : '#D1D5DB';
-                return (
-                  <div key={p.ref} className="flex items-center gap-3">
-                    <span className="w-5 h-5 flex-shrink-0 flex items-center justify-center rounded-full text-[10px] font-extrabold text-white" style={{ background: medalColor }}>
-                      {i + 1}
-                    </span>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="text-[13px] font-bold text-[#374151] font-mono">{p.ref}</span>
-                        <span className="text-[12px] font-bold tabular-nums" style={{ color: p.color }}>{p.qty} roul.</span>
-                      </div>
-                      <div className="h-1.5 rounded-full bg-[#F2F4F7] overflow-hidden">
-                        <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: p.color, opacity: 0.7 }} />
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+            <PieChart data={topProduits} />
+          )}
+        </div>
+
+        {/* Sources des demandes */}
+        <div className="bg-white rounded-2xl border border-[#E2E8F0] p-5 shadow-sm">
+          <p className="text-[11px] font-bold text-[#8A9BB5] uppercase tracking-widest mb-1">Origine</p>
+          <p className="text-[13px] font-semibold text-[#0F172A] mb-5">Source des demandes</p>
+          {loading ? (
+            <p className="text-[12px] text-[#8A9BB5] py-4">Chargement…</p>
+          ) : (
+            <SourceChart stats={sourceStats} />
           )}
         </div>
 
@@ -302,7 +387,15 @@ export default function DashboardPage() {
       <div className="bg-white rounded-2xl border border-[#E2E8F0] overflow-hidden shadow-sm">
         <div className="flex items-center justify-between px-6 py-4 border-b border-[#F2F4F7]">
           <h2 className="text-[15px] font-bold text-[#0F172A]">Dernières demandes</h2>
-          <a href="/admin/requests" className="text-[12px] font-semibold text-[#4CAF4F] hover:text-[#388E3C] transition-colors">Voir tout ↗</a>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => exportTableauExcel(sorted, 'PSI_Demandes', 'Demandes')}
+              className="flex items-center gap-1.5 text-[12px] font-semibold text-[#8A9BB5] hover:text-[#374151] transition-colors">
+              <svg width={13} height={13} fill="none" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6z" stroke="currentColor" strokeWidth="1.8"/><path d="M14 2v6h6M8 13h8M8 17h8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>
+              Excel
+            </button>
+            <a href="/admin/requests" className="text-[12px] font-semibold text-[#4CAF4F] hover:text-[#388E3C] transition-colors">Voir tout ↗</a>
+          </div>
         </div>
         <table className="w-full" style={{ borderCollapse: 'collapse' }}>
           <thead>
@@ -342,7 +435,13 @@ export default function DashboardPage() {
         </table>
       </div>
 
-      {selectedRequest && <RequestPanel item={selectedRequest} onClose={() => setSelectedRequest(null)} />}
+      {selectedRequest && (
+        <RequestPanel
+          item={selectedRequest}
+          onClose={() => setSelectedRequest(null)}
+          onStatusChange={(_ref, _statut) => { setSelectedRequest(null); fetchData(); }}
+        />
+      )}
     </div>
   );
 }

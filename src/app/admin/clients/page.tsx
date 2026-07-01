@@ -383,7 +383,7 @@ function dbClientToRecord(c: any): ClientRecord {
   const quotesCount = c._count?.quotes ?? 0;
 
   const orderHist = (c.orders ?? []).map((o: any) => ({
-    ref: o.id.slice(0, 8).toUpperCase(),
+    ref: o.ref ?? o.id.slice(0, 8).toUpperCase(),
     type: 'Commande' as const,
     date: new Date(o.createdAt).toLocaleDateString('fr-FR'),
     statut: STATUS_DB_TO_UI[o.status] ?? o.status,
@@ -392,7 +392,7 @@ function dbClientToRecord(c: any): ClientRecord {
     _ts: new Date(o.createdAt).getTime(),
   }));
   const quoteHist = (c.quotes ?? []).map((q: any) => ({
-    ref: q.id.slice(0, 8).toUpperCase(),
+    ref: q.ref ?? q.id.slice(0, 8).toUpperCase(),
     type: 'Devis' as const,
     date: new Date(q.createdAt).toLocaleDateString('fr-FR'),
     statut: STATUS_DB_TO_UI[q.status] ?? q.status,

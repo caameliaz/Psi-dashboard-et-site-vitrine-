@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { createNotif } from '@/lib/notifications';
+import { generateQuoteRef } from '@/lib/generate-ref';
+import { notifyClients } from '@/app/api/sse/route';
 
 export async function GET() {
   const session = await auth();
@@ -29,11 +31,24 @@ export async function POST(request: NextRequest) {
     const session = await auth();
 
     const primaryPhone: string = body.phone ?? '';
+    const clientName: string = body.name ?? '';
+    const clientCompany: string = body.company ?? '';
+
+    // 1. Cherche par téléphone
     let client = primaryPhone
       ? await prisma.client.findFirst({
           where: { phones: { some: { number: primaryPhone } } },
         })
       : null;
+
+    // 2. Sinon cherche par entreprise (si fournie) ou par nom exact
+    if (!client) {
+      client = await prisma.client.findFirst({
+        where: clientCompany
+          ? { company: { equals: clientCompany, mode: 'insensitive' } }
+          : { name: { equals: clientName, mode: 'insensitive' } },
+      });
+    }
 
     if (!client) {
       client = await prisma.client.create({
@@ -51,8 +66,10 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    const ref = await generateQuoteRef(client.wilaya);
     const quote = await prisma.quote.create({
       data: {
+        ref,
         clientId: client.id,
         message: body.message ?? '',
         source: body.source ?? 'SITE',
@@ -83,6 +100,7 @@ export async function POST(request: NextRequest) {
       quoteId: quote.id,
     });
 
+    notifyClients('new_quote');
     return NextResponse.json(quote, { status: 201 });
   } catch (error) {
     console.error('Error creating quote:', error);

@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { createNotif } from '@/lib/notifications';
+import { generateOrderRef } from '@/lib/generate-ref';
+import { notifyClients } from '@/app/api/sse/route';
 
 export async function GET() {
   const session = await auth();
@@ -28,13 +30,25 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const session = await auth();
 
-    // Identifier le client par téléphone principal (pas email — schéma ClientPhone)
     const primaryPhone: string = body.client?.phone ?? '';
+    const clientName: string = body.client?.name ?? '';
+    const clientCompany: string = body.client?.company ?? '';
+
+    // 1. Cherche par téléphone
     let client = primaryPhone
       ? await prisma.client.findFirst({
           where: { phones: { some: { number: primaryPhone } } },
         })
       : null;
+
+    // 2. Sinon cherche par entreprise (si fournie) ou par nom exact
+    if (!client) {
+      client = await prisma.client.findFirst({
+        where: clientCompany
+          ? { company: { equals: clientCompany, mode: 'insensitive' } }
+          : { name: { equals: clientName, mode: 'insensitive' } },
+      });
+    }
 
     if (!client) {
       client = await prisma.client.create({
@@ -53,8 +67,10 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    const ref = await generateOrderRef(client.wilaya);
     const order = await prisma.order.create({
       data: {
+        ref,
         clientId: client.id,
         source: body.source ?? 'SITE',
         createdById: session?.user?.id ?? null,
@@ -76,6 +92,7 @@ export async function POST(request: NextRequest) {
       orderId: order.id,
     });
 
+    notifyClients('new_order');
     return NextResponse.json(order, { status: 201 });
   } catch (error) {
     console.error('Error creating order:', error);

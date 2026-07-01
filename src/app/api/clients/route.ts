@@ -9,12 +9,16 @@ export async function GET() {
 
   try {
     const clients = await prisma.client.findMany({
+      where: {
+        orders: { some: {} },
+      },
       include: {
         phones: true,
         _count: { select: { orders: true, quotes: true } },
         orders: {
           select: {
             id: true,
+            ref: true,
             createdAt: true,
             status: true,
             items: { select: { quantity: true, unitPrice: true, product: { select: { reference: true } } } },
@@ -24,6 +28,7 @@ export async function GET() {
         quotes: {
           select: {
             id: true,
+            ref: true,
             createdAt: true,
             status: true,
             items: { select: { quantity: true, product: { select: { reference: true } } } },

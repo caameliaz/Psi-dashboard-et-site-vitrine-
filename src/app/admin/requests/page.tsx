@@ -4,6 +4,10 @@ import { useState, useEffect, useCallback } from 'react';
 import { StatusPill } from '@/components/ui/StatusPill';
 import { RequestPanel, type RequestDetail } from '@/components/ui/RequestPanel';
 import { AdminSelect } from '@/components/ui/AdminSelect';
+import { WilayaSelect } from '@/components/ui/WilayaSelect';
+import { exportTableauExcel } from '@/lib/export-tableau';
+import { exportVentesExcel } from '@/lib/export-ventes';
+import { useSSE } from '@/lib/use-sse';
 
 const ARCHIVED = ['Livré', 'Annulé'];
 
@@ -80,55 +84,143 @@ function sortItems(items: RequestDetail[]): RequestDetail[] {
 const ALL_STATUTS_COMMANDE = ['En attente', 'Contacté', 'Confirmé', 'Livré', 'Annulé'];
 const ALL_STATUTS_DEVIS    = ['En attente', 'Contacté', 'Confirmé', 'Annulé'];
 
+interface Ligne { ref: string; productId: string | null; qte: number; pu: number; }
+const emptyLigne = (): Ligne => ({ ref: '', productId: null, qte: 1, pu: 0 });
+
+function RefSelect({ value, products, onChange }: {
+  value: string;
+  products: { id: string; reference: string; price: number }[];
+  onChange: (ref: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const filtered = products.filter(p =>
+    !query || p.reference.toLowerCase().includes(query.toLowerCase())
+  );
+  return (
+    <div className="relative">
+      <button type="button" onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center justify-between px-3 py-2 rounded-xl border border-[#E2E8F0] bg-white text-[13px] transition-colors hover:border-[#4CAF4F] focus:outline-none"
+        style={{ color: value ? '#0F172A' : '#94A3B8' }}>
+        <span>{value || '— Réf —'}</span>
+        <svg width={12} height={12} fill="none" viewBox="0 0 24 24" className="flex-shrink-0 text-[#ABBED1]" style={{ transform: open ? 'rotate(180deg)' : undefined, transition: 'transform 0.15s' }}>
+          <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-[100]" onClick={() => setOpen(false)} />
+          <div className="absolute top-full left-0 right-0 mt-1 z-[110] bg-white rounded-xl border border-[#E2E8F0] shadow-xl overflow-hidden" style={{ minWidth: 180 }}>
+            <div className="px-3 py-2 border-b border-[#F2F4F7]">
+              <input
+                autoFocus
+                value={query}
+                onChange={e => setQuery(e.target.value)}
+                placeholder="Rechercher..."
+                className="w-full text-[12px] text-[#0F172A] bg-transparent outline-none placeholder-[#ABBED1]"
+              />
+            </div>
+            <div className="max-h-[180px] overflow-y-auto py-1">
+              {filtered.length === 0 ? (
+                <p className="px-3 py-2 text-[12px] text-[#ABBED1]">Aucun résultat</p>
+              ) : filtered.map(p => (
+                <button key={p.id} type="button"
+                  onClick={() => { onChange(p.reference); setOpen(false); setQuery(''); }}
+                  className="w-full text-left px-3 py-2.5 flex items-center justify-between gap-2 hover:bg-[#F0FDF4] transition-colors group"
+                  style={{ background: value === p.reference ? '#F0FDF4' : undefined }}>
+                  <span className="text-[13px] font-semibold" style={{ color: value === p.reference ? '#0D9488' : '#0F172A' }}>{p.reference}</span>
+                  <span className="text-[11px] text-[#ABBED1]">{p.price.toLocaleString('fr-FR')} DA</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 function CreateForm({ defaultType, onClose, onSave }: {
   defaultType: 'Commande' | 'Devis';
   onClose: () => void;
-  onSave: (item: RequestDetail) => void;
+  onSave: (item: any) => Promise<void>;
 }) {
-  const inputClass = "w-full px-3 py-2.5 rounded-xl border border-[#E2E8F0] text-[14px] text-[#263238] focus:outline-none focus:border-[#4CAF4F] focus:ring-[3px] focus:ring-[#4CAF4F]/15 transition-all bg-white";
-  const labelClass = "block text-[12px] font-semibold text-[#374151] mb-1.5";
+  const ic = "w-full px-3 py-2 rounded-xl border border-[#E2E8F0] text-[13px] text-[#263238] focus:outline-none focus:border-[#4CAF4F] focus:ring-[2px] focus:ring-[#4CAF4F]/15 transition-all bg-white";
+  const lc = "block text-[11px] font-bold text-[#8A9BB5] uppercase tracking-wide mb-1";
+
   const [type, setType] = useState<'Commande' | 'Devis'>(defaultType);
   const [client, setClient] = useState('');
   const [entreprise, setEntreprise] = useState('');
   const [telephone, setTelephone] = useState('');
+  const [email, setEmail] = useState('');
   const [wilaya, setWilaya] = useState('');
-  const [produits, setProduits] = useState('');
-  const [montant, setMontant] = useState('');
+  const [lignes, setLignes] = useState<Ligne[]>([emptyLigne()]);
+  const [tva, setTva] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [products, setProducts] = useState<{ id: string; reference: string; price: number }[]>([]);
+
+  useEffect(() => {
+    fetch('/api/products?all=true').then(r => r.json()).then((data: any[]) => {
+      setProducts(data.map(p => ({ id: p.id, reference: p.reference, price: p.price ?? 0 })));
+    }).catch(() => {});
+  }, []);
+
+  const setLigne = (i: number, patch: Partial<Ligne>) =>
+    setLignes(prev => prev.map((l, idx) => idx === i ? { ...l, ...patch } : l));
+
+  const selectRef = (i: number, reference: string) => {
+    const p = products.find(p => p.reference === reference);
+    setLigne(i, { ref: reference, productId: p?.id ?? null, pu: p?.price ?? 0 });
+  };
+
+  const ht = lignes.reduce((acc, l) => acc + l.qte * l.pu, 0);
+  const total = tva ? Math.round(ht * 1.19) : ht;
 
   const handleSave = async () => {
-    if (!client.trim() || !entreprise.trim() || !produits.trim()) return;
+    if (!client.trim() || lignes.every(l => !l.ref)) return;
     setSaving(true);
     const now = new Date();
-    // Pour la création manuelle, on reste en local (pas d'API POST structurée pour items libres)
-    onSave({
+    const produits = lignes.filter(l => l.ref).map(l => `${l.ref} × ${l.qte}`).join(', ');
+    await onSave({
       ref: '',
       type,
       client: client.trim(),
       entreprise: entreprise.trim(),
       telephone: telephone.trim(),
+      email: email.trim() || undefined,
       wilaya: wilaya.trim(),
-      produits: produits.trim(),
-      montant: montant.trim() || (type === 'Devis' ? 'Sur devis' : '—'),
+      produits,
+      montant: total > 0 ? `${total.toLocaleString('fr-FR')} DA${tva ? ' TTC' : ''}` : '—',
       statut: 'En attente',
       date: now.toLocaleDateString('fr-FR'),
       heure: now.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
-    });
+      // données brutes pour l'API
+      _lignes: lignes,
+      _wilaya: wilaya.trim(),
+      _email: email.trim(),
+      _telephone: telephone.trim(),
+      _entreprise: entreprise.trim(),
+    } as any);
     setSaving(false);
     onClose();
   };
 
   return (
-    <div className="fixed inset-0 z-[80] flex items-center justify-center p-6">
+    <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-white rounded-2xl shadow-2xl w-[520px] max-w-[92vw] z-10 flex flex-col overflow-hidden" style={{ maxHeight: '90vh' }}>
+      <div className="relative bg-white rounded-2xl shadow-2xl w-[560px] max-w-[96vw] z-10 flex flex-col overflow-hidden" style={{ maxHeight: '94vh' }}>
+
+        {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-[#F2F4F7]">
-          <h3 className="text-[16px] font-bold text-[#0F172A]">Nouvelle demande</h3>
-          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-[#F2F4F7] text-[#ABBED1] transition-colors">
-            <svg width={16} height={16} viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
+          <h3 className="text-[15px] font-bold text-[#0F172A]">Nouvelle demande</h3>
+          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-[#F2F4F7] text-[#ABBED1]">
+            <svg width={14} height={14} viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"/></svg>
           </button>
         </div>
-        <div className="flex-1 overflow-y-auto px-6 py-5 flex flex-col gap-4">
+
+        <div className="flex-1 overflow-y-auto px-6 py-5 flex flex-col gap-5">
+
+          {/* Type toggle */}
           <div className="flex gap-2">
             {(['Commande', 'Devis'] as const).map((t) => (
               <button key={t} onClick={() => setType(t)}
@@ -140,27 +232,109 @@ function CreateForm({ defaultType, onClose, onSave }: {
               </button>
             ))}
           </div>
+
+          {/* Coordonnées */}
           <div className="grid grid-cols-2 gap-3">
-            <div><label className={labelClass}>Nom du contact *</label><input value={client} onChange={(e) => setClient(e.target.value)} placeholder="Prénom Nom" className={inputClass} /></div>
-            <div><label className={labelClass}>Entreprise *</label><input value={entreprise} onChange={(e) => setEntreprise(e.target.value)} placeholder="Nom entreprise" className={inputClass} /></div>
+            <div><label className={lc}>Nom *</label><input value={client} onChange={e => setClient(e.target.value)} placeholder="Prénom Nom" className={ic} /></div>
+            <div><label className={lc}>Entreprise</label><input value={entreprise} onChange={e => setEntreprise(e.target.value)} placeholder="Nom entreprise" className={ic} /></div>
+            <div><label className={lc}>Téléphone</label><input value={telephone} onChange={e => setTelephone(e.target.value)} placeholder="+213 5XX XXX XXX" className={ic} /></div>
+            <div><label className={lc}>Email</label><input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="client@email.com" className={ic} /></div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div><label className={labelClass}>Téléphone</label><input value={telephone} onChange={(e) => setTelephone(e.target.value)} placeholder="+213 5XX XXX XXX" className={inputClass} /></div>
-            <div><label className={labelClass}>Wilaya</label><input value={wilaya} onChange={(e) => setWilaya(e.target.value)} placeholder="Alger, Oran…" className={inputClass} /></div>
-          </div>
+          <div><label className={lc}>Wilaya</label><WilayaSelect value={wilaya} onChange={setWilaya} /></div>
+
+          {/* Lignes produits */}
           <div>
-            <label className={labelClass}>Produits / Spécifications *</label>
-            <textarea value={produits} onChange={(e) => setProduits(e.target.value)} placeholder="ex: 80/80 × 50 rouleaux" rows={3} className={inputClass + ' resize-none'} />
+            <div className="flex items-center justify-between mb-2">
+              <label className={lc}>Produits</label>
+            </div>
+
+            {/* En-têtes colonnes */}
+            <div className="grid gap-2 mb-1" style={{ gridTemplateColumns: '1fr 64px 96px 24px' }}>
+              <span className="text-[10px] font-bold text-[#ABBED1] uppercase tracking-wide">Référence</span>
+              <span className="text-[10px] font-bold text-[#ABBED1] uppercase tracking-wide">Qté</span>
+              <span className="text-[10px] font-bold text-[#ABBED1] uppercase tracking-wide">Prix unit. DA</span>
+              <span />
+            </div>
+
+            <div className="flex flex-col gap-2">
+              {lignes.map((ligne, i) => (
+                <div key={i} className="grid gap-2 items-center" style={{ gridTemplateColumns: '1fr 64px 96px 24px' }}>
+                  {/* Ref : dropdown stylisé pour Commande, input libre pour Devis */}
+                  {type === 'Commande' ? (
+                    <RefSelect
+                      value={ligne.ref}
+                      products={products}
+                      onChange={(ref) => selectRef(i, ref)}
+                    />
+                  ) : (
+                    <input value={ligne.ref} onChange={e => setLigne(i, { ref: e.target.value, productId: null })} placeholder="Réf libre" className={ic} />
+                  )}
+
+                  {/* Quantité */}
+                  <input type="number" min={1} value={ligne.qte}
+                    onChange={e => setLigne(i, { qte: Math.max(1, Number(e.target.value)) })}
+                    className={ic + ' text-center'} />
+
+                  {/* Prix unitaire — toujours modifiable */}
+                  <input type="number" min={0} value={ligne.pu || ''}
+                    onChange={e => setLigne(i, { pu: Number(e.target.value) })}
+                    placeholder="0"
+                    className={ic + ' text-right'} />
+
+                  {/* Supprimer ligne */}
+                  {lignes.length > 1 ? (
+                    <button onClick={() => setLignes(prev => prev.filter((_, idx) => idx !== i))}
+                      className="w-6 h-6 flex items-center justify-center rounded-lg text-[#ABBED1] hover:text-[#EF4444] hover:bg-[#FEF2F2] transition-colors">
+                      <svg width={12} height={12} viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"/></svg>
+                    </button>
+                  ) : <span />}
+                </div>
+              ))}
+            </div>
+
+            <button onClick={() => setLignes(prev => [...prev, emptyLigne()])}
+              className="mt-2 flex items-center gap-1.5 text-[12px] font-bold text-[#4CAF4F] hover:text-[#388E3C] transition-colors">
+              <svg width={14} height={14} viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"/></svg>
+              Ajouter une ligne
+            </button>
           </div>
-          <div>
-            <label className={labelClass}>Montant {type === 'Devis' ? '(optionnel)' : ''}</label>
-            <input value={montant} onChange={(e) => setMontant(e.target.value)} placeholder={type === 'Devis' ? 'Sur devis' : 'ex: 45 000 DA'} className={inputClass} />
+
+          {/* TVA + Total */}
+          <div className="rounded-xl border border-[#F2F4F7] px-4 py-3 flex flex-col gap-2">
+            <label className="flex items-center gap-2.5 cursor-pointer select-none">
+              <div onClick={() => setTva(v => !v)}
+                className="w-9 h-5 rounded-full flex items-center transition-colors px-0.5 flex-shrink-0"
+                style={{ background: tva ? '#4CAF4F' : '#E2E8F0' }}>
+                <div className="w-4 h-4 bg-white rounded-full shadow transition-transform"
+                  style={{ transform: tva ? 'translateX(16px)' : 'translateX(0)' }} />
+              </div>
+              <span className="text-[13px] font-semibold text-[#374151]">TVA 19%</span>
+              {tva && <span className="text-[11px] text-[#8A9BB5]">HT → TTC</span>}
+            </label>
+            <div className="flex items-end justify-between pt-1 border-t border-[#F2F4F7]">
+              {tva && (
+                <div className="text-[12px] text-[#8A9BB5]">
+                  HT : {ht.toLocaleString('fr-FR')} DA
+                </div>
+              )}
+              <div className="ml-auto text-right">
+                <p className="text-[10px] font-bold text-[#ABBED1] uppercase tracking-wide">{tva ? 'Total TTC' : 'Total HT'}</p>
+                <p className="text-[22px] font-extrabold" style={{ color: type === 'Commande' ? '#4CAF4F' : '#8B5CF6' }}>
+                  {total.toLocaleString('fr-FR')} <span className="text-[14px]">DA</span>
+                </p>
+              </div>
+            </div>
           </div>
+
         </div>
+
+        {/* Footer */}
         <div className="flex gap-3 px-6 py-4 border-t border-[#F2F4F7]">
           <button onClick={onClose} className="flex-1 px-4 py-2.5 rounded-xl border border-[#E2E8F0] text-[13px] font-semibold text-[#374151] hover:bg-[#F8FAFC] transition-colors">Annuler</button>
-          <button onClick={handleSave} disabled={saving} className="flex-1 px-4 py-2.5 rounded-xl text-[13px] font-bold text-white disabled:opacity-60" style={{ background: '#4CAF4F' }}>
-            {saving ? 'Création…' : `Créer la ${type.toLowerCase()}`}
+          <button onClick={handleSave} disabled={saving || !client.trim() || lignes.every(l => !l.ref)}
+            className="flex-1 px-4 py-2.5 rounded-xl text-[13px] font-bold text-white disabled:opacity-40 transition-opacity"
+            style={{ background: '#4CAF4F' }}>
+            {saving ? 'Création…' : 'Créer la demande'}
           </button>
         </div>
       </div>
@@ -169,7 +343,7 @@ function CreateForm({ defaultType, onClose, onSave }: {
 }
 
 export default function RequestsPage() {
-  const [activeTab, setActiveTab] = useState<'commandes' | 'devis'>('commandes');
+  const [activeTab, setActiveTab] = useState<'tous' | 'commandes' | 'devis'>('tous');
   const [orders, setOrders]       = useState<RequestDetail[]>([]);
   const [quotes, setQuotes]       = useState<RequestDetail[]>([]);
   const [loading, setLoading]     = useState(true);
@@ -199,10 +373,11 @@ export default function RequestsPage() {
   }, []);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
+  useSSE(useCallback(() => { fetchAll(); }, [fetchAll]));
 
   const isDevis = activeTab === 'devis';
-  const rawItems = isDevis ? quotes : orders;
-  const allStatuts = isDevis ? ALL_STATUTS_DEVIS : ALL_STATUTS_COMMANDE;
+  const rawItems = activeTab === 'tous' ? [...orders, ...quotes] : isDevis ? quotes : orders;
+  const allStatuts = activeTab === 'tous' ? ALL_STATUTS_COMMANDE : isDevis ? ALL_STATUTS_DEVIS : ALL_STATUTS_COMMANDE;
 
   const sorted = sortItems(rawItems);
   const filtered = sorted.filter((r) => {
@@ -213,21 +388,22 @@ export default function RequestsPage() {
   });
 
   const handleStatusChange = async (ref: string, newStatut: string) => {
-    const item = rawItems.find((r) => r.ref === ref);
+    const item = selected ?? rawItems.find((r) => r.ref === ref || r.id === ref);
     if (!item?.id) {
-      // item local (créé manuellement sans API) — maj uniquement en mémoire
-      if (isDevis) setQuotes((p) => p.map((q) => q.ref === ref ? { ...q, statut: newStatut } : q));
+      if (item?.type === 'Devis') setQuotes((p) => p.map((q) => q.ref === ref ? { ...q, statut: newStatut } : q));
       else setOrders((p) => p.map((o) => o.ref === ref ? { ...o, statut: newStatut } : o));
       setSelected(null);
       return;
     }
     const dbStatus = UI_TO_DB[newStatut] ?? newStatut;
-    const endpoint = isDevis ? `/api/quotes/${item.id}` : `/api/orders/${item.id}`;
-    await fetch(endpoint, {
+    const isItemDevis = item.type === 'Devis';
+    const endpoint = isItemDevis ? `/api/quotes/${item.id}` : `/api/orders/${item.id}`;
+    const res = await fetch(endpoint, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status: dbStatus }),
     });
+    if (!res.ok) console.error('PATCH failed', await res.text());
     await fetchAll();
     setSelected(null);
   };
@@ -248,49 +424,138 @@ export default function RequestsPage() {
     setActiveTab('commandes');
   };
 
-  const handleSaveNew = (item: RequestDetail) => {
-    // Création manuelle locale (formulaire libre sans productId)
-    const ts = Date.now().toString(36).toUpperCase();
-    if (item.type === 'Commande') {
-      setOrders((p) => [{ ...item, ref: `CMD-${ts}` }, ...p]);
-    } else {
-      setQuotes((p) => [{ ...item, ref: `DEV-${ts}` }, ...p]);
-      setActiveTab('devis');
+  const handleSaveNew = async (item: RequestDetail & { _lignes?: { productId: string | null; ref: string; qte: number; pu: number }[]; _wilaya?: string; _email?: string; _telephone?: string; _entreprise?: string }) => {
+    const isCmd = item.type === 'Commande';
+    const endpoint = isCmd ? '/api/orders' : '/api/quotes';
+
+    const lignes = item._lignes ?? [];
+    const body = isCmd
+      ? {
+          client: {
+            name: item.client,
+            company: item._entreprise || undefined,
+            phone: item._telephone || undefined,
+            email: item._email || undefined,
+            wilaya: item._wilaya || 'Non spécifié',
+          },
+          items: lignes.filter(l => l.ref).map(l => ({
+            productId: l.productId ?? undefined,
+            quantity: l.qte,
+            unitPrice: l.pu,
+          })),
+          source: 'ADMIN',
+        }
+      : {
+          name: item.client,
+          company: item._entreprise || undefined,
+          phone: item._telephone || undefined,
+          email: item._email || undefined,
+          wilaya: item._wilaya || 'Non spécifié',
+          message: '',
+          items: lignes.filter(l => l.ref).map(l => ({
+            productId: l.productId ?? undefined,
+            description: l.productId ? undefined : l.ref,
+            quantity: l.qte,
+          })),
+          source: 'ADMIN',
+        };
+
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+
+    if (!res.ok) {
+      console.error('Erreur création:', await res.text());
+      return;
     }
+
+    await fetchAll();
+    setActiveTab(isCmd ? 'commandes' : 'devis');
   };
 
-  const attenteCounts = {
+  const counts = {
+    tous: orders.length + quotes.length,
+    commandes: orders.length,
+    devis: quotes.length,
+  };
+
+  const attente = {
     commandes: orders.filter((o) => o.statut === 'En attente').length,
     devis: quotes.filter((q) => q.statut === 'En attente').length,
   };
 
+  const TABS = [
+    { key: 'tous', label: 'Tous', count: counts.tous },
+    { key: 'commandes', label: 'Commandes', count: counts.commandes },
+    { key: 'devis', label: 'Devis', count: counts.devis },
+  ] as const;
+
   return (
     <div className="w-full">
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-4">
         <div>
           <h1 className="text-[22px] font-bold text-[#0F172A]">Demandes</h1>
           <p className="text-[13px] text-[#8A9BB5] mt-0.5">
             {loading ? 'Chargement…' : `${filtered.length} résultat${filtered.length !== 1 ? 's' : ''}`}
           </p>
         </div>
-        <div className="flex items-center gap-3">
-          <button onClick={() => setShowCreate(true)} className="px-4 py-2 rounded-xl text-[13px] font-bold text-white" style={{ background: '#4CAF4F' }}>
-            Nouvelle demande
-          </button>
-          <div className="flex gap-1 p-1 rounded-lg" style={{ background: '#E4EBF5' }}>
-            {(['commandes', 'devis'] as const).map((tab) => (
-              <button key={tab} onClick={() => { setActiveTab(tab); setFilterStatut('all'); setSearch(''); }}
-                className="relative px-4 py-1.5 rounded-md text-sm font-medium transition-colors"
-                style={{ background: activeTab === tab ? '#fff' : 'transparent', color: activeTab === tab ? '#101828' : '#8A9BB5', boxShadow: activeTab === tab ? '0 1px 3px rgba(0,0,0,0.08)' : 'none' }}>
-                {tab.charAt(0).toUpperCase() + tab.slice(1)}
-                {attenteCounts[tab] > 0 && (
-                  <span className="ml-1.5 inline-flex items-center justify-center w-4 h-4 rounded-full text-[9px] font-bold text-white" style={{ background: '#EF4444' }}>
-                    {attenteCounts[tab]}
+        <button
+          onClick={() => exportVentesExcel()}
+          className="flex items-center gap-2 px-4 py-2 rounded-xl border border-[#E2E8F0] text-[13px] font-semibold text-[#374151] hover:bg-[#F8FAFC] hover:border-[#4CAF4F] hover:text-[#4CAF4F] transition-colors"
+          title="Exporter toutes les commandes livrées (rapport de ventes)">
+          <svg width={14} height={14} fill="none" viewBox="0 0 24 24">
+            <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6z" stroke="currentColor" strokeWidth="1.8"/>
+            <path d="M14 2v6h6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
+            <path d="M12 18v-6M9 15l3 3 3-3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+          Rapport de ventes
+        </button>
+      </div>
+
+      {/* Tabs + bouton Nouvelle demande */}
+      <div className="flex items-center justify-between mb-5">
+        <div className="flex gap-1 p-1 rounded-2xl" style={{ background: '#EEF2F7' }}>
+          {TABS.map((tab) => {
+            const isActive = activeTab === tab.key;
+            const pendingCount = tab.key === 'commandes' ? attente.commandes : tab.key === 'devis' ? attente.devis : attente.commandes + attente.devis;
+            return (
+              <button key={tab.key} onClick={() => { setActiveTab(tab.key as typeof activeTab); setFilterStatut('all'); setSearch(''); }}
+                className="flex items-center gap-2 px-5 py-2 rounded-xl text-[13px] font-semibold transition-all"
+                style={{ background: isActive ? '#fff' : 'transparent', color: isActive ? '#0F172A' : '#94A3B8', boxShadow: isActive ? '0 2px 8px rgba(0,0,0,0.08)' : 'none' }}>
+                {tab.label}
+                {pendingCount > 0 ? (
+                  <>
+                    <span className="text-[11px] font-bold tabular-nums" style={{ color: '#F97316' }}>
+                      {pendingCount}
+                    </span>
+                    <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: '#F97316' }} />
+                  </>
+                ) : (
+                  <span className="text-[11px] font-bold tabular-nums" style={{ color: isActive ? '#4CAF4F' : '#CBD5E1' }}>
+                    {tab.count}
                   </span>
                 )}
               </button>
-            ))}
-          </div>
+            );
+          })}
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => {
+              const label = activeTab === 'devis' ? 'Devis' : activeTab === 'commandes' ? 'Commandes' : 'Demandes';
+              exportTableauExcel(filtered, `PSI_${label}`, label);
+            }}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-[13px] font-semibold border border-[#E2E8F0] text-[#374151] hover:bg-[#F8FAFC] transition-colors"
+            title="Exporter le tableau filtré en Excel">
+            <svg width={14} height={14} fill="none" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6z" stroke="currentColor" strokeWidth="1.8"/><path d="M14 2v6h6M8 13h8M8 17h8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>
+            Exporter
+          </button>
+          <button onClick={() => setShowCreate(true)}
+            className="px-4 py-2 rounded-xl text-[13px] font-bold border border-[#4CAF4F] text-[#4CAF4F] hover:bg-[#F0FDF4] transition-colors">
+            + Nouvelle demande
+          </button>
         </div>
       </div>
 
