@@ -9,9 +9,6 @@ export async function GET() {
 
   try {
     const clients = await prisma.client.findMany({
-      where: {
-        orders: { some: {} },
-      },
       include: {
         phones: true,
         _count: { select: { orders: true, quotes: true } },

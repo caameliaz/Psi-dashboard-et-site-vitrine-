@@ -1,40 +1,37 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
+import { addSSEClient } from '@/lib/sse-bus';
 
-// Registered SSE clients — one Set per process (works for single-instance dev + prod)
-const clients = new Set<(data: string) => void>();
+export const dynamic = 'force-dynamic';
+export const runtime = 'nodejs';
 
-// Called by orders/quotes POST to push an event to all connected admins
-export function notifyClients(event: string) {
-  clients.forEach((send) => send(event));
-}
-
-export async function GET() {
+export async function GET(request: NextRequest) {
   const encoder = new TextEncoder();
-  let intervalId: ReturnType<typeof setInterval>;
 
   const stream = new ReadableStream({
     start(controller) {
       const send = (data: string) => {
         try {
           controller.enqueue(encoder.encode(`data: ${data}\n\n`));
-        } catch { /* client disconnected */ }
+        } catch { /* déconnecté */ }
       };
 
-      clients.add(send);
+      const remove = addSSEClient(send);
 
-      // Keepalive ping every 25s to prevent proxy/browser timeout
-      intervalId = setInterval(() => {
-        try { controller.enqueue(encoder.encode(': ping\n\n')); } catch { clearInterval(intervalId); }
+      // Keepalive ping every 25s pour éviter timeout proxy/browser
+      const pingId = setInterval(() => {
+        try {
+          controller.enqueue(encoder.encode(': ping\n\n'));
+        } catch {
+          clearInterval(pingId);
+        }
       }, 25000);
 
-      // Cleanup on close
-      (controller as any).signal?.addEventListener?.('abort', () => {
-        clients.delete(send);
-        clearInterval(intervalId);
+      // Cleanup quand le client se déconnecte
+      request.signal.addEventListener('abort', () => {
+        remove();
+        clearInterval(pingId);
+        try { controller.close(); } catch { /* déjà fermé */ }
       });
-    },
-    cancel() {
-      clearInterval(intervalId);
     },
   });
 
@@ -47,3 +44,6 @@ export async function GET() {
     },
   });
 }
+
+// Re-export pour compat avec les anciens imports
+export { pushSSE as notifyClients } from '@/lib/sse-bus';

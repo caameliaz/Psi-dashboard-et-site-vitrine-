@@ -9,6 +9,7 @@ type Ctx = { params: Promise<{ id: string }> };
 export async function PATCH(request: NextRequest, { params }: Ctx) {
   const session = await auth();
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  if ((session.user as { role?: string }).role !== 'ADMIN') return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
   const { id } = await params;
 
@@ -44,6 +45,7 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
 export async function DELETE(_request: NextRequest, { params }: Ctx) {
   const session = await auth();
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  if ((session.user as { role?: string }).role !== 'ADMIN') return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
   const { id } = await params;
 

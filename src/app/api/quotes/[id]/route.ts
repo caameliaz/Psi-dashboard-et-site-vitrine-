@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { notifyStatusChange } from '@/lib/notify-activity';
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -56,6 +57,16 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
         createdBy: { select: { id: true, name: true } },
       },
     });
+
+    if (body.status !== undefined) {
+      notifyStatusChange({
+        actorName: session.user.name ?? session.user.email ?? 'Agent',
+        entityType: 'devis',
+        ref: quote.ref ?? id.slice(0, 8),
+        newStatus: body.status,
+        quoteId: quote.id,
+      }).catch(() => {});
+    }
 
     return NextResponse.json(quote);
   } catch (e) {

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { notifyDeletion } from '@/lib/notify-activity';
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -88,7 +89,15 @@ export async function DELETE(_request: NextRequest, { params }: Ctx) {
   const { id } = await params;
 
   try {
+    const client = await prisma.client.findUnique({ where: { id }, select: { name: true, company: true } });
     await prisma.client.delete({ where: { id } });
+
+    notifyDeletion({
+      actorName: session.user.name ?? session.user.email ?? 'Admin',
+      entityType: 'client',
+      label: client?.company ?? client?.name ?? id.slice(0, 8),
+    }).catch(() => {});
+
     return NextResponse.json({ success: true });
   } catch (e) {
     console.error(e);

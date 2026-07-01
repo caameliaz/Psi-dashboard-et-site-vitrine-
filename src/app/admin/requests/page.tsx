@@ -11,10 +11,16 @@ import { useSSE } from '@/lib/use-sse';
 
 const ARCHIVED = ['Livré', 'Annulé'];
 
+function getSourceLabel(src: string) { return src === 'SITE' ? 'Site web' : 'Manuel'; }
+const SOURCE_COLOR: Record<'SITE' | 'OTHER', { bg: string; color: string; border: string }> = {
+  SITE:  { bg: '#F0FDF4', color: '#166534', border: '#BBF7D0' },
+  OTHER: { bg: '#FFF7ED', color: '#92400E', border: '#FDE68A' },
+};
+
 // DB status → UI label
 const DB_TO_UI: Record<string, string> = {
   EN_ATTENTE: 'En attente',
-  CONTACTE:   'Contacté',
+  CONTACTE:   'En attente',
   VALIDE:     'Confirmé',
   LIVRE:      'Livré',
   ANNULE:     'Annulé',
@@ -23,7 +29,6 @@ const DB_TO_UI: Record<string, string> = {
 // UI label → DB status
 const UI_TO_DB: Record<string, string> = {
   'En attente': 'EN_ATTENTE',
-  'Contacté':   'CONTACTE',
   'Confirmé':   'VALIDE',
   'Livré':      'LIVRE',
   'Annulé':     'ANNULE',
@@ -31,12 +36,19 @@ const UI_TO_DB: Record<string, string> = {
 
 function orderToDetail(o: any): RequestDetail {
   const phone = o.client?.phones?.find((p: any) => p.primary)?.number ?? o.client?.phones?.[0]?.number ?? '';
-  const produits = o.items?.map((i: any) => `${i.product?.ref ?? '?'} × ${i.quantity}`).join(', ') || '—';
-  const total = o.items?.reduce((acc: number, i: any) => acc + i.quantity * (i.unitPrice ?? 0), 0) ?? 0;
+  const rawItems = o.items ?? [];
+  const items = rawItems.map((i: any) => ({
+    designation: i.product?.reference ?? i.product?.ref ?? '?',
+    quantite: i.quantity ?? 0,
+    prixUnitaire: i.unitPrice ?? 0,
+  }));
+  const produits = items.map((i: any) => `${i.designation} × ${i.quantite}`).join(', ') || '—';
+  const total = items.reduce((acc: number, i: any) => acc + i.quantite * i.prixUnitaire, 0);
   return {
     id: o.id,
     ref: o.ref ?? o.id.slice(0, 8).toUpperCase(),
     type: 'Commande',
+    source: o.source ?? 'SITE',
     client: o.client?.name ?? '—',
     entreprise: o.client?.company ?? '—',
     telephone: phone,
@@ -44,6 +56,7 @@ function orderToDetail(o: any): RequestDetail {
     adresse: o.client?.address ?? '',
     email: o.client?.email ?? '',
     produits,
+    items,
     montant: total > 0 ? `${total.toLocaleString('fr-FR')} DA` : '—',
     statut: DB_TO_UI[o.status] ?? o.status,
     date: new Date(o.createdAt).toLocaleDateString('fr-FR'),
@@ -53,11 +66,18 @@ function orderToDetail(o: any): RequestDetail {
 
 function quoteToDetail(q: any): RequestDetail {
   const phone = q.client?.phones?.find((p: any) => p.primary)?.number ?? q.client?.phones?.[0]?.number ?? '';
-  const produits = q.items?.map((i: any) => `${i.product?.ref ?? '?'} × ${i.quantity}`).join(', ') || '—';
+  const rawItems = q.items ?? [];
+  const items = rawItems.map((i: any) => ({
+    designation: i.product?.reference ?? i.product?.ref ?? i.description ?? '?',
+    quantite: i.quantity ?? 0,
+    prixUnitaire: i.unitPrice ?? 0,
+  }));
+  const produits = items.map((i: any) => `${i.designation} × ${i.quantite}`).join(', ') || '—';
   return {
     id: q.id,
     ref: q.ref ?? q.id.slice(0, 8).toUpperCase(),
     type: 'Devis',
+    source: q.source ?? 'SITE',
     client: q.client?.name ?? '—',
     entreprise: q.client?.company ?? '—',
     telephone: phone,
@@ -65,6 +85,7 @@ function quoteToDetail(q: any): RequestDetail {
     adresse: q.client?.address ?? '',
     email: q.client?.email ?? '',
     produits,
+    items,
     montant: q.proposedPrice ? `${Number(q.proposedPrice).toLocaleString('fr-FR')} DA` : 'Sur devis',
     statut: DB_TO_UI[q.status] ?? q.status,
     date: new Date(q.createdAt).toLocaleDateString('fr-FR'),
@@ -81,8 +102,8 @@ function sortItems(items: RequestDetail[]): RequestDetail[] {
   });
 }
 
-const ALL_STATUTS_COMMANDE = ['En attente', 'Contacté', 'Confirmé', 'Livré', 'Annulé'];
-const ALL_STATUTS_DEVIS    = ['En attente', 'Contacté', 'Confirmé', 'Annulé'];
+const ALL_STATUTS_COMMANDE = ['En attente', 'Confirmé', 'Livré', 'Annulé'];
+const ALL_STATUTS_DEVIS    = ['En attente', 'Confirmé', 'Annulé'];
 
 interface Ligne { ref: string; productId: string | null; qte: number; pu: number; }
 const emptyLigne = (): Ligne => ({ ref: '', productId: null, qte: 1, pu: 0 });
@@ -389,12 +410,7 @@ export default function RequestsPage() {
 
   const handleStatusChange = async (ref: string, newStatut: string) => {
     const item = selected ?? rawItems.find((r) => r.ref === ref || r.id === ref);
-    if (!item?.id) {
-      if (item?.type === 'Devis') setQuotes((p) => p.map((q) => q.ref === ref ? { ...q, statut: newStatut } : q));
-      else setOrders((p) => p.map((o) => o.ref === ref ? { ...o, statut: newStatut } : o));
-      setSelected(null);
-      return;
-    }
+    if (!item?.id) return;
     const dbStatus = UI_TO_DB[newStatut] ?? newStatut;
     const isItemDevis = item.type === 'Devis';
     const endpoint = isItemDevis ? `/api/quotes/${item.id}` : `/api/orders/${item.id}`;
@@ -581,22 +597,24 @@ export default function RequestsPage() {
         <table className="w-full" style={{ borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ background: '#F8FAFC' }}>
-              {['N°', 'Type', 'Entreprise', 'Client', 'Date', 'Statut'].map((h) => (
+              {['N°', 'Type', 'Source', 'Entreprise', 'Client', 'Date', 'Statut'].map((h) => (
                 <th key={h} className="px-5 py-3.5 text-left font-semibold text-[#8A9BB5] uppercase tracking-wider" style={{ fontSize: 11 }}>{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={6} className="px-6 py-14 text-center text-[13px] text-[#8A9BB5]">Chargement…</td></tr>
+              <tr><td colSpan={7} className="px-6 py-14 text-center text-[13px] text-[#8A9BB5]">Chargement…</td></tr>
             ) : filtered.length === 0 ? (
-              <tr><td colSpan={6} className="px-6 py-14 text-center text-[13px] text-[#8A9BB5]">Aucune demande trouvée</td></tr>
+              <tr><td colSpan={7} className="px-6 py-14 text-center text-[13px] text-[#8A9BB5]">Aucune demande trouvée</td></tr>
             ) : filtered.map((row, i) => {
               const isEnAttente = row.statut === 'En attente';
               const isArchived  = ARCHIVED.includes(row.statut);
               const isCommande  = row.type === 'Commande';
               const rowBg       = isEnAttente ? '#FFF7ED' : '#fff';
               const rowBgHover  = isEnAttente ? '#FEF3C7' : '#F8FAFC';
+              const src         = row.source ?? 'SITE';
+              const srcCfg      = src === 'SITE' ? SOURCE_COLOR.SITE : SOURCE_COLOR.OTHER;
               return (
                 <tr key={i} onClick={() => setSelected(row)} className="cursor-pointer transition-colors"
                   style={{ background: rowBg, borderTop: '1px solid #F2F4F7' }}
@@ -606,6 +624,12 @@ export default function RequestsPage() {
                   <td className="px-5 py-3.5">
                     <span style={{ display: 'inline-flex', alignItems: 'center', padding: '3px 10px', borderRadius: 8, fontSize: 12, fontWeight: 700, border: `2px solid ${isCommande ? '#4CAF4F' : '#8B5CF6'}`, background: isCommande ? '#F0FDF4' : '#F5F3FF', color: isCommande ? '#166534' : '#5B21B6' }}>
                       {row.type}
+                    </span>
+                  </td>
+                  <td className="px-5 py-3.5">
+                    <span className="text-[11px] font-bold px-2 py-1 rounded-lg border"
+                      style={{ background: srcCfg.bg, color: srcCfg.color, borderColor: srcCfg.border }}>
+                      {getSourceLabel(src)}
                     </span>
                   </td>
                   <td className={`px-5 py-3.5 text-[13px] font-semibold ${isArchived ? 'text-[#ABBED1]' : 'text-[#0F172A]'}`}>{row.entreprise}</td>

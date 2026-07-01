@@ -18,15 +18,24 @@ function fillTemplate(content: string, item: RequestDetail, agentName?: string) 
     .replace(/\[Agent\]/g, agentName ?? 'notre équipe');
 }
 
+export interface RequestItem {
+  designation: string;
+  quantite: number;
+  prixUnitaire: number;
+}
+
 export interface RequestDetail {
   id?: string;
   ref: string;
   type: 'Commande' | 'Devis';
+  source?: string;
   date: string;
   heure?: string;
   statut: string;
   montant: string;
+  tva?: boolean;
   produits: string;
+  items?: RequestItem[];
   client: string;
   entreprise: string;
   telephone: string;
@@ -35,6 +44,12 @@ export interface RequestDetail {
   email?: string;
   message?: string;
 }
+
+function getSourceLabel(src: string) { return src === 'SITE' ? 'Site web' : 'Manuel'; }
+const SOURCE_COLOR: Record<'SITE' | 'OTHER', { bg: string; color: string; border: string }> = {
+  SITE:  { bg: '#F0FDF4', color: '#166534', border: '#BBF7D0' },
+  OTHER: { bg: '#FFF7ED', color: '#92400E', border: '#FDE68A' },
+};
 
 // ── Export Excel pro (style facture N&B) ────────────────────────────────────
 async function exportExcel(item: RequestDetail) {
@@ -74,10 +89,27 @@ async function exportExcel(item: RequestDetail) {
 
 // ── Export PDF (impression propre N&B + logo) ───────────────────────────────
 async function printDoc(item: RequestDetail) {
-  const lignes = item.produits.split(',').map((p) => p.trim()).filter(Boolean);
-  const rows = lignes.map((l) => {
-    const m = l.match(/^(.+?)\s*×\s*(\d+)/);
-    return `<tr><td>${m ? m[1].trim() : l}</td><td>${m ? `${m[2]} roul.` : '—'}</td><td>—</td></tr>`;
+  // Utilise items structurés si disponibles, sinon parse la string produits
+  const lignesData: { designation: string; quantite: number; pu: number }[] =
+    item.items && item.items.length > 0
+      ? item.items.map(i => ({ designation: i.designation, quantite: i.quantite, pu: i.prixUnitaire }))
+      : item.produits.split(',').map(p => {
+          const m = p.trim().match(/^(.+?)\s*×\s*(\d+)/);
+          return { designation: m ? m[1].trim() : p.trim(), quantite: m ? Number(m[2]) : 0, pu: 0 };
+        });
+
+  const ht = lignesData.reduce((acc, l) => acc + l.quantite * l.pu, 0);
+  const hasTva = item.tva === true;
+  const ttc = hasTva ? Math.round(ht * 1.19) : ht;
+
+  const rows = lignesData.map(l => {
+    const totalLigne = l.quantite * l.pu;
+    return `<tr>
+      <td>${l.designation}</td>
+      <td style="text-align:center">${l.quantite} roul.</td>
+      <td style="text-align:right">${l.pu > 0 ? l.pu.toLocaleString('fr-FR') + ' DA' : '—'}</td>
+      <td style="text-align:right">${totalLigne > 0 ? totalLigne.toLocaleString('fr-FR') + ' DA' : '—'}</td>
+    </tr>`;
   }).join('');
 
   // Charge le logo et le convertit en data-URL pour l'embarquer dans le HTML
@@ -147,13 +179,25 @@ async function printDoc(item: RequestDetail) {
 </div>
 <div class="section-title">${item.type === 'Commande' ? 'Produits commandés' : 'Spécifications demandées'}</div>
 <table>
-  <thead><tr><th>Désignation</th><th>Quantité</th><th>Montant</th></tr></thead>
+  <thead><tr><th>Désignation</th><th style="text-align:center">Quantité</th><th style="text-align:right">Prix unitaire</th><th style="text-align:right">Montant</th></tr></thead>
   <tbody>${rows}</tbody>
 </table>
 <div class="total-row">
-  <div class="total-box">
-    <span class="total-label">${item.type === 'Commande' ? 'Total' : 'Estimé'}</span>
-    <span class="total-amount">${item.montant}</span>
+  <div style="min-width:260px">
+    ${hasTva ? `
+    <div style="display:flex;justify-content:space-between;padding:8px 20px;border:1px solid #e5e7eb;border-radius:6px 6px 0 0;font-size:12px">
+      <span style="color:#666">Montant HT</span>
+      <span style="font-weight:600">${ht.toLocaleString('fr-FR')} DA</span>
+    </div>
+    <div style="display:flex;justify-content:space-between;padding:8px 20px;border:1px solid #e5e7eb;border-top:none;font-size:12px">
+      <span style="color:#666">TVA 19%</span>
+      <span style="font-weight:600">${(ttc - ht).toLocaleString('fr-FR')} DA</span>
+    </div>
+    ` : ''}
+    <div class="total-box" style="${hasTva ? 'border-radius:0 0 6px 6px;border-top:none' : ''}">
+      <span class="total-label">${hasTva ? 'Total TTC' : item.type === 'Commande' ? 'Total HT' : 'Estimé'}</span>
+      <span class="total-amount">${ttc > 0 ? ttc.toLocaleString('fr-FR') + ' DA' : item.montant}</span>
+    </div>
   </div>
 </div>
 ${item.message ? `<div style="margin-top:24px"><div class="section-title">Message du client</div><div style="border:1px solid #e5e7eb;border-radius:6px;padding:12px 14px;font-size:12px;color:#374151;line-height:1.6">${item.message}</div></div>` : ''}
@@ -371,7 +415,18 @@ export function RequestPanel({ item, onClose, onStatusChange, onConvertToOrder }
                 <div className="text-right">
                   <p className="text-[22px] font-extrabold text-[#0F172A] font-mono leading-none">{item.ref}</p>
                   <p className="text-[12px] text-[#8A9BB5] mt-1">{item.date}{item.heure ? ` · ${item.heure}` : ''}</p>
-                  <p className="text-[11px] font-semibold mt-1" style={{ color: isCommande ? '#4CAF4F' : '#8B5CF6' }}>{item.type}</p>
+                  <div className="flex items-center justify-end gap-2 mt-1.5">
+                    <p className="text-[11px] font-semibold" style={{ color: isCommande ? '#4CAF4F' : '#8B5CF6' }}>{item.type}</p>
+                    {item.source && (() => {
+                      const sc = item.source === 'SITE' ? SOURCE_COLOR.SITE : SOURCE_COLOR.OTHER;
+                      return (
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border"
+                          style={{ background: sc.bg, color: sc.color, borderColor: sc.border }}>
+                          {getSourceLabel(item.source)}
+                        </span>
+                      );
+                    })()}
+                  </div>
                 </div>
               </div>
 
@@ -476,15 +531,9 @@ export function RequestPanel({ item, onClose, onStatusChange, onConvertToOrder }
                 {!isArchived && onStatusChange && (
                   <>
                     {item.statut === 'En attente' && (
-                      <button onClick={() => { onStatusChange(item.ref, 'Contacté'); onClose(); }}
-                        className="px-4 py-2 rounded-lg text-[13px] font-bold border border-[#3B82F6] text-[#3B82F6] hover:bg-[#EFF6FF] transition-colors">
-                        Marquer Contacté
-                      </button>
-                    )}
-                    {isCommande && item.statut === 'Contacté' && (
                       <button onClick={() => { onStatusChange(item.ref, 'Confirmé'); onClose(); }}
                         className="px-4 py-2 rounded-lg text-[13px] font-bold border border-[#0D9488] text-[#0D9488] hover:bg-[#F0FDFA] transition-colors">
-                        Marquer Confirmé
+                        Confirmer
                       </button>
                     )}
                     {isCommande && item.statut === 'Confirmé' && (
@@ -493,10 +542,10 @@ export function RequestPanel({ item, onClose, onStatusChange, onConvertToOrder }
                         Marquer Livré
                       </button>
                     )}
-                    {!isCommande && item.statut === 'Contacté' && onConvertToOrder && (
+                    {!isCommande && item.statut === 'Confirmé' && onConvertToOrder && (
                       <button onClick={() => setShowConvert(true)}
                         className="px-4 py-2 rounded-lg text-[13px] font-bold border border-[#0D9488] text-[#0D9488] hover:bg-[#F0FDFA] transition-colors">
-                        Valider → Commande
+                        Convertir en commande
                       </button>
                     )}
                     <button onClick={() => { onStatusChange(item.ref, 'Annulé'); onClose(); }}

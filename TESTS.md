@@ -1,24 +1,11 @@
 # PSI — Workflows & Parcours complets
 
-## ORDRE D'IMPLÉMENTATION
-1. ✅ Front admin (mock data)
-2. → Auth
-3. → Routes Bruno
-4. → Branchement DB
-
----
 
 ## WORKFLOW 1 — Devis entrant (depuis site public)
 
 ```
 Client remplit formulaire /devis
-  → POST /api/quotes
-  → Devis créé en DB (statut: En attente)
   → Notif admin : "Nouveau devis — BuroPro"
-
-Admin ouvre /admin/requests → onglet Devis
-  → Voit DEV-XXX en orange (En attente)
-  → Clique sur la ligne → RequestPanel s'ouvre
 
   ACTIONS POSSIBLES dans le panel :
   ├── WhatsApp → ouvre wa.me avec message prérempli (nom + ref)

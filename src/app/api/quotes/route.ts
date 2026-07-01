@@ -3,7 +3,7 @@ import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { createNotif } from '@/lib/notifications';
 import { generateQuoteRef } from '@/lib/generate-ref';
-import { notifyClients } from '@/app/api/sse/route';
+import { pushSSE } from '@/lib/sse-bus';
 
 export async function GET() {
   const session = await auth();
@@ -93,14 +93,25 @@ export async function POST(request: NextRequest) {
       include: { items: true, client: { include: { phones: true } } },
     });
 
-    await createNotif({
-      type: 'SITE_DEVIS',
-      title: 'Nouveau devis',
-      message: `${client.company ?? client.name} — ${body.message?.slice(0, 60) ?? ''}`,
+    const isAdmin = body.source !== 'SITE';
+    const actorName = session?.user?.name ?? session?.user?.email ?? 'Agent';
+    const clientLabel = client.company ?? client.name;
+    const notif = await createNotif({
+      type: isAdmin ? 'ACTION_AUTRE' : 'SITE_DEVIS',
+      title: isAdmin ? 'Nouveau devis · Manuel' : 'Nouveau devis · Site web',
+      message: isAdmin
+        ? `${actorName} a créé un devis pour ${clientLabel} (${quote.ref ?? ''})`
+        : `${clientLabel} — ${body.message?.slice(0, 60) ?? ''}`,
       quoteId: quote.id,
     });
 
-    notifyClients('new_quote');
+    pushSSE('new_quote', {
+      id: notif.id,
+      type: notif.type,
+      title: notif.title,
+      message: notif.message,
+      createdAt: notif.createdAt.toISOString(),
+    });
     return NextResponse.json(quote, { status: 201 });
   } catch (error) {
     console.error('Error creating quote:', error);
