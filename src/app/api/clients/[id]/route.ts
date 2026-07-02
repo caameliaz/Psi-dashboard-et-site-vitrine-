@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { createAudit } from '@/lib/audit';
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -72,6 +73,7 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
       }
     }
 
+    createAudit({ userId: session.user.id, action: 'Client modifié', entity: 'CLIENT', entityId: id, detail: client.company ? `${client.name} (${client.company})` : client.name });
     return NextResponse.json(client);
   } catch (e) {
     console.error(e);
@@ -88,7 +90,9 @@ export async function DELETE(_request: NextRequest, { params }: Ctx) {
   const { id } = await params;
 
   try {
+    const target = await prisma.client.findUnique({ where: { id }, select: { name: true, company: true } });
     await prisma.client.delete({ where: { id } });
+    createAudit({ userId: session.user.id, action: 'Client supprimé', entity: 'CLIENT', entityId: id, detail: target ? (target.company ? `${target.name} (${target.company})` : target.name) : id });
     return NextResponse.json({ success: true });
   } catch (e) {
     console.error(e);

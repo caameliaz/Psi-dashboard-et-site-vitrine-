@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { auth } from '@/lib/auth';
+import { createAudit } from '@/lib/audit';
 
 // GET /api/products — produits actifs (public)
 // GET /api/products?all=true — tous les produits (admin)
@@ -30,9 +31,7 @@ export async function GET(request: NextRequest) {
 
 // POST /api/products — créer un produit (admin)
 export async function POST(request: NextRequest) {
-  // TODO: remettre auth avant prod
-  // const session = await auth();
-  // if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const session = await auth();
 
   try {
     const body = await request.json();
@@ -55,6 +54,7 @@ export async function POST(request: NextRequest) {
       include: { category: true, customFields: { include: { definition: true } } },
     });
 
+    createAudit({ userId: session?.user?.id, action: 'Produit créé', entity: 'PRODUIT', entityId: product.id, detail: product.reference });
     return NextResponse.json(product, { status: 201 });
   } catch (e) {
     console.error(e);

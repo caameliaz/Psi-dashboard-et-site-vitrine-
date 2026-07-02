@@ -135,6 +135,7 @@ model OrderItem {
 
 enum OrderSource {
   SITE
+  ADMIN
   WHATSAPP
   TELEPHONE
   AUTRE

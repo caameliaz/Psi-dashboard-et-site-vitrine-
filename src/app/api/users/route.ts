@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import bcrypt from 'bcryptjs';
+import { createAudit } from '@/lib/audit';
 
 // GET /api/users — liste tous les utilisateurs (admin uniquement)
 export async function GET() {
@@ -57,6 +58,7 @@ export async function POST(request: NextRequest) {
       },
     });
 
+    createAudit({ userId: session.user.id, action: 'Utilisateur créé', entity: 'UTILISATEUR', entityId: user.id, detail: `${user.name} (${user.email})` });
     return NextResponse.json(user, { status: 201 });
   } catch (e) {
     console.error(e);

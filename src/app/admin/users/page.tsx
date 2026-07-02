@@ -46,7 +46,7 @@ function dbUserToUser(u: any): User {
   };
 }
 
-const emptyForm = { nom: '', email: '', role: 'Employe' as 'Admin' | 'Employe', motdepasse: '' };
+const emptyForm = { nom: '', email: '', role: 'Employe' as string, motdepasse: '', permissions: [] as PermKey[] };
 
 function genPassword() {
   const chars = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789@#!';
@@ -94,6 +94,9 @@ function PermToggle({ checked, onChange, disabled }: { checked: boolean; onChang
 function RoleCreatorOverlay({ onClose, onCreate }: { onClose: () => void; onCreate: (role: CustomRole) => void }) {
   const [nom, setNom] = useState('');
   const [perms, setPerms] = useState<PermKey[]>([]);
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => { const id = requestAnimationFrame(() => setVisible(true)); return () => cancelAnimationFrame(id); }, []);
 
   const toggle = (key: PermKey) =>
     setPerms((p) => p.includes(key) ? p.filter((k) => k !== key) : [...p, key]);
@@ -105,60 +108,66 @@ function RoleCreatorOverlay({ onClose, onCreate }: { onClose: () => void; onCrea
 
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/50 backdrop-blur-[2px]" onClick={onClose} />
-      <div className="relative bg-white rounded-2xl shadow-2xl w-[480px] max-h-[90vh] overflow-y-auto p-6 flex flex-col gap-5 mx-4">
-
-        <div className="flex items-center justify-between">
-          <h3 className="text-[16px] font-bold text-[#0F172A]">Nouveau rôle</h3>
-          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-[#F2F4F7] text-[#8A9BB5] transition-colors">
-            <svg width={14} height={14} viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
-          </button>
+      <div className="absolute inset-0 bg-black/30 backdrop-blur-[2px]" onClick={onClose} />
+      <div
+        className="relative bg-white rounded-2xl shadow-2xl w-[480px] max-h-[90vh] flex flex-col overflow-hidden mx-4"
+        style={{
+          transform: visible ? 'scale(1) translateY(0)' : 'scale(0.96) translateY(10px)',
+          opacity: visible ? 1 : 0,
+          transition: 'transform 0.22s cubic-bezier(0.34,1.56,0.64,1), opacity 0.18s ease',
+        }}
+      >
+        <div className="flex items-center justify-between px-6 py-4 border-b border-[#E2E8F0] bg-[#F8FAFC] flex-shrink-0">
+          <h3 className="text-[15px] font-bold text-[#0F172A]">Nouveau rôle</h3>
+          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-[#E2E8F0] text-[#8A9BB5] transition-colors text-lg">&#x2715;</button>
         </div>
 
-        <div>
-          <label className="block text-[12px] font-semibold text-[#374151] mb-1.5">Titre du rôle</label>
-          <input
-            value={nom}
-            onChange={(e) => setNom(e.target.value)}
-            placeholder="ex : Gestionnaire commercial…"
-            className="w-full px-3 py-2.5 rounded-xl border border-[#E2E8F0] text-sm text-[#0F172A] focus:outline-none focus:border-[#4CAF4F] focus:ring-[3px] focus:ring-[#4CAF4F]/15 transition-all bg-white"
-          />
-        </div>
+        <div className="overflow-y-auto px-6 py-5 flex flex-col gap-5">
+          <div>
+            <label className="block text-[12px] font-semibold text-[#374151] mb-1.5">Titre du rôle</label>
+            <input
+              value={nom}
+              onChange={(e) => setNom(e.target.value)}
+              placeholder="ex : Gestionnaire commercial…"
+              className="w-full px-3 py-2.5 rounded-xl border border-[#E2E8F0] text-sm text-[#0F172A] focus:outline-none focus:border-[#4CAF4F] focus:ring-[3px] focus:ring-[#4CAF4F]/15 transition-all bg-white"
+            />
+          </div>
 
-        <div>
-          <div className="flex items-center justify-between mb-2">
-            <label className="text-[12px] font-semibold text-[#374151]">Autorisations</label>
-            <div className="flex gap-2">
-              <button onClick={() => setPerms([...ADMIN_PERMS])} className="text-[11px] font-semibold text-[#4CAF4F] hover:underline">Tout</button>
-              <span className="text-[#E2E8F0]">·</span>
-              <button onClick={() => setPerms([])} className="text-[11px] font-semibold text-[#8A9BB5] hover:underline">Aucun</button>
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-[12px] font-semibold text-[#374151]">Autorisations</label>
+              <div className="flex gap-2">
+                <button onClick={() => setPerms([...ADMIN_PERMS])} className="text-[11px] font-semibold text-[#4CAF4F] hover:underline">Tout</button>
+                <span className="text-[#E2E8F0]">·</span>
+                <button onClick={() => setPerms([])} className="text-[11px] font-semibold text-[#8A9BB5] hover:underline">Aucun</button>
+              </div>
+            </div>
+            <div className="flex flex-col gap-1">
+              {ALL_PERMISSIONS.map((perm) => {
+                const checked = perms.includes(perm.key);
+                return (
+                  <div key={perm.key} onClick={() => toggle(perm.key)}
+                    className="flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer transition-all"
+                    style={{ background: checked ? '#F0FDF4' : '#F8FAFC', border: `1.5px solid ${checked ? '#BBF7D0' : '#F2F4F7'}` }}>
+                    <div className="w-4 h-4 rounded flex-shrink-0 border-2 flex items-center justify-center transition-all"
+                      style={{ background: checked ? '#4CAF4F' : 'white', borderColor: checked ? '#4CAF4F' : '#D1D5DB' }}>
+                      {checked && <svg width={8} height={8} viewBox="0 0 12 12" fill="none"><path d="M2 6L5 9L10 3" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                    </div>
+                    <span className="text-[12px] font-medium" style={{ color: checked ? '#166534' : '#374151' }}>{perm.label}</span>
+                  </div>
+                );
+              })}
             </div>
           </div>
-          <div className="flex flex-col gap-1">
-            {ALL_PERMISSIONS.map((perm) => {
-              const checked = perms.includes(perm.key);
-              return (
-                <div key={perm.key} onClick={() => toggle(perm.key)}
-                  className="flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer transition-all"
-                  style={{ background: checked ? '#F0FDF4' : '#F8FAFC', border: `1.5px solid ${checked ? '#BBF7D0' : '#F2F4F7'}` }}>
-                  <div className="w-4 h-4 rounded flex-shrink-0 border-2 flex items-center justify-center transition-all"
-                    style={{ background: checked ? '#4CAF4F' : 'white', borderColor: checked ? '#4CAF4F' : '#D1D5DB' }}>
-                    {checked && <svg width={8} height={8} viewBox="0 0 12 12" fill="none"><path d="M2 6L5 9L10 3" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>}
-                  </div>
-                  <span className="text-[12px] font-medium" style={{ color: checked ? '#166534' : '#374151' }}>{perm.label}</span>
-                </div>
-              );
-            })}
-          </div>
-        </div>
 
-        <div className="flex gap-3 pt-1">
-          <button onClick={onClose} className="flex-1 px-4 py-2.5 rounded-xl border border-[#E2E8F0] text-[13px] font-semibold text-[#374151] hover:bg-[#F8FAFC] transition-colors">Annuler</button>
-          <button onClick={handleCreate} disabled={!nom.trim()}
-            className="flex-1 px-4 py-2.5 rounded-xl text-[13px] font-bold text-white transition-opacity disabled:opacity-40"
-            style={{ background: '#4CAF4F' }}>
-            Créer le rôle
-          </button>
+          <div className="flex gap-3 pt-1">
+            <button onClick={onClose} className="flex-1 px-4 py-2.5 rounded-xl border border-[#E2E8F0] text-[13px] font-semibold text-[#374151] hover:bg-[#F8FAFC] transition-colors">Annuler</button>
+            <button onClick={handleCreate} disabled={!nom.trim()}
+              className="flex-1 px-4 py-2.5 rounded-xl text-[13px] font-bold text-white transition-opacity disabled:opacity-40"
+              style={{ background: '#4CAF4F' }}>
+              Créer le rôle
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -360,10 +369,33 @@ function CreateUserForm({ onSubmit, onClose, customRoles, onAddCustomRole }: {
 }
 
 /* ─── Formulaire de modification ─── */
-function EditUserForm({ form, setForm, onSubmit, onClose }: {
+function EditUserForm({ form, setForm, onSubmit, onClose, customRoles }: {
   form: typeof emptyForm; setForm: (f: typeof emptyForm) => void; onSubmit: () => void; onClose: () => void;
+  customRoles: CustomRole[];
 }) {
   const inputClass = "w-full px-3 py-2.5 rounded-xl border border-[#E2E8F0] text-sm text-[#0F172A] focus:outline-none focus:border-[#4CAF4F] focus:ring-[3px] focus:ring-[#4CAF4F]/15 transition-all bg-white";
+
+  const allRoles = [
+    { id: 'Admin',   label: 'Admin',   colors: { bg: '#F3E8FF', border: '#7C3AED', text: '#6B21A8' } },
+    { id: 'Employe', label: 'Employé', colors: { bg: '#F0FDF4', border: '#4CAF4F', text: '#166534' } },
+    ...customRoles.map((cr) => ({ id: cr.id, label: cr.nom, colors: { bg: '#EFF6FF', border: '#3B82F6', text: '#1D4ED8' } })),
+  ];
+
+  const selectRole = (id: string) => {
+    if (id === 'Admin') {
+      setForm({ ...form, role: 'Admin', permissions: [...ADMIN_PERMS] });
+    } else if (id === 'Employe') {
+      setForm({ ...form, role: 'Employe', permissions: [...EMPLOYE_PERMS] });
+    } else {
+      const cr = customRoles.find((r) => r.id === id);
+      setForm({ ...form, role: id, permissions: cr ? [...cr.permissions] : [] });
+    }
+  };
+
+  const isAdmin = form.role === 'Admin';
+  const isCustom = form.role !== 'Admin' && form.role !== 'Employe';
+  const showPerms = !isAdmin && (form.role === 'Employe' || isCustom);
+
   return (
     <div className="space-y-4">
       <div>
@@ -376,13 +408,47 @@ function EditUserForm({ form, setForm, onSubmit, onClose }: {
       </div>
       <div>
         <label className="block text-[12px] font-semibold text-[#374151] mb-1.5">Rôle</label>
-        <div className="flex gap-3">
-          {(['Admin', 'Employe'] as const).map((r) => (
-            <button key={r} onClick={() => setForm({ ...form, role: r })} className="flex-1 py-2.5 rounded-xl text-[13px] font-semibold border-2 transition-all"
-              style={form.role === r ? { background: r === 'Admin' ? '#F3E8FF' : '#F0FDF4', borderColor: r === 'Admin' ? '#7C3AED' : '#4CAF4F', color: r === 'Admin' ? '#6B21A8' : '#166634' } : { background: '#F8FAFC', borderColor: '#E2E8F0', color: '#8A9BB5' }}>
-              {r === 'Admin' ? 'Admin' : 'Employé'}
-            </button>
-          ))}
+        <div className="flex flex-wrap gap-2">
+          {allRoles.map((r) => {
+            const active = form.role === r.id;
+            return (
+              <button key={r.id} onClick={() => selectRole(r.id)}
+                className="px-3 py-2 rounded-xl text-[13px] font-semibold border-2 transition-all"
+                style={active ? { background: r.colors.bg, borderColor: r.colors.border, color: r.colors.text } : { background: '#F8FAFC', borderColor: '#E2E8F0', color: '#8A9BB5' }}>
+                {r.label}
+              </button>
+            );
+          })}
+        </div>
+
+        <div style={{ maxHeight: showPerms ? '300px' : '0', opacity: showPerms ? 1 : 0, overflow: 'hidden', transition: 'max-height 0.28s ease, opacity 0.2s ease', marginTop: showPerms ? '10px' : '0' }}>
+          <div className="rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] p-3">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[11px] font-bold text-[#8A9BB5] uppercase tracking-widest">Autorisations</span>
+              <div className="flex gap-2">
+                <button onClick={() => setForm({ ...form, permissions: [...ADMIN_PERMS] })} className="text-[10px] font-semibold text-[#4CAF4F] hover:underline">Tout</button>
+                <span className="text-[#E2E8F0]">·</span>
+                <button onClick={() => setForm({ ...form, permissions: [] })} className="text-[10px] font-semibold text-[#8A9BB5] hover:underline">Aucun</button>
+              </div>
+            </div>
+            <div className="grid grid-cols-3 gap-1.5">
+              {ALL_PERMISSIONS.map((perm) => {
+                const checked = (form.permissions ?? []).includes(perm.key);
+                return (
+                  <button key={perm.key}
+                    onClick={() => setForm({ ...form, permissions: checked ? form.permissions.filter((p) => p !== perm.key) : [...(form.permissions ?? []), perm.key] })}
+                    className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-[11px] font-medium text-left transition-all"
+                    style={{ background: checked ? '#F0FDF4' : 'white', border: `1.5px solid ${checked ? '#4CAF4F' : '#E2E8F0'}`, color: checked ? '#166534' : '#6B7280' }}>
+                    <div className="w-3 h-3 rounded flex-shrink-0 border flex items-center justify-center"
+                      style={{ background: checked ? '#4CAF4F' : 'white', borderColor: checked ? '#4CAF4F' : '#D1D5DB' }}>
+                      {checked && <svg width={7} height={7} viewBox="0 0 10 10" fill="none"><path d="M2 5L4 7.5L8 2.5" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                    </div>
+                    {perm.short}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
         </div>
       </div>
       <div className="flex gap-3 pt-2">
@@ -535,7 +601,10 @@ export default function UsersPage() {
   const fetchRoles = useCallback(async () => {
     try {
       const res = await fetch('/api/roles');
-      if (res.ok) setCustomRoles(await res.json());
+      if (res.ok) {
+        const data = await res.json();
+        setCustomRoles(data.map((r: any) => ({ id: r.id, nom: r.name, permissions: r.permissions })));
+      }
     } catch {}
   }, []);
 
@@ -593,12 +662,13 @@ export default function UsersPage() {
   };
 
   const openEdit = (u: User) => {
-    setEditForm({ nom: u.nom, email: u.email, role: u.role, motdepasse: '' });
+    setEditForm({ nom: u.nom, email: u.email, role: u.role, motdepasse: '', permissions: [...u.permissions] });
     setEditUser(u);
   };
 
   const handleEdit = async () => {
     if (!editUser) return;
+    const isCustom = editForm.role !== 'Admin' && editForm.role !== 'Employe';
     await fetch(`/api/users/${editUser.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -607,6 +677,7 @@ export default function UsersPage() {
         email: editForm.email,
         role: editForm.role === 'Admin' ? 'ADMIN' : 'EMPLOYEE',
         ...(editForm.motdepasse ? { password: editForm.motdepasse } : {}),
+        ...(isCustom || editForm.role === 'Employe' ? { permissions: editForm.permissions } : {}),
       }),
     });
     await fetchUsers();
@@ -633,8 +704,13 @@ export default function UsersPage() {
 
   const filteredUsers = users.filter((u) => {
     const q = search.toLowerCase();
-    return (!q || u.nom.toLowerCase().includes(q) || u.email.toLowerCase().includes(q))
-      && (filterRole === 'all' || u.role === filterRole);
+    const matchSearch = !q || u.nom.toLowerCase().includes(q) || u.email.toLowerCase().includes(q);
+    let matchRole = filterRole === 'all' || u.role === filterRole;
+    if (!matchRole) {
+      const cr = customRoles.find((r) => r.id === filterRole);
+      if (cr) matchRole = u.role === 'Employe' && cr.permissions.length === u.permissions.length && cr.permissions.every((p) => u.permissions.includes(p));
+    }
+    return matchSearch && matchRole;
   });
 
   return (
@@ -659,7 +735,12 @@ export default function UsersPage() {
             className="px-3 py-2 pl-8 w-[220px] rounded-xl border border-[#E2E8F0] text-sm text-[#0F172A] bg-white focus:outline-none focus:border-[#4CAF4F] focus:ring-[3px] focus:ring-[#4CAF4F]/15 transition-all" />
         </div>
         <AdminSelect value={filterRole} onChange={setFilterRole}
-          options={[{ value: 'all', label: 'Tous les rôles' }, { value: 'Admin', label: 'Admin' }, { value: 'Employe', label: 'Employé' }]} />
+          options={[
+            { value: 'all', label: 'Tous les rôles' },
+            { value: 'Admin', label: 'Admin' },
+            { value: 'Employe', label: 'Employé' },
+            ...customRoles.map((cr) => ({ value: cr.id, label: cr.nom })),
+          ]} />
       </div>
 
       {filteredUsers.length === 0 ? (
@@ -730,7 +811,7 @@ export default function UsersPage() {
 
       {editUser && (
         <Modal title="Modifier l'utilisateur" onClose={() => setEditUser(null)}>
-          <EditUserForm form={editForm} setForm={setEditForm} onSubmit={handleEdit} onClose={() => setEditUser(null)} />
+          <EditUserForm form={editForm} setForm={setEditForm} onSubmit={handleEdit} onClose={() => setEditUser(null)} customRoles={customRoles} />
         </Modal>
       )}
 

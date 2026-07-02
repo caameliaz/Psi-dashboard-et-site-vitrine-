@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { createAudit } from '@/lib/audit';
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -56,6 +57,7 @@ export async function PATCH(_request: NextRequest, { params }: Ctx) {
       },
     });
 
+    createAudit({ userId: session.user.id, action: 'Devis converti en commande', entity: 'DEVIS', entityId: id, detail: `Commande créée : ${order.id}`, quoteId: id, orderId: order.id });
     return NextResponse.json({ quote: updatedQuote, order });
   } catch (e) {
     console.error(e);

@@ -1,14 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { auth } from '@/lib/auth';
+import { createAudit } from '@/lib/audit';
 
 type Ctx = { params: Promise<{ id: string }> };
 
 // PATCH /api/products/[id] — modifier un produit (admin)
 export async function PATCH(request: NextRequest, { params }: Ctx) {
-  // TODO: remettre auth avant prod
-  // const session = await auth();
-  // if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const session = await auth();
 
   const { id } = await params;
 
@@ -30,6 +29,10 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
       include: { category: true, customFields: { include: { definition: true } } },
     });
 
+    const action = body.active !== undefined && !body.reference
+      ? `Produit ${body.active ? 'activé' : 'désactivé'}`
+      : 'Produit modifié';
+    createAudit({ userId: session?.user?.id, action, entity: 'PRODUIT', entityId: id, detail: product.reference });
     return NextResponse.json(product);
   } catch (e) {
     console.error(e);
@@ -39,14 +42,14 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
 
 // DELETE /api/products/[id] — supprimer un produit (admin)
 export async function DELETE(_request: NextRequest, { params }: Ctx) {
-  // TODO: remettre auth avant prod
-  // const session = await auth();
-  // if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const session = await auth();
 
   const { id } = await params;
 
   try {
+    const product = await prisma.product.findUnique({ where: { id }, select: { reference: true } });
     await prisma.product.delete({ where: { id } });
+    createAudit({ userId: session?.user?.id, action: 'Produit supprimé', entity: 'PRODUIT', entityId: id, detail: product?.reference ?? id });
     return NextResponse.json({ success: true });
   } catch (e) {
     console.error(e);

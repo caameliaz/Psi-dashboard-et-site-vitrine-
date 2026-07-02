@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { createAudit, statusLabel } from '@/lib/audit';
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -57,6 +58,8 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
       },
     });
 
+    const action = body.status !== undefined ? `Statut devis : ${statusLabel(body.status)}` : 'Devis modifié';
+    createAudit({ userId: session.user.id, action, entity: 'DEVIS', entityId: id, quoteId: id });
     return NextResponse.json(quote);
   } catch (e) {
     console.error(e);

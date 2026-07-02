@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { createAudit, statusLabel } from '@/lib/audit';
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -54,6 +55,8 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
       },
     });
 
+    const action = body.status !== undefined ? `Statut commande : ${statusLabel(body.status)}` : 'Commande modifiée';
+    createAudit({ userId: session.user.id, action, entity: 'COMMANDE', entityId: id, orderId: id });
     return NextResponse.json(order);
   } catch (e) {
     console.error(e);

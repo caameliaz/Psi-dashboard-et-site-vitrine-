@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import bcrypt from 'bcryptjs';
+import { createAudit } from '@/lib/audit';
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -34,6 +35,11 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
       },
     });
 
+    const action = body.active === false ? 'Utilisateur désactivé'
+      : body.active === true ? 'Utilisateur activé'
+      : body.permissions !== undefined && Object.keys(body).length === 1 ? 'Autorisations modifiées'
+      : 'Utilisateur modifié';
+    createAudit({ userId: session.user.id, action, entity: 'UTILISATEUR', entityId: id, detail: user.name });
     return NextResponse.json(user);
   } catch (e) {
     console.error(e);
@@ -49,7 +55,9 @@ export async function DELETE(_request: NextRequest, { params }: Ctx) {
   const { id } = await params;
 
   try {
+    const target = await prisma.user.findUnique({ where: { id }, select: { name: true, email: true } });
     await prisma.user.delete({ where: { id } });
+    createAudit({ userId: session.user.id, action: 'Utilisateur supprimé', entity: 'UTILISATEUR', entityId: id, detail: target ? `${target.name} (${target.email})` : id });
     return NextResponse.json({ success: true });
   } catch (e) {
     console.error(e);

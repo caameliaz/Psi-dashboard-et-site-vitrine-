@@ -17,6 +17,7 @@ export default function QuotePage() {
     name: '',
     company: '',
     phone: '',
+    email: '',
     wilaya: '',
     width: '',
     length: '',
@@ -24,10 +25,13 @@ export default function QuotePage() {
     message: '',
   });
   const [loading, setLoading] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
+  const [submitError, setSubmitError] = useState('');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+    setSubmitError('');
     try {
       const res = await fetch('/api/quotes', {
         method: 'POST',
@@ -36,6 +40,7 @@ export default function QuotePage() {
           name: formData.name,
           company: formData.company || undefined,
           phone: formData.phone,
+          email: formData.email || undefined,
           wilaya: formData.wilaya,
           message: formData.message,
           items: formData.width || formData.length || formData.quantity
@@ -46,11 +51,10 @@ export default function QuotePage() {
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        alert(err.error ?? 'Erreur lors de l\'envoi. Veuillez réessayer.');
+        setSubmitError(err.error ?? 'Erreur lors de l\'envoi. Veuillez réessayer.');
         return;
       }
-      alert('Demande de devis envoyée ! Notre équipe vous contactera rapidement.');
-      router.push('/');
+      setSubmitted(true);
     } finally {
       setLoading(false);
     }
@@ -61,6 +65,30 @@ export default function QuotePage() {
   ) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
+
+  if (submitted) {
+    return (
+      <div className="min-h-screen bg-[#F5F7FA] flex items-center justify-center px-6">
+        <div className="bg-white rounded-2xl shadow-[0_4px_24px_rgba(171,190,209,0.35)] p-10 max-w-[480px] w-full text-center">
+          <div className="w-16 h-16 rounded-full bg-[#E0F4F4] flex items-center justify-center mx-auto mb-6">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none">
+              <path d="M5 13l4 4L19 7" stroke="#0D9488" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </div>
+          <h2 className="text-[22px] font-bold text-[#263238] mb-3">Demande envoyée !</h2>
+          <p className="text-[15px] text-[#717171] mb-8">
+            Merci pour votre demande de devis. Notre équipe vous contactera dans les plus brefs délais.
+          </p>
+          <Link
+            href="/"
+            className="inline-block bg-[#0D9488] text-white text-[15px] font-semibold px-8 py-3 rounded-xl hover:bg-[#0F766E] transition-all"
+          >
+            Retour à l'accueil
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#F5F7FA] py-12 px-6">
@@ -114,6 +142,11 @@ export default function QuotePage() {
                 </div>
               </div>
 
+              <div>
+                <label className={labelClass}>Email</label>
+                <input type="email" name="email" value={formData.email} onChange={handleChange} placeholder="votre@email.com" className={inputClass} />
+              </div>
+
               <div className="border-t border-[#F0F4F8] pt-6">
                 <h2 className="text-[18px] font-bold text-[#263238] mb-5">Spécifications du produit</h2>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -145,6 +178,9 @@ export default function QuotePage() {
                 />
               </div>
 
+              {submitError && (
+                <p className="text-[13px] text-red-600 bg-red-50 border border-red-200 rounded-xl px-4 py-3">{submitError}</p>
+              )}
               <button
                 type="submit"
                 disabled={loading}
