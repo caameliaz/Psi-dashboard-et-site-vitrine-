@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { createAudit } from '@/lib/audit';
 import { notifyDeletion } from '@/lib/notify-activity';
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -72,6 +73,7 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
       }
     }
 
+    createAudit({ userId: session.user.id, action: 'Client modifié', entity: 'CLIENT', entityId: id, detail: client.company ? `${client.name} (${client.company})` : client.name });
     return NextResponse.json(client);
   } catch (e) {
     console.error(e);
@@ -88,19 +90,18 @@ export async function DELETE(_request: NextRequest, { params }: Ctx) {
   const { id } = await params;
 
   try {
-    const client = await prisma.client.findUnique({
-      where: { id },
-      select: { name: true, company: true },
-    });
-    if (!client) return NextResponse.json({ error: 'Client introuvable' }, { status: 404 });
+    const target = await prisma.client.findUnique({ where: { id }, select: { name: true, company: true } });
+    if (!target) return NextResponse.json({ error: 'Client introuvable' }, { status: 404 });
 
     await prisma.client.delete({ where: { id } });
+
+    createAudit({ userId: session.user.id, action: 'Client supprimé', entity: 'CLIENT', entityId: id, detail: target.company ? `${target.name} (${target.company})` : target.name });
 
     notifyDeletion({
       actorId: session.user.id!,
       actorName: session.user.name ?? session.user.email ?? 'Admin',
       entityType: 'client',
-      label: client.company ?? client.name,
+      label: target.company ?? target.name,
     }).catch(() => {});
 
     return NextResponse.json({ success: true });

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { createAudit } from '@/lib/audit';
 import { notifyConversion } from '@/lib/notify-activity';
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -51,6 +52,8 @@ export async function PATCH(_request: NextRequest, { params }: Ctx) {
         createdBy: { select: { id: true, name: true } },
       },
     });
+
+    createAudit({ userId: session.user.id, action: 'Devis converti en commande', entity: 'DEVIS', entityId: id, detail: `Commande créée : ${order.id}`, quoteId: id, orderId: order.id });
 
     const clientLabel = quote.client?.company ?? quote.client?.name ?? quote.clientCompany ?? quote.clientName ?? '—';
     notifyConversion({

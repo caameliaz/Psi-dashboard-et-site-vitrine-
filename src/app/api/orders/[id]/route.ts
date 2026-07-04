@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { createAudit, statusLabel } from '@/lib/audit';
 import { notifyStatusChange } from '@/lib/notify-activity';
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -54,6 +55,9 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
         createdBy: { select: { id: true, name: true } },
       },
     });
+
+    const action = body.status !== undefined ? `Statut commande : ${statusLabel(body.status)}` : 'Commande modifiée';
+    createAudit({ userId: session.user.id, action, entity: 'COMMANDE', entityId: id, orderId: id });
 
     if (body.status !== undefined) {
       notifyStatusChange({

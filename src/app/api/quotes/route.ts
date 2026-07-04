@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { createNotif } from '@/lib/notifications';
 import { generateQuoteRef } from '@/lib/generate-ref';
 import { pushSSE } from '@/lib/sse-bus';
+import { createAudit } from '@/lib/audit';
 
 export async function GET() {
   const session = await auth();
@@ -111,6 +112,14 @@ export async function POST(request: NextRequest) {
       title: notif.title,
       message: notif.message,
       createdAt: notif.createdAt.toISOString(),
+    });
+    createAudit({
+      userId: session?.user?.id,
+      action: 'Devis créé',
+      entity: 'DEVIS',
+      entityId: quote.id,
+      detail: `${client.company ?? client.name}`,
+      quoteId: quote.id,
     });
     return NextResponse.json(quote, { status: 201 });
   } catch (error) {

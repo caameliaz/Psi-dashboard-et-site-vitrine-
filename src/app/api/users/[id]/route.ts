@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import bcrypt from 'bcryptjs';
+import { createAudit } from '@/lib/audit';
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -23,6 +24,7 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
     if (body.active !== undefined) data.active = body.active;
     if (body.phone !== undefined) data.phone = body.phone;
     if (body.photo !== undefined) data.photo = body.photo;
+    if (body.permissions !== undefined) data.permissions = body.permissions;
     if (body.password !== undefined) data.password = await bcrypt.hash(body.password, 10);
 
     const user = await prisma.user.update({
@@ -30,10 +32,15 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
       data,
       select: {
         id: true, name: true, email: true, role: true,
-        active: true, phone: true, photo: true, createdAt: true,
+        active: true, phone: true, photo: true, permissions: true, createdAt: true,
       },
     });
 
+    const action = body.active === false ? 'Utilisateur désactivé'
+      : body.active === true ? 'Utilisateur activé'
+      : body.permissions !== undefined && Object.keys(body).length === 1 ? 'Autorisations modifiées'
+      : 'Utilisateur modifié';
+    createAudit({ userId: session.user.id, action, entity: 'UTILISATEUR', entityId: id, detail: user.name });
     return NextResponse.json(user);
   } catch (e) {
     console.error(e);
@@ -50,7 +57,9 @@ export async function DELETE(_request: NextRequest, { params }: Ctx) {
   const { id } = await params;
 
   try {
+    const target = await prisma.user.findUnique({ where: { id }, select: { name: true, email: true } });
     await prisma.user.delete({ where: { id } });
+    createAudit({ userId: session.user.id, action: 'Utilisateur supprimé', entity: 'UTILISATEUR', entityId: id, detail: target ? `${target.name} (${target.email})` : id });
     return NextResponse.json({ success: true });
   } catch (e) {
     console.error(e);

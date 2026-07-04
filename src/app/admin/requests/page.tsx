@@ -474,7 +474,7 @@ export default function RequestsPage() {
             quantity: l.qte,
             unitPrice: l.pu,
           })),
-          source: 'ADMIN',
+          source: 'AUTRE',
         }
       : {
           name: item.client,
@@ -488,7 +488,7 @@ export default function RequestsPage() {
             description: l.productId ? undefined : l.ref,
             quantity: l.qte,
           })),
-          source: 'ADMIN',
+          source: 'AUTRE',
         };
 
     const res = await fetch(endpoint, {
@@ -498,7 +498,11 @@ export default function RequestsPage() {
     });
 
     if (!res.ok) {
-      console.error('Erreur création:', await res.text());
+      const text = await res.text();
+      let errBody: any = {};
+      try { errBody = JSON.parse(text); } catch { /* not json */ }
+      alert(`[${res.status}] ${errBody.detail ?? errBody.error ?? text.slice(0, 200)}`);
+      console.error('Erreur création raw:', text);
       return;
     }
 

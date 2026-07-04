@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import bcrypt from 'bcryptjs';
-import { notifyUserCreated } from '@/lib/notify-activity';
+import { createAudit } from '@/lib/audit';
 
 // GET /api/users — liste tous les utilisateurs (admin uniquement)
 export async function GET() {
@@ -12,14 +12,8 @@ export async function GET() {
   try {
     const users = await prisma.user.findMany({
       select: {
-        id: true,
-        name: true,
-        email: true,
-        role: true,
-        active: true,
-        phone: true,
-        photo: true,
-        createdAt: true,
+        id: true, name: true, email: true, role: true,
+        active: true, phone: true, photo: true, permissions: true, createdAt: true,
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -56,19 +50,15 @@ export async function POST(request: NextRequest) {
         password: hashed,
         role: body.role ?? 'EMPLOYEE',
         phone: body.phone ?? null,
+        permissions: body.permissions ?? [],
       },
       select: {
         id: true, name: true, email: true, role: true,
-        active: true, phone: true, photo: true, createdAt: true,
+        active: true, phone: true, photo: true, permissions: true, createdAt: true,
       },
     });
 
-    notifyUserCreated({
-      actorId: session.user.id!,
-      actorName: session.user.name ?? session.user.email ?? 'Admin',
-      userName: user.name,
-    }).catch(() => {});
-
+    createAudit({ userId: session.user.id, action: 'Utilisateur créé', entity: 'UTILISATEUR', entityId: user.id, detail: `${user.name} (${user.email})` });
     return NextResponse.json(user, { status: 201 });
   } catch (e) {
     console.error(e);

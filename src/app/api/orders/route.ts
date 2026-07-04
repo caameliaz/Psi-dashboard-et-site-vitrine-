@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { createNotif } from '@/lib/notifications';
 import { generateOrderRef } from '@/lib/generate-ref';
 import { pushSSE } from '@/lib/sse-bus';
+import { createAudit } from '@/lib/audit';
 
 export async function GET() {
   const session = await auth();
@@ -69,11 +70,18 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    const VALID_SOURCES = ['SITE', 'ADMIN', 'WHATSAPP', 'TELEPHONE', 'AUTRE'];
+    const source = VALID_SOURCES.includes(body.source) ? body.source : 'SITE';
+
     const ref = await generateOrderRef(client.wilaya);
     const validItems = (body.items ?? []).filter(
       (i: { productId?: string | null; quantity?: number }) =>
         i.productId && i.productId !== '' && (i.quantity ?? 0) > 0
     );
+
+    if (validItems.length === 0) {
+      return NextResponse.json({ error: 'Au moins un produit valide est requis' }, { status: 400 });
+    }
 
     console.log('[POST /api/orders] validItems:', JSON.stringify(validItems));
 
@@ -84,17 +92,15 @@ export async function POST(request: NextRequest) {
         clientName: client.name,
         clientCompany: client.company ?? null,
         clientWilaya: client.wilaya ?? null,
-        source: body.source ?? 'SITE',
+        source: source as any,
         createdById: session?.user?.id ?? null,
-        ...(validItems.length > 0 && {
-          items: {
-            create: validItems.map((item: { productId: string; quantity: number; unitPrice?: number }) => ({
-              productId: item.productId,
-              quantity: item.quantity,
-              unitPrice: item.unitPrice ?? 0,
-            })),
-          },
-        }),
+        items: {
+          create: validItems.map((item: { productId: string; quantity: number; unitPrice: number }) => ({
+            productId: item.productId,
+            quantity: item.quantity,
+            unitPrice: item.unitPrice ?? 0,
+          })),
+        },
       },
       include: { items: true, client: { include: { phones: true } } },
     });
@@ -118,9 +124,21 @@ export async function POST(request: NextRequest) {
       message: notif.message,
       createdAt: notif.createdAt.toISOString(),
     });
+    createAudit({
+      userId: session?.user?.id,
+      action: 'Commande créée',
+      entity: 'COMMANDE',
+      entityId: order.id,
+      detail: `${client.company ?? client.name} — ${validItems.length} article(s)`,
+      orderId: order.id,
+    });
     return NextResponse.json(order, { status: 201 });
-  } catch (error) {
+  } catch (error: any) {
     console.error('[POST /api/orders] ERROR:', error);
-    return NextResponse.json({ error: 'Failed to create order', detail: String(error) }, { status: 500 });
+    return NextResponse.json({
+      error: 'Failed to create order',
+      detail: error?.message ?? String(error),
+      code: error?.code,
+    }, { status: 500 });
   }
 }

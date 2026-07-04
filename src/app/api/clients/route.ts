@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { createAudit } from '@/lib/audit';
 
 // GET /api/clients — liste tous les clients (admin + employé)
 export async function GET() {
@@ -65,6 +66,7 @@ export async function POST(request: NextRequest) {
       include: { phones: true, _count: { select: { orders: true, quotes: true } } },
     });
 
+    createAudit({ userId: session.user.id, action: 'Client créé', entity: 'CLIENT', entityId: client.id, detail: client.company ? `${client.name} (${client.company})` : client.name });
     return NextResponse.json(client, { status: 201 });
   } catch (e) {
     console.error(e);

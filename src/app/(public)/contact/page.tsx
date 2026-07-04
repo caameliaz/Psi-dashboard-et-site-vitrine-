@@ -1,11 +1,27 @@
 import Link from 'next/link';
 
-const WHATSAPP_NUMBER = '213770150656';
-const WHATSAPP_MSG = encodeURIComponent('Bonjour, je souhaite obtenir des informations sur vos produits PSI.');
-const PHONE = '+213770150656';
-const EMAIL = 'contact@psi-algerie.com';
+async function getContent(): Promise<Record<string, string>> {
+  try {
+    const base = process.env.NEXTAUTH_URL ?? 'http://localhost:3000';
+    const res = await fetch(`${base}/api/content`, { next: { revalidate: 60 } });
+    if (!res.ok) return {};
+    return res.json();
+  } catch {
+    return {};
+  }
+}
 
-export default function ContactPage() {
+const WHATSAPP_MSG = encodeURIComponent('Bonjour, je souhaite obtenir des informations sur vos produits PSI.');
+
+export default async function ContactPage() {
+  const content = await getContent();
+
+  const telephone = content['contact_telephone'] ?? '+213770150656';
+  const email     = content['contact_email']     ?? 'contact@psi-algerie.com';
+  const adresse   = content['contact_adresse']   ?? 'Centre El Qods, Niveau M1, Chéraga, Alger';
+
+  const whatsappNumber = telephone.replace(/\D/g, '').replace(/^0/, '213');
+
   return (
     <div className="min-h-screen bg-[#F5F7FA] py-12 px-6">
       <div className="max-w-[600px] mx-auto">
@@ -30,7 +46,7 @@ export default function ContactPage() {
 
           {/* WhatsApp */}
           <a
-            href={`https://wa.me/${WHATSAPP_NUMBER}?text=${WHATSAPP_MSG}`}
+            href={`https://wa.me/${whatsappNumber}?text=${WHATSAPP_MSG}`}
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center gap-5 bg-white rounded-2xl shadow-[0_4px_24px_rgba(171,190,209,0.35)] p-6 hover:shadow-[0_8px_32px_rgba(171,190,209,0.5)] transition-all group"
@@ -43,7 +59,7 @@ export default function ContactPage() {
             </div>
             <div className="flex-1">
               <p className="text-[17px] font-bold text-[#263238]">WhatsApp</p>
-              <p className="text-[14px] text-[#717171] mt-0.5">+213 770 150 656</p>
+              <p className="text-[14px] text-[#717171] mt-0.5">{telephone}</p>
             </div>
             <svg width="20" height="20" viewBox="0 0 20 20" fill="none" className="text-[#ABBED1] group-hover:text-[#4CAF4F] transition-colors">
               <path d="M5 10h10M11 6l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
@@ -52,7 +68,7 @@ export default function ContactPage() {
 
           {/* Téléphone */}
           <a
-            href={`tel:${PHONE}`}
+            href={`tel:${telephone}`}
             className="flex items-center gap-5 bg-white rounded-2xl shadow-[0_4px_24px_rgba(171,190,209,0.35)] p-6 hover:shadow-[0_8px_32px_rgba(171,190,209,0.5)] transition-all group"
           >
             <div className="w-14 h-14 rounded-2xl bg-[#EFF6FF] flex items-center justify-center shrink-0">
@@ -62,7 +78,7 @@ export default function ContactPage() {
             </div>
             <div className="flex-1">
               <p className="text-[17px] font-bold text-[#263238]">Appeler</p>
-              <p className="text-[14px] text-[#717171] mt-0.5">+213 770 150 656</p>
+              <p className="text-[14px] text-[#717171] mt-0.5">{telephone}</p>
             </div>
             <svg width="20" height="20" viewBox="0 0 20 20" fill="none" className="text-[#ABBED1] group-hover:text-[#3B82F6] transition-colors">
               <path d="M5 10h10M11 6l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
@@ -71,7 +87,7 @@ export default function ContactPage() {
 
           {/* Email */}
           <a
-            href={`mailto:${EMAIL}`}
+            href={`mailto:${email}`}
             className="flex items-center gap-5 bg-white rounded-2xl shadow-[0_4px_24px_rgba(171,190,209,0.35)] p-6 hover:shadow-[0_8px_32px_rgba(171,190,209,0.5)] transition-all group"
           >
             <div className="w-14 h-14 rounded-2xl bg-[#FFF7ED] flex items-center justify-center shrink-0">
@@ -82,7 +98,7 @@ export default function ContactPage() {
             </div>
             <div className="flex-1">
               <p className="text-[17px] font-bold text-[#263238]">Email</p>
-              <p className="text-[14px] text-[#717171] mt-0.5">{EMAIL}</p>
+              <p className="text-[14px] text-[#717171] mt-0.5">{email}</p>
             </div>
             <svg width="20" height="20" viewBox="0 0 20 20" fill="none" className="text-[#ABBED1] group-hover:text-[#F97316] transition-colors">
               <path d="M5 10h10M11 6l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
@@ -96,7 +112,7 @@ export default function ContactPage() {
             <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z" stroke="#ABBED1" strokeWidth="1.8"/>
             <circle cx="12" cy="10" r="3" stroke="#ABBED1" strokeWidth="1.8"/>
           </svg>
-          <a href="https://maps.google.com/?q=Centre+El+Qods+Cheraga+Alger" target="_blank" rel="noopener noreferrer" className="hover:text-[#263238] transition-colors underline underline-offset-2">Centre El Qods, Niveau M1, Chéraga, Alger</a>
+          <a href={`https://maps.google.com/?q=${encodeURIComponent(adresse)}`} target="_blank" rel="noopener noreferrer" className="hover:text-[#263238] transition-colors underline underline-offset-2">{adresse}</a>
         </div>
 
         {/* CTA Devis */}
