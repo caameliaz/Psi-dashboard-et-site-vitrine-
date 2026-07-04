@@ -2,28 +2,39 @@ import { prisma } from './prisma';
 
 type NotifType = 'SITE_COMMANDE' | 'SITE_DEVIS' | 'ACTION_PERSO' | 'ACTION_AUTRE' | 'ANNULATION';
 
-/**
- * Crée une notification visible par tous les admins + employés actifs.
- */
 export async function createNotif({
   type,
   title,
   message,
+  actorId,
   orderId,
   quoteId,
+  adminOnly,
+  actorOnly,
 }: {
   type: NotifType;
   title: string;
   message: string;
+  actorId?: string | null;
   orderId?: string;
   quoteId?: string;
+  adminOnly?: boolean;
+  actorOnly?: boolean;
 }) {
-  const users = await prisma.user.findMany({
-    where: { active: true },
-    select: { id: true },
-  });
+  const users = actorOnly && actorId
+    ? [{ id: actorId }]
+    : await prisma.user.findMany({
+        where: {
+          active: true,
+          ...(adminOnly && { role: 'ADMIN' }),
+          ...(actorId && type !== 'SITE_COMMANDE' && type !== 'SITE_DEVIS'
+            ? { NOT: { id: actorId } }
+            : {}),
+        },
+        select: { id: true },
+      });
 
-  await prisma.notification.create({
+  const notif = await prisma.notification.create({
     data: {
       type,
       title,
@@ -35,4 +46,6 @@ export async function createNotif({
       },
     },
   });
+
+  return notif;
 }

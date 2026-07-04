@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { createAudit, statusLabel } from '@/lib/audit';
+import { notifyStatusChange } from '@/lib/notify-activity';
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -60,6 +61,18 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
 
     const action = body.status !== undefined ? `Statut devis : ${statusLabel(body.status)}` : 'Devis modifié';
     createAudit({ userId: session.user.id, action, entity: 'DEVIS', entityId: id, quoteId: id });
+
+    if (body.status !== undefined) {
+      notifyStatusChange({
+        actorId: session.user.id!,
+        actorName: session.user.name ?? session.user.email ?? 'Agent',
+        entityType: 'devis',
+        clientLabel: quote.client?.company ?? quote.client?.name ?? '—',
+        newStatus: body.status,
+        quoteId: quote.id,
+      }).catch(() => {});
+    }
+
     return NextResponse.json(quote);
   } catch (e) {
     console.error(e);

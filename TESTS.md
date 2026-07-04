@@ -1,262 +1,238 @@
-# PSI — Workflows & Parcours complets
-
-## ORDRE D'IMPLÉMENTATION
-1. ✅ Front admin (mock data)
-2. → Auth
-3. → Routes Bruno
-4. → Branchement DB
+# PSI — Checklist de recette complète
+**Version :** 1 juillet 2026 — À tester avant livraison
 
 ---
 
-## WORKFLOW 1 — Devis entrant (depuis site public)
+## AVANT DE COMMENCER
 
-```
-Client remplit formulaire /devis
-  → POST /api/quotes
-  → Devis créé en DB (statut: En attente)
-  → Notif admin : "Nouveau devis — BuroPro"
-
-Admin ouvre /admin/requests → onglet Devis
-  → Voit DEV-XXX en orange (En attente)
-  → Clique sur la ligne → RequestPanel s'ouvre
-
-  ACTIONS POSSIBLES dans le panel :
-  ├── WhatsApp → ouvre wa.me avec message prérempli (nom + ref)
-  ├── Appeler → tel: du client
-  ├── Email → mailto: du client
-  ├── Annuler → statut: Annulé (ligne grisée, archivée en bas)
-  └── Marquer Contacté → statut: Contacté (pill bleue)
-        └── ACTIONS POSSIBLES :
-            ├── Annuler → statut: Annulé
-            └── Valider → Commande
-                  → Devis reste "Contacté" (archivé)
-                  → Nouvelle Commande créée (CMD-XXX, statut: En attente)
-                  → Notif : "Devis DEV-XXX converti en CMD-XXX"
-
-Si Annulé → bouton Restaurer → statut revient: En attente
-```
+- [ ] `npm run dev` tourne sans erreur
+- [ ] Connecté en **Admin**
+- [ ] Ouvrir un 2e onglet navigation privée connecté en **Employé** (pour tester les notifs croisées)
+- [ ] Avoir : 1 client avec commandes, 1 client vide, 2-3 commandes dont 1 devis
 
 ---
 
-## WORKFLOW 2 — Commande entrante (depuis site public)
+## 1. AUTHENTIFICATION
 
-```
-Client remplit formulaire /cart ou /checkout
-  → POST /api/orders
-  → Commande créée en DB (statut: En attente)
-  → Notif admin : "Nouvelle commande — TechAlger"
-
-Admin ouvre /admin/requests → onglet Commandes
-  → Voit CMD-XXX en orange (En attente)
-  → Clique → RequestPanel
-
-  ACTIONS POSSIBLES :
-  ├── WhatsApp / Appeler / Email
-  ├── Annuler → statut: Annulé
-  └── Marquer Contacté → statut: Contacté
-        └── ACTIONS POSSIBLES :
-            ├── Annuler → statut: Annulé
-            └── Marquer Livré → statut: Livré (archivée)
-
-Si Annulé → Restaurer → statut: En attente
-```
+| # | Action | Résultat attendu |
+|---|--------|-----------------|
+| 1.1 | Aller sur `/admin` sans session | Redirigé `/admin/login` |
+| 1.2 | Mauvais mot de passe | Message erreur, pas de redirection |
+| 1.3 | Se connecter Admin | Dashboard, sidebar affiche "Admin" vert |
+| 1.4 | Se connecter Employé (autre onglet) | Sidebar "Employé" bleu, pas Utilisateurs ni Contenu |
+| 1.5 | Déconnexion | Redirigé `/admin/login` |
 
 ---
 
-## WORKFLOW 3 — Création manuelle (admin)
+## 2. SITE PUBLIC → ADMIN (temps réel)
 
-### Depuis /admin/requests
-```
-Bouton "Nouvelle demande"
-  → Modal CreateForm s'ouvre
-  → Choisir : Commande ou Devis
-  → Remplir : entreprise, client, produits, montant
-  → Valider
-  → Ref auto-générée (CMD-XXX ou DEV-XXX)
-  → Apparaît en haut du tableau (En attente)
-  → Suit le workflow normal (1 ou 2)
-```
+### 2A. Nouvelle commande depuis le site
+| # | Action | Résultat attendu |
+|---|--------|-----------------|
+| 2.1 | `/products` → panier → `/checkout` → soumettre | Écran confirmation vert |
+| 2.2 | Admin (sans refresh) | Toast "Nouvelle commande · Site web" haut droite (7s) |
+| 2.3 | Cloche admin | Badge +1, notif dans le panel |
+| 2.4 | `/admin/requests` | Commande en haut, badge "Site web" vert, statut "En attente" |
+| 2.5 | Employé (autre onglet) | Reçoit aussi le toast et la notif |
 
-### Depuis /admin/clients → fiche client
-```
-Ouvrir fiche client (clic sur ligne)
-  → Section Historique → bouton "Nouvelle demande"
-  → Modal NewOrderForm (client pré-rempli)
-  → Choisir Commande / Devis
-  → Remplir produits + montant
-  → Valider
-  → Apparaît dans /admin/requests + dans l'historique du client
-```
+### 2B. Nouveau devis depuis le site
+| # | Action | Résultat attendu |
+|---|--------|-----------------|
+| 2.6 | `/quote` → remplir → soumettre | Écran confirmation |
+| 2.7 | Admin et Employé reçoivent toast "Nouveau devis · Site web" | ✓ |
+| 2.8 | Apparaît onglet Devis avec badge "Site web" | ✓ |
 
 ---
 
-## WORKFLOW 4 — Gestion client
+## 3. WORKFLOW COMMANDE
 
-```
-/admin/clients
-  → Tableau clients (clic sur ligne → fiche slide-in droite)
-
-Fiche client contient :
-  ├── Infos : nom, entreprise, wilaya, téléphones
-  ├── Historique : toutes ses commandes/devis
-  │     └── Clic sur une ligne → RequestPanel de cette commande
-  ├── Bouton "Nouvelle demande" → workflow 3
-  └── Bouton modifier → éditer nom/wilaya/tél
-
-Actions dans la fiche :
-  ├── WhatsApp direct (numéro du client)
-  ├── Appeler
-  └── Supprimer client (avec confirmation)
-
-Nouveau client :
-  → Bouton "Nouveau client" (haut de page)
-  → Modal : nom, entreprise, wilaya, téléphone, email
-  → Créé immédiatement dans la liste
-```
+| # | Action | Résultat attendu |
+|---|--------|-----------------|
+| 3.1 | Ouvrir commande "En attente" | Bouton "Confirmer" visible |
+| 3.2 | Cliquer "Confirmer" | Statut → "Confirmé" (violet) |
+| 3.3 | Vérifier onglet notifs sur compte Employé | Reçoit "Commande mise à jour — commande de ClientX → Confirmé" |
+| 3.4 | Vérifier que l'Admin (acteur) ne reçoit PAS la notif | ✓ |
+| 3.5 | Rouvrir le panel | Bouton "Marquer Livré" visible |
+| 3.6 | Cliquer "Marquer Livré" | Statut → "Livré" (vert), descend en bas |
+| 3.7 | Cliquer "Annuler" sur commande En attente | Popup "Annuler commande de X ?" |
+| 3.8 | Confirmer | Statut → "Annulé" (gris), archivé en bas |
+| 3.9 | Rouvrir commande annulée | Bouton "Restaurer" |
+| 3.10 | Restaurer | Statut → "En attente", remonte |
 
 ---
 
-## WORKFLOW 5 — Gestion produits
+## 4. WORKFLOW DEVIS
 
-```
-/admin/products
-  → Liste produits (ref, format, prix, stock)
-  → Clic → fiche produit slide-in
-
-Actions :
-  ├── Modifier prix / stock → inline edit ou modal
-  ├── Ajouter variante (format, longueur)
-  ├── Désactiver produit (ne s'affiche plus sur site public)
-  └── Supprimer (avec confirmation)
-
-Nouveau produit :
-  → Bouton "Nouveau produit"
-  → Modal : ref, format (mm), longueur (m), prix, stock
-```
+| # | Action | Résultat attendu |
+|---|--------|-----------------|
+| 4.1 | Ouvrir devis "En attente" | Boutons "Confirmer" et "Annuler" |
+| 4.2 | Confirmer | Statut → "Confirmé" |
+| 4.3 | Rouvrir devis confirmé | Bouton "Convertir en commande" visible |
+| 4.4 | Convertir | Nouvelle commande créée "En attente", devis reste "Confirmé" |
+| 4.5 | Employé reçoit notif "Devis converti en commande de ClientX" | ✓ |
+| 4.6 | Acteur ne reçoit PAS la notif | ✓ |
+| 4.7 | Annuler un devis + popup | Statut → "Annulé" |
+| 4.8 | Restaurer | Statut → "En attente" |
 
 ---
 
-## WORKFLOW 6 — Gestion utilisateurs
+## 5. CRÉATION MANUELLE
 
-```
-/admin/users
-  → Tableau : Nom · Email · Rôle · Statut · Autorisations · Actions
+### 5A. Depuis /admin/requests
+| # | Action | Résultat attendu |
+|---|--------|-----------------|
+| 5.1 | "+ Nouvelle demande" | Modal s'ouvre |
+| 5.2 | Commande : remplir client, wilaya, téléphone | — |
+| 5.3 | Sélectionner produit dans dropdown | Prix auto-rempli |
+| 5.4 | Activer TVA 19% | Total recalculé |
+| 5.5 | Valider | Commande créée, badge "Manuel" orange |
+| 5.6 | Employé reçoit toast "Nouvelle commande · Manuel" | ✓ |
+| 5.7 | Acteur ne reçoit PAS la notif | ✓ |
+| 5.8 | Même test avec "Devis" | Devis créé onglet Devis |
 
-Créer un utilisateur (2 étapes) :
-  Étape 1 : nom, email, mot de passe (auto-généré ↻), rôle
-  Étape 2 : cocher les autorisations une par une
-  → Valider → Modal identifiants (email + mdp à copier)
-  → L'employé se connecte avec ces identifiants
-
-Modifier un utilisateur :
-  → Clic sur ligne → fiche slide-in droite
-  → Autorisations : checkboxes cochables/décochables en temps réel
-  → Bouton Modifier → éditer nom/email/rôle
-  → Bouton Supprimer → choix : désactiver ou supprimer définitivement
-
-Autorisations disponibles :
-  ├── Voir les commandes & devis
-  ├── Modifier les statuts
-  ├── Voir les fiches clients
-  ├── Modifier / ajouter des clients
-  ├── Voir les produits
-  ├── Modifier les produits
-  ├── Voir l'historique
-  ├── Modifier le contenu du site
-  └── Gérer les utilisateurs
-
-Admin → toutes les autorisations (non modifiables)
-Employé → sous-ensemble configurable par l'admin
-```
+### 5B. Depuis fiche client
+| # | Action | Résultat attendu |
+|---|--------|-----------------|
+| 5.9 | `/admin/clients` → fiche → "Nouvelle commande" | Modal client pré-rempli |
+| 5.10 | Remplir, valider | Apparaît dans /requests ET historique client |
 
 ---
 
-## WORKFLOW 7 — Contenu site public
+## 6. FILTRES — /admin/requests
 
-```
-/admin/content
-  → Sections éditables : Hero, À propos, Produits mis en avant, Footer
-  → Modifier texte / image → live preview
-  → Bouton "Publier" → PATCH /api/content → site public mis à jour
-```
-
----
-
-## WORKFLOW 8 — Historique
-
-```
-/admin/history
-  → Journal de toutes les actions (qui a fait quoi, quand)
-  → Filtres : par user, par type d'action, par date
-  → Entrées : création commande, changement statut, modification client, etc.
-```
+| # | Action | Résultat attendu |
+|---|--------|-----------------|
+| 6.1 | Onglet "Tous" | Commandes + devis, En attente en haut, archivés en bas |
+| 6.2 | Onglet "Commandes" | Seulement commandes |
+| 6.3 | Onglet "Devis" | Seulement devis |
+| 6.4 | Filtre statut "Confirmé" | Seulement confirmés |
+| 6.5 | Filtre période "Ce mois" (défaut) | Mois en cours |
+| 6.6 | Filtre "3 derniers mois" | 3 mois |
+| 6.7 | Filtre "Tout afficher" | Tout |
+| 6.8 | Recherche par entreprise | Filtre en temps réel |
+| 6.9 | Recherche par ref "CMD-" | Filtre par ref |
+| 6.10 | Bouton "Effacer" | Tous filtres réinitialisés |
 
 ---
 
-## WORKFLOW 9 — Notifications
+## 7. SOURCE (Site web vs Manuel)
 
-```
-Cloche en haut à droite (TopBar)
-  → Badge rouge = nombre non lues
-  → Clic → panel 500px
-
-Types :
-  ├── Commande (vert) : nouvelle commande, commande livrée
-  ├── Devis (violet) : nouveau devis, devis converti
-  ├── Action (gris) : mes propres actions (produit modifié, client ajouté)
-  └── Équipe (orange) : actions des autres users
-
-Comportement :
-  ├── Clic sur notif → marque comme lue (bordure bleue disparaît)
-  ├── "Tout marquer lu" → toutes lues
-  └── (futur) Clic → redirige vers la commande/fiche concernée
-```
+| # | Où | Résultat attendu |
+|---|---|-----------------|
+| 7.1 | Tableau /requests | Badge vert "Site web" ou orange "Manuel" |
+| 7.2 | Tableau /dashboard | Idem |
+| 7.3 | Panel RequestPanel header | Badge Source visible |
+| 7.4 | Toast | "· Site web" ou "· Manuel" dans le titre |
+| 7.5 | Excel rapport ventes | Colonne "Source" lisible |
 
 ---
 
-## WORKFLOW 10 — Messages contact
+## 8. CLIENTS
 
-```
-/admin/requests → onglet Messages
-  → Messages reçus depuis /contact du site public
-  → Clic → panel avec contenu du message
-  → Actions : répondre (email), marquer lu, archiver
-```
-
----
-
-## TRANSITIONS DE STATUTS — Récap
-
-```
-DEVIS :
-  En attente → Contacté → [converti en Commande]
-  En attente → Annulé → (Restaurer) → En attente
-  Contacté   → Annulé → (Restaurer) → En attente
-
-COMMANDE :
-  En attente → Contacté → Livré
-  En attente → Annulé → (Restaurer) → En attente
-  Contacté   → Annulé → (Restaurer) → En attente
-
-RÈGLE : un Devis ne peut pas avoir statut "Validé"
-  → Quand validé : Devis reste "Contacté", une Commande est créée
-```
+| # | Action | Résultat attendu |
+|---|--------|-----------------|
+| 8.1 | `/admin/clients` | Tous les clients visibles (même sans commandes) |
+| 8.2 | Recherche | Filtre par nom / entreprise / wilaya |
+| 8.3 | Clic sur client | Fiche slide-in : infos + historique |
+| 8.4 | Clic sur ligne historique | RequestPanel de cette commande |
+| 8.5 | Modifier client | Changements sauvegardés |
+| 8.6 | Créer client | Apparaît dans la liste |
+| 8.7 | Supprimer client (popup confirmation) | Client supprimé, commandes/devis restent dans /requests |
+| 8.8 | Employé essaie de supprimer | Bouton absent ou 403 |
 
 ---
 
-## COULEURS STATUTS
+## 9. NOTIFICATIONS
 
-| Statut     | Couleur     | Hex       |
-|------------|-------------|-----------|
-| En attente | Orange      | `#F97316` |
-| Contacté   | Bleu        | `#3B82F6` |
-| Livré      | Vert        | `#4CAF4F` |
-| Annulé     | Gris        | `#9CA3AF` |
+| # | Vérification | Résultat attendu |
+|---|-------------|-----------------|
+| 9.1 | Toast : position | Haut droite |
+| 9.2 | Toast : durée | 7 secondes |
+| 9.3 | Toast : style | Carte blanche, PAS de rond à gauche, PAS de barre colorée |
+| 9.4 | Toast : clic | Disparaît |
+| 9.5 | Badge cloche | Nombre non lus |
+| 9.6 | Panel : fond coloré = non lu | ✓ |
+| 9.7 | Panel : PAS de ronds à gauche | ✓ |
+| 9.8 | Clic notif | Passe en lue |
+| 9.9 | "Tout marquer lu" | Badge disparaît |
+| 9.10 | Employé agit → Admin reçoit | ✓ |
+| 9.11 | Admin agit → Employé reçoit | ✓ |
+| 9.12 | Acteur ne reçoit PAS sa propre action | ✓ |
+| 9.13 | Création user → admins seulement | ✓ |
 
 ---
 
-## ÉTAPES RESTANTES
+## 10. EXPORTS EXCEL
 
-1. **AUTH** — login admin (ne pas faire sans validation explicite)
-2. **Bruno** — tester toutes les routes API
-3. **DB** — remplacer tous les `useState` mock par des vrais appels API
+### 10A. Rapport de ventes
+| # | Action | Résultat attendu |
+|---|--------|-----------------|
+| 10.1 | Bouton "Rapport de ventes" | Téléchargement `PSI_Ventes_DD-MM-YYYY.xlsx` |
+| 10.2 | Colonnes | N° Facture · Source · Date commande · Date livraison · Client · Entreprise · Wilaya · Agent · Réf produit · Qté · Prix unitaire · Total ligne |
+| 10.3 | Contenu | Seulement commandes **Livrées** |
+| 10.4 | Multi-produits | Une ligne par produit |
+| 10.5 | Bas du fichier | Ligne TOTAL VENTES |
+| 10.6 | Colonne Source | "Site web" ou "Manuel" |
+
+### 10B. Export tableau filtré
+| # | Action | Résultat attendu |
+|---|--------|-----------------|
+| 10.7 | Filtrer, cliquer "Exporter" | Export du tableau tel qu'affiché |
+| 10.8 | Colonnes | Référence · Type · Date · Client · Entreprise · Wilaya · Statut · Produits · Montant HT |
+| 10.9 | Bas | Récap par statut + total |
+
+---
+
+## 11. DASHBOARD
+
+| # | Action | Résultat attendu |
+|---|--------|-----------------|
+| 11.1 | Cartes stats | Commandes mois, Devis mois, CA, En attente |
+| 11.2 | Donut | Top 3 produits |
+| 11.3 | Carte origine | Barre Site web / Manuel / % |
+| 11.4 | Tableau récent | Avec colonne Source |
+| 11.5 | Clic ligne | RequestPanel |
+| 11.6 | Nouvelle commande site | Dashboard se met à jour sans refresh |
+
+---
+
+## 12. SÉCURITÉ
+
+| # | Action | Résultat attendu |
+|---|--------|-----------------|
+| 12.1 | Employé : PATCH `/api/products/[id]` | 403 Forbidden |
+| 12.2 | Employé : DELETE `/api/products/[id]` | 403 Forbidden |
+| 12.3 | Employé : DELETE `/api/users/[id]` | 403 Forbidden |
+| 12.4 | Non connecté : GET `/api/orders` | 401 Unauthorized |
+
+---
+
+## 13. UTILISATEURS (admin only)
+
+| # | Action | Résultat attendu |
+|---|--------|-----------------|
+| 13.1 | Créer un employé | Notif reçue par admins seulement (pas l'acteur) |
+| 13.2 | Modifier rôle | Pris en compte au prochain login |
+| 13.3 | Désactiver compte | Ce compte ne peut plus se connecter |
+
+---
+
+## RÉCAP STATUTS
+
+| Type | Transitions |
+|------|------------|
+| Commande | En attente → Confirmé → Livré |
+| Commande | En attente/Confirmé → Annulé → (Restaurer) → En attente |
+| Devis | En attente → Confirmé → Converti en commande |
+| Devis | En attente/Confirmé → Annulé → (Restaurer) → En attente |
+
+---
+
+## CHECKLIST FINALE
+
+- [ ] Sections 1 à 13 toutes testées
+- [ ] Aucun `console.error` dans le terminal serveur
+- [ ] Export ventes contient des données réelles livrées
+- [ ] Notifs temps réel entre 2 comptes simultanés OK
+- [ ] Suppression client ne détruit pas les commandes
+- [ ] Build propre : `npx next build` sans erreur TypeScript

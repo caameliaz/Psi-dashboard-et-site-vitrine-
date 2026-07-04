@@ -56,13 +56,13 @@ function IconChevron({ collapsed }: { collapsed: boolean }) {
 }
 
 const navItems = [
-  { href: '/admin/dashboard', label: 'Dashboard', Icon: IconHome },
-  { href: '/admin/requests', label: 'Commandes', Icon: IconDocument },
-  { href: '/admin/products', label: 'Produits', Icon: IconLayers },
-  { href: '/admin/clients', label: 'Clients', Icon: IconUsers },
-  { href: '/admin/history', label: 'Historique', Icon: IconHistory },
-  { href: '/admin/content', label: 'Contenu', Icon: IconEdit },
-  { href: '/admin/users', label: 'Utilisateurs', Icon: IconUserPlus },
+  { href: '/admin/dashboard', label: 'Dashboard',    Icon: IconHome },
+  { href: '/admin/requests',  label: 'Commandes',    Icon: IconDocument },
+  { href: '/admin/products',  label: 'Produits',     Icon: IconLayers },
+  { href: '/admin/clients',   label: 'Clients',      Icon: IconUsers },
+  { href: '/admin/history',   label: 'Historique',   Icon: IconHistory },
+  { href: '/admin/content',   label: 'Contenu',      Icon: IconEdit },
+  { href: '/admin/users',     label: 'Utilisateurs', Icon: IconUserPlus },
 ];
 
 const adminOnlyItems = ['/admin/content', '/admin/users'];

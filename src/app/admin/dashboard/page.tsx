@@ -7,8 +7,14 @@ import { exportTableauExcel } from '@/lib/export-tableau';
 import { useSSE } from '@/lib/use-sse';
 
 const DB_TO_UI: Record<string, string> = {
-  EN_ATTENTE: 'En attente', CONTACTE: 'Contacté',
+  EN_ATTENTE: 'En attente', CONTACTE: 'En attente',
   VALIDE: 'Confirmé', LIVRE: 'Livré', ANNULE: 'Annulé',
+};
+
+function getSourceLabel(src: string) { return src === 'SITE' ? 'Site web' : 'Manuel'; }
+const SOURCE_COLOR: Record<'SITE' | 'OTHER', { bg: string; color: string; border: string }> = {
+  SITE:  { bg: '#F0FDF4', color: '#166534', border: '#BBF7D0' },
+  OTHER: { bg: '#FFF7ED', color: '#92400E', border: '#FDE68A' },
 };
 
 function orderToDetail(o: any): RequestDetail {
@@ -19,6 +25,7 @@ function orderToDetail(o: any): RequestDetail {
     id: o.id,
     ref: o.ref ?? o.id?.slice(0, 8).toUpperCase(),
     type: 'Commande',
+    source: o.source ?? 'SITE',
     client: o.client?.name ?? '—',
     entreprise: o.client?.company ?? o.client?.name ?? '—',
     telephone: phone,
@@ -39,6 +46,7 @@ function quoteToDetail(q: any): RequestDetail {
     id: q.id,
     ref: q.ref ?? q.id?.slice(0, 8).toUpperCase(),
     type: 'Devis',
+    source: q.source ?? 'SITE',
     client: q.client?.name ?? '—',
     entreprise: q.client?.company ?? q.client?.name ?? '—',
     telephone: phone,
@@ -402,6 +410,7 @@ export default function DashboardPage() {
             <tr style={{ background: '#F8FAFC' }}>
               <th className="px-6 py-3.5 text-left font-semibold text-[#8A9BB5] uppercase tracking-wider" style={{ fontSize: 11 }}>N°</th>
               <th className="px-6 py-3.5 text-left font-semibold text-[#8A9BB5] uppercase tracking-wider" style={{ fontSize: 11 }}>Type</th>
+              <th className="px-6 py-3.5 text-left font-semibold text-[#8A9BB5] uppercase tracking-wider" style={{ fontSize: 11 }}>Source</th>
               <th className="px-6 py-3.5 text-left font-semibold text-[#8A9BB5] uppercase tracking-wider" style={{ fontSize: 11 }}>Entreprise</th>
               <th className="px-6 py-3.5 text-left font-semibold text-[#8A9BB5] uppercase tracking-wider cursor-pointer select-none hover:text-[#374151] transition-colors" style={{ fontSize: 11 }} onClick={() => handleSort('client')}>Client <SortIcon col="client" /></th>
               <th className="px-6 py-3.5 text-left font-semibold text-[#8A9BB5] uppercase tracking-wider cursor-pointer select-none hover:text-[#374151] transition-colors" style={{ fontSize: 11 }} onClick={() => handleSort('date')}>Date <SortIcon col="date" /></th>
@@ -410,13 +419,15 @@ export default function DashboardPage() {
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={6} className="px-6 py-10 text-center text-[13px] text-[#8A9BB5]">Chargement…</td></tr>
+              <tr><td colSpan={7} className="px-6 py-10 text-center text-[13px] text-[#8A9BB5]">Chargement…</td></tr>
             ) : sorted.length === 0 ? (
-              <tr><td colSpan={6} className="px-6 py-10 text-center text-[13px] text-[#8A9BB5]">Aucune demande</td></tr>
+              <tr><td colSpan={7} className="px-6 py-10 text-center text-[13px] text-[#8A9BB5]">Aucune demande</td></tr>
             ) : sorted.map((row, i) => {
               const isAttente  = row.statut === 'En attente';
               const rowBg      = isAttente ? '#FFF7ED' : '#fff';
               const rowBgHover = isAttente ? '#FEF3C7' : '#F8FAFC';
+              const src        = row.source ?? 'SITE';
+              const srcCfg     = src === 'SITE' ? SOURCE_COLOR.SITE : SOURCE_COLOR.OTHER;
               return (
                 <tr key={i} onClick={() => setSelectedRequest(row)} className="cursor-pointer transition-colors"
                   style={{ background: rowBg, borderTop: '1px solid #F2F4F7' }}
@@ -424,6 +435,12 @@ export default function DashboardPage() {
                   onMouseLeave={(e) => (e.currentTarget.style.background = rowBg)}>
                   <td className="px-6 py-4 text-[12px] font-mono font-bold" style={{ color: row.type === 'Commande' ? '#4CAF4F' : '#8B5CF6' }}>{row.ref}</td>
                   <td className="px-6 py-4"><TypeChip type={row.type} /></td>
+                  <td className="px-6 py-4">
+                    <span className="text-[11px] font-bold px-2 py-1 rounded-lg border"
+                      style={{ background: srcCfg.bg, color: srcCfg.color, borderColor: srcCfg.border }}>
+                      {getSourceLabel(src)}
+                    </span>
+                  </td>
                   <td className="px-6 py-4 text-[13px] font-semibold text-[#0F172A]">{row.entreprise}</td>
                   <td className="px-6 py-4 text-[13px] text-[#8A9BB5]">{row.client}</td>
                   <td className="px-6 py-4 text-[13px] text-[#8A9BB5] tabular-nums">{row.date}</td>

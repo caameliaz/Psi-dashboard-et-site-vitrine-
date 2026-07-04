@@ -40,9 +40,9 @@ export async function exportVentesExcel() {
   for (const order of orders) {
     const dateCmd = new Date(order.createdAt).toLocaleDateString('fr-FR');
     const dateLiv = new Date(order.updatedAt).toLocaleDateString('fr-FR');
-    const client = order.client?.name ?? '—';
-    const entreprise = order.client?.company ?? '—';
-    const wilaya = order.client?.wilaya ?? '—';
+    const client = order.client?.name ?? order.clientName ?? '—';
+    const entreprise = order.client?.company ?? order.clientCompany ?? '—';
+    const wilaya = order.client?.wilaya ?? order.clientWilaya ?? '—';
     const agent = order.createdBy?.name ?? 'Site web';
     const ref = order.ref ?? order.id.slice(0, 8).toUpperCase();
     const source = SOURCE_LABEL[order.source] ?? order.source ?? '—';

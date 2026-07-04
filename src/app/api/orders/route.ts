@@ -3,7 +3,7 @@ import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { createNotif } from '@/lib/notifications';
 import { generateOrderRef } from '@/lib/generate-ref';
-import { notifyClients } from '@/app/api/sse/route';
+import { pushSSE } from '@/lib/sse-bus';
 import { createAudit } from '@/lib/audit';
 
 export async function GET() {
@@ -30,6 +30,8 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const session = await auth();
+
+    console.log('[POST /api/orders] body:', JSON.stringify(body, null, 2));
 
     const primaryPhone: string = body.client?.phone ?? '';
     const clientName: string = body.client?.name ?? '';
@@ -71,38 +73,57 @@ export async function POST(request: NextRequest) {
     const VALID_SOURCES = ['SITE', 'ADMIN', 'WHATSAPP', 'TELEPHONE', 'AUTRE'];
     const source = VALID_SOURCES.includes(body.source) ? body.source : 'SITE';
 
+    const ref = await generateOrderRef(client.wilaya);
     const validItems = (body.items ?? []).filter(
-      (item: { productId?: string; quantity: number; unitPrice: number }) => item.productId
+      (i: { productId?: string | null; quantity?: number }) =>
+        i.productId && i.productId !== '' && (i.quantity ?? 0) > 0
     );
+
     if (validItems.length === 0) {
       return NextResponse.json({ error: 'Au moins un produit valide est requis' }, { status: 400 });
     }
 
-    const ref = await generateOrderRef(client.wilaya);
+    console.log('[POST /api/orders] validItems:', JSON.stringify(validItems));
+
     const order = await prisma.order.create({
       data: {
         ref,
         clientId: client.id,
+        clientName: client.name,
+        clientCompany: client.company ?? null,
+        clientWilaya: client.wilaya ?? null,
         source: source as any,
         createdById: session?.user?.id ?? null,
         items: {
           create: validItems.map((item: { productId: string; quantity: number; unitPrice: number }) => ({
             productId: item.productId,
             quantity: item.quantity,
-            unitPrice: item.unitPrice,
+            unitPrice: item.unitPrice ?? 0,
           })),
         },
       },
       include: { items: true, client: { include: { phones: true } } },
     });
 
-    await createNotif({
-      type: 'SITE_COMMANDE',
-      title: 'Nouvelle commande',
-      message: `${client.company ?? client.name} — ${body.items?.length ?? 0} article(s)`,
+    const isAdmin = body.source !== 'SITE';
+    const actorName = session?.user?.name ?? session?.user?.email ?? 'Agent';
+    const clientLabel = client.company ?? client.name;
+    const notif = await createNotif({
+      type: isAdmin ? 'ACTION_AUTRE' : 'SITE_COMMANDE',
+      title: isAdmin ? 'Nouvelle commande · Manuel' : 'Nouvelle commande · Site web',
+      message: isAdmin
+        ? `${actorName} a créé une commande pour ${clientLabel} (${order.ref ?? ''})`
+        : `${clientLabel} — ${body.items?.length ?? 0} article(s)`,
       orderId: order.id,
     });
 
+    pushSSE('new_order', {
+      id: notif.id,
+      type: notif.type,
+      title: notif.title,
+      message: notif.message,
+      createdAt: notif.createdAt.toISOString(),
+    });
     createAudit({
       userId: session?.user?.id,
       action: 'Commande créée',
@@ -111,10 +132,9 @@ export async function POST(request: NextRequest) {
       detail: `${client.company ?? client.name} — ${validItems.length} article(s)`,
       orderId: order.id,
     });
-    notifyClients('new_order');
     return NextResponse.json(order, { status: 201 });
   } catch (error: any) {
-    console.error('Error creating order:', error);
+    console.error('[POST /api/orders] ERROR:', error);
     return NextResponse.json({
       error: 'Failed to create order',
       detail: error?.message ?? String(error),

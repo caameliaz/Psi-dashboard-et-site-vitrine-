@@ -99,10 +99,42 @@ function NewOrderForm({ client, onClose }: { client: ClientRecord; onClose: () =
   const [produits, setProduits] = useState('');
   const [montant, setMontant] = useState('');
   const [type, setType] = useState<'Commande' | 'Devis'>('Commande');
+  const [saving, setSaving] = useState(false);
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!produits.trim()) return;
-    // En mode mock, on ferme juste — le branchement DB viendra plus tard
+    setSaving(true);
+    const dbId = (client as any)._dbId ?? client.id;
+    const endpoint = type === 'Commande' ? '/api/orders' : '/api/quotes';
+    const body = type === 'Commande'
+      ? {
+          source: 'ADMIN',
+          client: {
+            name: client.contact,
+            company: client.entreprise,
+            phone: client.telephone,
+            wilaya: client.wilaya,
+            email: client.email,
+          },
+          items: [],
+        }
+      : {
+          source: 'ADMIN',
+          clientId: dbId,
+          name: client.contact,
+          company: client.entreprise,
+          phone: client.telephone,
+          wilaya: client.wilaya,
+          email: client.email,
+          message: produits,
+          items: [],
+        };
+    await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    setSaving(false);
     onClose();
   };
 
@@ -112,7 +144,7 @@ function NewOrderForm({ client, onClose }: { client: ClientRecord; onClose: () =
       <div className="relative bg-white rounded-2xl shadow-2xl w-[460px] max-w-[92vw] p-6 z-10">
         <div className="flex items-center justify-between mb-5">
           <div>
-            <h3 className="text-[16px] font-bold text-[#0F172A]">Nouvelle demande</h3>
+            <h3 className="text-[16px] font-bold text-[#0F172A]">Nouvelle {type === 'Commande' ? 'commande' : 'demande de devis'}</h3>
             <p className="text-[12px] text-[#8A9BB5] mt-0.5">{client.contact} · {client.entreprise}</p>
           </div>
           <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-[#F2F4F7] text-[#ABBED1] transition-colors">
@@ -152,10 +184,10 @@ function NewOrderForm({ client, onClose }: { client: ClientRecord; onClose: () =
           <button onClick={onClose} className="flex-1 px-4 py-2.5 rounded-xl border border-[#E2E8F0] text-[13px] font-semibold text-[#374151] hover:bg-[#F8FAFC] transition-colors">
             Annuler
           </button>
-          <button onClick={handleSubmit}
-            className="flex-1 px-4 py-2.5 rounded-xl text-[13px] font-bold text-white transition-colors"
+          <button onClick={handleSubmit} disabled={saving}
+            className="flex-1 px-4 py-2.5 rounded-xl text-[13px] font-bold text-white transition-colors disabled:opacity-60"
             style={{ background: '#4CAF4F' }}>
-            Créer la {type.toLowerCase()}
+            {saving ? 'Création...' : type === 'Commande' ? 'Créer la commande' : 'Créer le devis'}
           </button>
         </div>
       </div>
@@ -285,7 +317,7 @@ function ClientSlideIn({ client, onClose, onEdit, onDelete }: {
               <button onClick={() => setShowNewOrder(true)}
                 className="px-3 py-1.5 rounded-lg text-[12px] font-bold text-white"
                 style={{ background: '#4CAF4F' }}>
-                Nouvelle demande
+                Nouvelle commande
               </button>
             </div>
 

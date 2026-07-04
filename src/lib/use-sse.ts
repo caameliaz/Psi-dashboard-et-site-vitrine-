@@ -1,14 +1,12 @@
 'use client';
 
 import { useEffect } from 'react';
+import { useSSEContext } from './sse-context';
 
+// Thin wrapper autour du SSEContext partagé — une seule connexion EventSource pour tout l'admin
 export function useSSE(onEvent: (event: string) => void) {
+  const { subscribe } = useSSEContext();
   useEffect(() => {
-    const es = new EventSource('/api/sse');
-    es.onmessage = (e) => onEvent(e.data);
-    es.onerror = () => {
-      // Reconnect automatique géré par le browser nativement
-    };
-    return () => es.close();
-  }, [onEvent]);
+    return subscribe((payload) => onEvent(payload.event));
+  }, [subscribe, onEvent]);
 }

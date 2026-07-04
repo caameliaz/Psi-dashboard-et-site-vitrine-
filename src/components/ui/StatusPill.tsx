@@ -1,6 +1,5 @@
 const statusConfig: Record<string, { dot: string; text: string; bg: string; border: string }> = {
   'En attente': { dot: '#F97316', text: '#9A3412', bg: '#FFF7ED', border: '#FED7AA' },
-  'Contacté':   { dot: '#3B82F6', text: '#1E40AF', bg: '#EFF6FF', border: '#BFDBFE' },
   'Confirmé':   { dot: '#8B5CF6', text: '#5B21B6', bg: '#F5F3FF', border: '#DDD6FE' },
   'Livré':      { dot: '#22C55E', text: '#166534', bg: '#F0FDF4', border: '#BBF7D0' },
   'Annulé':     { dot: '#6B7280', text: '#374151', bg: '#F9FAFB', border: '#E5E7EB' },

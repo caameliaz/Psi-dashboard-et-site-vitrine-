@@ -30,12 +30,27 @@ npm run dev
 - Dropdown ref : custom stylisé avec recherche intégrée (plus le select natif moche)
 - Bouton **"Rapport de ventes"** — export Excel des commandes livrées uniquement
 - Bouton **"Exporter"** — export Excel du tableau filtré actuel
+- Colonne **Source** dans le tableau : "Site web" (vert) / "Manuel" (orange)
+- Statuts simplifiés : **En attente → Confirmé → Livré** (Contacté supprimé)
 
 ---
 
 ### Temps réel (SSE)
 - Le dashboard et la page demandes se mettent à jour **automatiquement** quand une nouvelle commande/devis arrive — sans refresh, sans polling
-- Fonctionne via `EventSource` → `/api/sse` → notifié depuis les routes POST orders/quotes
+- **Fix critique** : singleton `globalThis.__sseBus` dans `src/lib/sse-bus.ts` — Next.js isolait chaque module de route dans son propre Set vide, les toasts n'arrivaient jamais. Le globalThis partage le même Set sur toute l'instance Node.
+- `pushSSE()` importé depuis `@/lib/sse-bus` dans toutes les routes (orders, quotes, clients, etc.)
+- `SSEProvider` dans `src/lib/sse-context.tsx` — reconnexion auto après 3s si déconnecté
+- `useSSEContext().subscribe()` utilisé partout au lieu de créer un EventSource manuellement
+
+---
+
+### Notifications (TopBar)
+- **Toasts push** : top-right, 360–440px, 7 secondes, sans point rond, sans barre colorée — carte blanche avec bordure colorée uniquement
+- **Cloche** avec badge rouge (count non lus) dans le header admin
+- **Panel notifications** (clic cloche) : liste avec couleur par type, timestamp relatif, marquer lu individuel / tout marquer lu
+- `notifyActivity` helper (`src/lib/notify-activity.ts`) : `notifyStatusChange`, `notifyDeletion`, `notifyCreation` — appelés depuis toutes les routes de mutation
+- Notifications distinguent **Source** : titre "Nouvelle commande · Site web" vs "Nouvelle commande · Manuel"
+- Page `/admin/notifications` existe (filtre All/Unread/type) mais **non accessible depuis la sidebar** (panel suffisant)
 
 ---
 
@@ -44,23 +59,25 @@ npm run dev
 - Carte "Origine" : barre empilée + légende Site web / Manuel / WhatsApp / Téléphone avec %
 - Clic sur une ligne du tableau → ouvre le panel avec toutes les actions
 - Bouton **Excel** pour exporter le tableau
+- Colonne **Source** dans le tableau récapitulatif
 
 ---
 
 ### Clients (`/admin/clients`)
-- Un client apparaît dès qu'il a **au moins une commande** (avant : seulement si VALIDE)
+- **Tous les clients** sont visibles dès leur création — filtre `orders: { some: {} }` supprimé de `GET /api/clients`
+- Bouton "Nouvelle **commande**" (corrigé — était "Nouvelle demande")
+- Titre modal : "Nouvelle commande" / "Nouvelle demande de devis" selon le type choisi
+- Formulaire admin création commande/devis : appelle vraiment le POST API (avant : mock local)
 - Les **refs** dans l'historique sont les vraies refs (`CMD-16-0001`) — plus les IDs tronqués
-- Historique complet : toutes les commandes + devis, tous statuts
 
 ---
 
 ### Panel demande (`RequestPanel`)
-- Workflow commande : `En attente → Contacté → Confirmé → Livré`
-- Workflow devis : `En attente → Contacté → Valider → Commande`
-- Boutons contact : WA (rond vert), Tel (rond bleu), MAIL (stroke orange)
-- WA / MAIL ouvrent un **popover de templates** : liste → édition → envoi
-- **PDF impression** : facture N&B pro avec logo PSI en haut
-- **Export Excel** : facture structurée par commande
+- Badge **Source** visible dans le header (Site web vert / Manuel orange)
+- Workflow simplifié : `En attente → Confirmer → Marquer Livré` (ou "Convertir en commande" pour les devis)
+- Bouton "Marquer Contacté" supprimé
+- Boutons contact : WA, Tel, MAIL avec templates
+- **PDF impression** + **Export Excel** par commande
 
 ---
 
@@ -82,8 +99,14 @@ Format : `CMD-16-0001` (commande) / `DEV-31-0002` (devis)
 
 ### Source des demandes
 - Enum `OrderSource` : `SITE` / `ADMIN` / `WHATSAPP` / `TELEPHONE` / `AUTRE`
-- Créations depuis le site public → `SITE`, depuis l'admin → `ADMIN`
-- Visible dans le dashboard (carte Origine) et dans l'export ventes
+- Affichage simplifié partout : `SITE` → "Site web" (vert), tout le reste → "Manuel" (orange)
+- Visible : tableau requests, tableau dashboard, panel RequestPanel, export Excel, toasts/notifs
+
+---
+
+### Sécurité (fixes critiques)
+- `PATCH /api/products/[id]` et `DELETE /api/products/[id]` : auth commentée → **restaurée + check rôle ADMIN**
+- `DELETE /api/users/[id]` et `PATCH /api/users/[id]` : vérification rôle ADMIN ajoutée (avant : n'importe quel employé connecté pouvait supprimer/modifier des utilisateurs)
 
 ---
 
@@ -105,7 +128,31 @@ Le collègue fait : `npm install` → copie le `.env` → `npx prisma generate` 
 
 ---
 
+## Bugs corrigés en cours de session
+
+- **`OrderSource.ADMIN` non reconnu** : valeur présente dans `schema.prisma` mais client Prisma jamais regénéré → `prisma.order.create()` crashait avec `Invalid value for argument source`. Fix : `npx prisma generate` (après avoir arrêté le serveur). **À faire systématiquement après tout changement de schéma.**
+
+---
+
+## Bugs corrigés (suite)
+
+- **Suppression client crashait** : `clientId` non nullable sur Order/Quote → FK constraint error. Fix : `clientId String?` + `onDelete: SetNull` + champs snapshot `clientName/clientCompany/clientWilaya` pour garder le nom dans l'export après suppression.
+- **Notifs changement statut** : logique finale — changement statut → tout le monde sauf l'acteur. Annulation → tout le monde (type ANNULATION rouge). Nouvelles commandes/devis site → tout le monde.
+- **Rôle affiché "Employé" au chargement** : fallback `'EMPLOYEE'` pendant `useSession` loading. Fix : fallback `'ADMIN'` pendant le chargement.
+- **`cmrXXXXX` dans les notifs** : commandes sans `ref` (créées avant la génération auto). Fix : fallback `(sans réf)` puis remplacé par `clientLabel` dans le message.
+- **Ronds à gauche dans le panel notifs** : supprimés (ligne 208 TopBar.tsx).
+- **Annulation sans confirmation** : ajout `window.confirm()` avant d'annuler dans RequestPanel.
+
+---
+
 ## Ce qui reste à faire
-- [ ] Page `/admin/content` — gestion des templates WA/MAIL (CRUD)
-- [ ] Notifications dans le header admin (cloche)
-- [ ] Restriction par rôle sur les pages admin
+- [ ] Page `/admin/content` — gestion des templates WA/MAIL (CRUD) à finaliser
+- [x] Notifications dans le header admin (cloche) ✓
+- [x] Restriction par rôle sur les pages admin ✓
+- [x] Création commande admin fonctionnelle ✓
+- [x] Suppression client sans détruire les commandes ✓
+- [x] Filtre période dans /requests ✓
+- [x] Snapshot clientName sur commandes ✓
+- [x] TESTS.md complet ✓
+- [ ] Merger le travail du collègue
+- [ ] Tests end-to-end checklist TESTS.md
