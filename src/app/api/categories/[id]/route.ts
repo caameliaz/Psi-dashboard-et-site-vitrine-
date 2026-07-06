@@ -6,9 +6,9 @@ type Ctx = { params: Promise<{ id: string }> };
 
 // PATCH /api/categories/[id] — renommer une catégorie (admin)
 export async function PATCH(request: NextRequest, { params }: Ctx) {
-  // TODO: remettre auth avant prod
-  // const session = await auth();
-  // if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const session = await auth();
+  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  if ((session.user as { role?: string }).role !== 'ADMIN') return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
   const { id } = await params;
 
@@ -32,9 +32,9 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
 
 // DELETE /api/categories/[id] — supprimer une catégorie (admin)
 export async function DELETE(_request: NextRequest, { params }: Ctx) {
-  // TODO: remettre auth avant prod
-  // const session = await auth();
-  // if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const session = await auth();
+  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  if ((session.user as { role?: string }).role !== 'ADMIN') return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
   const { id } = await params;
 

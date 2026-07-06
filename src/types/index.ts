@@ -116,11 +116,15 @@ export interface OrderItem {
 
 export interface Order {
   id: string;
-  client: Client;
-  clientId: string;
+  ref: string | null;
+  client: Client | null;
+  clientId: string | null;
+  clientName: string | null;
+  clientCompany: string | null;
+  clientWilaya: string | null;
   items: OrderItem[];
   status: RequestStatus;
-  source: OrderSource;
+  source: OrderSource | 'ADMIN';
   cancelReason: string | null;
   notes: string | null;
   createdBy: { id: string; name: string } | null;
@@ -143,14 +147,17 @@ export interface QuoteItem {
 
 export interface Quote {
   id: string;
-  client: Client;
-  clientId: string;
+  ref: string | null;
+  client: Client | null;
+  clientId: string | null;
+  clientName: string | null;
+  clientCompany: string | null;
+  clientWilaya: string | null;
   items: QuoteItem[];
   message: string;
   status: RequestStatus;
-  source: OrderSource;
+  source: OrderSource | 'ADMIN';
   cancelReason: string | null;
-  // Champs admin
   proposedPrice: number | null;
   deliveryDelay: string | null;
   paymentTerms: string | null;

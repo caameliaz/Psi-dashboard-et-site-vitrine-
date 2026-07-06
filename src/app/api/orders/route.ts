@@ -31,8 +31,6 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const session = await auth();
 
-    console.log('[POST /api/orders] body:', JSON.stringify(body, null, 2));
-
     const primaryPhone: string = body.client?.phone ?? '';
     const clientName: string = body.client?.name ?? '';
     const clientCompany: string = body.client?.company ?? '';
@@ -82,8 +80,6 @@ export async function POST(request: NextRequest) {
     if (validItems.length === 0) {
       return NextResponse.json({ error: 'Au moins un produit valide est requis' }, { status: 400 });
     }
-
-    console.log('[POST /api/orders] validItems:', JSON.stringify(validItems));
 
     const order = await prisma.order.create({
       data: {

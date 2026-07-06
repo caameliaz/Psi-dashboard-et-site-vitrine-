@@ -42,12 +42,22 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
   try {
     const body = await request.json();
 
+    // Mise à jour des prix unitaires par produit si fournis
+    if (body.itemPrices && Array.isArray(body.itemPrices)) {
+      const existing = await prisma.orderItem.findMany({ where: { orderId: id }, include: { product: true } });
+      await Promise.all(body.itemPrices.map(async (ip: { designation: string; unitPrice: number }) => {
+        const match = existing.find(e => e.product?.reference === ip.designation);
+        if (match) await prisma.orderItem.update({ where: { id: match.id }, data: { unitPrice: ip.unitPrice } });
+      }));
+    }
+
     const order = await prisma.order.update({
       where: { id },
       data: {
         ...(body.status !== undefined && { status: body.status }),
         ...(body.notes !== undefined && { notes: body.notes }),
         ...(body.source !== undefined && { source: body.source }),
+        ...(body.totalOverride !== undefined && { notes: `TOTAL:${body.totalOverride}${body.notes ? '\n' + body.notes : ''}` }),
       },
       include: {
         client: { include: { phones: true } },

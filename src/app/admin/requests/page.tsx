@@ -149,7 +149,7 @@ function RefSelect({ value, products, onChange }: {
                   onClick={() => { onChange(p.reference); setOpen(false); setQuery(''); }}
                   className="w-full text-left px-3 py-2.5 flex items-center justify-between gap-2 hover:bg-[#F0FDF4] transition-colors group"
                   style={{ background: value === p.reference ? '#F0FDF4' : undefined }}>
-                  <span className="text-[13px] font-semibold" style={{ color: value === p.reference ? '#0D9488' : '#0F172A' }}>{p.reference}</span>
+                  <span className="text-[13px] font-semibold" style={{ color: value === p.reference ? '#4CAF4F' : '#0F172A' }}>{p.reference}</span>
                   <span className="text-[11px] text-[#ABBED1]">{p.price.toLocaleString('fr-FR')} DA</span>
                 </button>
               ))}
@@ -439,7 +439,7 @@ export default function RequestsPage() {
     setSelected(null);
   };
 
-  const handleConvertToOrder = async (item: RequestDetail) => {
+  const handleConvertToOrder = async (item: RequestDetail & { _prix?: { totalOverride?: number; itemPrices?: { designation: string; unitPrice: number }[] } }) => {
     if (!item.id) {
       // fallback local
       const newOrder: RequestDetail = { ...item, ref: item.ref.replace('DEV-', 'CMD-'), type: 'Commande', statut: 'En attente', date: new Date().toLocaleDateString('fr-FR'), heure: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) };
@@ -449,7 +449,18 @@ export default function RequestsPage() {
       setActiveTab('commandes');
       return;
     }
-    await fetch(`/api/quotes/${item.id}/convert`, { method: 'PATCH' });
+    const res = await fetch(`/api/quotes/${item.id}/convert`, { method: 'PATCH' });
+    // Applique les prix saisis (unitaires ou total) sur la commande créée
+    if (res.ok && item._prix) {
+      const { order } = await res.json();
+      if (order?.id) {
+        await fetch(`/api/orders/${order.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(item._prix),
+        });
+      }
+    }
     await fetchAll();
     setSelected(null);
     setActiveTab('commandes');

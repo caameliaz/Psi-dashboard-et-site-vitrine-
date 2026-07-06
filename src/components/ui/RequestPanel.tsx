@@ -54,34 +54,54 @@ const SOURCE_COLOR: Record<'SITE' | 'OTHER', { bg: string; color: string; border
 // ── Export Excel pro (style facture N&B) ────────────────────────────────────
 async function exportExcel(item: RequestDetail) {
   const { utils, writeFile } = await import('xlsx');
-  const lignes = item.produits.split(',').map((p) => p.trim()).filter(Boolean);
+
+  const lignesData: { ref: string; quantite: number; pu: number }[] =
+    item.items && item.items.length > 0
+      ? item.items.map((i) => ({ ref: i.designation, quantite: i.quantite, pu: i.prixUnitaire }))
+      : item.produits.split(',').map((p) => {
+          const m = p.trim().match(/^(.+?)\s*×\s*(\d+)/);
+          return { ref: m ? m[1].trim() : p.trim(), quantite: m ? Number(m[2]) : 0, pu: 0 };
+        });
+
   const rows: (string | number)[][] = [
-    ['PSI — Paper Solutions Industry', '', '', ''],
-    ['Centre El Qods, Niveau M1 — Chéraga, Alger', '', '', ''],
-    ['contact@psi-algerie.com', '', '', ''],
-    ['', '', '', ''],
-    [item.type.toUpperCase(), '', 'Réf :', item.ref],
-    ['', '', 'Date :', item.date + (item.heure ? ` ${item.heure}` : '')],
-    ['', '', 'Statut :', item.statut],
-    ['', '', '', ''],
-    ['CLIENT', '', '', ''],
-    ['Nom', item.client, 'Entreprise', item.entreprise],
-    ['Téléphone', item.telephone, 'Wilaya', item.wilaya || '—'],
-    ...(item.email ? [['Email', item.email, '', '']] : []),
-    ...(item.adresse ? [['Adresse', item.adresse, '', '']] : []),
-    ['', '', '', ''],
-    ['DÉSIGNATION', '', 'QTÉ', 'MONTANT'],
-    ...lignes.map((l) => {
-      const m = l.match(/^(.+?)\s*×\s*(\d+)/);
-      return [m ? m[1].trim() : l, '', m ? `${m[2]} roul.` : '—', ''];
+    ['PSI — Paper Solutions Industry', '', '', '', ''],
+    ['Centre El Qods, Niveau M1 — Chéraga, Alger', '', '', '', ''],
+    ['contact@psi-algerie.com', '', '', '', ''],
+    ['', '', '', '', ''],
+    [item.type.toUpperCase(), '', '', 'Réf :', item.ref],
+    ['', '', '', 'Date :', item.date + (item.heure ? ` ${item.heure}` : '')],
+    ['', '', '', 'Statut :', item.statut],
+    ['', '', '', '', ''],
+    ['CLIENT', '', '', '', ''],
+    ['Nom', item.client, '', 'Entreprise', item.entreprise],
+    ['Téléphone', item.telephone, '', 'Wilaya', item.wilaya || '—'],
+    ...(item.email ? [['Email', item.email, '', '', '']] : []),
+    ...(item.adresse ? [['Adresse', item.adresse, '', '', '']] : []),
+    ['', '', '', '', ''],
+    ['RÉFÉRENCE', 'QTÉ', 'PRIX UNITAIRE (DA)', 'TOTAL LIGNE (DA)', ''],
+    ...lignesData.map((l) => {
+      const total = l.quantite * l.pu;
+      return [
+        l.ref || '—',
+        `${l.quantite} roul.`,
+        l.pu > 0 ? l.pu : '—',
+        total > 0 ? total : '—',
+        '',
+      ];
     }),
-    ['', '', '', ''],
-    [item.type === 'Commande' ? 'TOTAL COMMANDE' : 'MONTANT ESTIMÉ', '', '', item.montant],
-    ['', '', '', ''],
-    ['Document généré par PSI — psi-algerie.com', '', '', ''],
+    ['', '', '', '', ''],
+    [item.type === 'Commande' ? 'TOTAL COMMANDE' : 'MONTANT ESTIMÉ', '', '', item.montant, ''],
+    ['', '', '', '', ''],
+    ['Document généré par PSI — psi-algerie.com', '', '', '', ''],
   ];
+
   const ws = utils.aoa_to_sheet(rows);
-  ws['!cols'] = [{ wch: 32 }, { wch: 22 }, { wch: 14 }, { wch: 18 }];
+  ws['!cols'] = [{ wch: 28 }, { wch: 12 }, { wch: 20 }, { wch: 18 }, { wch: 6 }];
+  ws['!merges'] = [
+    { s: { r: 0, c: 0 }, e: { r: 0, c: 4 } },
+    { s: { r: 1, c: 0 }, e: { r: 1, c: 4 } },
+    { s: { r: 2, c: 0 }, e: { r: 2, c: 4 } },
+  ];
   const wb = utils.book_new();
   utils.book_append_sheet(wb, ws, item.ref);
   writeFile(wb, `${item.ref}_PSI.xlsx`);
@@ -246,8 +266,8 @@ function TemplatePopover({ item, mode, onClose }: {
     onClose();
   };
 
-  const accentColor = mode === 'wa' ? '#25D366' : '#0D9488';
-  const accentBg    = mode === 'wa' ? '#F0FDF4' : '#F0FDFA';
+  const accentColor = mode === 'wa' ? '#25D366' : '#4CAF4F';
+  const accentBg    = mode === 'wa' ? '#F0FDF4' : '#F0FDF4';
 
   return (
     <>
@@ -273,10 +293,10 @@ function TemplatePopover({ item, mode, onClose }: {
                 <button key={t.id} onClick={() => select(t)}
                   className="w-full text-left px-5 py-3 flex items-center justify-between gap-3 hover:bg-[#F8FAFC] transition-colors group">
                   <div>
-                    <p className="text-[13px] font-semibold text-[#0F172A] group-hover:text-[#0D9488] transition-colors">{t.title}</p>
+                    <p className="text-[13px] font-semibold text-[#0F172A] group-hover:text-[#4CAF4F] transition-colors">{t.title}</p>
                     <p className="text-[11px] text-[#ABBED1] mt-0.5">{CATEGORY_LABEL[t.category] ?? t.category}</p>
                   </div>
-                  <svg width={14} height={14} fill="none" viewBox="0 0 24 24" className="flex-shrink-0 text-[#ABBED1] group-hover:text-[#0D9488] transition-colors"><path d="M9 18l6-6-6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                  <svg width={14} height={14} fill="none" viewBox="0 0 24 24" className="flex-shrink-0 text-[#ABBED1] group-hover:text-[#4CAF4F] transition-colors"><path d="M9 18l6-6-6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
                 </button>
               ))}
             </div>
@@ -292,7 +312,7 @@ function TemplatePopover({ item, mode, onClose }: {
                 value={preview}
                 onChange={e => setPreview(e.target.value)}
                 rows={7}
-                className="w-full resize-none text-[13px] text-[#374151] leading-relaxed border border-[#E2E8F0] rounded-xl px-4 py-3 focus:outline-none focus:border-[#0D9488] focus:ring-2 focus:ring-[#0D9488]/10 transition-all"
+                className="w-full resize-none text-[13px] text-[#374151] leading-relaxed border border-[#E2E8F0] rounded-xl px-4 py-3 focus:outline-none focus:border-[#4CAF4F] focus:ring-2 focus:ring-[#4CAF4F]/10 transition-all"
               />
               <button onClick={send}
                 className="w-full py-2.5 rounded-xl text-[13px] font-bold border transition-colors"
@@ -307,22 +327,85 @@ function TemplatePopover({ item, mode, onClose }: {
   );
 }
 
-function ConvertModal({ item, onConfirm, onClose }: { item: RequestDetail; onConfirm: (montant: string) => void; onClose: () => void }) {
-  const [montant, setMontant] = useState('');
+export interface ConvertPrixData { totalOverride?: number; itemPrices?: { designation: string; unitPrice: number }[]; }
+
+function ConvertModal({ item, onConfirm, onClose }: {
+  item: RequestDetail;
+  onConfirm: (montant: string, prix: ConvertPrixData) => void;
+  onClose: () => void;
+}) {
+  const [mode, setMode] = useState<'unitaire' | 'total'>('unitaire');
+  const [totalGlobal, setTotalGlobal] = useState('');
+  const [itemPrices, setItemPrices] = useState<{ designation: string; qty: number; pu: string }[]>(
+    (item.items ?? []).map(i => ({ designation: i.designation, qty: i.quantite, pu: i.prixUnitaire > 0 ? String(i.prixUnitaire) : '' }))
+  );
+
+  const totalCalc = itemPrices.reduce((acc, i) => acc + i.qty * (parseFloat(i.pu) || 0), 0);
+  const inputCls = "w-full px-3 py-2 rounded-xl border border-[#E2E8F0] text-[13px] text-[#0F172A] focus:outline-none focus:border-[#4CAF4F] focus:ring-[3px] focus:ring-[#4CAF4F]/15 transition-all";
+  const hasItems = itemPrices.length > 0;
+
+  const handleConfirm = () => {
+    if (mode === 'total') {
+      const t = parseFloat(totalGlobal) || 0;
+      onConfirm(t > 0 ? `${t.toLocaleString('fr-FR')} DA` : 'À définir', { totalOverride: t });
+    } else {
+      onConfirm(totalCalc > 0 ? `${totalCalc.toLocaleString('fr-FR')} DA` : 'À définir',
+        { itemPrices: itemPrices.map(i => ({ designation: i.designation, unitPrice: parseFloat(i.pu) || 0 })) });
+    }
+  };
+
   return (
     <>
       <div className="fixed inset-0 z-[80] bg-black/40 backdrop-blur-sm" onClick={onClose} />
       <div className="fixed inset-0 z-[90] flex items-center justify-center p-6 pointer-events-none">
-        <div className="pointer-events-auto bg-white rounded-2xl shadow-2xl p-6 w-[400px] max-w-[92vw]">
-          <p className="text-[16px] font-bold text-[#0F172A] mb-1">Valider le devis</p>
-          <p className="text-[13px] text-[#8A9BB5] mb-5">{item.ref} — {item.client} · {item.entreprise}</p>
-          <label className="block text-[12px] font-semibold text-[#374151] mb-1.5">Montant de la commande</label>
-          <input autoFocus value={montant} onChange={(e) => setMontant(e.target.value)}
-            placeholder="ex: 45 000 DA"
-            className="w-full px-3 py-2.5 rounded-xl border border-[#E2E8F0] text-[14px] text-[#0F172A] focus:outline-none focus:border-[#4CAF4F] focus:ring-[3px] focus:ring-[#4CAF4F]/15 transition-all mb-5" />
+        <div className="pointer-events-auto bg-white rounded-2xl shadow-2xl p-6 w-[460px] max-w-[94vw]">
+          <p className="text-[16px] font-bold text-[#0F172A] mb-1">Convertir en commande</p>
+          <p className="text-[12px] text-[#8A9BB5] mb-4">{item.ref} — {item.entreprise || item.client}</p>
+
+          {/* Toggle mode — n'affiche l'unitaire que si on a des produits */}
+          {hasItems && (
+            <div className="flex gap-2 mb-4 p-1 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0]">
+              {(['unitaire', 'total'] as const).map(m => (
+                <button key={m} onClick={() => setMode(m)}
+                  className="flex-1 py-2 rounded-lg text-[12px] font-bold transition-all"
+                  style={{ background: mode === m ? '#fff' : 'transparent', color: mode === m ? '#0F172A' : '#8A9BB5', boxShadow: mode === m ? '0 1px 4px rgba(0,0,0,0.08)' : 'none' }}>
+                  {m === 'unitaire' ? 'Prix unitaire par produit' : 'Total global direct'}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {hasItems && mode === 'unitaire' ? (
+            <div className="flex flex-col gap-2 mb-4">
+              {itemPrices.map((it, i) => (
+                <div key={i} className="flex items-center gap-3">
+                  <span className="text-[12px] font-semibold text-[#374151] flex-1 truncate">{it.designation} <span className="text-[#ABBED1]">× {it.qty}</span></span>
+                  <div className="flex items-center gap-1.5 flex-shrink-0">
+                    <input type="number" min="0" value={it.pu} onChange={e => setItemPrices(p => p.map((x, j) => j === i ? { ...x, pu: e.target.value } : x))}
+                      placeholder="Prix unit." className={`${inputCls} w-28`} />
+                    <span className="text-[11px] text-[#8A9BB5]">DA</span>
+                  </div>
+                </div>
+              ))}
+              <div className="flex justify-between items-center pt-2 border-t border-[#F2F4F7] mt-1">
+                <span className="text-[12px] font-semibold text-[#374151]">Total calculé</span>
+                <span className="text-[15px] font-extrabold text-[#4CAF4F]">{totalCalc.toLocaleString('fr-FR')} DA</span>
+              </div>
+            </div>
+          ) : (
+            <div className="mb-4">
+              <label className="block text-[12px] font-semibold text-[#374151] mb-1.5">Montant de la commande</label>
+              <div className="flex items-center gap-2">
+                <input type="number" min="0" autoFocus value={totalGlobal} onChange={e => setTotalGlobal(e.target.value)}
+                  placeholder="Ex: 45000" className={inputCls} />
+                <span className="text-[12px] text-[#8A9BB5] flex-shrink-0">DA</span>
+              </div>
+            </div>
+          )}
+
           <div className="flex gap-3">
             <button onClick={onClose} className="flex-1 px-4 py-2.5 rounded-xl border border-[#E2E8F0] text-[13px] font-semibold text-[#374151]">Annuler</button>
-            <button onClick={() => onConfirm(montant.trim() || 'À définir')} className="flex-1 px-4 py-2.5 rounded-xl text-[13px] font-bold text-white" style={{ background: '#4CAF4F' }}>
+            <button onClick={handleConfirm} className="flex-1 px-4 py-2.5 rounded-xl text-[13px] font-bold text-white" style={{ background: '#4CAF4F' }}>
               Créer la commande
             </button>
           </div>
@@ -336,7 +419,7 @@ interface RequestPanelProps {
   item: RequestDetail;
   onClose: () => void;
   onStatusChange?: (ref: string, newStatut: string) => void;
-  onConvertToOrder?: (item: RequestDetail) => void;
+  onConvertToOrder?: (item: RequestDetail & { _prix?: ConvertPrixData }) => void;
 }
 
 // ── Bouton icône rond ────────────────────────────────────────────────────────
@@ -363,9 +446,19 @@ function IconBtn({ href, onClick, title, color, children }: {
 
 export function RequestPanel({ item, onClose, onStatusChange, onConvertToOrder }: RequestPanelProps) {
   const [showConvert, setShowConvert] = useState(false);
+  const [editingNotes, setEditingNotes] = useState(false);
+  const [notesValue, setNotesValue] = useState('');
   const [templateMode, setTemplateMode] = useState<'wa' | 'mail' | null>(null);
   const isCommande = item.type === 'Commande';
   const isArchived = item.statut === 'Livré' || item.statut === 'Annulé';
+
+  const saveNotes = async () => {
+    if (!item.id) return;
+    const endpoint = isCommande ? `/api/orders/${item.id}` : `/api/quotes/${item.id}`;
+    await fetch(endpoint, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ notes: notesValue }) });
+    setEditingNotes(false);
+    onStatusChange?.(item.ref, item.statut);
+  };
 
   const callHref = `tel:${item.telephone.replace(/\s/g, '')}`;
   const emailHref = item.email ? `mailto:${item.email}?subject=${encodeURIComponent(`${item.type} ${item.ref} — PSI`)}` : null;
@@ -461,7 +554,7 @@ export function RequestPanel({ item, onClose, onStatusChange, onConvertToOrder }
                 </p>
                 <div className="rounded-xl border border-[#F2F4F7] overflow-hidden">
                   <div className="grid grid-cols-[1fr_auto] bg-[#F8FAFC] px-4 py-2 border-b border-[#F2F4F7]">
-                    <span className="text-[10px] font-bold text-[#ABBED1] uppercase tracking-wider">Désignation</span>
+                    <span className="text-[10px] font-bold text-[#ABBED1] uppercase tracking-wider">Référence</span>
                     <span className="text-[10px] font-bold text-[#ABBED1] uppercase tracking-wider">Qté</span>
                   </div>
                   {lignes.map((ligne, i) => {
@@ -524,6 +617,14 @@ export function RequestPanel({ item, onClose, onStatusChange, onConvertToOrder }
                     MAIL
                   </button>
                 )}
+                <button onClick={() => { setNotesValue(''); setEditingNotes(true); }}
+                  className="flex items-center gap-1.5 px-3 h-9 rounded-full border text-[11px] font-bold transition-colors"
+                  style={{ borderColor: '#ABBED140', color: '#8A9BB5' }}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = '#F8FAFC')}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}>
+                  <svg width={13} height={13} fill="none" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>
+                  Notes
+                </button>
               </div>
 
               {/* Droite : actions statut */}
@@ -532,7 +633,7 @@ export function RequestPanel({ item, onClose, onStatusChange, onConvertToOrder }
                   <>
                     {item.statut === 'En attente' && (
                       <button onClick={() => { onStatusChange(item.ref, 'Confirmé'); onClose(); }}
-                        className="px-4 py-2 rounded-lg text-[13px] font-bold border border-[#0D9488] text-[#0D9488] hover:bg-[#F0FDFA] transition-colors">
+                        className="px-4 py-2 rounded-lg text-[13px] font-bold border border-[#4CAF4F] text-[#4CAF4F] hover:bg-[#F0FDF4] transition-colors">
                         Confirmer
                       </button>
                     )}
@@ -544,7 +645,7 @@ export function RequestPanel({ item, onClose, onStatusChange, onConvertToOrder }
                     )}
                     {!isCommande && item.statut === 'Confirmé' && onConvertToOrder && (
                       <button onClick={() => setShowConvert(true)}
-                        className="px-4 py-2 rounded-lg text-[13px] font-bold border border-[#0D9488] text-[#0D9488] hover:bg-[#F0FDFA] transition-colors">
+                        className="px-4 py-2 rounded-lg text-[13px] font-bold border border-[#4CAF4F] text-[#4CAF4F] hover:bg-[#F0FDF4] transition-colors">
                         Convertir en commande
                       </button>
                     )}
@@ -570,12 +671,31 @@ export function RequestPanel({ item, onClose, onStatusChange, onConvertToOrder }
         </div>
       </div>
 
+      {editingNotes && (
+        <>
+          <div className="fixed inset-0 z-[80] bg-black/40 backdrop-blur-sm" onClick={() => setEditingNotes(false)} />
+          <div className="fixed inset-0 z-[90] flex items-center justify-center p-6 pointer-events-none">
+            <div className="pointer-events-auto bg-white rounded-2xl shadow-2xl p-6 w-[440px] max-w-[94vw]">
+              <p className="text-[15px] font-bold text-[#0F172A] mb-1">Notes internes</p>
+              <p className="text-[12px] text-[#8A9BB5] mb-4">{item.ref} — non visible par le client</p>
+              <textarea autoFocus value={notesValue} onChange={e => setNotesValue(e.target.value)} rows={5} placeholder="Remarques internes, conditions particulières…"
+                className="w-full resize-none px-3 py-2.5 rounded-xl border border-[#E2E8F0] text-[13px] text-[#374151] focus:outline-none focus:border-[#4CAF4F] focus:ring-[3px] focus:ring-[#4CAF4F]/15 transition-all mb-4" />
+              <div className="flex gap-3">
+                <button onClick={() => setEditingNotes(false)} className="flex-1 px-4 py-2.5 rounded-xl border border-[#E2E8F0] text-[13px] font-semibold text-[#374151]">Annuler</button>
+                <button onClick={saveNotes} className="flex-1 px-4 py-2.5 rounded-xl text-[13px] font-bold text-white" style={{ background: '#4CAF4F' }}>Enregistrer</button>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+
+
       {showConvert && onConvertToOrder && (
         <ConvertModal
           item={item}
           onClose={() => setShowConvert(false)}
-          onConfirm={(montant) => {
-            onConvertToOrder({ ...item, montant });
+          onConfirm={(montant, prix) => {
+            onConvertToOrder({ ...item, montant, _prix: prix });
             setShowConvert(false);
             onClose();
           }}

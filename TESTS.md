@@ -1,19 +1,19 @@
 # PSI — Checklist de recette complète
-**Version :** 1 juillet 2026 — À tester avant livraison
+**Version :** 5 juillet 2026 — À tester avant livraison
 
+> **Changements récents (juillet 2026)** — voir sections ⭐ mises à jour :
+> - **Confirmer une commande** ne redemande plus le prix (il existe déjà) — §3.2
+> - **Convertir un devis** demande le prix en mode **unitaire (par produit)** ou **total global** — §4.4
+> - **Dashboard** : nouveau post-it papier, camembert avec carte flottante au survol, "Par produit" — §11
+> - **Couleurs** unifiées : diagrammes en palette sobre (sans vert/bleu), plus de teal dans l'admin — §7 / §11
 ---
-
 ## AVANT DE COMMENCER
-
 - [ ] `npm run dev` tourne sans erreur
 - [ ] Connecté en **Admin**
-- [ ] Ouvrir un 2e onglet navigation privée connecté en **Employé** (pour tester les notifs croisées)
+- [ ] Ouvrir un 2e  onglet navigation privée connecté en **Employé** (pour tester les notifs croisées)
 - [ ] Avoir : 1 client avec commandes, 1 client vide, 2-3 commandes dont 1 devis
-
 ---
-
 ## 1. AUTHENTIFICATION
-
 | # | Action | Résultat attendu |
 |---|--------|-----------------|
 | 1.1 | Aller sur `/admin` sans session | Redirigé `/admin/login` |
@@ -23,9 +23,7 @@
 | 1.5 | Déconnexion | Redirigé `/admin/login` |
 
 ---
-
 ## 2. SITE PUBLIC → ADMIN (temps réel)
-
 ### 2A. Nouvelle commande depuis le site
 | # | Action | Résultat attendu |
 |---|--------|-----------------|
@@ -43,32 +41,46 @@
 | 2.8 | Apparaît onglet Devis avec badge "Site web" | ✓ |
 
 ---
+## 3. WORKFLOW COMMANDE ⭐ (mis à jour)
 
-## 3. WORKFLOW COMMANDE
+| #   | Action | Résultat attendu |
 
-| # | Action | Résultat attendu |
-|---|--------|-----------------|
-| 3.1 | Ouvrir commande "En attente" | Bouton "Confirmer" visible |
-| 3.2 | Cliquer "Confirmer" | Statut → "Confirmé" (violet) |
-| 3.3 | Vérifier onglet notifs sur compte Employé | Reçoit "Commande mise à jour — commande de ClientX → Confirmé" |
-| 3.4 | Vérifier que l'Admin (acteur) ne reçoit PAS la notif | ✓ |
+| 3.1 | Ouvrir commande "En attente" | Bouton "Confirmer"  visible |
+
+| 3.2 | Cliquer "Confirmer" | ⭐ Statut → "Confirmé" **directement, SANS popup de prix** (le prix de la commande existe déjà). Le panel se ferme. |
+
+| 3.3 | Vérifier onglet notifs sur compte Employé | Reçoit "Commande mise à jour — commande de ClientX → Confirmé" |  
+| 3.4 | Vérifier que l'Admin (acteur) ne reçoit PAS la notif |✓|
 | 3.5 | Rouvrir le panel | Bouton "Marquer Livré" visible |
 | 3.6 | Cliquer "Marquer Livré" | Statut → "Livré" (vert), descend en bas |
 | 3.7 | Cliquer "Annuler" sur commande En attente | Popup "Annuler commande de X ?" |
+
 | 3.8 | Confirmer | Statut → "Annulé" (gris), archivé en bas |
+
 | 3.9 | Rouvrir commande annulée | Bouton "Restaurer" |
+
 | 3.10 | Restaurer | Statut → "En attente", remonte |
 
 ---
 
-## 4. WORKFLOW DEVIS
+## 4. WORKFLOW DEVIS ⭐ (mis à jour)
 
 | # | Action | Résultat attendu |
-|---|--------|-----------------|
+
 | 4.1 | Ouvrir devis "En attente" | Boutons "Confirmer" et "Annuler" |
+
 | 4.2 | Confirmer | Statut → "Confirmé" |
 | 4.3 | Rouvrir devis confirmé | Bouton "Convertir en commande" visible |
-| 4.4 | Convertir | Nouvelle commande créée "En attente", devis reste "Confirmé" |
+| 4.4 | Cliquer "Convertir en commande" | ⭐ Modale "Convertir en commande" avec **toggle Prix unitaire par produit / Total global direct** (si le devis a des produits) |
+
+| 4.4a | Mode **unitaire** : saisir un prix par produit | "Total calculé" se met à jour en bas en temps réel |
+
+| 4.4b | Mode **total global** : saisir un montant | Champ montant unique |
+
+| 4.4c | Cliquer "Créer la commande" | Nouvelle commande "En attente" créée, devis reste "Confirmé" |
+
+| 4.4d | Ouvrir la commande créée | ⭐ Les **prix saisis sont enregistrés** (montant visible, pas 0 DA) |
+
 | 4.5 | Employé reçoit notif "Devis converti en commande de ClientX" | ✓ |
 | 4.6 | Acteur ne reçoit PAS la notif | ✓ |
 | 4.7 | Annuler un devis + popup | Statut → "Annulé" |
@@ -80,7 +92,7 @@
 
 ### 5A. Depuis /admin/requests
 | # | Action | Résultat attendu |
-|---|--------|-----------------|
+
 | 5.1 | "+ Nouvelle demande" | Modal s'ouvre |
 | 5.2 | Commande : remplir client, wilaya, téléphone | — |
 | 5.3 | Sélectionner produit dans dropdown | Prix auto-rempli |
@@ -92,7 +104,7 @@
 
 ### 5B. Depuis fiche client
 | # | Action | Résultat attendu |
-|---|--------|-----------------|
+
 | 5.9 | `/admin/clients` → fiche → "Nouvelle commande" | Modal client pré-rempli |
 | 5.10 | Remplir, valider | Apparaît dans /requests ET historique client |
 
@@ -101,8 +113,9 @@
 ## 6. FILTRES — /admin/requests
 
 | # | Action | Résultat attendu |
-|---|--------|-----------------|
+
 | 6.1 | Onglet "Tous" | Commandes + devis, En attente en haut, archivés en bas |
+
 | 6.2 | Onglet "Commandes" | Seulement commandes |
 | 6.3 | Onglet "Devis" | Seulement devis |
 | 6.4 | Filtre statut "Confirmé" | Seulement confirmés |
@@ -118,7 +131,7 @@
 ## 7. SOURCE (Site web vs Manuel)
 
 | # | Où | Résultat attendu |
-|---|---|-----------------|
+
 | 7.1 | Tableau /requests | Badge vert "Site web" ou orange "Manuel" |
 | 7.2 | Tableau /dashboard | Idem |
 | 7.3 | Panel RequestPanel header | Badge Source visible |
@@ -130,7 +143,7 @@
 ## 8. CLIENTS
 
 | # | Action | Résultat attendu |
-|---|--------|-----------------|
+
 | 8.1 | `/admin/clients` | Tous les clients visibles (même sans commandes) |
 | 8.2 | Recherche | Filtre par nom / entreprise / wilaya |
 | 8.3 | Clic sur client | Fiche slide-in : infos + historique |
@@ -145,7 +158,7 @@
 ## 9. NOTIFICATIONS
 
 | # | Vérification | Résultat attendu |
-|---|-------------|-----------------|
+
 | 9.1 | Toast : position | Haut droite |
 | 9.2 | Toast : durée | 7 secondes |
 | 9.3 | Toast : style | Carte blanche, PAS de rond à gauche, PAS de barre colorée |
@@ -166,7 +179,7 @@
 
 ### 10A. Rapport de ventes
 | # | Action | Résultat attendu |
-|---|--------|-----------------|
+
 | 10.1 | Bouton "Rapport de ventes" | Téléchargement `PSI_Ventes_DD-MM-YYYY.xlsx` |
 | 10.2 | Colonnes | N° Facture · Source · Date commande · Date livraison · Client · Entreprise · Wilaya · Agent · Réf produit · Qté · Prix unitaire · Total ligne |
 | 10.3 | Contenu | Seulement commandes **Livrées** |
@@ -176,23 +189,26 @@
 
 ### 10B. Export tableau filtré
 | # | Action | Résultat attendu |
-|---|--------|-----------------|
+
+
 | 10.7 | Filtrer, cliquer "Exporter" | Export du tableau tel qu'affiché |
 | 10.8 | Colonnes | Référence · Type · Date · Client · Entreprise · Wilaya · Statut · Produits · Montant HT |
 | 10.9 | Bas | Récap par statut + total |
 
 ---
 
-## 11. DASHBOARD
+## 11. DASHBOARD ⭐ (mis à jour)
 
 | # | Action | Résultat attendu |
 |---|--------|-----------------|
-| 11.1 | Cartes stats | Commandes mois, Devis mois, CA, En attente |
-| 11.2 | Donut | Top 3 produits |
-| 11.3 | Carte origine | Barre Site web / Manuel / % |
-| 11.4 | Tableau récent | Avec colonne Source |
-| 11.5 | Clic ligne | RequestPanel |
-| 11.6 | Nouvelle commande site | Dashboard se met à jour sans refresh |
+| 11.1 | Post-it "Aujourd'hui" | ⭐ Style papier jaune (languette en haut) : date du jour, Nouvelles demandes / En attente / Clients contactés (chiffres en gris foncé), ligne "X livrées ce mois" en bas |
+| 11.2 | Camembert "Top produits" | ⭐ Sous-titre **"Par produit"**, anneau fin avec relief, légende à droite (puces + libellés) |
+| 11.3 | Survol d'un segment du camembert | ⭐ **Carte blanche flottante** suit la souris : libellé produit + % + nombre d'unités ; le segment survolé reste opaque, les autres s'estompent |
+| 11.4 | Couleurs des diagrammes | ⭐ Palette sobre **sans vert ni bleu** (violet grisé, ambre, terracotta, ardoise…) — cohérente entre camembert et carte Origine |
+| 11.5 | Carte origine | Barre Site web / Manuel + comptage + % |
+| 11.6 | Tableau récent | Avec colonne Source |
+| 11.7 | Clic ligne | RequestPanel |
+| 11.8 | Nouvelle commande site | Dashboard se met à jour sans refresh |
 
 ---
 

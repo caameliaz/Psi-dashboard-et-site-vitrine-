@@ -197,7 +197,7 @@ enum RequestStatus {
 // Les messages de contact n'ont pas de cancelReason — on les traite ou pas, pas d'annulation
 model ContactRequest {
   id        String        @id @default(cuid())
-  client    Client        @relation(fields: [clientId], references: [id])
+  client    Client        @relation(fields: [clientId], references: [id], onDelete: Cascade)
   clientId  String
   message   String
   status    ContactStatus @default(EN_ATTENTE)

@@ -697,7 +697,12 @@ export default function UsersPage() {
 
   const handleDelete = async () => {
     if (!deleteUser) return;
-    await fetch(`/api/users/${deleteUser.id}`, { method: 'DELETE' });
+    const res = await fetch(`/api/users/${deleteUser.id}`, { method: 'DELETE' });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      alert(data.error ?? "Impossible de supprimer cet utilisateur.");
+      return;
+    }
     await fetchUsers();
     setDeleteUser(null);
   };

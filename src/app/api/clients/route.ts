@@ -15,23 +15,19 @@ export async function GET() {
         _count: { select: { orders: true, quotes: true } },
         orders: {
           select: {
-            id: true,
-            ref: true,
-            createdAt: true,
-            status: true,
+            id: true, ref: true, createdAt: true, status: true,
             items: { select: { quantity: true, unitPrice: true, product: { select: { reference: true } } } },
           },
           orderBy: { createdAt: 'desc' },
+          take: 10,
         },
         quotes: {
           select: {
-            id: true,
-            ref: true,
-            createdAt: true,
-            status: true,
+            id: true, ref: true, createdAt: true, status: true,
             items: { select: { quantity: true, product: { select: { reference: true } } } },
           },
           orderBy: { createdAt: 'desc' },
+          take: 10,
         },
       },
       orderBy: { createdAt: 'desc' },

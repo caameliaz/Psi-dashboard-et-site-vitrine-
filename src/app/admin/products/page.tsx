@@ -253,7 +253,12 @@ export default function ProductsPage() {
 
   const handleDelete = async () => {
     if (!deleteProduct) return;
-    await fetch(`/api/products/${deleteProduct.id}`, { method: 'DELETE' });
+    const res = await fetch(`/api/products/${deleteProduct.id}`, { method: 'DELETE' });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      alert(data.error ?? "Impossible de supprimer ce produit.");
+      return;
+    }
     await fetchProducts();
     setDeleteProduct(null);
   };

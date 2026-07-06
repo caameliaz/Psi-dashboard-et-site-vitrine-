@@ -6,9 +6,9 @@ type Ctx = { params: Promise<{ id: string }> };
 
 // POST /api/products/[id]/fields — ajouter une valeur de champ sur un produit (admin)
 export async function POST(request: NextRequest, { params }: Ctx) {
-  // TODO: remettre auth avant prod
-  // const session = await auth();
-  // if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const session = await auth();
+  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  if ((session.user as { role?: string }).role !== 'ADMIN') return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
   const { id: productId } = await params;
 
@@ -35,9 +35,9 @@ export async function POST(request: NextRequest, { params }: Ctx) {
 
 // DELETE /api/products/[id]/fields?definitionId=xxx — supprimer un champ d'un produit (admin)
 export async function DELETE(request: NextRequest, { params }: Ctx) {
-  // TODO: remettre auth avant prod
-  // const session = await auth();
-  // if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const session = await auth();
+  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  if ((session.user as { role?: string }).role !== 'ADMIN') return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
   const { id: productId } = await params;
   const definitionId = request.nextUrl.searchParams.get('definitionId');

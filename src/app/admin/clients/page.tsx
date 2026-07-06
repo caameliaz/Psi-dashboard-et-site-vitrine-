@@ -420,7 +420,7 @@ function dbClientToRecord(c: any): ClientRecord {
     date: new Date(o.createdAt).toLocaleDateString('fr-FR'),
     statut: STATUS_DB_TO_UI[o.status] ?? o.status,
     montant: `${(o.items ?? []).reduce((acc: number, i: any) => acc + i.quantity * (i.unitPrice ?? 0), 0).toLocaleString('fr-FR')} DA`,
-    produits: (o.items ?? []).map((i: any) => `${i.product?.reference ?? '?'} × ${i.quantity}`).join(', ') || '—',
+    produits: (o.items ?? []).map((i: any) => `${i.product?.reference ?? 'Produit supprimé'} × ${i.quantity}`).join(', ') || '—',
     _ts: new Date(o.createdAt).getTime(),
   }));
   const quoteHist = (c.quotes ?? []).map((q: any) => ({
@@ -429,7 +429,7 @@ function dbClientToRecord(c: any): ClientRecord {
     date: new Date(q.createdAt).toLocaleDateString('fr-FR'),
     statut: STATUS_DB_TO_UI[q.status] ?? q.status,
     montant: 'Sur devis',
-    produits: (q.items ?? []).map((i: any) => `${i.product?.reference ?? '?'} × ${i.quantity}`).join(', ') || '—',
+    produits: (q.items ?? []).map((i: any) => `${i.product?.reference ?? 'Produit supprimé'} × ${i.quantity}`).join(', ') || '—',
     _ts: new Date(q.createdAt).getTime(),
   }));
 
@@ -538,9 +538,12 @@ export default function ClientsPage() {
   const handleDelete = async (c: ClientRecord) => {
     const id = (c as any)._dbId ?? c.id;
     const res = await fetch(`/api/clients/${id}`, { method: 'DELETE' });
-    if (res.ok) {
-      await fetchClients();
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      alert(data.error ?? "Impossible de supprimer ce client.");
+      return;
     }
+    await fetchClients();
     setDeleteClient(null);
     setSelected(null);
   };

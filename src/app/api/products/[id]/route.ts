@@ -52,8 +52,22 @@ export async function DELETE(_request: NextRequest, { params }: Ctx) {
 
   try {
     const product = await prisma.product.findUnique({ where: { id }, select: { reference: true } });
+    if (!product) return NextResponse.json({ error: 'Produit introuvable' }, { status: 404 });
+
+    // Blocage si le produit est utilisé dans des commandes/devis (préserve l'historique)
+    const [inOrders, inQuotes] = await Promise.all([
+      prisma.orderItem.count({ where: { productId: id } }),
+      prisma.quoteItem.count({ where: { productId: id } }),
+    ]);
+    if (inOrders + inQuotes > 0) {
+      return NextResponse.json(
+        { error: `Impossible de supprimer : ce produit est utilisé dans ${inOrders + inQuotes} commande(s)/devis. Désactivez-le plutôt.` },
+        { status: 409 }
+      );
+    }
+
     await prisma.product.delete({ where: { id } });
-    createAudit({ userId: session?.user?.id, action: 'Produit supprimé', entity: 'PRODUIT', entityId: id, detail: product?.reference ?? id });
+    createAudit({ userId: session?.user?.id, action: 'Produit supprimé', entity: 'PRODUIT', entityId: id, detail: product.reference });
     return NextResponse.json({ success: true });
   } catch (e) {
     console.error(e);
