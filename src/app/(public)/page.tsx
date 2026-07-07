@@ -1,5 +1,4 @@
 import Link from 'next/link';
-import Image from 'next/image';
 import { ProductCard } from '@/components/ProductCard';
 
 const BASE = process.env.NEXTAUTH_URL ?? 'http://localhost:3000';
@@ -39,7 +38,7 @@ export default async function Home() {
       <section
         id="hero"
         className="relative min-h-[70vh] bg-cover bg-center flex items-center"
-        style={{ backgroundImage: 'url(/geri-sakti-g9_KP2fvFII-unsplash.jpg)' }}
+        style={{ backgroundImage: 'url(/photo%202.avif)' }}
       >
         {/* Overlay dégradé */}
         <div className="absolute inset-0 bg-gradient-to-r from-[rgba(38,50,56,0.90)] via-[rgba(38,50,56,0.75)] to-[rgba(38,50,56,0.45)]" />
@@ -82,58 +81,45 @@ export default async function Home() {
           PRODUITS
       ════════════════════════════════════════════════════════════ */}
       <section id="products" className="bg-white py-20 px-6 md:px-12">
-        <div className="max-w-[1280px] mx-auto grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_380px] xl:grid-cols-[minmax(0,1fr)_440px] gap-x-16 gap-y-8 items-start">
+        <div className="max-w-[1280px] mx-auto flex flex-col gap-10">
 
-          {/* ── Titre + filtre ── */}
-          <div className="flex items-center gap-4 flex-wrap min-w-0">
+          <div className="flex flex-col items-center gap-3 text-center">
             <h2 className="text-[36px] md:text-[42px] font-bold text-[#263238] leading-tight">
               Nos Produits
             </h2>
+            <p className="text-[16px] md:text-[18px] text-[#717171] max-w-[480px] leading-relaxed">
+              Rouleaux thermiques de haute qualité pour tous vos besoins professionnels
+            </p>
+          </div>
+
+          {/* Filtre */}
+          <div className="flex justify-center gap-3">
             <button className="bg-[#4CAF4F] text-white text-[14px] font-semibold px-6 py-2.5 rounded-full shadow-[0_4px_14px_rgba(76,175,79,0.3)]">
               Papier thermique
             </button>
           </div>
 
-          {/* ── Gauche : grille ── */}
-          <div className="flex flex-col gap-8 min-w-0 lg:col-start-1 lg:row-start-2">
-            {/* Grille */}
-            <div className="bg-[#F0F2F5] rounded-2xl p-4 grid grid-cols-2 gap-4">
-              {products.slice(0, 6).map((product: any, i: number) => (
-                <div key={product.id} style={{ animation: `fadeDown 0.45s ease both`, animationDelay: `${i * 0.12}s` }}>
-                  <ProductCard product={product} hideImage />
-                </div>
-              ))}
-            </div>
-
-            {/* Bouton "Voir plus" si plus de 6 produits */}
-            {products.length > 6 && (
-              <div>
-                <Link
-                  href="/products"
-                  className="inline-flex items-center gap-2 border-2 border-[#4CAF4F] text-[#4CAF4F] text-[15px] font-semibold px-8 py-3.5 rounded-xl hover:bg-[#4CAF4F] hover:text-white transition-all"
-                >
-                  Voir tous les produits
-                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                    <path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                </Link>
-              </div>
-            )}
+          {/* Grille */}
+          <div className="grid grid-cols-2 lg:grid-cols-3 gap-5 md:gap-7">
+            {products.slice(0, 6).map((product: any) => (
+              <ProductCard key={product.id} product={product} />
+            ))}
           </div>
 
-          {/* ── Droite : image ── */}
-          <div className="w-full h-full lg:col-start-2 lg:row-start-2 lg:self-stretch" style={{ animation: 'fadeDown 0.5s ease both', animationDelay: `${6 * 0.12 + 0.15}s` }}>
-            <div className="relative w-full aspect-[4/5] lg:aspect-auto lg:h-full rounded-3xl overflow-hidden shadow-2xl">
-              <Image
-                src="/426-Papier-couche-blanc-jet-dencre-premium-160g.jpg"
-                alt="Rouleaux thermiques PSI"
-                fill
-                className="object-cover"
-                sizes="(max-width: 1024px) 100vw, 520px"
-              />
+          {/* Bouton "Voir plus" si plus de 6 produits */}
+          {products.length > 6 && (
+            <div className="flex justify-center">
+              <Link
+                href="/products"
+                className="flex items-center gap-2 border-2 border-[#4CAF4F] text-[#4CAF4F] text-[15px] font-semibold px-8 py-3.5 rounded-xl hover:bg-[#4CAF4F] hover:text-white transition-all"
+              >
+                Voir tous les produits
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                  <path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              </Link>
             </div>
-          </div>
-
+          )}
         </div>
       </section>
 
@@ -155,44 +141,49 @@ export default async function Home() {
 
           {/* Badges */}
           <div className="flex items-start justify-center gap-10 md:gap-20 flex-wrap">
-
-            {/* Papier Premium */}
-            <div className="flex flex-col items-center gap-3 min-w-[100px]">
-              <div className="w-14 h-14 bg-white border-2 border-[#C8DFF7] shadow-[0_4px_12px_rgba(171,190,209,0.4)] rounded-xl flex items-center justify-center overflow-hidden">
-                <Image src="/Papier-thermique-1920x600.jpg" alt="Papier thermique" width={56} height={56} className="object-cover w-full h-full" />
+            {[
+              {
+                label: '55 gr/m²',
+                sub: 'Papier Premium',
+                icon: (
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                    <rect x="2" y="3" width="20" height="18" rx="2" stroke="#4CAF4F" strokeWidth="1.8"/>
+                    <path d="M2 9h20M8 3v6" stroke="#4CAF4F" strokeWidth="1.8" strokeLinecap="round"/>
+                  </svg>
+                ),
+              },
+              {
+                label: 'Allemagne',
+                sub: 'Origine Europe',
+                icon: (
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                    <rect x="2" y="5" width="20" height="5" fill="#1a1a1a" rx="1"/>
+                    <rect x="2" y="10" width="20" height="4.5" fill="#D32F2F"/>
+                    <rect x="2" y="14.5" width="20" height="5" fill="#FDD835" rx="1"/>
+                  </svg>
+                ),
+              },
+              {
+                label: 'BPA Free',
+                sub: 'Sécurité Sanitaire',
+                icon: (
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                    <path d="M12 2l8 3v6.5C20 16.7 16.6 21 12 22 7.4 21 4 16.7 4 11.5V5l8-3z" stroke="#4CAF4F" strokeWidth="1.8"/>
+                    <path d="M8.5 12l3 3 5-5" stroke="#4CAF4F" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                ),
+              },
+            ].map((item) => (
+              <div key={item.label} className="flex flex-col items-center gap-3 min-w-[100px]">
+                <div className="w-14 h-14 bg-white border-2 border-[#C8DFF7] shadow-[0_4px_12px_rgba(171,190,209,0.4)] rounded-xl flex items-center justify-center">
+                  {item.icon}
+                </div>
+                <div className="text-center">
+                  <p className="text-[17px] font-bold text-[#263238] leading-5">{item.label}</p>
+                  <p className="text-[13px] text-[#717171] mt-0.5">{item.sub}</p>
+                </div>
               </div>
-              <div className="text-center">
-                <p className="text-[17px] font-bold text-[#263238] leading-5">55 gr/m²</p>
-                <p className="text-[13px] text-[#717171] mt-0.5">Papier Premium</p>
-              </div>
-            </div>
-
-            {/* Origine Allemagne */}
-            <div className="flex flex-col items-center gap-3 min-w-[100px]">
-              <div className="w-14 h-14 bg-white border-2 border-[#C8DFF7] shadow-[0_4px_12px_rgba(171,190,209,0.4)] rounded-xl flex items-center justify-center overflow-hidden">
-                <svg width="36" height="24" viewBox="0 0 36 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <rect width="36" height="8" fill="#1a1a1a"/>
-                  <rect y="8" width="36" height="8" fill="#D32F2F"/>
-                  <rect y="16" width="36" height="8" fill="#FDD835"/>
-                </svg>
-              </div>
-              <div className="text-center">
-                <p className="text-[17px] font-bold text-[#263238] leading-5">Allemagne</p>
-                <p className="text-[13px] text-[#717171] mt-0.5">Origine Europe</p>
-              </div>
-            </div>
-
-            {/* BPA Free */}
-            <div className="flex flex-col items-center gap-3 min-w-[100px]">
-              <div className="w-14 h-14 bg-white border-2 border-[#C8DFF7] shadow-[0_4px_12px_rgba(171,190,209,0.4)] rounded-xl flex items-center justify-center overflow-hidden">
-                <Image src="/symbole-certifie-sans-bisphenol-bpa_1017-18549.avif" alt="BPA Free" width={48} height={48} className="object-contain" />
-              </div>
-              <div className="text-center">
-                <p className="text-[17px] font-bold text-[#263238] leading-5">BPA Free</p>
-                <p className="text-[13px] text-[#717171] mt-0.5">Sécurité Sanitaire</p>
-              </div>
-            </div>
-
+            ))}
           </div>
         </div>
       </section>
