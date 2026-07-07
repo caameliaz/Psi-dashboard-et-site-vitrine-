@@ -21,6 +21,11 @@
   --radius-lg: var(--radius);
 }
 
+@keyframes fadeDown {
+  from { opacity: 0; transform: translateY(-28px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
 @layer base {
   *, *::before, *::after { box-sizing: border-box; }
 
