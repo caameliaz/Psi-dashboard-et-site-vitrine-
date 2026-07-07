@@ -529,24 +529,11 @@ export default function RequestsPage() {
 
   return (
     <div className="w-full">
-      <div className="flex items-center justify-between mb-4">
-        <div>
-          <h1 className="text-[22px] font-bold text-[#0F172A]">Demandes</h1>
-          <p className="text-[13px] text-[#8A9BB5] mt-0.5">
-            {loading ? 'Chargement…' : `${filtered.length} résultat${filtered.length !== 1 ? 's' : ''}`}
-          </p>
-        </div>
-        <button
-          onClick={() => exportVentesExcel()}
-          className="flex items-center gap-2 px-4 py-2 rounded-xl border border-[#E2E8F0] text-[13px] font-semibold text-[#374151] hover:bg-[#F8FAFC] hover:border-[#4CAF4F] hover:text-[#4CAF4F] transition-colors"
-          title="Exporter toutes les commandes livrées (rapport de ventes)">
-          <svg width={14} height={14} fill="none" viewBox="0 0 24 24">
-            <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6z" stroke="currentColor" strokeWidth="1.8"/>
-            <path d="M14 2v6h6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
-            <path d="M12 18v-6M9 15l3 3 3-3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
-          </svg>
-          Rapport de ventes
-        </button>
+      <div className="mb-4">
+        <h1 className="text-[22px] font-bold text-[#0F172A]">Demandes</h1>
+        <p className="text-[13px] text-[#8A9BB5] mt-0.5">
+          {loading ? 'Chargement…' : `${filtered.length} résultat${filtered.length !== 1 ? 's' : ''}`}
+        </p>
       </div>
 
       {/* Tabs + bouton Nouvelle demande */}
@@ -577,6 +564,17 @@ export default function RequestsPage() {
           })}
         </div>
         <div className="flex items-center gap-2">
+          <button
+            onClick={() => exportVentesExcel()}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-[13px] font-semibold border border-[#E2E8F0] text-[#374151] hover:bg-[#F8FAFC] hover:border-[#4CAF4F] hover:text-[#4CAF4F] transition-colors"
+            title="Rapport de ventes — commandes livrées">
+            <svg width={14} height={14} fill="none" viewBox="0 0 24 24">
+              <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6z" stroke="currentColor" strokeWidth="1.8"/>
+              <path d="M14 2v6h6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
+              <path d="M12 18v-6M9 15l3 3 3-3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+            Rapport
+          </button>
           <button
             onClick={() => {
               const label = activeTab === 'devis' ? 'Devis' : activeTab === 'commandes' ? 'Commandes' : 'Demandes';

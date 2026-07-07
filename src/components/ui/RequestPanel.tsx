@@ -251,8 +251,8 @@ function TemplatePopover({ item, mode, onClose }: {
 
   return (
     <>
-      <div className="fixed inset-0 z-[80]" onClick={onClose} />
-      <div className="fixed inset-0 z-[90] flex items-center justify-center p-6 pointer-events-none">
+      <div className="fixed inset-0 z-[130]" onClick={onClose} />
+      <div className="fixed inset-0 z-[140] flex items-center justify-center p-6 pointer-events-none">
         <div className="pointer-events-auto bg-white rounded-2xl shadow-2xl border border-[#F2F4F7] overflow-hidden flex flex-col"
           style={{ width: 480, maxWidth: '92vw', maxHeight: '80vh' }}>
 
@@ -311,8 +311,8 @@ function ConvertModal({ item, onConfirm, onClose }: { item: RequestDetail; onCon
   const [montant, setMontant] = useState('');
   return (
     <>
-      <div className="fixed inset-0 z-[80] bg-black/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="fixed inset-0 z-[90] flex items-center justify-center p-6 pointer-events-none">
+      <div className="fixed inset-0 z-[130] bg-black/40 backdrop-blur-sm" onClick={onClose} />
+      <div className="fixed inset-0 z-[140] flex items-center justify-center p-6 pointer-events-none">
         <div className="pointer-events-auto bg-white rounded-2xl shadow-2xl p-6 w-[400px] max-w-[92vw]">
           <p className="text-[16px] font-bold text-[#0F172A] mb-1">Valider le devis</p>
           <p className="text-[13px] text-[#8A9BB5] mb-5">{item.ref} — {item.client} · {item.entreprise}</p>
@@ -374,8 +374,8 @@ export function RequestPanel({ item, onClose, onStatusChange, onConvertToOrder }
 
   return (
     <>
-      <div className="fixed inset-0 z-[60] bg-black/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="fixed inset-0 z-[70] flex items-center justify-center p-6 pointer-events-none">
+      <div className="fixed inset-0 z-[110] bg-black/40 backdrop-blur-sm" onClick={onClose} />
+      <div className="fixed inset-0 z-[120] flex items-center justify-center p-6 pointer-events-none">
         <div className="pointer-events-auto bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden" style={{ width: 600, maxWidth: '94vw', maxHeight: '92vh' }}>
 
           {/* ── Header ── */}
@@ -388,6 +388,18 @@ export function RequestPanel({ item, onClose, onStatusChange, onConvertToOrder }
               <IconBtn onClick={() => exportExcel(item)} title="Exporter Excel" color="#374151">
                 <svg width={14} height={14} viewBox="0 0 24 24" fill="none"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6z" stroke="currentColor" strokeWidth="1.8"/><path d="M14 2v6h6M8 13h8M8 17h8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>
               </IconBtn>
+              {item.telephone && (
+                <a
+                  href={`https://wa.me/${item.telephone.replace(/[\s+\-().]/g, '')}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title="Appeler sur WhatsApp"
+                  className="w-7 h-7 flex items-center justify-center rounded-lg transition-colors"
+                  style={{ background: '#25D366', color: '#fff' }}
+                >
+                  <svg width={14} height={14} viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+                </a>
+              )}
               <div className="w-px h-5 bg-[#E2E8F0] mx-1" />
               <button onClick={onClose} className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-[#F2F4F7] text-[#ABBED1] hover:text-[#374151] transition-colors">
                 <svg width={14} height={14} viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"/></svg>
@@ -434,7 +446,7 @@ export function RequestPanel({ item, onClose, onStatusChange, onConvertToOrder }
 
               {/* Infos client */}
               <div>
-                <p className="text-[10px] font-bold text-[#ABBED1] uppercase tracking-widest mb-3">Client</p>
+                <p className="text-[11px] font-bold text-[#374151] uppercase tracking-widest mb-3">Client</p>
                 <div className="rounded-xl border border-[#F2F4F7] overflow-hidden">
                   <div className="grid grid-cols-2">
                     {[
@@ -446,7 +458,7 @@ export function RequestPanel({ item, onClose, onStatusChange, onConvertToOrder }
                       ...(item.adresse ? [{ label: 'Adresse', value: item.adresse }] : []),
                     ].map((info, i) => (
                       <div key={i} className="px-4 py-3 border-b border-r border-[#F2F4F7] last:border-b-0">
-                        <p className="text-[10px] font-bold text-[#ABBED1] uppercase tracking-wider">{info.label}</p>
+                        <p className="text-[10px] font-bold text-[#6B7280] uppercase tracking-wider">{info.label}</p>
                         <p className="text-[13px] font-semibold text-[#0F172A] mt-0.5">{info.value}</p>
                       </div>
                     ))}
@@ -456,13 +468,13 @@ export function RequestPanel({ item, onClose, onStatusChange, onConvertToOrder }
 
               {/* Produits */}
               <div>
-                <p className="text-[10px] font-bold text-[#ABBED1] uppercase tracking-widest mb-3">
+                <p className="text-[11px] font-bold text-[#374151] uppercase tracking-widest mb-3">
                   {isCommande ? 'Produits commandés' : 'Spécifications demandées'}
                 </p>
                 <div className="rounded-xl border border-[#F2F4F7] overflow-hidden">
                   <div className="grid grid-cols-[1fr_auto] bg-[#F8FAFC] px-4 py-2 border-b border-[#F2F4F7]">
-                    <span className="text-[10px] font-bold text-[#ABBED1] uppercase tracking-wider">Désignation</span>
-                    <span className="text-[10px] font-bold text-[#ABBED1] uppercase tracking-wider">Qté</span>
+                    <span className="text-[10px] font-bold text-[#374151] uppercase tracking-wider">Désignation</span>
+                    <span className="text-[10px] font-bold text-[#374151] uppercase tracking-wider">Qté</span>
                   </div>
                   {lignes.map((ligne, i) => {
                     const match = ligne.match(/^(.+?)\s*×\s*(\d+)/);
@@ -470,8 +482,8 @@ export function RequestPanel({ item, onClose, onStatusChange, onConvertToOrder }
                     const qty = match ? `${match[2]} roul.` : '—';
                     return (
                       <div key={i} className="grid grid-cols-[1fr_auto] px-4 py-3 border-b border-[#F2F4F7] last:border-b-0">
-                        <span className="text-[13px] font-medium text-[#374151]">{ref}</span>
-                        <span className="text-[13px] font-semibold text-[#8A9BB5] tabular-nums">{qty}</span>
+                        <span className="text-[13px] font-semibold text-[#0F172A]">{ref}</span>
+                        <span className="text-[13px] font-semibold text-[#374151] tabular-nums">{qty}</span>
                       </div>
                     );
                   })}
@@ -490,9 +502,9 @@ export function RequestPanel({ item, onClose, onStatusChange, onConvertToOrder }
 
               {item.message && (
                 <div>
-                  <p className="text-[10px] font-bold text-[#ABBED1] uppercase tracking-widest mb-2">Message du client</p>
+                  <p className="text-[11px] font-bold text-[#374151] uppercase tracking-widest mb-2">Message du client</p>
                   <div className="rounded-xl border border-[#F2F4F7] px-4 py-3">
-                    <p className="text-[13px] text-[#374151] leading-relaxed">{item.message}</p>
+                    <p className="text-[13px] text-[#0F172A] leading-relaxed">{item.message}</p>
                   </div>
                 </div>
               )}

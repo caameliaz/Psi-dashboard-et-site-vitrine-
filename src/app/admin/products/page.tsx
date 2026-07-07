@@ -270,14 +270,9 @@ export default function ProductsPage() {
 
   return (
     <div className="w-full">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-[22px] font-bold text-[#0F172A]">Produits</h1>
-          <p className="text-[13px] text-[#8A9BB5] mt-0.5">{loading ? 'Chargement…' : `${filteredProducts.length} produit${filteredProducts.length !== 1 ? 's' : ''}`}</p>
-        </div>
-        <button onClick={() => { setAddForm(emptyForm); setShowAdd(true); }} className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white transition-colors" style={{ background: '#4CAF4F' }}>
-          + Nouveau produit
-        </button>
+      <div className="mb-6">
+        <h1 className="text-[22px] font-bold text-[#0F172A]">Produits</h1>
+        <p className="text-[13px] text-[#8A9BB5] mt-0.5">{loading ? 'Chargement…' : `${filteredProducts.length} produit${filteredProducts.length !== 1 ? 's' : ''}`}</p>
       </div>
 
       <div className="flex gap-3 mb-5">
@@ -298,6 +293,9 @@ export default function ProductsPage() {
           onChange={(v) => setFilterActif(v as typeof filterActif)}
           options={[{ value: 'all', label: 'Actif + Inactif' }, { value: 'actif', label: 'Actifs seulement' }, { value: 'inactif', label: 'Inactifs seulement' }]}
         />
+        <button onClick={() => { setAddForm(emptyForm); setShowAdd(true); }} className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white transition-colors ml-auto" style={{ background: '#4CAF4F' }}>
+          + Nouveau produit
+        </button>
       </div>
 
       {filteredProducts.length === 0 ? (

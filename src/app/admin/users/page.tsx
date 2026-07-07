@@ -224,11 +224,12 @@ function CredsModal({ nom, email, password, onClose }: { nom: string; email: str
 /* ─── Formulaire de création (une seule étape) ─── */
 interface AddFormData { nom: string; email: string; role: string; motdepasse: string; permissions: PermKey[]; }
 
-function CreateUserForm({ onSubmit, onClose, customRoles, onAddCustomRole }: {
+function CreateUserForm({ onSubmit, onClose, customRoles, onAddCustomRole, onDeleteRole }: {
   onSubmit: (data: AddFormData) => void;
   onClose: () => void;
   customRoles: CustomRole[];
   onAddCustomRole: (role: CustomRole) => void;
+  onDeleteRole: (id: string) => void;
 }) {
   const [data, setData] = useState<AddFormData>({ nom: '', email: '', role: 'Employe', motdepasse: genPassword(), permissions: [...EMPLOYE_PERMS] });
   const [showRoleCreator, setShowRoleCreator] = useState(false);
@@ -266,9 +267,9 @@ function CreateUserForm({ onSubmit, onClose, customRoles, onAddCustomRole }: {
   const showPerms = !isAdmin;
 
   const allRoles = [
-    { id: 'Admin',   label: 'Admin',   color: { active: { background: '#F3E8FF', borderColor: '#7C3AED', color: '#6B21A8' } } },
-    { id: 'Employe', label: 'Employé', color: { active: { background: '#F0FDF4', borderColor: '#4CAF4F', color: '#166534' } } },
-    ...customRoles.map((cr) => ({ id: cr.id, label: cr.nom, color: { active: { background: '#EFF6FF', borderColor: '#3B82F6', color: '#1D4ED8' } } })),
+    { id: 'Admin',   label: 'Admin',   custom: false, color: { active: { background: '#F3E8FF', borderColor: '#7C3AED', color: '#6B21A8' } } },
+    { id: 'Employe', label: 'Employé', custom: false, color: { active: { background: '#F0FDF4', borderColor: '#4CAF4F', color: '#166534' } } },
+    ...customRoles.map((cr) => ({ id: cr.id, label: cr.nom, custom: true, color: { active: { background: '#EFF6FF', borderColor: '#3B82F6', color: '#1D4ED8' } } })),
   ];
 
   return (
@@ -304,11 +305,19 @@ function CreateUserForm({ onSubmit, onClose, customRoles, onAddCustomRole }: {
             {allRoles.map((r) => {
               const isActive = data.role === r.id;
               return (
-                <button key={r.id} onClick={() => selectRole(r.id)}
-                  className="px-3 py-2 rounded-xl text-[13px] font-semibold border-2 transition-all"
-                  style={isActive ? r.color.active : { background: '#F8FAFC', borderColor: '#E2E8F0', color: '#8A9BB5' }}>
-                  {r.label}
-                </button>
+                <div key={r.id} className="relative inline-flex">
+                  <button onClick={() => selectRole(r.id)}
+                    className={`py-2 rounded-xl text-[13px] font-semibold border-2 transition-all ${r.custom ? 'pl-3 pr-7' : 'px-3'}`}
+                    style={isActive ? r.color.active : { background: '#F8FAFC', borderColor: '#E2E8F0', color: '#8A9BB5' }}>
+                    {r.label}
+                  </button>
+                  {r.custom && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); onDeleteRole(r.id); }}
+                      className="absolute right-1.5 top-1/2 -translate-y-1/2 w-4 h-4 flex items-center justify-center rounded-full hover:bg-black/10 text-[11px] font-bold leading-none opacity-60 hover:opacity-100 transition-opacity"
+                    >×</button>
+                  )}
+                </div>
               );
             })}
           </div>
@@ -369,16 +378,17 @@ function CreateUserForm({ onSubmit, onClose, customRoles, onAddCustomRole }: {
 }
 
 /* ─── Formulaire de modification ─── */
-function EditUserForm({ form, setForm, onSubmit, onClose, customRoles }: {
+function EditUserForm({ form, setForm, onSubmit, onClose, customRoles, onDeleteRole }: {
   form: typeof emptyForm; setForm: (f: typeof emptyForm) => void; onSubmit: () => void; onClose: () => void;
   customRoles: CustomRole[];
+  onDeleteRole: (id: string) => void;
 }) {
   const inputClass = "w-full px-3 py-2.5 rounded-xl border border-[#E2E8F0] text-sm text-[#0F172A] focus:outline-none focus:border-[#4CAF4F] focus:ring-[3px] focus:ring-[#4CAF4F]/15 transition-all bg-white";
 
   const allRoles = [
-    { id: 'Admin',   label: 'Admin',   colors: { bg: '#F3E8FF', border: '#7C3AED', text: '#6B21A8' } },
-    { id: 'Employe', label: 'Employé', colors: { bg: '#F0FDF4', border: '#4CAF4F', text: '#166534' } },
-    ...customRoles.map((cr) => ({ id: cr.id, label: cr.nom, colors: { bg: '#EFF6FF', border: '#3B82F6', text: '#1D4ED8' } })),
+    { id: 'Admin',   label: 'Admin',   custom: false, colors: { bg: '#F3E8FF', border: '#7C3AED', text: '#6B21A8' } },
+    { id: 'Employe', label: 'Employé', custom: false, colors: { bg: '#F0FDF4', border: '#4CAF4F', text: '#166534' } },
+    ...customRoles.map((cr) => ({ id: cr.id, label: cr.nom, custom: true, colors: { bg: '#EFF6FF', border: '#3B82F6', text: '#1D4ED8' } })),
   ];
 
   const selectRole = (id: string) => {
@@ -412,11 +422,19 @@ function EditUserForm({ form, setForm, onSubmit, onClose, customRoles }: {
           {allRoles.map((r) => {
             const active = form.role === r.id;
             return (
-              <button key={r.id} onClick={() => selectRole(r.id)}
-                className="px-3 py-2 rounded-xl text-[13px] font-semibold border-2 transition-all"
-                style={active ? { background: r.colors.bg, borderColor: r.colors.border, color: r.colors.text } : { background: '#F8FAFC', borderColor: '#E2E8F0', color: '#8A9BB5' }}>
-                {r.label}
-              </button>
+              <div key={r.id} className="relative inline-flex">
+                <button onClick={() => selectRole(r.id)}
+                  className={`py-2 rounded-xl text-[13px] font-semibold border-2 transition-all ${r.custom ? 'pl-3 pr-7' : 'px-3'}`}
+                  style={active ? { background: r.colors.bg, borderColor: r.colors.border, color: r.colors.text } : { background: '#F8FAFC', borderColor: '#E2E8F0', color: '#8A9BB5' }}>
+                  {r.label}
+                </button>
+                {r.custom && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onDeleteRole(r.id); }}
+                    className="absolute right-1.5 top-1/2 -translate-y-1/2 w-4 h-4 flex items-center justify-center rounded-full hover:bg-black/10 text-[11px] font-bold leading-none opacity-60 hover:opacity-100 transition-opacity"
+                  >×</button>
+                )}
+              </div>
             );
           })}
         </div>
@@ -661,6 +679,11 @@ export default function UsersPage() {
     }
   };
 
+  const handleDeleteCustomRole = async (id: string) => {
+    await fetch(`/api/roles/${id}`, { method: 'DELETE' });
+    setCustomRoles((prev) => prev.filter((r) => r.id !== id));
+  };
+
   const openEdit = (u: User) => {
     setEditForm({ nom: u.nom, email: u.email, role: u.role, motdepasse: '', permissions: [...u.permissions] });
     setEditUser(u);
@@ -715,14 +738,9 @@ export default function UsersPage() {
 
   return (
     <div className="w-full">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-[22px] font-bold text-[#0F172A]">Utilisateurs</h1>
-          <p className="text-[13px] text-[#8A9BB5] mt-0.5">{loading ? 'Chargement…' : `${filteredUsers.length} compte${filteredUsers.length !== 1 ? 's' : ''}`}</p>
-        </div>
-        <button onClick={() => setShowAdd(true)} className="px-4 py-2 rounded-xl text-[13px] font-bold text-white" style={{ background: '#4CAF4F' }}>
-          Nouvel utilisateur
-        </button>
+      <div className="mb-6">
+        <h1 className="text-[22px] font-bold text-[#0F172A]">Utilisateurs</h1>
+        <p className="text-[13px] text-[#8A9BB5] mt-0.5">{loading ? 'Chargement…' : `${filteredUsers.length} compte${filteredUsers.length !== 1 ? 's' : ''}`}</p>
       </div>
 
       <div className="flex gap-3 mb-5">
@@ -741,6 +759,9 @@ export default function UsersPage() {
             { value: 'Employe', label: 'Employé' },
             ...customRoles.map((cr) => ({ value: cr.id, label: cr.nom })),
           ]} />
+        <button onClick={() => setShowAdd(true)} className="px-4 py-2 rounded-xl text-[13px] font-bold text-white ml-auto" style={{ background: '#4CAF4F' }}>
+          + Nouvel utilisateur
+        </button>
       </div>
 
       {filteredUsers.length === 0 ? (
@@ -805,13 +826,14 @@ export default function UsersPage() {
             onClose={() => setShowAdd(false)}
             customRoles={customRoles}
             onAddCustomRole={handleAddCustomRole}
+            onDeleteRole={handleDeleteCustomRole}
           />
         </Modal>
       )}
 
       {editUser && (
         <Modal title="Modifier l'utilisateur" onClose={() => setEditUser(null)}>
-          <EditUserForm form={editForm} setForm={setEditForm} onSubmit={handleEdit} onClose={() => setEditUser(null)} customRoles={customRoles} />
+          <EditUserForm form={editForm} setForm={setEditForm} onSubmit={handleEdit} onClose={() => setEditUser(null)} customRoles={customRoles} onDeleteRole={handleDeleteCustomRole} />
         </Modal>
       )}
 
