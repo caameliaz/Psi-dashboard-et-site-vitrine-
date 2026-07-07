@@ -1,15 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { requirePermission } from '@/lib/permissions';
 import { createAudit, statusLabel } from '@/lib/audit';
 import { notifyStatusChange } from '@/lib/notify-activity';
 
 type Ctx = { params: Promise<{ id: string }> };
 
-// GET /api/quotes/[id] — détail devis (admin + employé)
+// GET /api/quotes/[id] — détail devis (permission voir_commandes)
 export async function GET(_request: NextRequest, { params }: Ctx) {
-  const session = await auth();
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const guard = await requirePermission('voir_commandes');
+  if (guard.error) return guard.error;
 
   const { id } = await params;
 
@@ -32,10 +32,11 @@ export async function GET(_request: NextRequest, { params }: Ctx) {
   }
 }
 
-// PATCH /api/quotes/[id] — modifier statut / champs admin / notes (admin + employé)
+// PATCH /api/quotes/[id] — modifier statut / champs admin / notes (permission modifier_statuts)
 export async function PATCH(request: NextRequest, { params }: Ctx) {
-  const session = await auth();
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const guard = await requirePermission('modifier_statuts');
+  if (guard.error) return guard.error;
+  const session = guard.session;
 
   const { id } = await params;
 

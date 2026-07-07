@@ -1,8 +1,9 @@
 ﻿'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Modal } from '@/components/ui/Modal';
 import { AdminSelect } from '@/components/ui/AdminSelect';
+import { useRole } from '@/lib/role-context';
 
 function IconPencil() {
   return (
@@ -44,6 +45,7 @@ interface Product {
   longueur: string;
   categorie: string;
   actif: boolean;
+  photo?: string;
 }
 
 function dbProductToProduct(p: any): Product {
@@ -54,10 +56,11 @@ function dbProductToProduct(p: any): Product {
     longueur: p.length ? `${p.length}m` : '—',
     categorie: p.category?.name ?? 'Standard',
     actif: p.active ?? true,
+    photo: p.photo ?? undefined,
   };
 }
 
-const emptyForm = { reference: '', largeur: '', longueur: '', categorie: 'Thermique' };
+const emptyForm = { reference: '', largeur: '', longueur: '', categorie: 'Thermique', photo: '' };
 
 function ProductForm({
   form, setForm, categories, onSubmit, onClose, submitLabel,
@@ -70,8 +73,50 @@ function ProductForm({
   submitLabel: string;
 }) {
   const inputClass = "w-full px-3 py-2.5 rounded-lg border border-[#E2E8F0] text-sm text-[#0F172A] focus:outline-none focus:border-[#4CAF4F] focus:ring-1 focus:ring-[#4CAF4F] transition-colors bg-[#F8FAFC]";
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const handlePhoto = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => setForm({ ...form, photo: ev.target?.result as string });
+    reader.readAsDataURL(file);
+  };
+
   return (
     <div className="space-y-4">
+      {/* Photo produit (visible sur le site public) */}
+      <div>
+        <label className="block text-[12px] font-semibold text-[#374151] mb-1.5">Photo du produit</label>
+        <div className="flex items-center gap-3">
+          <div className="relative group flex-shrink-0 cursor-pointer" onClick={() => fileRef.current?.click()}>
+            {form.photo ? (
+              <img src={form.photo} alt="Produit" className="w-20 h-20 rounded-xl object-cover border border-[#E2E8F0]" />
+            ) : (
+              <div className="w-20 h-20 rounded-xl flex items-center justify-center bg-[#F8FAFC] border border-dashed border-[#CBD5E1]">
+                <svg width={22} height={22} fill="none" viewBox="0 0 24 24"><path d="M4 16l4-4a3 3 0 014 0l4 4M14 14l1-1a3 3 0 014 0l1 1M4 6h16a1 1 0 011 1v10a1 1 0 01-1 1H4a1 1 0 01-1-1V7a1 1 0 011-1z" stroke="#94A3B8" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/><circle cx="8.5" cy="10" r="1.5" fill="#94A3B8"/></svg>
+              </div>
+            )}
+            <div className="absolute inset-0 rounded-xl bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+              <span className="text-white text-[10px] font-bold">Changer</span>
+            </div>
+          </div>
+          <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handlePhoto} />
+          <div className="flex flex-col gap-1.5">
+            <button type="button" onClick={() => fileRef.current?.click()}
+              className="px-3 py-1.5 rounded-lg border border-[#E2E8F0] text-[12px] font-semibold text-[#374151] hover:bg-[#F8FAFC] transition-colors">
+              {form.photo ? 'Changer la photo' : 'Ajouter une photo'}
+            </button>
+            {form.photo && (
+              <button type="button" onClick={() => setForm({ ...form, photo: '' })}
+                className="px-3 py-1.5 rounded-lg text-[12px] font-semibold text-[#EF4444] hover:bg-[#FEF2F2] transition-colors self-start">
+                Retirer
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+
       {[
         { label: 'Référence', key: 'reference', placeholder: 'ex: 80/80' },
         { label: 'Largeur', key: 'largeur', placeholder: 'ex: 80mm' },
@@ -143,6 +188,8 @@ function DeleteModal({ product, onDeactivate, onDelete, onClose }: {
 }
 
 export default function ProductsPage() {
+  const { can } = useRole();
+  const canEdit = can('modifier_produits');
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<string[]>([]);
   const [loading, setLoading]   = useState(true);
@@ -211,6 +258,7 @@ export default function ProductsPage() {
         price: 0,
         categoryId: cat.id,
         active: true,
+        photo: addForm.photo || null,
       }),
     });
     await fetchProducts();
@@ -219,7 +267,7 @@ export default function ProductsPage() {
   };
 
   const openEdit = (p: Product) => {
-    setEditForm({ reference: p.reference, largeur: p.largeur, longueur: p.longueur, categorie: p.categorie });
+    setEditForm({ reference: p.reference, largeur: p.largeur, longueur: p.longueur, categorie: p.categorie, photo: p.photo ?? '' });
     setEditProduct(p);
   };
 
@@ -234,6 +282,7 @@ export default function ProductsPage() {
         reference: editForm.reference.trim(),
         width: widthStr ? Number(widthStr) : undefined,
         length: lengthStr ? Number(lengthStr) : undefined,
+        photo: editForm.photo || null,
       }),
     });
     await fetchProducts();
@@ -280,9 +329,11 @@ export default function ProductsPage() {
           <h1 className="text-[22px] font-bold text-[#0F172A]">Produits</h1>
           <p className="text-[13px] text-[#8A9BB5] mt-0.5">{loading ? 'Chargement…' : `${filteredProducts.length} produit${filteredProducts.length !== 1 ? 's' : ''}`}</p>
         </div>
-        <button onClick={() => { setAddForm(emptyForm); setShowAdd(true); }} className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white transition-colors" style={{ background: '#4CAF4F' }}>
-          + Nouveau produit
-        </button>
+        {canEdit && (
+          <button onClick={() => { setAddForm(emptyForm); setShowAdd(true); }} className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white transition-colors" style={{ background: '#4CAF4F' }}>
+            + Nouveau produit
+          </button>
+        )}
       </div>
 
       <div className="flex gap-3 mb-5">
@@ -340,25 +391,27 @@ export default function ProductsPage() {
                   <span className="text-[12px] font-semibold" style={{ color: p.actif ? '#4CAF4F' : '#9CA3AF' }}>
                     {p.actif ? 'Actif' : 'Inactif'}
                   </span>
-                  <Toggle active={p.actif} onToggle={() => toggleProduct(p.id)} />
+                  {canEdit && <Toggle active={p.actif} onToggle={() => toggleProduct(p.id)} />}
                 </div>
 
                 {/* Actions */}
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => openEdit(p)}
-                    className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg border border-[#E2E8F0] hover:border-[#4CAF4F] hover:bg-[#F0FDF4] transition-colors"
-                  >
-                    <IconPencil />
-                    <span className="text-[12px] font-semibold text-[#8A9BB5]">Modifier</span>
-                  </button>
-                  <button
-                    onClick={() => setDeleteProduct(p)}
-                    className="flex items-center justify-center w-9 rounded-lg border border-[#E2E8F0] hover:border-[#EF4444] hover:bg-[#FEF2F2] transition-colors"
-                  >
-                    <IconTrash />
-                  </button>
-                </div>
+                {canEdit && (
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => openEdit(p)}
+                      className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg border border-[#E2E8F0] hover:border-[#4CAF4F] hover:bg-[#F0FDF4] transition-colors"
+                    >
+                      <IconPencil />
+                      <span className="text-[12px] font-semibold text-[#8A9BB5]">Modifier</span>
+                    </button>
+                    <button
+                      onClick={() => setDeleteProduct(p)}
+                      className="flex items-center justify-center w-9 rounded-lg border border-[#E2E8F0] hover:border-[#EF4444] hover:bg-[#FEF2F2] transition-colors"
+                    >
+                      <IconTrash />
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           ))}

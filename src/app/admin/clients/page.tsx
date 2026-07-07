@@ -1,6 +1,8 @@
 'use client';
 
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { RefSelect } from '@/components/ui/RefSelect';
+
 interface ClientRecord {
   id: string | number;
   _dbId?: string;
@@ -93,41 +95,69 @@ function ClientForm({ form, setForm, onSubmit, onClose, submitLabel }: {
   );
 }
 
-function NewOrderForm({ client, onClose }: { client: ClientRecord; onClose: () => void }) {
-  const inputClass = "w-full px-3 py-2.5 rounded-xl border border-[#E2E8F0] text-[14px] text-[#263238] focus:outline-none focus:border-[#4CAF4F] focus:ring-[3px] focus:ring-[#4CAF4F]/15 transition-all bg-white";
-  const labelClass = "block text-[12px] font-semibold text-[#374151] mb-1.5";
-  const [produits, setProduits] = useState('');
-  const [montant, setMontant] = useState('');
+interface CLigne { ref: string; productId: string | null; qte: number; pu: number; }
+const emptyCLigne = (): CLigne => ({ ref: '', productId: null, qte: 1, pu: 0 });
+
+function NewOrderForm({ client, onClose, onCreated }: { client: ClientRecord; onClose: () => void; onCreated?: () => void }) {
+  const inputClass = "w-full px-3 py-2 rounded-xl border border-[#E2E8F0] text-[13px] text-[#263238] focus:outline-none focus:border-[#4CAF4F] focus:ring-[2px] focus:ring-[#4CAF4F]/15 transition-all bg-white";
+  const labelClass = "block text-[11px] font-bold text-[#8A9BB5] uppercase tracking-wide mb-1";
   const [type, setType] = useState<'Commande' | 'Devis'>('Commande');
+  const [lignes, setLignes] = useState<CLigne[]>([emptyCLigne()]);
+  const [tva, setTva] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [products, setProducts] = useState<{ id: string; reference: string; price: number }[]>([]);
+
+  useEffect(() => {
+    fetch('/api/products?all=true').then(r => r.json()).then((data: any[]) => {
+      setProducts(data.map(p => ({ id: p.id, reference: p.reference, price: p.price ?? 0 })));
+    }).catch(() => {});
+  }, []);
+
+  const setLigne = (i: number, patch: Partial<CLigne>) =>
+    setLignes(prev => prev.map((l, idx) => idx === i ? { ...l, ...patch } : l));
+  const selectRef = (i: number, reference: string) => {
+    const p = products.find(p => p.reference === reference);
+    setLigne(i, { ref: reference, productId: p?.id ?? null, pu: p?.price ?? 0 });
+  };
+
+  const ht = lignes.reduce((acc, l) => acc + l.qte * l.pu, 0);
+  const total = tva ? Math.round(ht * 1.19) : ht;
 
   const handleSubmit = async () => {
-    if (!produits.trim()) return;
+    if (lignes.every(l => !l.ref)) return;
     setSaving(true);
     const dbId = (client as any)._dbId ?? client.id;
+    const validLignes = lignes.filter(l => l.ref);
     const endpoint = type === 'Commande' ? '/api/orders' : '/api/quotes';
+    const clientBlock = {
+      name: client.contact,
+      company: client.entreprise,
+      phone: client.telephone,
+      wilaya: client.wilaya,
+      email: client.email,
+    };
     const body = type === 'Commande'
       ? {
           source: 'ADMIN',
-          client: {
-            name: client.contact,
-            company: client.entreprise,
-            phone: client.telephone,
-            wilaya: client.wilaya,
-            email: client.email,
-          },
-          items: [],
+          client: clientBlock,
+          tva,
+          items: validLignes.map(l => ({
+            productId: l.productId ?? undefined,
+            description: l.productId ? undefined : l.ref,
+            quantity: l.qte,
+            unitPrice: l.pu,
+          })),
         }
       : {
           source: 'ADMIN',
           clientId: dbId,
-          name: client.contact,
-          company: client.entreprise,
-          phone: client.telephone,
-          wilaya: client.wilaya,
-          email: client.email,
-          message: produits,
-          items: [],
+          ...clientBlock,
+          message: validLignes.map(l => `${l.ref} × ${l.qte}`).join(', '),
+          items: validLignes.map(l => ({
+            productId: l.productId ?? undefined,
+            description: l.productId ? undefined : l.ref,
+            quantity: l.qte,
+          })),
         };
     await fetch(endpoint, {
       method: 'POST',
@@ -135,13 +165,14 @@ function NewOrderForm({ client, onClose }: { client: ClientRecord; onClose: () =
       body: JSON.stringify(body),
     });
     setSaving(false);
+    onCreated?.();
     onClose();
   };
 
   return (
     <div className="fixed inset-0 z-[80] flex items-center justify-center p-6">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-white rounded-2xl shadow-2xl w-[460px] max-w-[92vw] p-6 z-10">
+      <div className="relative bg-white rounded-2xl shadow-2xl w-[520px] max-w-[94vw] p-6 z-10 max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between mb-5">
           <div>
             <h3 className="text-[16px] font-bold text-[#0F172A]">Nouvelle {type === 'Commande' ? 'commande' : 'demande de devis'}</h3>
@@ -155,7 +186,7 @@ function NewOrderForm({ client, onClose }: { client: ClientRecord; onClose: () =
         <div className="flex gap-2 mb-4">
           {(['Commande', 'Devis'] as const).map((t) => (
             <button key={t} onClick={() => setType(t)}
-              className="flex-1 py-2 rounded-xl text-[13px] font-bold transition-colors border-2"
+              className="flex-1 py-2 rounded-xl text-[13px] font-bold transition-colors border"
               style={type === t
                 ? { background: t === 'Commande' ? '#F0FDF4' : '#F5F3FF', color: t === 'Commande' ? '#166534' : '#5B21B6', borderColor: t === 'Commande' ? '#4CAF4F' : '#8B5CF6' }
                 : { background: '#F8FAFC', color: '#8A9BB5', borderColor: '#E2E8F0' }}>
@@ -164,21 +195,42 @@ function NewOrderForm({ client, onClose }: { client: ClientRecord; onClose: () =
           ))}
         </div>
 
-        <div className="space-y-3">
-          <div>
-            <label className={labelClass}>Produits / Spécifications</label>
-            <textarea value={produits} onChange={(e) => setProduits(e.target.value)}
-              placeholder="ex: 80/80 × 50 rouleaux, 57/40 × 30 rouleaux"
-              rows={3}
-              className={inputClass + ' resize-none'} />
+        {/* Lignes produits */}
+        <label className={labelClass}>Produits</label>
+        <div className="flex flex-col gap-2">
+          <div className="grid grid-cols-[1fr_60px_90px_28px] gap-2 px-1">
+            <span className="text-[10px] font-bold text-[#ABBED1] uppercase">Référence</span>
+            <span className="text-[10px] font-bold text-[#ABBED1] uppercase">Qté</span>
+            <span className="text-[10px] font-bold text-[#ABBED1] uppercase">Prix</span>
+            <span />
           </div>
-          <div>
-            <label className={labelClass}>Montant {type === 'Devis' ? '(estimé, optionnel)' : ''}</label>
-            <input value={montant} onChange={(e) => setMontant(e.target.value)}
-              placeholder={type === 'Devis' ? 'Sur devis' : 'ex: 45 000 DA'}
-              className={inputClass} />
-          </div>
+          {lignes.map((ligne, i) => (
+            <div key={i} className="grid grid-cols-[1fr_60px_90px_28px] gap-2 items-center">
+              <RefSelect value={ligne.ref} products={products} onChange={(ref) => selectRef(i, ref)} />
+              <input type="number" min="1" value={ligne.qte} onChange={e => setLigne(i, { qte: Math.max(1, Number(e.target.value)) })} className={inputClass} />
+              <input type="number" min="0" value={ligne.pu} onChange={e => setLigne(i, { pu: Number(e.target.value) })} className={inputClass} />
+              <button type="button" onClick={() => setLignes(prev => prev.filter((_, idx) => idx !== i))}
+                className="w-7 h-7 flex items-center justify-center rounded-lg text-[#EF4444] hover:bg-[#FEF2F2]" title="Retirer">
+                <svg width={14} height={14} fill="none" viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
+              </button>
+            </div>
+          ))}
         </div>
+        <button type="button" onClick={() => setLignes(prev => [...prev, emptyCLigne()])}
+          className="mt-2 flex items-center gap-1.5 text-[12px] font-bold text-[#4CAF4F] hover:text-[#388E3C] transition-colors">
+          <svg width={14} height={14} fill="none" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
+          Ajouter un produit
+        </button>
+
+        {type === 'Commande' && (
+          <div className="flex items-center justify-between mt-4 py-2 px-1">
+            <label className="flex items-center gap-2 text-[13px] font-semibold text-[#374151] cursor-pointer">
+              <input type="checkbox" checked={tva} onChange={e => setTva(e.target.checked)} className="w-4 h-4 accent-[#4CAF4F]" />
+              TVA 19%
+            </label>
+            <span className="text-[15px] font-extrabold text-[#4CAF4F]">{total.toLocaleString('fr-FR')} DA</span>
+          </div>
+        )}
 
         <div className="flex gap-3 mt-5">
           <button onClick={onClose} className="flex-1 px-4 py-2.5 rounded-xl border border-[#E2E8F0] text-[13px] font-semibold text-[#374151] hover:bg-[#F8FAFC] transition-colors">
@@ -429,7 +481,7 @@ function dbClientToRecord(c: any): ClientRecord {
     date: new Date(q.createdAt).toLocaleDateString('fr-FR'),
     statut: STATUS_DB_TO_UI[q.status] ?? q.status,
     montant: 'Sur devis',
-    produits: (q.items ?? []).map((i: any) => `${i.product?.reference ?? 'Produit supprimé'} × ${i.quantity}`).join(', ') || '—',
+    produits: (q.items ?? []).map((i: any) => `${i.product?.reference ?? i.description ?? 'Produit supprimé'} × ${i.quantity}`).join(', ') || '—',
     _ts: new Date(q.createdAt).getTime(),
   }));
 

@@ -42,7 +42,7 @@ function orderToDetail(o: Order): RequestDetail {
 
 function quoteToDetail(q: Quote): RequestDetail {
   const phone = q.client?.phones?.find((p) => p.primary)?.number ?? q.client?.phones?.[0]?.number ?? '';
-  const produits = q.items?.map((i) => `${i.product?.reference ?? 'Produit supprimé'} × ${i.quantity}`).join(', ') || '—';
+  const produits = q.items?.map((i) => `${i.product?.reference ?? i.description ?? 'Produit supprimé'} × ${i.quantity}`).join(', ') || '—';
   return {
     id: q.id,
     ref: q.ref ?? q.id?.slice(0, 8).toUpperCase(),
@@ -54,7 +54,7 @@ function quoteToDetail(q: Quote): RequestDetail {
     wilaya: q.client?.wilaya ?? q.clientWilaya ?? '',
     email: q.client?.email ?? '',
     produits,
-    items: q.items?.map((i) => ({ designation: i.product?.reference ?? 'Produit supprimé', quantite: i.quantity, prixUnitaire: 0 })) ?? [],
+    items: q.items?.map((i) => ({ designation: i.product?.reference ?? i.description ?? 'Produit supprimé', quantite: i.quantity, prixUnitaire: 0 })) ?? [],
     montant: q.proposedPrice ? `${Number(q.proposedPrice).toLocaleString('fr-FR')} DA` : 'Sur devis',
     statut: DB_TO_UI[q.status] ?? q.status,
     date: new Date(q.createdAt).toLocaleDateString('fr-FR'),
@@ -325,10 +325,16 @@ export default function DashboardPage() {
                 ))}
               </ul>
               <hr style={{ borderColor: '#FDE047' }} className="mb-3" />
-              <p className="flex items-center gap-1.5 text-[12px] font-bold text-[#4CAF4F]">
-                <svg width={13} height={13} viewBox="0 0 24 24" fill="none"><path d="M4 16L10 10L14 14L20 6M20 6H14M20 6V12" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                {stats.livrees} livrées ce mois
-              </p>
+              <div className="flex flex-col gap-2">
+                <p className="flex items-center gap-1.5 text-[12px] font-bold text-[#8B5CF6]">
+                  <svg width={13} height={13} viewBox="0 0 24 24" fill="none"><path d="M9 12h6M9 16h6M9 8h2M7 3h7l5 5v11a2 2 0 01-2 2H7a2 2 0 01-2-2V5a2 2 0 012-2z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                  {stats.devis} devis en cours
+                </p>
+                <p className="flex items-center gap-1.5 text-[12px] font-bold text-[#4CAF4F]">
+                  <svg width={13} height={13} viewBox="0 0 24 24" fill="none"><path d="M4 16L10 10L14 14L20 6M20 6H14M20 6V12" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                  {stats.livrees} livrées ce mois
+                </p>
+              </div>
             </>
           )}
         </div>

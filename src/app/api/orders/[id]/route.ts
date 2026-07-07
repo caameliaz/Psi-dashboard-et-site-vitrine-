@@ -1,15 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { requirePermission } from '@/lib/permissions';
 import { createAudit, statusLabel } from '@/lib/audit';
 import { notifyStatusChange } from '@/lib/notify-activity';
 
 type Ctx = { params: Promise<{ id: string }> };
 
-// GET /api/orders/[id] — détail commande (admin + employé)
+// GET /api/orders/[id] — détail commande (permission voir_commandes)
 export async function GET(_request: NextRequest, { params }: Ctx) {
-  const session = await auth();
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const guard = await requirePermission('voir_commandes');
+  if (guard.error) return guard.error;
 
   const { id } = await params;
 
@@ -32,10 +32,11 @@ export async function GET(_request: NextRequest, { params }: Ctx) {
   }
 }
 
-// PATCH /api/orders/[id] — modifier statut / notes (admin + employé)
+// PATCH /api/orders/[id] — modifier statut / notes / prix (permission modifier_statuts)
 export async function PATCH(request: NextRequest, { params }: Ctx) {
-  const session = await auth();
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const guard = await requirePermission('modifier_statuts');
+  if (guard.error) return guard.error;
+  const session = guard.session;
 
   const { id } = await params;
 
@@ -49,6 +50,28 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
         const match = existing.find(e => e.product?.reference === ip.designation);
         if (match) await prisma.orderItem.update({ where: { id: match.id }, data: { unitPrice: ip.unitPrice } });
       }));
+    }
+
+    // Remplacement complet des lignes de la commande (bouton "Modifier")
+    // body.items = [{ productId, quantity, unitPrice }] — on ne modifie pas une commande livrée/annulée
+    if (body.items && Array.isArray(body.items)) {
+      const current = await prisma.order.findUnique({ where: { id }, select: { status: true } });
+      if (current && (current.status === 'LIVRE' || current.status === 'ANNULE')) {
+        return NextResponse.json({ error: 'Impossible de modifier une commande livrée ou annulée' }, { status: 409 });
+      }
+      const validItems = (body.items as { productId?: string; quantity?: number; unitPrice?: number }[])
+        .filter((it) => it.productId && (it.quantity ?? 0) > 0);
+      await prisma.orderItem.deleteMany({ where: { orderId: id } });
+      if (validItems.length > 0) {
+        await prisma.orderItem.createMany({
+          data: validItems.map((it) => ({
+            orderId: id,
+            productId: it.productId!,
+            quantity: it.quantity!,
+            unitPrice: it.unitPrice ?? 0,
+          })),
+        });
+      }
     }
 
     const order = await prisma.order.update({

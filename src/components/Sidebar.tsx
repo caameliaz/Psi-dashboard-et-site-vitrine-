@@ -5,6 +5,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import { useRole } from '@/lib/role-context';
+import type { PermKey } from '@/lib/permissions';
 import { useSession, signOut } from 'next-auth/react';
 
 function IconHome({ color = '#717171' }) {
@@ -55,21 +56,19 @@ function IconChevron({ collapsed }: { collapsed: boolean }) {
   );
 }
 
-const navItems = [
-  { href: '/admin/dashboard', label: 'Dashboard',    Icon: IconHome },
-  { href: '/admin/requests',  label: 'Commandes',    Icon: IconDocument },
-  { href: '/admin/products',  label: 'Produits',     Icon: IconLayers },
-  { href: '/admin/clients',   label: 'Clients',      Icon: IconUsers },
-  { href: '/admin/history',   label: 'Historique',   Icon: IconHistory },
-  { href: '/admin/content',   label: 'Contenu',      Icon: IconEdit },
-  { href: '/admin/users',     label: 'Utilisateurs', Icon: IconUserPlus },
+const navItems: { href: string; label: string; Icon: typeof IconHome; perm: PermKey | null }[] = [
+  { href: '/admin/dashboard', label: 'Dashboard',    Icon: IconHome,     perm: null },
+  { href: '/admin/requests',  label: 'Commandes',    Icon: IconDocument, perm: 'voir_commandes' },
+  { href: '/admin/products',  label: 'Produits',     Icon: IconLayers,   perm: 'voir_produits' },
+  { href: '/admin/clients',   label: 'Clients',      Icon: IconUsers,    perm: 'voir_clients' },
+  { href: '/admin/history',   label: 'Historique',   Icon: IconHistory,  perm: 'voir_historique' },
+  { href: '/admin/content',   label: 'Contenu',      Icon: IconEdit,     perm: 'modifier_contenu' },
+  { href: '/admin/users',     label: 'Utilisateurs', Icon: IconUserPlus, perm: 'gerer_utilisateurs' },
 ];
-
-const adminOnlyItems = ['/admin/content', '/admin/users'];
 
 export function Sidebar() {
   const pathname = usePathname();
-  const { role, isAdmin } = useRole();
+  const { role, can } = useRole();
   const { data: session } = useSession();
   const [collapsed, setCollapsed] = useState(false);
   const userName  = session?.user?.name ?? '—';
@@ -109,7 +108,7 @@ export function Sidebar() {
 
       {/* Nav */}
       <nav className="flex-1 py-4 overflow-y-auto overflow-x-hidden">
-        {navItems.filter(({ href }) => isAdmin || !adminOnlyItems.includes(href)).map(({ href, label, Icon }) => {
+        {navItems.filter(({ perm }) => perm === null || can(perm)).map(({ href, label, Icon }) => {
           const isActive = pathname === href || pathname.startsWith(href + '/');
           return (
             <Link

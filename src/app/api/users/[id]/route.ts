@@ -1,16 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@/lib/auth';
+import { requirePermission } from '@/lib/permissions';
 import { prisma } from '@/lib/prisma';
 import bcrypt from 'bcryptjs';
 import { createAudit } from '@/lib/audit';
 
 type Ctx = { params: Promise<{ id: string }> };
 
-// PATCH /api/users/[id] — modifier rôle / statut / infos (admin uniquement)
+// PATCH /api/users/[id] — modifier rôle / statut / infos (permission gerer_utilisateurs)
 export async function PATCH(request: NextRequest, { params }: Ctx) {
-  const session = await auth();
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  if ((session.user as { role?: string }).role !== 'ADMIN') return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  const guard = await requirePermission('gerer_utilisateurs');
+  if (guard.error) return guard.error;
+  const session = guard.session;
 
   const { id } = await params;
 
@@ -48,11 +48,11 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
   }
 }
 
-// DELETE /api/users/[id] — supprimer un utilisateur (admin uniquement)
+// DELETE /api/users/[id] — supprimer un utilisateur (permission gerer_utilisateurs)
 export async function DELETE(_request: NextRequest, { params }: Ctx) {
-  const session = await auth();
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  if ((session.user as { role?: string }).role !== 'ADMIN') return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  const guard = await requirePermission('gerer_utilisateurs');
+  if (guard.error) return guard.error;
+  const session = guard.session;
 
   const { id } = await params;
 

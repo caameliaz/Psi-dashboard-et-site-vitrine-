@@ -32,7 +32,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           id: user.id,
           email: user.email,
           name: user.name,
-          role: user.role
+          role: user.role,
+          permissions: user.permissions ?? [],
         };
       }
     })
@@ -42,18 +43,20 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     async jwt({ token, user }) {
       if (user) {
         token.role = user.role as Role;
+        token.permissions = (user as { permissions?: string[] }).permissions ?? [];
         // Stocker sessionVersion initial pour pouvoir détecter une invalidation
         const dbUser = await prisma.user.findUnique({ where: { id: user.id } });
         token.sessionVersion = dbUser?.sessionVersion ?? 0;
       } else {
-        // À chaque requête : vérifier que sessionVersion n'a pas changé
+        // À chaque requête : vérifier que sessionVersion n'a pas changé + rafraîchir permissions
         const dbUser = await prisma.user.findUnique({
           where: { id: token.sub! },
-          select: { sessionVersion: true, active: true },
+          select: { sessionVersion: true, active: true, permissions: true },
         });
         if (!dbUser || !dbUser.active || dbUser.sessionVersion !== token.sessionVersion) {
           return null;
         }
+        token.permissions = dbUser.permissions ?? [];
       }
       return token;
     },
@@ -61,6 +64,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (session.user) {
         session.user.id = token.sub!;
         session.user.role = token.role as Role;
+        session.user.permissions = (token.permissions as string[]) ?? [];
       }
       return session;
     }

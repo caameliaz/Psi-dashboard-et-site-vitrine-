@@ -1,254 +1,181 @@
-# PSI — Checklist de recette complète
-**Version :** 5 juillet 2026 — À tester avant livraison
+# PSI — Tests des workflows
 
-> **Changements récents (juillet 2026)** — voir sections ⭐ mises à jour :
-> - **Confirmer une commande** ne redemande plus le prix (il existe déjà) — §3.2
-> - **Convertir un devis** demande le prix en mode **unitaire (par produit)** ou **total global** — §4.4
-> - **Dashboard** : nouveau post-it papier, camembert avec carte flottante au survol, "Par produit" — §11
-> - **Couleurs** unifiées : diagrammes en palette sobre (sans vert/bleu), plus de teal dans l'admin — §7 / §11
----
-## AVANT DE COMMENCER
-- [ ] `npm run dev` tourne sans erreur
-- [ ] Connecté en **Admin**
-- [ ] Ouvrir un 2e  onglet navigation privée connecté en **Employé** (pour tester les notifs croisées)
-- [ ] Avoir : 1 client avec commandes, 1 client vide, 2-3 commandes dont 1 devis
----
-## 1. AUTHENTIFICATION
-| # | Action | Résultat attendu |
-|---|--------|-----------------|
-| 1.1 | Aller sur `/admin` sans session | Redirigé `/admin/login` |
-| 1.2 | Mauvais mot de passe | Message erreur, pas de redirection |
-| 1.3 | Se connecter Admin | Dashboard, sidebar affiche "Admin" vert |
-| 1.4 | Se connecter Employé (autre onglet) | Sidebar "Employé" bleu, pas Utilisateurs ni Contenu |
-| 1.5 | Déconnexion | Redirigé `/admin/login` |
+Compte	Mot de passe	Rôle
+admin1@psi.dz	psi2026	Admin (tout)
+admin2@psi.dz	psi2026	Admin (tout)
+employe1@psi.dz	psi2026	Employé complet
+employe2@psi.dz	psi2026	Employé limité (lecture seule)
 
----
-## 2. SITE PUBLIC → ADMIN (temps réel)
-### 2A. Nouvelle commande depuis le site
-| # | Action | Résultat attendu |
-|---|--------|-----------------|
-| 2.1 | `/products` → panier → `/checkout` → soumettre | Écran confirmation vert |
-| 2.2 | Admin (sans refresh) | Toast "Nouvelle commande · Site web" haut droite (7s) |
-| 2.3 | Cloche admin | Badge +1, notif dans le panel |
-| 2.4 | `/admin/requests` | Commande en haut, badge "Site web" vert, statut "En attente" |
-| 2.5 | Employé (autre onglet) | Reçoit aussi le toast et la notif |
+Guide simple pour tester l'app avant de livrer. On suit les étapes dans l'ordre, workflow par workflow.
 
-### 2B. Nouveau devis depuis le site
-| # | Action | Résultat attendu |
-|---|--------|-----------------|
-| 2.6 | `/quote` → remplir → soumettre | Écran confirmation |
-| 2.7 | Admin et Employé reçoivent toast "Nouveau devis · Site web" | ✓ |
-| 2.8 | Apparaît onglet Devis avec badge "Site web" | ✓ |
 
----
-## 3. WORKFLOW COMMANDE ⭐ (mis à jour)
+## ➕ Créer une commande / devis à la main
 
-| #   | Action | Résultat attendu |
+**Depuis /admin/requests :**
+1. Cliquer **+ Nouvelle demande**
+2. Choisir "Commande", remplir le client (nom, wilaya, téléphone)
+3. Choisir un produit dans la liste → le prix se remplit tout seul
+4. (Optionnel) activer TVA 19 % → le total se recalcule
+5. Valider → la commande apparaît avec le badge "Manuel"
+6. Refaire pareil en choisissant "Devis" → apparaît dans l'onglet Devis
 
-| 3.1 | Ouvrir commande "En attente" | Bouton "Confirmer"  visible |
-
-| 3.2 | Cliquer "Confirmer" | ⭐ Statut → "Confirmé" **directement, SANS popup de prix** (le prix de la commande existe déjà). Le panel se ferme. |
-
-| 3.3 | Vérifier onglet notifs sur compte Employé | Reçoit "Commande mise à jour — commande de ClientX → Confirmé" |  
-| 3.4 | Vérifier que l'Admin (acteur) ne reçoit PAS la notif |✓|
-| 3.5 | Rouvrir le panel | Bouton "Marquer Livré" visible |
-| 3.6 | Cliquer "Marquer Livré" | Statut → "Livré" (vert), descend en bas |
-| 3.7 | Cliquer "Annuler" sur commande En attente | Popup "Annuler commande de X ?" |
-
-| 3.8 | Confirmer | Statut → "Annulé" (gris), archivé en bas |
-
-| 3.9 | Rouvrir commande annulée | Bouton "Restaurer" |
-
-| 3.10 | Restaurer | Statut → "En attente", remonte |
+**Depuis une fiche client :**
+1. Aller dans `/admin/clients` → ouvrir une fiche → **Nouvelle commande**
+2. Le client est déjà pré-rempli
+3. Valider → apparaît dans /requests ET dans l'historique du client
 
 ---
 
-## 4. WORKFLOW DEVIS ⭐ (mis à jour)
+## 🔎 Filtres et recherche (/admin/requests)
 
-| # | Action | Résultat attendu |
-
-| 4.1 | Ouvrir devis "En attente" | Boutons "Confirmer" et "Annuler" |
-
-| 4.2 | Confirmer | Statut → "Confirmé" |
-| 4.3 | Rouvrir devis confirmé | Bouton "Convertir en commande" visible |
-| 4.4 | Cliquer "Convertir en commande" | ⭐ Modale "Convertir en commande" avec **toggle Prix unitaire par produit / Total global direct** (si le devis a des produits) |
-
-| 4.4a | Mode **unitaire** : saisir un prix par produit | "Total calculé" se met à jour en bas en temps réel |
-
-| 4.4b | Mode **total global** : saisir un montant | Champ montant unique |
-
-| 4.4c | Cliquer "Créer la commande" | Nouvelle commande "En attente" créée, devis reste "Confirmé" |
-
-| 4.4d | Ouvrir la commande créée | ⭐ Les **prix saisis sont enregistrés** (montant visible, pas 0 DA) |
-
-| 4.5 | Employé reçoit notif "Devis converti en commande de ClientX" | ✓ |
-| 4.6 | Acteur ne reçoit PAS la notif | ✓ |
-| 4.7 | Annuler un devis + popup | Statut → "Annulé" |
-| 4.8 | Restaurer | Statut → "En attente" |
+1. Onglet "Tous" → commandes + devis mélangés, en attente en haut
+2. Onglet "Commandes" → seulement les commandes
+3. Onglet "Devis" → seulement les devis
+4. Filtre statut "Confirmé" → seulement les confirmés
+5. Changer la période (Ce mois / 3 derniers mois / Tout)
+6. Rechercher par entreprise → filtre en direct
+7. Rechercher par numéro (ex "CMD-") → filtre par référence
+8. Bouton **Effacer** → remet tous les filtres à zéro
 
 ---
 
-## 5. CRÉATION MANUELLE
+## 👥 Clients
 
-### 5A. Depuis /admin/requests
-| # | Action | Résultat attendu |
-
-| 5.1 | "+ Nouvelle demande" | Modal s'ouvre |
-| 5.2 | Commande : remplir client, wilaya, téléphone | — |
-| 5.3 | Sélectionner produit dans dropdown | Prix auto-rempli |
-| 5.4 | Activer TVA 19% | Total recalculé |
-| 5.5 | Valider | Commande créée, badge "Manuel" orange |
-| 5.6 | Employé reçoit toast "Nouvelle commande · Manuel" | ✓ |
-| 5.7 | Acteur ne reçoit PAS la notif | ✓ |
-| 5.8 | Même test avec "Devis" | Devis créé onglet Devis |
-
-### 5B. Depuis fiche client
-| # | Action | Résultat attendu |
-
-| 5.9 | `/admin/clients` → fiche → "Nouvelle commande" | Modal client pré-rempli |
-| 5.10 | Remplir, valider | Apparaît dans /requests ET historique client |
+1. `/admin/clients` → tous les clients s'affichent (même ceux sans commande)
+2. Rechercher par nom / entreprise / wilaya
+3. Cliquer un client → sa fiche s'ouvre (infos + historique)
+4. Cliquer une ligne de l'historique → ouvre le détail de cette commande
+5. Modifier le client → les changements sont sauvegardés
+6. Créer un client → apparaît dans la liste
+7. Supprimer un client → fenêtre de confirmation → le client part, ses commandes/devis restent
+8. ⚠️ Si la suppression est impossible → un **message clair** s'affiche (pas une erreur bizarre)
 
 ---
 
-## 6. FILTRES — /admin/requests
+## 🗑️ Suppressions — vérifier les messages (important, corrigé récemment)
 
-| # | Action | Résultat attendu |
-
-| 6.1 | Onglet "Tous" | Commandes + devis, En attente en haut, archivés en bas |
-
-| 6.2 | Onglet "Commandes" | Seulement commandes |
-| 6.3 | Onglet "Devis" | Seulement devis |
-| 6.4 | Filtre statut "Confirmé" | Seulement confirmés |
-| 6.5 | Filtre période "Ce mois" (défaut) | Mois en cours |
-| 6.6 | Filtre "3 derniers mois" | 3 mois |
-| 6.7 | Filtre "Tout afficher" | Tout |
-| 6.8 | Recherche par entreprise | Filtre en temps réel |
-| 6.9 | Recherche par ref "CMD-" | Filtre par ref |
-| 6.10 | Bouton "Effacer" | Tous filtres réinitialisés |
+1. Supprimer un **produit qui n'est utilisé nulle part** → marche
+2. Supprimer un **produit déjà dans des commandes** → message "Impossible : produit utilisé, désactivez-le plutôt" (pas d'erreur brute)
+3. Supprimer une **catégorie qui contient des produits** → message "Impossible : X produits dans cette catégorie"
+4. Supprimer un **utilisateur qui a créé des commandes/notes** → message "Impossible, désactivez-le plutôt"
+5. Essayer de supprimer **son propre compte** → refusé avec message
+6. Supprimer un **client** (même avec des messages de contact) → doit marcher maintenant
 
 ---
 
-## 7. SOURCE (Site web vs Manuel)
+## 🔔 Notifications (avec 2 comptes ouverts)
 
-| # | Où | Résultat attendu |
-
-| 7.1 | Tableau /requests | Badge vert "Site web" ou orange "Manuel" |
-| 7.2 | Tableau /dashboard | Idem |
-| 7.3 | Panel RequestPanel header | Badge Source visible |
-| 7.4 | Toast | "· Site web" ou "· Manuel" dans le titre |
-| 7.5 | Excel rapport ventes | Colonne "Source" lisible |
-
----
-
-## 8. CLIENTS
-
-| # | Action | Résultat attendu |
-
-| 8.1 | `/admin/clients` | Tous les clients visibles (même sans commandes) |
-| 8.2 | Recherche | Filtre par nom / entreprise / wilaya |
-| 8.3 | Clic sur client | Fiche slide-in : infos + historique |
-| 8.4 | Clic sur ligne historique | RequestPanel de cette commande |
-| 8.5 | Modifier client | Changements sauvegardés |
-| 8.6 | Créer client | Apparaît dans la liste |
-| 8.7 | Supprimer client (popup confirmation) | Client supprimé, commandes/devis restent dans /requests |
-| 8.8 | Employé essaie de supprimer | Bouton absent ou 403 |
+1. Un toast apparaît en haut à droite quand il y a du nouveau
+2. Le toast disparaît après quelques secondes (ou au clic)
+3. La cloche montre le nombre de non-lus
+4. Dans le panneau : les non-lus ont un fond coloré
+5. Cliquer une notif → passe en "lue"
+6. Bouton "Tout marquer lu" → la cloche se vide
+7. Quand l'**Employé** fait une action → l'**Admin** reçoit la notif
+8. Quand l'**Admin** fait une action → l'**Employé** reçoit la notif
+9. ⚠️ Celui qui fait l'action ne reçoit **jamais** sa propre notif
 
 ---
 
-## 9. NOTIFICATIONS
+## 📊 Exports Excel
 
-| # | Vérification | Résultat attendu |
+**Rapport de ventes :**
+1. Cliquer **Rapport de ventes** → un fichier `.xlsx` se télécharge
+2. Il contient seulement les commandes **Livrées**
+3. Une ligne par produit, avec une colonne "Source" (Site web / Manuel)
+4. Une ligne TOTAL en bas
 
-| 9.1 | Toast : position | Haut droite |
-| 9.2 | Toast : durée | 7 secondes |
-| 9.3 | Toast : style | Carte blanche, PAS de rond à gauche, PAS de barre colorée |
-| 9.4 | Toast : clic | Disparaît |
-| 9.5 | Badge cloche | Nombre non lus |
-| 9.6 | Panel : fond coloré = non lu | ✓ |
-| 9.7 | Panel : PAS de ronds à gauche | ✓ |
-| 9.8 | Clic notif | Passe en lue |
-| 9.9 | "Tout marquer lu" | Badge disparaît |
-| 9.10 | Employé agit → Admin reçoit | ✓ |
-| 9.11 | Admin agit → Employé reçoit | ✓ |
-| 9.12 | Acteur ne reçoit PAS sa propre action | ✓ |
-| 9.13 | Création user → admins seulement | ✓ |
+**Export du tableau :**
+1. Filtrer puis cliquer **Exporter** → télécharge le tableau tel qu'affiché
+2. Vérifier les colonnes + le récap en bas
 
 ---
 
-## 10. EXPORTS EXCEL
+## 🏠 Dashboard
 
-### 10A. Rapport de ventes
-| # | Action | Résultat attendu |
-
-| 10.1 | Bouton "Rapport de ventes" | Téléchargement `PSI_Ventes_DD-MM-YYYY.xlsx` |
-| 10.2 | Colonnes | N° Facture · Source · Date commande · Date livraison · Client · Entreprise · Wilaya · Agent · Réf produit · Qté · Prix unitaire · Total ligne |
-| 10.3 | Contenu | Seulement commandes **Livrées** |
-| 10.4 | Multi-produits | Une ligne par produit |
-| 10.5 | Bas du fichier | Ligne TOTAL VENTES |
-| 10.6 | Colonne Source | "Site web" ou "Manuel" |
-
-### 10B. Export tableau filtré
-| # | Action | Résultat attendu |
-
-
-| 10.7 | Filtrer, cliquer "Exporter" | Export du tableau tel qu'affiché |
-| 10.8 | Colonnes | Référence · Type · Date · Client · Entreprise · Wilaya · Statut · Produits · Montant HT |
-| 10.9 | Bas | Récap par statut + total |
+1. Le **post-it jaune** affiche : la date du jour, les stats du jour, "X livrées ce mois" en bas
+2. Le **camembert** montre les produits, avec la légende à droite
+3. Passer la souris sur un morceau du camembert → une **petite carte blanche** suit la souris (produit + % + quantité)
+4. La carte **Origine** montre la répartition Site web / Manuel
+5. Le tableau du bas montre les dernières demandes
+6. Cliquer une ligne → ouvre le détail
+7. Faire une nouvelle commande depuis le site → le dashboard se met à jour tout seul (sans rafraîchir)
 
 ---
 
-## 11. DASHBOARD ⭐ (mis à jour)
+## 📸 Photos produits (nouveau)
 
-| # | Action | Résultat attendu |
-|---|--------|-----------------|
-| 11.1 | Post-it "Aujourd'hui" | ⭐ Style papier jaune (languette en haut) : date du jour, Nouvelles demandes / En attente / Clients contactés (chiffres en gris foncé), ligne "X livrées ce mois" en bas |
-| 11.2 | Camembert "Top produits" | ⭐ Sous-titre **"Par produit"**, anneau fin avec relief, légende à droite (puces + libellés) |
-| 11.3 | Survol d'un segment du camembert | ⭐ **Carte blanche flottante** suit la souris : libellé produit + % + nombre d'unités ; le segment survolé reste opaque, les autres s'estompent |
-| 11.4 | Couleurs des diagrammes | ⭐ Palette sobre **sans vert ni bleu** (violet grisé, ambre, terracotta, ardoise…) — cohérente entre camembert et carte Origine |
-| 11.5 | Carte origine | Barre Site web / Manuel + comptage + % |
-| 11.6 | Tableau récent | Avec colonne Source |
-| 11.7 | Clic ligne | RequestPanel |
-| 11.8 | Nouvelle commande site | Dashboard se met à jour sans refresh |
+1. Dashboard → **Produits** → **Nouveau produit** (ou Modifier un produit existant)
+2. Cliquer sur la zone photo → choisir une image → elle s'affiche en aperçu
+3. Enregistrer
+4. Aller sur le **site public** `/products` → la photo apparaît sur la carte du produit
+5. Un produit **sans** photo → garde le visuel par défaut (cercles verts)
 
 ---
 
-## 12. SÉCURITÉ
+## 🔐 Page de connexion (nouveau)
 
-| # | Action | Résultat attendu |
-|---|--------|-----------------|
-| 12.1 | Employé : PATCH `/api/products/[id]` | 403 Forbidden |
-| 12.2 | Employé : DELETE `/api/products/[id]` | 403 Forbidden |
-| 12.3 | Employé : DELETE `/api/users/[id]` | 403 Forbidden |
-| 12.4 | Non connecté : GET `/api/orders` | 401 Unauthorized |
+1. Se déconnecter → la page login s'affiche **sans la barre latérale** (sidebar)
+2. La carte de connexion est **grande et centrée**, avec le logo, fond dégradé vert
+3. Se reconnecter → tout marche normalement
 
 ---
 
-## 13. UTILISATEURS (admin only)
+## 🔒 Sécurité (à tester, corrigé récemment)
 
-| # | Action | Résultat attendu |
-|---|--------|-----------------|
-| 13.1 | Créer un employé | Notif reçue par admins seulement (pas l'acteur) |
-| 13.2 | Modifier rôle | Pris en compte au prochain login |
-| 13.3 | Désactiver compte | Ce compte ne peut plus se connecter |
-
----
-
-## RÉCAP STATUTS
-
-| Type | Transitions |
-|------|------------|
-| Commande | En attente → Confirmé → Livré |
-| Commande | En attente/Confirmé → Annulé → (Restaurer) → En attente |
-| Devis | En attente → Confirmé → Converti en commande |
-| Devis | En attente/Confirmé → Annulé → (Restaurer) → En attente |
+1. En **Employé**, essayer de modifier/supprimer un produit → refusé (403)
+2. En **Employé**, essayer de supprimer un utilisateur → refusé
+3. **Sans être connecté**, essayer d'accéder à `/api/orders` → refusé (401)
+4. **Sans être connecté**, essayer de créer/supprimer une catégorie → refusé (corrigé : avant c'était ouvert à tous ⚠️)
 
 ---
 
-## CHECKLIST FINALE
+## 🎫 Permissions employé (nouveau — à bien tester)
 
-- [ ] Sections 1 à 13 toutes testées
-- [ ] Aucun `console.error` dans le terminal serveur
-- [ ] Export ventes contient des données réelles livrées
-- [ ] Notifs temps réel entre 2 comptes simultanés OK
-- [ ] Suppression client ne détruit pas les commandes
-- [ ] Build propre : `npx next build` sans erreur TypeScript
+Se connecter en **`employe2@psi.dz`** (employé limité) et comparer avec **`admin1@psi.dz`** :
+
+1. **Sidebar** → l'employé limité voit **moins de menus** (pas Produits/Contenu/Utilisateurs selon ses droits)
+2. **Produits** (si accès) → l'employé sans "modifier produits" ne voit **pas** les boutons Nouveau/Modifier/Supprimer
+3. **Commande** → l'employé sans "modifier statuts" ne voit **pas** les boutons Confirmer/Livrer/Annuler/Modifier
+4. **Test API direct** (optionnel) → même en connaissant l'URL, l'employé est bloqué (403) sur une action interdite
+5. L'**admin** (`admin1`) → voit et peut TOUT (toutes les permissions)
+
+👉 Comparaison clé : `employe2` (limité) doit clairement pouvoir faire **moins** que `admin1`.
+
+---
+
+## 👤 Utilisateurs (Admin seulement)
+
+1. Créer un employé → les autres admins reçoivent une notif
+2. Modifier le rôle d'un compte → pris en compte à sa prochaine connexion
+3. Désactiver un compte → ce compte ne peut plus se connecter
+
+**Changer les permissions d'un employé existant :**
+1. En admin (`admin1@psi.dz`) → menu **Utilisateurs**
+2. Cliquer sur un employé (ex: **Employé Limité**) → sa fiche s'ouvre → **Modifier**
+3. Cocher/décocher des permissions (ex: donner "Modifier les produits") → **Enregistrer**
+4. Dans la fenêtre où l'employé est connecté → **se déconnecter et se reconnecter**
+5. ⚠️ Après reconnexion → l'employé a les nouvelles permissions (nouveaux menus/boutons apparaissent)
+   *(le changement n'est PAS instantané dans une session déjà ouverte — il faut se reconnecter, c'est normal)*
+
+---
+
+## ✅ Avant de livrer — check final
+
+1. Toutes les sections ci-dessus testées
+2. Aucune erreur rouge dans le terminal du serveur
+3. `npx next build` passe sans erreur *(déjà vérifié ✓)*
+4. Les notifications marchent bien entre 2 comptes
+5. Supprimer un client ne casse pas ses commandes
+6. Les permissions employé fonctionnent (employé limité ≠ admin)
+7. Modifier une commande (quantités/produits) marche
+8. Photos produits visibles sur le site public
+9. Page login sans sidebar + agrandie
+10. La base contient les 4 comptes (2 admins + 2 employés)
+
+---
+
+## 📌 Rappel — les statuts possibles
+
+- **Commande** : En attente → Confirmé → Livré (ou → Annulé → Restaurer)
+- **Devis** : En attente → Confirmé → Converti en commande (ou → Annulé → Restaurer)

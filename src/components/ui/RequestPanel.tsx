@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { StatusPill } from './StatusPill';
+import { useRole } from '@/lib/role-context';
 
 interface Template { id: string; title: string; content: string; category: string; }
 
@@ -415,6 +416,136 @@ function ConvertModal({ item, onConfirm, onClose }: {
   );
 }
 
+// ── Modale "Modifier la commande" — édition complète des lignes ──────────────
+interface ProdOption { id: string; reference: string; price: number; }
+interface EditLine { productId: string | null; designation: string; quantite: number; prixUnitaire: number; }
+
+function EditOrderModal({ item, onClose, onSaved }: {
+  item: RequestDetail; onClose: () => void; onSaved: () => void;
+}) {
+  const [products, setProducts] = useState<ProdOption[]>([]);
+  const [lines, setLines] = useState<EditLine[]>([]);
+  const [saving, setSaving] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState<number | null>(null);
+
+  useEffect(() => {
+    fetch('/api/products').then(r => r.json()).then((data: ProdOption[]) => {
+      setProducts(data);
+      // Initialise les lignes depuis la commande, en retrouvant le productId via la référence
+      const init: EditLine[] = (item.items ?? []).map(it => {
+        const p = data.find(pr => pr.reference === it.designation);
+        return { productId: p?.id ?? null, designation: it.designation, quantite: it.quantite, prixUnitaire: it.prixUnitaire };
+      });
+      setLines(init.length > 0 ? init : [{ productId: null, designation: '', quantite: 1, prixUnitaire: 0 }]);
+    }).catch(() => {});
+  }, [item.items]);
+
+  const setLine = (i: number, patch: Partial<EditLine>) =>
+    setLines(prev => prev.map((l, idx) => idx === i ? { ...l, ...patch } : l));
+  const pickProduct = (i: number, p: ProdOption) => {
+    setLine(i, { productId: p.id, designation: p.reference, prixUnitaire: p.price });
+    setPickerOpen(null);
+  };
+  const total = lines.reduce((acc, l) => acc + l.quantite * l.prixUnitaire, 0);
+  const inputCls = "px-3 py-2 rounded-xl border border-[#E2E8F0] text-[13px] text-[#0F172A] focus:outline-none focus:border-[#4CAF4F] focus:ring-[2px] focus:ring-[#4CAF4F]/15 transition-all";
+
+  const save = async () => {
+    if (!item.id) return;
+    setSaving(true);
+    const items = lines
+      .filter(l => l.productId && l.quantite > 0)
+      .map(l => ({ productId: l.productId, quantity: l.quantite, unitPrice: l.prixUnitaire }));
+    const res = await fetch(`/api/orders/${item.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ items }),
+    });
+    setSaving(false);
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({}));
+      alert(d.error ?? 'Impossible de modifier la commande.');
+      return;
+    }
+    onSaved();
+  };
+
+  return (
+    <>
+      <div className="fixed inset-0 z-[80] bg-black/40 backdrop-blur-sm" onClick={onClose} />
+      <div className="fixed inset-0 z-[90] flex items-center justify-center p-6 pointer-events-none">
+        <div className="pointer-events-auto bg-white rounded-2xl shadow-2xl p-6 w-[560px] max-w-[94vw] max-h-[88vh] flex flex-col">
+          <p className="text-[16px] font-bold text-[#0F172A] mb-1">Modifier la commande</p>
+          <p className="text-[12px] text-[#8A9BB5] mb-4">{item.ref} — {item.entreprise || item.client}</p>
+
+          <div className="flex-1 overflow-y-auto -mx-1 px-1">
+            {/* En-têtes */}
+            <div className="grid grid-cols-[1fr_70px_100px_28px] gap-2 mb-2 px-1">
+              <span className="text-[10px] font-bold text-[#ABBED1] uppercase tracking-wide">Produit</span>
+              <span className="text-[10px] font-bold text-[#ABBED1] uppercase tracking-wide">Qté</span>
+              <span className="text-[10px] font-bold text-[#ABBED1] uppercase tracking-wide">Prix unit.</span>
+              <span />
+            </div>
+            <div className="flex flex-col gap-2">
+              {lines.map((l, i) => (
+                <div key={i} className="grid grid-cols-[1fr_70px_100px_28px] gap-2 items-center">
+                  {/* Sélecteur produit */}
+                  <div className="relative">
+                    <button type="button" onClick={() => setPickerOpen(pickerOpen === i ? null : i)}
+                      className="w-full flex items-center justify-between px-3 py-2 rounded-xl border border-[#E2E8F0] bg-white text-[13px] hover:border-[#4CAF4F]"
+                      style={{ color: l.designation ? '#0F172A' : '#94A3B8' }}>
+                      <span className="truncate">{l.designation || '— Réf —'}</span>
+                      <svg width={12} height={12} fill="none" viewBox="0 0 24 24" className="flex-shrink-0 text-[#ABBED1]"><path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                    </button>
+                    {pickerOpen === i && (
+                      <>
+                        <div className="fixed inset-0 z-[100]" onClick={() => setPickerOpen(null)} />
+                        <div className="absolute top-full left-0 right-0 mt-1 z-[110] bg-white rounded-xl border border-[#E2E8F0] shadow-xl overflow-hidden">
+                          <div className="max-h-[180px] overflow-y-auto py-1">
+                            {products.map(p => (
+                              <button key={p.id} type="button" onClick={() => pickProduct(i, p)}
+                                className="w-full text-left px-3 py-2 flex items-center justify-between gap-2 hover:bg-[#F0FDF4]">
+                                <span className="text-[13px] font-semibold text-[#0F172A]">{p.reference}</span>
+                                <span className="text-[11px] text-[#ABBED1]">{p.price.toLocaleString('fr-FR')} DA</span>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                  <input type="number" min="1" value={l.quantite} onChange={e => setLine(i, { quantite: Math.max(1, Number(e.target.value)) })} className={inputCls} />
+                  <input type="number" min="0" value={l.prixUnitaire} onChange={e => setLine(i, { prixUnitaire: Number(e.target.value) })} className={inputCls} />
+                  <button onClick={() => setLines(prev => prev.filter((_, idx) => idx !== i))}
+                    className="w-7 h-7 flex items-center justify-center rounded-lg text-[#EF4444] hover:bg-[#FEF2F2]" title="Retirer">
+                    <svg width={14} height={14} fill="none" viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
+                  </button>
+                </div>
+              ))}
+            </div>
+            <button onClick={() => setLines(prev => [...prev, { productId: null, designation: '', quantite: 1, prixUnitaire: 0 }])}
+              className="mt-3 flex items-center gap-1.5 text-[12px] font-bold text-[#4CAF4F] hover:text-[#388E3C] transition-colors">
+              <svg width={14} height={14} fill="none" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
+              Ajouter un produit
+            </button>
+          </div>
+
+          <div className="flex justify-between items-center py-3 mt-2 border-t border-[#F2F4F7]">
+            <span className="text-[13px] font-semibold text-[#374151]">Total</span>
+            <span className="text-[17px] font-extrabold text-[#4CAF4F]">{total.toLocaleString('fr-FR')} DA</span>
+          </div>
+
+          <div className="flex gap-3">
+            <button onClick={onClose} className="flex-1 px-4 py-2.5 rounded-xl border border-[#E2E8F0] text-[13px] font-semibold text-[#374151]">Annuler</button>
+            <button onClick={save} disabled={saving} className="flex-1 px-4 py-2.5 rounded-xl text-[13px] font-bold text-white disabled:opacity-60" style={{ background: '#4CAF4F' }}>
+              {saving ? 'Enregistrement…' : 'Enregistrer'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
 interface RequestPanelProps {
   item: RequestDetail;
   onClose: () => void;
@@ -445,7 +576,10 @@ function IconBtn({ href, onClick, title, color, children }: {
 }
 
 export function RequestPanel({ item, onClose, onStatusChange, onConvertToOrder }: RequestPanelProps) {
+  const { can } = useRole();
+  const canModifierStatuts = can('modifier_statuts');
   const [showConvert, setShowConvert] = useState(false);
+  const [showEdit, setShowEdit] = useState(false);
   const [editingNotes, setEditingNotes] = useState(false);
   const [notesValue, setNotesValue] = useState('');
   const [templateMode, setTemplateMode] = useState<'wa' | 'mail' | null>(null);
@@ -625,25 +759,38 @@ export function RequestPanel({ item, onClose, onStatusChange, onConvertToOrder }
                   <svg width={13} height={13} fill="none" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>
                   Notes
                 </button>
+                {isCommande && !isArchived && canModifierStatuts && (
+                  <button onClick={() => setShowEdit(true)}
+                    className="flex items-center gap-1.5 px-3 h-9 rounded-full border text-[11px] font-bold transition-colors"
+                    style={{ borderColor: '#4CAF4F40', color: '#4CAF4F' }}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = '#F0FDF4')}
+                    onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}>
+                    <svg width={13} height={13} fill="none" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>
+                    Modifier
+                  </button>
+                )}
               </div>
 
               {/* Droite : actions statut */}
               <div className="flex flex-col items-end gap-2">
-                {!isArchived && onStatusChange && (
+                {!isArchived && onStatusChange && canModifierStatuts && (
                   <>
-                    {item.statut === 'En attente' && (
+                    {/* Commande en attente → Confirmer */}
+                    {isCommande && item.statut === 'En attente' && (
                       <button onClick={() => { onStatusChange(item.ref, 'Confirmé'); onClose(); }}
                         className="px-4 py-2 rounded-lg text-[13px] font-bold border border-[#4CAF4F] text-[#4CAF4F] hover:bg-[#F0FDF4] transition-colors">
                         Confirmer
                       </button>
                     )}
+                    {/* Commande confirmée → Marquer Livré */}
                     {isCommande && item.statut === 'Confirmé' && (
                       <button onClick={() => { onStatusChange(item.ref, 'Livré'); onClose(); }}
                         className="px-4 py-2 rounded-lg text-[13px] font-bold border border-[#4CAF4F] text-[#4CAF4F] hover:bg-[#F0FDF4] transition-colors">
                         Marquer Livré
                       </button>
                     )}
-                    {!isCommande && item.statut === 'Confirmé' && onConvertToOrder && (
+                    {/* Devis (en attente OU confirmé) → Convertir en commande directement */}
+                    {!isCommande && (item.statut === 'En attente' || item.statut === 'Confirmé') && onConvertToOrder && (
                       <button onClick={() => setShowConvert(true)}
                         className="px-4 py-2 rounded-lg text-[13px] font-bold border border-[#4CAF4F] text-[#4CAF4F] hover:bg-[#F0FDF4] transition-colors">
                         Convertir en commande
@@ -656,7 +803,7 @@ export function RequestPanel({ item, onClose, onStatusChange, onConvertToOrder }
                   </>
                 )}
 
-                {item.statut === 'Annulé' && onStatusChange && (
+                {item.statut === 'Annulé' && onStatusChange && canModifierStatuts && (
                   <button onClick={() => { onStatusChange(item.ref, 'En attente'); onClose(); }}
                     className="px-4 py-2 rounded-lg text-[13px] font-semibold border border-[#ABBED1]/60 text-[#374151] hover:border-[#374151]/40 transition-colors">
                     Restaurer
@@ -670,6 +817,18 @@ export function RequestPanel({ item, onClose, onStatusChange, onConvertToOrder }
 
         </div>
       </div>
+
+      {showEdit && (
+        <EditOrderModal
+          item={item}
+          onClose={() => setShowEdit(false)}
+          onSaved={() => {
+            setShowEdit(false);
+            onStatusChange?.(item.ref, item.statut); // déclenche un refetch côté parent
+            onClose();
+          }}
+        />
+      )}
 
       {editingNotes && (
         <>

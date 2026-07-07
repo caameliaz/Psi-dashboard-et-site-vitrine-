@@ -1,14 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { requirePermission } from '@/lib/permissions';
 import { createAudit } from '@/lib/audit';
 import { notifyConversion } from '@/lib/notify-activity';
 
 type Ctx = { params: Promise<{ id: string }> };
 
 export async function PATCH(_request: NextRequest, { params }: Ctx) {
-  const session = await auth();
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const guard = await requirePermission('modifier_statuts');
+  if (guard.error) return guard.error;
+  const session = guard.session;
 
   const { id } = await params;
 
@@ -29,6 +30,7 @@ export async function PATCH(_request: NextRequest, { params }: Ctx) {
         clientCompany: quote.clientCompany ?? quote.client?.company ?? null,
         clientWilaya: quote.clientWilaya ?? quote.client?.wilaya ?? null,
         source: quote.source,
+        status: 'VALIDE', // commande directement confirmée (prix fixé lors de la conversion)
         createdById: session.user.id,
         notes: quote.notes ?? null,
         items: {

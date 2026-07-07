@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@/lib/auth';
+import { requirePermission } from '@/lib/permissions';
 import { prisma } from '@/lib/prisma';
 
 type Ctx = { params: Promise<{ id: string }> };
 
-// POST /api/clients/[id]/notes — ajouter une note interne (admin + employé)
+// POST /api/clients/[id]/notes — ajouter une note interne (permission modifier_clients)
 export async function POST(request: NextRequest, { params }: Ctx) {
-  const session = await auth();
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const guard = await requirePermission('modifier_clients');
+  if (guard.error) return guard.error;
+  const session = guard.session;
 
   const { id: clientId } = await params;
 

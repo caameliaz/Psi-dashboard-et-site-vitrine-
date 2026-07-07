@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@/lib/auth';
+import { requirePermission } from '@/lib/permissions';
 import { prisma } from '@/lib/prisma';
 import bcrypt from 'bcryptjs';
 import { createAudit } from '@/lib/audit';
 
-// GET /api/users — liste tous les utilisateurs (admin uniquement)
+// GET /api/users — liste tous les utilisateurs (permission gerer_utilisateurs)
 export async function GET() {
-  const session = await auth();
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const guard = await requirePermission('gerer_utilisateurs');
+  if (guard.error) return guard.error;
 
   try {
     const users = await prisma.user.findMany({
@@ -24,10 +24,11 @@ export async function GET() {
   }
 }
 
-// POST /api/users — créer un utilisateur (admin uniquement)
+// POST /api/users — créer un utilisateur (permission gerer_utilisateurs)
 export async function POST(request: NextRequest) {
-  const session = await auth();
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const guard = await requirePermission('gerer_utilisateurs');
+  if (guard.error) return guard.error;
+  const session = guard.session;
 
   try {
     const body = await request.json();

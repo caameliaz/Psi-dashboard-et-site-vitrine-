@@ -7,17 +7,20 @@ declare module "next-auth" {
       name: string;
       email: string;
       role: Role;
+      permissions: string[];
     };
   }
 
   interface User {
     role: Role;
+    permissions?: string[];
   }
 }
 
 declare module "next-auth/jwt" {
   interface JWT {
     role: Role;
+    permissions?: string[];
     sessionVersion?: number;
   }
 }
