@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { requirePermission } from '@/lib/permissions';
+import { requirePermission, hasPermission } from '@/lib/permissions';
 import { createAudit, statusLabel } from '@/lib/audit';
-import { notifyStatusChange } from '@/lib/notify-activity';
+import { notifyStatusChange, notifyAssignment } from '@/lib/notify-activity';
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -43,6 +43,11 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
   try {
     const body = await request.json();
 
+    // Changement d'assignation ("pris en charge par") → nécessite la permission assign_commandes
+    if (body.assignedToId !== undefined && !hasPermission(session.user as any, 'assign_commandes')) {
+      return NextResponse.json({ error: "Vous n'avez pas la permission d'assigner" }, { status: 403 });
+    }
+
     // Mise à jour des prix unitaires par produit si fournis
     if (body.itemPrices && Array.isArray(body.itemPrices)) {
       const existing = await prisma.orderItem.findMany({ where: { orderId: id }, include: { product: true } });
@@ -80,12 +85,14 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
         ...(body.status !== undefined && { status: body.status }),
         ...(body.notes !== undefined && { notes: body.notes }),
         ...(body.source !== undefined && { source: body.source }),
+        ...(body.assignedToId !== undefined && { assignedToId: body.assignedToId || null }),
         ...(body.totalOverride !== undefined && { notes: `TOTAL:${body.totalOverride}${body.notes ? '\n' + body.notes : ''}` }),
       },
       include: {
         client: { include: { phones: true } },
         items: { include: { product: true } },
         createdBy: { select: { id: true, name: true } },
+        assignedTo: { select: { id: true, name: true } },
       },
     });
 
@@ -99,6 +106,18 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
         entityType: 'commande',
         clientLabel: order.client?.company ?? order.client?.name ?? '—',
         newStatus: body.status,
+        orderId: order.id,
+      }).catch(() => {});
+    }
+
+    if (body.assignedToId) {
+      notifyAssignment({
+        actorId: session.user.id!,
+        actorName: session.user.name ?? session.user.email ?? 'Agent',
+        assignedToId: body.assignedToId,
+        entityType: 'commande',
+        clientLabel: order.client?.company ?? order.client?.name ?? '—',
+        ref: order.ref ?? order.id.slice(0, 8),
         orderId: order.id,
       }).catch(() => {});
     }

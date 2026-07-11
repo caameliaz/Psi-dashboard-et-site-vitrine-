@@ -18,15 +18,16 @@ DÉCISIONS ACTÉES (P1) :
 - [x] Devis chiffrable : prix (proposedPrice) saisi via popup au moment de CONFIRMER le devis
 - [x] Stats dashboard : livrées ce mois = commandes LIVRÉES + devis LIVRÉS
 - [x] Nettoyer convertedOrderId : migration DB (colonne supprimée) + code
-- [ ] À tester en vrai : popup prix pour un devis avec lignes hors-catalogue (sans productId)
+  → tests détaillés dans la section « 10. Cycle des devis » ci-dessous
 
-## 1.2 — Champ "Pris en charge par" (assignation)
-- [ ] Colonne assignedToId (userId nullable) sur Order ET Quote + migration
-- [ ] Nouvelle permission `assign_commandes` (décochable, off par défaut sauf admin)
-- [ ] Dropdown dans formulaires création/édition : pré-rempli = utilisateur connecté, modifiable si permission
-- [ ] Afficher le nom de l'assigné dans le panneau de détail + dans les listes
-- [ ] Filtre "assigné à" dans les listes commandes/devis
-- [ ] Notif à l'assigné quand on lui assigne une demande (voir P3)
+## 1.2 — Champ "Pris en charge par" (assignation)  ✅ FAIT
+- [x] Colonne assignedToId (userId nullable) sur Order ET Quote + migration (add_assigned_to)
+- [x] Nouvelle permission `assign_commandes` (décochable, off par défaut sauf admin)
+- [x] Dropdown dans formulaire création : pré-rempli = utilisateur connecté, modifiable
+- [x] Panneau détail : select assigné (si permission) sinon lecture seule + colonne "Responsable" dans la liste
+- [x] Filtre "assigné à" dans les listes (+ option "Non assigné")
+- [x] Notif à l'assigné quand on lui assigne une demande (seul l'assigné reçoit)
+  → tests détaillés dans la section « 10bis. Assignation » ci-dessous
 
 ## 1.3 — Wilayas + Communes
 - [ ] Fichier lib/data/wilayas-communes.ts (58 wilayas + communes)
@@ -240,13 +241,16 @@ Mot de passe pour **tous** : `psi2026`
 7. Recherche par **numéro** (ex "CMD-") → filtre par référence
 8. Bouton **Effacer** → remet tous les filtres à zéro
 
+9. **Filtre "Responsable"** (nouveau) → filtre par personne assignée, + option **Non assigné**
+
 ### Créer une demande à la main
-1. **+ Nouvelle demande** → choisir **Commande** ou **Devis**
+1. **+ Nouvelle commande** → choisir **Commande** ou **Devis**
 2. Remplir le client (nom, wilaya, téléphone)
 3. Choisir un produit → le **prix se remplit tout seul**
 4. Ajouter plusieurs lignes (devis multi-lignes)
 5. Activer **TVA 19 %** → le total se recalcule (HT → TTC)
-6. Valider → apparaît avec le badge **Manuel**
+6. **Pris en charge par** (nouveau) → dropdown pré-rempli sur **soi-même**, modifiable
+7. Valider → apparaît avec le badge **Manuel** + la colonne **Responsable** remplie
 
 ### Le panneau de détail (clic sur une demande)
 1. Clic sur une demande → **panneau latéral** s'ouvre
@@ -257,19 +261,39 @@ Mot de passe pour **tous** : `psi2026`
 6. Bouton **Email** → même chose avec un template → ouvre la messagerie
 7. Bouton **Appeler** → lien téléphone
 8. **Notes internes** → écrire une remarque, enregistrer
-9. Actions statut (si permission "modifier statuts") :
+9. **Pris en charge par** (nouveau) → si permission "assigner", un select modifie l'assigné ; sinon **lecture seule**
+10. Actions statut (si permission "modifier statuts") :
    - **Commande** : Confirmer → Livrer, ou Annuler → Restaurer
-   - **Devis** : Convertir en commande, ou Annuler → Restaurer
+   - **Devis** : Confirmer (popup prix) → Livrer, ou Annuler → Restaurer
    - **Modifier** (commande) → éditer les lignes (produits/quantités)
 
 ---
 
-## 🔄 10. Conversion devis → commande (corrigé récemment)
+## 🔄 10. Cycle des devis — devis chiffré = vente (nouveau)
 
-1. Ouvrir un **devis** (en attente ou confirmé)
-2. **Convertir en commande** → une vraie commande est créée avec les mêmes lignes
-3. ✅ Le devis passe en "converti", la commande apparaît dans l'onglet Commandes
-4. ✅ La commande garde le client et les produits du devis
+⚠️ Il n'y a **plus** de bouton "Convertir en commande". Les devis ont leur propre cycle et un devis **livré** compte comme une vente.
+
+1. Ouvrir un **devis** en **attente** → **Confirmer**
+2. ✅ Un **popup demande le prix** (total global OU prix unitaire par ligne) → valider
+3. ✅ Le devis passe en **Confirmé** avec son montant (`proposedPrice`)
+4. Devis confirmé → **Marquer Livré**
+5. ✅ Le devis passe en **Livré** → il est compté dans **"X livrées ce mois"** du dashboard
+6. Devis → **Annuler** → **Restaurer** possible
+7. ⚠️ Cas à vérifier : devis avec une **ligne hors-catalogue** (dimension perso, sans produit) → le popup prix doit quand même permettre de saisir le montant
+
+---
+
+## 🎯 10bis. Assignation "Pris en charge par" (nouveau)
+
+Se connecter avec **`admin1`** (a la permission "assigner") et **`employe2`** (limité, ne l'a pas) :
+
+1. **admin1** ouvre une demande → change le **Responsable** dans le select → enregistré
+2. ✅ La colonne **Responsable** de la liste se met à jour
+3. ✅ La personne nouvellement assignée reçoit **une notif** dans sa cloche (elle seule)
+4. **employe2** ouvre la même demande → le "Pris en charge par" est en **lecture seule** (pas de select)
+5. **Test API direct** (optionnel) : `employe2` fait un PATCH avec `assignedToId` → refusé **403**
+6. Créer une commande manuelle sans toucher au dropdown → elle est assignée **au créateur** par défaut
+7. Filtre **Responsable** dans la liste → n'affiche que les demandes de cette personne
 
 ---
 
@@ -392,8 +416,9 @@ Se connecter en **`employe2@psi.dz`** (limité) et comparer avec **`admin1@psi.d
 1. **Sidebar** → l'employé limité voit **moins de menus** (pas Produits en édition / Contenu / Utilisateurs)
 2. **Produits** → l'employé sans "modifier produits" ne voit **pas** Nouveau/Modifier/Supprimer
 3. **Commande** → l'employé sans "modifier statuts" ne voit **pas** Confirmer/Livrer/Annuler/Modifier
-4. **Contenu** / **Utilisateurs** → invisibles pour l'employé limité
-5. L'**admin** voit et peut **TOUT**
+4. **Assignation** (nouveau) → l'employé sans "assigner les commandes" voit le Responsable en **lecture seule**
+5. **Contenu** / **Utilisateurs** → invisibles pour l'employé limité
+6. L'**admin** voit et peut **TOUT**
 
 👉 Comparaison clé : `employe2` (limité) doit clairement pouvoir faire **moins** que `admin1`.
 

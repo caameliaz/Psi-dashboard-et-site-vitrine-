@@ -4,7 +4,7 @@ import { createContext, useContext, useEffect, useRef, useCallback, ReactNode } 
 
 export interface SSEPayload {
   event: string;
-  notif: { id: string; type: string; title: string; message: string; createdAt: string } | null;
+  notif: { id: string; type: string; title: string; message: string; createdAt: string; targetUserId?: string } | null;
 }
 
 interface SSEContextValue {

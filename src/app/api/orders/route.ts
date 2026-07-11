@@ -17,6 +17,7 @@ export async function GET() {
         client: { include: { phones: true } },
         items: { include: { product: true } },
         createdBy: { select: { id: true, name: true } },
+        assignedTo: { select: { id: true, name: true } },
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -91,6 +92,8 @@ export async function POST(request: NextRequest) {
         clientWilaya: client.wilaya ?? null,
         source: source as any,
         createdById: session?.user?.id ?? null,
+        // Assignation : valeur fournie, sinon le créateur (utilisateur connecté)
+        assignedToId: body.assignedToId ?? session?.user?.id ?? null,
         items: {
           create: validItems.map((item: { productId: string; quantity: number; unitPrice: number }) => ({
             productId: item.productId,

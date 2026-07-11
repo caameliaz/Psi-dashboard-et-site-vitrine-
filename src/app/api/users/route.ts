@@ -5,7 +5,27 @@ import bcrypt from 'bcryptjs';
 import { createAudit } from '@/lib/audit';
 
 // GET /api/users — liste tous les utilisateurs (permission gerer_utilisateurs)
-export async function GET() {
+// GET /api/users?assignable=true — liste réduite (id + name) des users actifs,
+//   accessible à quiconque peut voir les commandes (pour le dropdown "pris en charge par")
+export async function GET(request: NextRequest) {
+  const assignable = request.nextUrl.searchParams.get('assignable') === 'true';
+
+  if (assignable) {
+    const guard = await requirePermission('voir_commandes');
+    if (guard.error) return guard.error;
+    try {
+      const users = await prisma.user.findMany({
+        where: { active: true },
+        select: { id: true, name: true },
+        orderBy: { name: 'asc' },
+      });
+      return NextResponse.json(users);
+    } catch (e) {
+      console.error(e);
+      return NextResponse.json({ error: 'Failed to fetch users' }, { status: 500 });
+    }
+  }
+
   const guard = await requirePermission('gerer_utilisateurs');
   if (guard.error) return guard.error;
 

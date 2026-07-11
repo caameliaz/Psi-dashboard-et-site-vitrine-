@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { requirePermission } from '@/lib/permissions';
+import { requirePermission, hasPermission } from '@/lib/permissions';
 import { createAudit, statusLabel } from '@/lib/audit';
-import { notifyStatusChange } from '@/lib/notify-activity';
+import { notifyStatusChange, notifyAssignment } from '@/lib/notify-activity';
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -20,6 +20,7 @@ export async function GET(_request: NextRequest, { params }: Ctx) {
         client: { include: { phones: true } },
         items: { include: { product: { include: { category: true } } } },
         createdBy: { select: { id: true, name: true } },
+        assignedTo: { select: { id: true, name: true } },
       },
     });
 
@@ -43,11 +44,17 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
   try {
     const body = await request.json();
 
+    // Changement d'assignation ("pris en charge par") → nécessite la permission assign_commandes
+    if (body.assignedToId !== undefined && !hasPermission(session.user as any, 'assign_commandes')) {
+      return NextResponse.json({ error: "Vous n'avez pas la permission d'assigner" }, { status: 403 });
+    }
+
     const quote = await prisma.quote.update({
       where: { id },
       data: {
         ...(body.status !== undefined && { status: body.status }),
         ...(body.notes !== undefined && { notes: body.notes }),
+        ...(body.assignedToId !== undefined && { assignedToId: body.assignedToId || null }),
         ...(body.proposedPrice !== undefined && { proposedPrice: Number(body.proposedPrice) }),
         ...(body.deliveryDelay !== undefined && { deliveryDelay: body.deliveryDelay }),
         ...(body.paymentTerms !== undefined && { paymentTerms: body.paymentTerms }),
@@ -57,6 +64,7 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
         client: { include: { phones: true } },
         items: { include: { product: true } },
         createdBy: { select: { id: true, name: true } },
+        assignedTo: { select: { id: true, name: true } },
       },
     });
 
@@ -70,6 +78,18 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
         entityType: 'devis',
         clientLabel: quote.client?.company ?? quote.client?.name ?? '—',
         newStatus: body.status,
+        quoteId: quote.id,
+      }).catch(() => {});
+    }
+
+    if (body.assignedToId) {
+      notifyAssignment({
+        actorId: session.user.id!,
+        actorName: session.user.name ?? session.user.email ?? 'Agent',
+        assignedToId: body.assignedToId,
+        entityType: 'devis',
+        clientLabel: quote.client?.company ?? quote.client?.name ?? '—',
+        ref: quote.ref ?? quote.id.slice(0, 8),
         quoteId: quote.id,
       }).catch(() => {});
     }

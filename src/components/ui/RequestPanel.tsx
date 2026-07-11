@@ -44,6 +44,8 @@ export interface RequestDetail {
   adresse?: string;
   email?: string;
   message?: string;
+  assignedToId?: string | null;
+  assignedToName?: string | null;
 }
 
 function getSourceLabel(src: string) { return src === 'SITE' ? 'Site web' : 'Manuel'; }
@@ -551,6 +553,8 @@ interface RequestPanelProps {
   onClose: () => void;
   onStatusChange?: (ref: string, newStatut: string) => void;
   onConfirmQuoteWithPrice?: (item: RequestDetail & { _prix?: ConvertPrixData }) => void;
+  users?: { id: string; name: string }[];
+  onAssign?: (id: string, type: string, assignedToId: string | null) => void;
 }
 
 // ── Bouton icône rond ────────────────────────────────────────────────────────
@@ -575,9 +579,10 @@ function IconBtn({ href, onClick, title, color, children }: {
   );
 }
 
-export function RequestPanel({ item, onClose, onStatusChange, onConfirmQuoteWithPrice }: RequestPanelProps) {
+export function RequestPanel({ item, onClose, onStatusChange, onConfirmQuoteWithPrice, users, onAssign }: RequestPanelProps) {
   const { can } = useRole();
   const canModifierStatuts = can('modifier_statuts');
+  const canAssign = can('assign_commandes');
   const [showPriceModal, setShowPriceModal] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
   const [editingNotes, setEditingNotes] = useState(false);
@@ -713,6 +718,24 @@ export function RequestPanel({ item, onClose, onStatusChange, onConfirmQuoteWith
                 <span className="text-[22px] font-extrabold" style={{ color: isCommande ? '#4CAF4F' : '#8B5CF6' }}>
                   {item.montant}
                 </span>
+              </div>
+
+              {/* Pris en charge par */}
+              <div>
+                <p className="text-[10px] font-bold text-[#ABBED1] uppercase tracking-widest mb-2">Pris en charge par</p>
+                {canAssign && onAssign && users ? (
+                  <select
+                    value={item.assignedToId ?? ''}
+                    onChange={(e) => item.id && onAssign(item.id, item.type, e.target.value || null)}
+                    className="w-full px-3 py-2.5 rounded-xl border border-[#E2E8F0] text-[13px] text-[#374151] focus:outline-none focus:border-[#4CAF4F] focus:ring-[3px] focus:ring-[#4CAF4F]/15 transition-all bg-white">
+                    <option value="">— Non assigné —</option>
+                    {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+                  </select>
+                ) : (
+                  <div className="rounded-xl border border-[#F2F4F7] px-4 py-3">
+                    <p className="text-[13px] font-semibold text-[#374151]">{item.assignedToName ?? '— Non assigné —'}</p>
+                  </div>
+                )}
               </div>
 
               {item.message && (

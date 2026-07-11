@@ -9,6 +9,7 @@ import { RefSelect } from '@/components/ui/RefSelect';
 import { exportTableauExcel } from '@/lib/export-tableau';
 import { exportVentesExcel } from '@/lib/export-ventes';
 import { useSSE } from '@/lib/use-sse';
+import { useSession } from 'next-auth/react';
 
 const ARCHIVED = ['Livré', 'Annulé'];
 
@@ -60,6 +61,8 @@ function orderToDetail(o: any): RequestDetail {
     items,
     montant: total > 0 ? `${total.toLocaleString('fr-FR')} DA` : '—',
     statut: DB_TO_UI[o.status] ?? o.status,
+    assignedToId: o.assignedTo?.id ?? o.assignedToId ?? null,
+    assignedToName: o.assignedTo?.name ?? null,
     date: new Date(o.createdAt).toLocaleDateString('fr-FR'),
     heure: new Date(o.createdAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
   };
@@ -89,6 +92,8 @@ function quoteToDetail(q: any): RequestDetail {
     items,
     montant: q.proposedPrice ? `${Number(q.proposedPrice).toLocaleString('fr-FR')} DA` : 'Sur devis',
     statut: DB_TO_UI[q.status] ?? q.status,
+    assignedToId: q.assignedTo?.id ?? q.assignedToId ?? null,
+    assignedToName: q.assignedTo?.name ?? null,
     date: new Date(q.createdAt).toLocaleDateString('fr-FR'),
     heure: new Date(q.createdAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
     message: q.message ?? '',
@@ -109,10 +114,12 @@ const ALL_STATUTS_DEVIS    = ['En attente', 'Confirmé', 'Livré', 'Annulé'];
 interface Ligne { ref: string; productId: string | null; qte: number; pu: number; }
 const emptyLigne = (): Ligne => ({ ref: '', productId: null, qte: 1, pu: 0 });
 
-function CreateForm({ defaultType, onClose, onSave }: {
+function CreateForm({ defaultType, onClose, onSave, users, currentUserId }: {
   defaultType: 'Commande' | 'Devis';
   onClose: () => void;
   onSave: (item: any) => Promise<void>;
+  users: { id: string; name: string }[];
+  currentUserId?: string;
 }) {
   const ic = "w-full px-3 py-2 rounded-xl border border-[#E2E8F0] text-[13px] text-[#263238] focus:outline-none focus:border-[#4CAF4F] focus:ring-[2px] focus:ring-[#4CAF4F]/15 transition-all bg-white";
   const lc = "block text-[11px] font-bold text-[#8A9BB5] uppercase tracking-wide mb-1";
@@ -126,6 +133,7 @@ function CreateForm({ defaultType, onClose, onSave }: {
   const [lignes, setLignes] = useState<Ligne[]>([emptyLigne()]);
   const [tva, setTva] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [assignedToId, setAssignedToId] = useState<string>(currentUserId ?? '');
   const [products, setProducts] = useState<{ id: string; reference: string; price: number }[]>([]);
 
   useEffect(() => {
@@ -169,6 +177,7 @@ function CreateForm({ defaultType, onClose, onSave }: {
       _email: email.trim(),
       _telephone: telephone.trim(),
       _entreprise: entreprise.trim(),
+      _assignedToId: assignedToId || undefined,
     } as any);
     setSaving(false);
     onClose();
@@ -209,7 +218,16 @@ function CreateForm({ defaultType, onClose, onSave }: {
             <div><label className={lc}>Téléphone</label><input value={telephone} onChange={e => setTelephone(e.target.value)} placeholder="+213 5XX XXX XXX" className={ic} /></div>
             <div><label className={lc}>Email</label><input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="client@email.com" className={ic} /></div>
           </div>
-          <div><label className={lc}>Wilaya</label><WilayaSelect value={wilaya} onChange={setWilaya} /></div>
+          <div className="grid grid-cols-2 gap-3">
+            <div><label className={lc}>Wilaya</label><WilayaSelect value={wilaya} onChange={setWilaya} /></div>
+            <div>
+              <label className={lc}>Pris en charge par</label>
+              <select value={assignedToId} onChange={e => setAssignedToId(e.target.value)} className={ic}>
+                <option value="">— Non assigné —</option>
+                {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+              </select>
+            </div>
+          </div>
 
           {/* Lignes produits */}
           <div>
@@ -312,6 +330,8 @@ function CreateForm({ defaultType, onClose, onSave }: {
 }
 
 export default function RequestsPage() {
+  const { data: session } = useSession();
+  const currentUserId = (session?.user as { id?: string } | undefined)?.id;
   const [activeTab, setActiveTab] = useState<'tous' | 'commandes' | 'devis'>('tous');
   const [orders, setOrders]       = useState<RequestDetail[]>([]);
   const [quotes, setQuotes]       = useState<RequestDetail[]>([]);
@@ -319,6 +339,8 @@ export default function RequestsPage() {
   const [search, setSearch]       = useState('');
   const [filterStatut, setFilterStatut] = useState('all');
   const [filterPeriode, setFilterPeriode] = useState('mois');
+  const [filterAssigne, setFilterAssigne] = useState('all');
+  const [users, setUsers] = useState<{ id: string; name: string }[]>([]);
   const [selected, setSelected]   = useState<RequestDetail | null>(null);
   const [showCreate, setShowCreate] = useState(false);
 
@@ -345,6 +367,11 @@ export default function RequestsPage() {
   useEffect(() => { fetchAll(); }, [fetchAll]);
   useSSE(useCallback(() => { fetchAll(); }, [fetchAll]));
 
+  // Liste des utilisateurs actifs (pour l'assignation "pris en charge par")
+  useEffect(() => {
+    fetch('/api/users?assignable=true').then(r => r.ok ? r.json() : []).then(setUsers).catch(() => {});
+  }, []);
+
   const isDevis = activeTab === 'devis';
   const rawItems = activeTab === 'tous' ? [...orders, ...quotes] : isDevis ? quotes : orders;
   const allStatuts = activeTab === 'tous' ? ALL_STATUTS_COMMANDE : isDevis ? ALL_STATUTS_DEVIS : ALL_STATUTS_COMMANDE;
@@ -364,11 +391,13 @@ export default function RequestsPage() {
     const q = search.toLowerCase();
     const matchSearch = !q || r.client.toLowerCase().includes(q) || r.entreprise.toLowerCase().includes(q) || r.ref.toLowerCase().includes(q);
     const matchStatut = filterStatut === 'all' || r.statut === filterStatut;
+    const matchAssigne = filterAssigne === 'all'
+      || (filterAssigne === 'none' ? !r.assignedToId : r.assignedToId === filterAssigne);
     const matchPeriode = !periodeStart || (() => {
       const [d, m, y] = r.date.split('/').map(Number);
       return new Date(y, m - 1, d) >= periodeStart;
     })();
-    return matchSearch && matchStatut && matchPeriode;
+    return matchSearch && matchStatut && matchAssigne && matchPeriode;
   });
 
   const handleStatusChange = async (ref: string, newStatut: string) => {
@@ -385,6 +414,20 @@ export default function RequestsPage() {
     if (!res.ok) console.error('PATCH failed', await res.text());
     await fetchAll();
     setSelected(null);
+  };
+
+  // Change l'assignation ("pris en charge par") d'une commande/devis
+  const handleAssign = async (id: string, type: string, assignedToId: string | null) => {
+    const endpoint = type === 'Devis' ? `/api/quotes/${id}` : `/api/orders/${id}`;
+    const res = await fetch(endpoint, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ assignedToId }),
+    });
+    if (!res.ok) { console.error('Assign failed', await res.text()); return; }
+    await fetchAll();
+    // Met à jour le panneau ouvert avec le nouvel assigné
+    setSelected(prev => prev ? { ...prev, assignedToId, assignedToName: users.find(u => u.id === assignedToId)?.name ?? null } : prev);
   };
 
   // Confirme un devis en fixant son prix (proposedPrice). Le prix est saisi
@@ -413,7 +456,7 @@ export default function RequestsPage() {
     setSelected(null);
   };
 
-  const handleSaveNew = async (item: RequestDetail & { _lignes?: { productId: string | null; ref: string; qte: number; pu: number }[]; _wilaya?: string; _email?: string; _telephone?: string; _entreprise?: string }) => {
+  const handleSaveNew = async (item: RequestDetail & { _lignes?: { productId: string | null; ref: string; qte: number; pu: number }[]; _wilaya?: string; _email?: string; _telephone?: string; _entreprise?: string; _assignedToId?: string | null }) => {
     const isCmd = item.type === 'Commande';
     const endpoint = isCmd ? '/api/orders' : '/api/quotes';
 
@@ -432,6 +475,7 @@ export default function RequestsPage() {
             quantity: l.qte,
             unitPrice: l.pu,
           })),
+          assignedToId: item._assignedToId ?? undefined,
           source: 'AUTRE',
         }
       : {
@@ -446,6 +490,7 @@ export default function RequestsPage() {
             description: l.productId ? undefined : l.ref,
             quantity: l.qte,
           })),
+          assignedToId: item._assignedToId ?? undefined,
           source: 'AUTRE',
         };
 
@@ -576,8 +621,17 @@ export default function RequestsPage() {
             { value: 'tout',  label: 'Tout afficher' },
           ]}
         />
-        {(search || filterStatut !== 'all' || filterPeriode !== 'mois') && (
-          <button onClick={() => { setSearch(''); setFilterStatut('all'); setFilterPeriode('mois'); }} className="text-[12px] font-semibold text-[#8A9BB5] hover:text-[#374151]">Effacer</button>
+        <AdminSelect
+          value={filterAssigne}
+          onChange={setFilterAssigne}
+          options={[
+            { value: 'all',  label: 'Tous les responsables' },
+            { value: 'none', label: 'Non assigné' },
+            ...users.map((u) => ({ value: u.id, label: u.name })),
+          ]}
+        />
+        {(search || filterStatut !== 'all' || filterPeriode !== 'mois' || filterAssigne !== 'all') && (
+          <button onClick={() => { setSearch(''); setFilterStatut('all'); setFilterPeriode('mois'); setFilterAssigne('all'); }} className="text-[12px] font-semibold text-[#8A9BB5] hover:text-[#374151]">Effacer</button>
         )}
       </div>
 
@@ -585,16 +639,16 @@ export default function RequestsPage() {
         <table className="w-full" style={{ borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ background: '#F8FAFC' }}>
-              {['N°', 'Type', 'Source', 'Entreprise', 'Client', 'Date', 'Statut'].map((h) => (
+              {['N°', 'Type', 'Source', 'Entreprise', 'Client', 'Responsable', 'Date', 'Statut'].map((h) => (
                 <th key={h} className="px-5 py-3.5 text-left font-semibold text-[#8A9BB5] uppercase tracking-wider" style={{ fontSize: 11 }}>{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={7} className="px-6 py-14 text-center text-[13px] text-[#8A9BB5]">Chargement…</td></tr>
+              <tr><td colSpan={8} className="px-6 py-14 text-center text-[13px] text-[#8A9BB5]">Chargement…</td></tr>
             ) : filtered.length === 0 ? (
-              <tr><td colSpan={7} className="px-6 py-14 text-center text-[13px] text-[#8A9BB5]">Aucune demande trouvée</td></tr>
+              <tr><td colSpan={8} className="px-6 py-14 text-center text-[13px] text-[#8A9BB5]">Aucune demande trouvée</td></tr>
             ) : filtered.map((row, i) => {
               const isEnAttente = row.statut === 'En attente';
               const isArchived  = ARCHIVED.includes(row.statut);
@@ -622,6 +676,11 @@ export default function RequestsPage() {
                   </td>
                   <td className={`px-5 py-3.5 text-[13px] font-semibold ${isArchived ? 'text-[#ABBED1]' : 'text-[#0F172A]'}`}>{row.entreprise}</td>
                   <td className="px-5 py-3.5 text-[13px] text-[#8A9BB5]">{row.client}</td>
+                  <td className="px-5 py-3.5 text-[13px]">
+                    {row.assignedToName
+                      ? <span className="text-[#374151] font-medium">{row.assignedToName}</span>
+                      : <span className="text-[#CBD5E1] italic">—</span>}
+                  </td>
                   <td className="px-5 py-3.5 text-[13px] text-[#8A9BB5] tabular-nums">{row.date}</td>
                   <td className="px-5 py-3.5"><StatusPill status={row.statut} /></td>
                 </tr>
@@ -637,6 +696,8 @@ export default function RequestsPage() {
           onClose={() => setSelected(null)}
           onStatusChange={handleStatusChange}
           onConfirmQuoteWithPrice={selected.type === 'Devis' ? handleConfirmQuoteWithPrice : undefined}
+          users={users}
+          onAssign={handleAssign}
         />
       )}
       {showCreate && (
@@ -644,6 +705,8 @@ export default function RequestsPage() {
           defaultType={isDevis ? 'Devis' : 'Commande'}
           onClose={() => setShowCreate(false)}
           onSave={handleSaveNew}
+          users={users}
+          currentUserId={currentUserId}
         />
       )}
     </div>
