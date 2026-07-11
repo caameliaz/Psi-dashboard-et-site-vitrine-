@@ -55,6 +55,7 @@ export async function GET() {
       }),
       prisma.quote.findMany({
         take: 5,
+        where: { convertedOrderId: null }, // exclut les devis déjà convertis en commande
         orderBy: { createdAt: 'desc' },
         select: {
           id: true, ref: true, status: true, source: true, message: true, proposedPrice: true, createdAt: true,

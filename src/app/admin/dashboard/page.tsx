@@ -105,7 +105,7 @@ function PieChart({ data }: { data: { ref: string; qty: number; label: string; c
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
   const total = data.reduce((s, d) => s + d.qty, 0);
   if (total === 0) return <p className="text-[12px] text-[#8A9BB5] py-4">Aucune commande</p>;
-  const R = 70, stroke = 26, cx = 88, cy = 88, gap = 0.04;
+  const R = 70, stroke = 24, cx = 88, cy = 88, gap = 0.015;
   let angle = -Math.PI / 2;
   const slices = data.map((d) => {
     const sweep = (d.qty / total) * (2 * Math.PI) - gap;
@@ -127,14 +127,9 @@ function PieChart({ data }: { data: { ref: string; qty: number; label: string; c
   return (
     <div className="relative flex items-center gap-8" onMouseMove={handleMove}>
       <svg width="176" height="176" viewBox="0 0 176 176">
-        <defs>
-          <filter id="donut-shadow" x="-50%" y="-50%" width="200%" height="200%">
-            <feDropShadow dx="0" dy="2" stdDeviation="2.5" floodColor="#000" floodOpacity="0.18" />
-          </filter>
-        </defs>
         {slices.map((s, i) => (
-          <path key={i} d={s.path} fill="none" stroke={s.color} strokeWidth={stroke} strokeLinecap="round"
-            opacity={hovered === null || hovered === i ? 1 : 0.25} filter="url(#donut-shadow)"
+          <path key={i} d={s.path} fill="none" stroke={s.color} strokeWidth={stroke} strokeLinecap="butt"
+            opacity={hovered === null || hovered === i ? 1 : 0.25}
             style={{ cursor: 'pointer', transition: 'opacity 0.15s' }}
             onMouseEnter={() => setHovered(i)} onMouseLeave={() => setHovered(null)} />
         ))}
@@ -230,7 +225,7 @@ export default function DashboardPage() {
         const da = a.date.split('/').reverse().join('') + (a.heure ?? '');
         const db = b.date.split('/').reverse().join('') + (b.heure ?? '');
         return db.localeCompare(da);
-      }).slice(0, 7);
+      }).slice(0, 5);
       setRecentRequests(allDetails);
     } finally {
       setLoading(false);

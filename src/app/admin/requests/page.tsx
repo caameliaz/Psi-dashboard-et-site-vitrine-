@@ -181,7 +181,7 @@ function CreateForm({ defaultType, onClose, onSave }: {
 
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-[#F2F4F7]">
-          <h3 className="text-[15px] font-bold text-[#0F172A]">Nouvelle demande</h3>
+          <h3 className="text-[15px] font-bold text-[#0F172A]">{type === 'Commande' ? 'Nouvelle commande' : 'Nouvelle demande de devis'}</h3>
           <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-[#F2F4F7] text-[#ABBED1]">
             <svg width={14} height={14} viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"/></svg>
           </button>
@@ -548,7 +548,7 @@ export default function RequestsPage() {
           </button>
           <button onClick={() => setShowCreate(true)}
             className="px-4 py-2 rounded-xl text-[13px] font-bold border border-[#4CAF4F] text-[#4CAF4F] hover:bg-[#F0FDF4] transition-colors">
-            + Nouvelle demande
+            + Nouvelle commande
           </button>
         </div>
       </div>
