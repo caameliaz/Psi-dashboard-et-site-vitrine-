@@ -104,7 +104,7 @@ function sortItems(items: RequestDetail[]): RequestDetail[] {
 }
 
 const ALL_STATUTS_COMMANDE = ['En attente', 'Confirmé', 'Livré', 'Annulé'];
-const ALL_STATUTS_DEVIS    = ['En attente', 'Confirmé', 'Annulé'];
+const ALL_STATUTS_DEVIS    = ['En attente', 'Confirmé', 'Livré', 'Annulé'];
 
 interface Ligne { ref: string; productId: string | null; qte: number; pu: number; }
 const emptyLigne = (): Ligne => ({ ref: '', productId: null, qte: 1, pu: 0 });
@@ -387,31 +387,30 @@ export default function RequestsPage() {
     setSelected(null);
   };
 
-  const handleConvertToOrder = async (item: RequestDetail & { _prix?: { totalOverride?: number; itemPrices?: { designation: string; unitPrice: number }[] } }) => {
-    if (!item.id) {
-      // fallback local
-      const newOrder: RequestDetail = { ...item, ref: item.ref.replace('DEV-', 'CMD-'), type: 'Commande', statut: 'En attente', date: new Date().toLocaleDateString('fr-FR'), heure: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) };
-      setQuotes((p) => p.map((q) => q.ref === item.ref ? { ...q, statut: 'Confirmé' } : q));
-      setOrders((p) => [newOrder, ...p]);
-      setSelected(null);
-      setActiveTab('commandes');
-      return;
+  // Confirme un devis en fixant son prix (proposedPrice). Le prix est saisi
+  // dans le popup au moment du passage "En attente → Confirmé".
+  const handleConfirmQuoteWithPrice = async (
+    item: RequestDetail & { _prix?: { totalOverride?: number; itemPrices?: { designation: string; unitPrice: number }[] } }
+  ) => {
+    if (!item.id) return;
+    // Calcule le montant total du devis à partir du popup (total direct OU somme des lignes)
+    const prix = item._prix;
+    let proposedPrice = 0;
+    if (prix?.totalOverride !== undefined) {
+      proposedPrice = prix.totalOverride;
+    } else if (prix?.itemPrices) {
+      proposedPrice = (item.items ?? []).reduce((acc, it) => {
+        const p = prix.itemPrices!.find((x) => x.designation === it.designation);
+        return acc + it.quantite * (p?.unitPrice ?? 0);
+      }, 0);
     }
-    const res = await fetch(`/api/quotes/${item.id}/convert`, { method: 'PATCH' });
-    // Applique les prix saisis (unitaires ou total) sur la commande créée
-    if (res.ok && item._prix) {
-      const { order } = await res.json();
-      if (order?.id) {
-        await fetch(`/api/orders/${order.id}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(item._prix),
-        });
-      }
-    }
+    await fetch(`/api/quotes/${item.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'VALIDE', proposedPrice }),
+    });
     await fetchAll();
     setSelected(null);
-    setActiveTab('commandes');
   };
 
   const handleSaveNew = async (item: RequestDetail & { _lignes?: { productId: string | null; ref: string; qte: number; pu: number }[]; _wilaya?: string; _email?: string; _telephone?: string; _entreprise?: string }) => {
@@ -637,7 +636,7 @@ export default function RequestsPage() {
           item={selected}
           onClose={() => setSelected(null)}
           onStatusChange={handleStatusChange}
-          onConvertToOrder={selected.type === 'Devis' ? handleConvertToOrder : undefined}
+          onConfirmQuoteWithPrice={selected.type === 'Devis' ? handleConfirmQuoteWithPrice : undefined}
         />
       )}
       {showCreate && (

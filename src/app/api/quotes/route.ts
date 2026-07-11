@@ -13,7 +13,6 @@ export async function GET() {
 
   try {
     const quotes = await prisma.quote.findMany({
-      where: { convertedOrderId: null }, // exclut les devis déjà convertis en commande
       include: {
         client: { include: { phones: true } },
         items: { include: { product: true } },

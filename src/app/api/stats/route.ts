@@ -15,6 +15,7 @@ export async function GET() {
     const [
       commandesMois,
       livreesMois,
+      devisLivresMois,
       clientsMois,
       devisEnCours,
       commandesAujourdhui,
@@ -29,6 +30,7 @@ export async function GET() {
     ] = await Promise.all([
       prisma.order.count({ where: { createdAt: { gte: startOfMonth } } }),
       prisma.order.count({ where: { status: 'LIVRE', createdAt: { gte: startOfMonth } } }),
+      prisma.quote.count({ where: { status: 'LIVRE', createdAt: { gte: startOfMonth } } }),
       prisma.client.count({ where: { createdAt: { gte: startOfMonth } } }),
       prisma.quote.count({ where: { status: { in: ['EN_ATTENTE', 'CONTACTE'] } } }),
       prisma.order.count({ where: { createdAt: { gte: startOfToday } } }),
@@ -55,7 +57,6 @@ export async function GET() {
       }),
       prisma.quote.findMany({
         take: 5,
-        where: { convertedOrderId: null }, // exclut les devis déjà convertis en commande
         orderBy: { createdAt: 'desc' },
         select: {
           id: true, ref: true, status: true, source: true, message: true, proposedPrice: true, createdAt: true,
@@ -106,7 +107,7 @@ export async function GET() {
     return NextResponse.json({
       stats: {
         commandes: commandesMois,
-        livrees: livreesMois,
+        livrees: livreesMois + devisLivresMois, // devis livré = vente (compté comme livraison)
         clients: clientsMois,
         devis: devisEnCours,
       },

@@ -11,13 +11,14 @@ DÉCISIONS ACTÉES (P1) :
 🔴 PRIORITÉ 1 — Logique métier core  (EN COURS — on traite ça d'abord)
 ═══════════════════════════════════════════════════════════
 
-## 1.1 — Séparer Devis et Commandes
-- [ ] Supprimer le bouton "Convertir en commande" partout (UI + route /api/quotes/[id]/convert)
-- [ ] Cycle Devis   : En attente → Confirmé → Livré → Annulé (indépendant)
-- [ ] Cycle Commande: En attente → Confirmé → Livré → Annulé
-- [ ] Devis chiffrable : prix par ligne (ou proposedPrice) obligatoire avant de passer "Livré"
-- [ ] Stats dashboard : CA = commandes LIVRÉES + devis LIVRÉS
-- [ ] Nettoyer le champ convertedOrderId / la logique de conversion
+## 1.1 — Séparer Devis et Commandes  ✅ FAIT
+- [x] Supprimer le bouton "Convertir en commande" partout (UI + route /api/quotes/[id]/convert)
+- [x] Cycle Devis   : En attente → Confirmé → Livré → Annulé (indépendant)
+- [x] Cycle Commande: En attente → Confirmé → Livré → Annulé
+- [x] Devis chiffrable : prix (proposedPrice) saisi via popup au moment de CONFIRMER le devis
+- [x] Stats dashboard : livrées ce mois = commandes LIVRÉES + devis LIVRÉS
+- [x] Nettoyer convertedOrderId : migration DB (colonne supprimée) + code
+- [ ] À tester en vrai : popup prix pour un devis avec lignes hors-catalogue (sans productId)
 
 ## 1.2 — Champ "Pris en charge par" (assignation)
 - [ ] Colonne assignedToId (userId nullable) sur Order ET Quote + migration

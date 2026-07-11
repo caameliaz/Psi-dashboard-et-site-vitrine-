@@ -9,7 +9,7 @@ const prisma = new PrismaClient();
 
 // Permissions (doivent correspondre à src/lib/permissions.ts)
 const ALL_PERMS = [
-  'voir_commandes', 'modifier_statuts', 'voir_clients', 'modifier_clients',
+  'voir_commandes', 'modifier_statuts', 'assign_commandes', 'voir_clients', 'modifier_clients',
   'voir_produits', 'modifier_produits', 'voir_historique', 'modifier_contenu', 'gerer_utilisateurs',
 ];
 const EMPLOYE_COMPLET = [

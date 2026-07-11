@@ -416,20 +416,24 @@ export default function DashboardPage() {
             setSelectedRequest(null);
             fetchData();
           }}
-          onConvertToOrder={async (item) => {
+          onConfirmQuoteWithPrice={async (item) => {
             if (item.id) {
-              const res = await fetch(`/api/quotes/${item.id}/convert`, { method: 'PATCH' });
-              // Applique les prix saisis (unitaires ou total) sur la commande créée
-              if (res.ok && item._prix) {
-                const { order } = await res.json();
-                if (order?.id) {
-                  await fetch(`/api/orders/${order.id}`, {
-                    method: 'PATCH',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(item._prix),
-                  });
-                }
+              // Fixe le prix du devis (proposedPrice) au moment de la confirmation
+              const prix = item._prix;
+              let proposedPrice = 0;
+              if (prix?.totalOverride !== undefined) {
+                proposedPrice = prix.totalOverride;
+              } else if (prix?.itemPrices) {
+                proposedPrice = (item.items ?? []).reduce((acc, it) => {
+                  const p = prix.itemPrices!.find((x) => x.designation === it.designation);
+                  return acc + it.quantite * (p?.unitPrice ?? 0);
+                }, 0);
               }
+              await fetch(`/api/quotes/${item.id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ status: 'VALIDE', proposedPrice }),
+              });
             }
             setSelectedRequest(null);
             fetchData();

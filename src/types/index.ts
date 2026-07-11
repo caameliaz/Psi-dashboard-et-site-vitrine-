@@ -163,7 +163,6 @@ export interface Quote {
   paymentTerms: string | null;
   adminRemarks: string | null;
   notes: string | null;
-  convertedOrderId: string | null;
   createdBy: { id: string; name: string } | null;
   createdAt: string;
   updatedAt: string;

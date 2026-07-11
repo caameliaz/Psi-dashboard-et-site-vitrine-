@@ -330,7 +330,7 @@ function TemplatePopover({ item, mode, onClose }: {
 
 export interface ConvertPrixData { totalOverride?: number; itemPrices?: { designation: string; unitPrice: number }[]; }
 
-function ConvertModal({ item, onConfirm, onClose }: {
+function PriceModal({ item, onConfirm, onClose }: {
   item: RequestDetail;
   onConfirm: (montant: string, prix: ConvertPrixData) => void;
   onClose: () => void;
@@ -360,7 +360,7 @@ function ConvertModal({ item, onConfirm, onClose }: {
       <div className="fixed inset-0 z-[80] bg-black/40 backdrop-blur-sm" onClick={onClose} />
       <div className="fixed inset-0 z-[90] flex items-center justify-center p-6 pointer-events-none">
         <div className="pointer-events-auto bg-white rounded-2xl shadow-2xl p-6 w-[460px] max-w-[94vw]">
-          <p className="text-[16px] font-bold text-[#0F172A] mb-1">Convertir en commande</p>
+          <p className="text-[16px] font-bold text-[#0F172A] mb-1">Confirmer le devis — fixer le prix</p>
           <p className="text-[12px] text-[#8A9BB5] mb-4">{item.ref} — {item.entreprise || item.client}</p>
 
           {/* Toggle mode — n'affiche l'unitaire que si on a des produits */}
@@ -407,7 +407,7 @@ function ConvertModal({ item, onConfirm, onClose }: {
           <div className="flex gap-3">
             <button onClick={onClose} className="flex-1 px-4 py-2.5 rounded-xl border border-[#E2E8F0] text-[13px] font-semibold text-[#374151]">Annuler</button>
             <button onClick={handleConfirm} className="flex-1 px-4 py-2.5 rounded-xl text-[13px] font-bold text-white" style={{ background: '#4CAF4F' }}>
-              Créer la commande
+              Confirmer le devis
             </button>
           </div>
         </div>
@@ -550,7 +550,7 @@ interface RequestPanelProps {
   item: RequestDetail;
   onClose: () => void;
   onStatusChange?: (ref: string, newStatut: string) => void;
-  onConvertToOrder?: (item: RequestDetail & { _prix?: ConvertPrixData }) => void;
+  onConfirmQuoteWithPrice?: (item: RequestDetail & { _prix?: ConvertPrixData }) => void;
 }
 
 // ── Bouton icône rond ────────────────────────────────────────────────────────
@@ -575,10 +575,10 @@ function IconBtn({ href, onClick, title, color, children }: {
   );
 }
 
-export function RequestPanel({ item, onClose, onStatusChange, onConvertToOrder }: RequestPanelProps) {
+export function RequestPanel({ item, onClose, onStatusChange, onConfirmQuoteWithPrice }: RequestPanelProps) {
   const { can } = useRole();
   const canModifierStatuts = can('modifier_statuts');
-  const [showConvert, setShowConvert] = useState(false);
+  const [showPriceModal, setShowPriceModal] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
   const [editingNotes, setEditingNotes] = useState(false);
   const [notesValue, setNotesValue] = useState('');
@@ -789,11 +789,18 @@ export function RequestPanel({ item, onClose, onStatusChange, onConvertToOrder }
                         Marquer Livré
                       </button>
                     )}
-                    {/* Devis (en attente OU confirmé) → Convertir en commande directement */}
-                    {!isCommande && (item.statut === 'En attente' || item.statut === 'Confirmé') && onConvertToOrder && (
-                      <button onClick={() => setShowConvert(true)}
+                    {/* Devis en attente → Confirmer (fixe le prix via popup) */}
+                    {!isCommande && item.statut === 'En attente' && onConfirmQuoteWithPrice && (
+                      <button onClick={() => setShowPriceModal(true)}
                         className="px-4 py-2 rounded-lg text-[13px] font-bold border border-[#4CAF4F] text-[#4CAF4F] hover:bg-[#F0FDF4] transition-colors">
-                        Convertir en commande
+                        Confirmer
+                      </button>
+                    )}
+                    {/* Devis confirmé → Marquer Livré */}
+                    {!isCommande && item.statut === 'Confirmé' && (
+                      <button onClick={() => { onStatusChange(item.ref, 'Livré'); onClose(); }}
+                        className="px-4 py-2 rounded-lg text-[13px] font-bold border border-[#4CAF4F] text-[#4CAF4F] hover:bg-[#F0FDF4] transition-colors">
+                        Marquer Livré
                       </button>
                     )}
                     <button onClick={() => { if (window.confirm(`Annuler ${item.type.toLowerCase()} de ${item.entreprise || item.client} ?`)) { onStatusChange(item.ref, 'Annulé'); onClose(); } }}
@@ -849,13 +856,13 @@ export function RequestPanel({ item, onClose, onStatusChange, onConvertToOrder }
       )}
 
 
-      {showConvert && onConvertToOrder && (
-        <ConvertModal
+      {showPriceModal && onConfirmQuoteWithPrice && (
+        <PriceModal
           item={item}
-          onClose={() => setShowConvert(false)}
+          onClose={() => setShowPriceModal(false)}
           onConfirm={(montant, prix) => {
-            onConvertToOrder({ ...item, montant, _prix: prix });
-            setShowConvert(false);
+            onConfirmQuoteWithPrice({ ...item, montant, _prix: prix });
+            setShowPriceModal(false);
             onClose();
           }}
         />
