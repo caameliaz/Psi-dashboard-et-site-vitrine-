@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useSSEContext } from '@/lib/sse-context';
+import { useSession } from 'next-auth/react';
 
 type NotifType = 'SITE_COMMANDE' | 'SITE_DEVIS' | 'ACTION_AUTRE' | 'ACTION_PERSO' | 'ANNULATION';
 
@@ -89,6 +90,8 @@ export function NotifBell() {
   const notifIds = useRef(new Set<string>());
 
   const { subscribe } = useSSEContext();
+  const { data: session } = useSession();
+  const currentUserId = (session?.user as { id?: string } | undefined)?.id;
   const unread = notifs.filter((n) => !n.read).length;
 
   const fetchNotifs = useCallback(async () => {
@@ -106,12 +109,14 @@ export function NotifBell() {
     return subscribe((payload) => {
       const notif = payload?.notif;
       if (!notif || notifIds.current.has(notif.id)) return;
+      // Notif ciblée (assignation) : ne concerne que l'utilisateur visé
+      if (notif.targetUserId && notif.targetUserId !== currentUserId) return;
       notifIds.current.add(notif.id);
       const mapped = mapDbNotif({ ...notif, read: false });
       setNotifs((prev) => [mapped, ...prev]);
       setToasts((prev) => [...prev, { id: notif.id, type: notif.type as NotifType, title: notif.title, message: notif.message }]);
     });
-  }, [subscribe]);
+  }, [subscribe, currentUserId]);
 
   useEffect(() => { fetchNotifs(); }, [fetchNotifs]);
 

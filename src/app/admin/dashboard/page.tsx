@@ -5,7 +5,25 @@ import { StatusPill } from '@/components/ui/StatusPill';
 import { RequestPanel, type RequestDetail } from '@/components/ui/RequestPanel';
 import { NotifBell } from '@/components/ui/NotifBell';
 import { useSSE } from '@/lib/use-sse';
+import dynamic from 'next/dynamic';
 import type { Order, Quote } from '@/types';
+
+// Graphiques Recharts chargés à la demande (ssr:false) → aucun poids ailleurs
+const WilayaBarChart = dynamic(() => import('@/components/ui/DashboardCharts').then((m) => m.WilayaBarChart), {
+  ssr: false, loading: () => <ChartSkeleton title="Commandes par wilaya" />,
+});
+const TrendLineChart = dynamic(() => import('@/components/ui/DashboardCharts').then((m) => m.TrendLineChart), {
+  ssr: false, loading: () => <ChartSkeleton title="Évolution sur 6 mois" />,
+});
+
+function ChartSkeleton({ title }: { title: string }) {
+  return (
+    <div className="bg-white rounded-2xl border border-[#E4EBF5] p-5 shadow-sm">
+      <h3 className="text-[14px] font-bold text-[#0F172A] mb-3">{title}</h3>
+      <div className="h-[200px] flex items-center justify-center text-[12px] text-[#ABBED1]">Chargement du graphique…</div>
+    </div>
+  );
+}
 
 const DB_TO_UI: Record<string, string> = {
   EN_ATTENTE: 'En attente', CONTACTE: 'En attente',
@@ -189,6 +207,11 @@ export default function DashboardPage() {
   const [todayStats, setTodayStats] = useState({ commandes: 0, attente: 0, contactes: 0 });
   const [topProduits, setTopProduits] = useState<{ ref: string; qty: number; label: string; color: string }[]>([]);
   const [sourceStats, setSourceStats] = useState({ site: 0, manuel: 0 });
+  const [evolution, setEvolution] = useState(0);
+  const [devisEnAttente, setDevisEnAttente] = useState({ count: 0, montant: 0 });
+  const [topWilayas, setTopWilayas] = useState<{ wilaya: string; count: number }[]>([]);
+  const [serie6Mois, setSerie6Mois] = useState<{ mois: string; commandes: number; devis: number }[]>([]);
+  const [employesActifs, setEmployesActifs] = useState<{ name: string; count: number }[]>([]);
   const [loading, setLoading]   = useState(true);
 
   useEffect(() => {
@@ -204,8 +227,9 @@ export default function DashboardPage() {
     return () => clearInterval(iv);
   }, []);
 
-  const fetchData = useCallback(async () => {
-    setLoading(true);
+  // silent = refetch temps réel (SSE) → pas de spinner, mise à jour en douceur
+  const fetchData = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const res = await fetch('/api/stats');
       if (!res.ok) return;
@@ -213,6 +237,11 @@ export default function DashboardPage() {
       setStats(data.stats);
       setTodayStats(data.todayStats);
       setSourceStats(data.sourceStats);
+      setEvolution(data.evolutionCommandes ?? 0);
+      setDevisEnAttente(data.devisEnAttente ?? { count: 0, montant: 0 });
+      setTopWilayas(data.topWilayas ?? []);
+      setSerie6Mois(data.serie6Mois ?? []);
+      setEmployesActifs(data.employesActifs ?? []);
       setTopProduits(
         (data.topProduits as { ref: string; qty: number; label: string }[]).map((p, i) => ({
           ...p, color: TOP_COLORS[i] ?? '#8A9BB5',
@@ -228,12 +257,12 @@ export default function DashboardPage() {
       }).slice(0, 5);
       setRecentRequests(allDetails);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, []);
 
   useEffect(() => { fetchData(); }, [fetchData]);
-  useSSE(useCallback(() => { fetchData(); }, [fetchData]));
+  useSSE(useCallback(() => { fetchData(true); }, [fetchData]));
 
   const handleSort = (key: SortKey) => {
     if (sortKey === key) setSortAsc((a) => !a);
@@ -350,6 +379,61 @@ export default function DashboardPage() {
 
       </div>
 
+      {/* ── Nouvelles stats (P2) ──────────────────────────────────────── */}
+      {/* Ligne : cartes évolution + devis en attente */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="bg-white rounded-2xl border border-[#E4EBF5] p-5 shadow-sm">
+          <p className="text-[11px] font-bold text-[#ABBED1] uppercase tracking-widest mb-2">Commandes ce mois</p>
+          <div className="flex items-end gap-3">
+            <span className="text-[32px] font-extrabold text-[#0F172A] leading-none">{stats.commandes}</span>
+            <span className={`flex items-center gap-1 text-[13px] font-bold pb-1 ${evolution >= 0 ? 'text-[#4CAF4F]' : 'text-[#EF4444]'}`}>
+              {evolution >= 0 ? '▲' : '▼'} {Math.abs(evolution)}%
+            </span>
+          </div>
+          <p className="text-[12px] text-[#8A9BB5] mt-1">vs mois précédent</p>
+        </div>
+        <div className="bg-white rounded-2xl border border-[#E4EBF5] p-5 shadow-sm">
+          <p className="text-[11px] font-bold text-[#ABBED1] uppercase tracking-widest mb-2">Devis en attente</p>
+          <div className="flex items-end gap-3">
+            <span className="text-[32px] font-extrabold text-[#8B5CF6] leading-none">{devisEnAttente.count}</span>
+            <span className="text-[13px] font-bold text-[#8A9BB5] pb-1">
+              {devisEnAttente.montant > 0 ? `≈ ${Number(devisEnAttente.montant).toLocaleString('fr-FR')} DA` : '—'}
+            </span>
+          </div>
+          <p className="text-[12px] text-[#8A9BB5] mt-1">montant estimé (prix proposés)</p>
+        </div>
+      </div>
+
+      {/* Ligne : graphiques barres wilaya + courbe 6 mois */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <WilayaBarChart data={topWilayas} />
+        <TrendLineChart data={serie6Mois} />
+      </div>
+
+      {/* Tableau employés actifs */}
+      <div className="bg-white rounded-2xl border border-[#E4EBF5] p-5 shadow-sm">
+        <h3 className="text-[14px] font-bold text-[#0F172A] mb-1">Employés actifs ce mois</h3>
+        <p className="text-[11px] text-[#8A9BB5] mb-4">Commandes créées manuellement</p>
+        {employesActifs.length === 0 ? (
+          <p className="text-[12px] text-[#8A9BB5] py-4 text-center">Aucune commande créée manuellement ce mois</p>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {employesActifs.map((e, i) => {
+              const max = employesActifs[0]?.count || 1;
+              return (
+                <div key={i} className="flex items-center gap-3">
+                  <span className="text-[13px] font-semibold text-[#374151] w-32 truncate">{e.name}</span>
+                  <div className="flex-1 h-2.5 rounded-full bg-[#F2F4F7] overflow-hidden">
+                    <div className="h-full rounded-full" style={{ width: `${(e.count / max) * 100}%`, background: '#4CAF4F' }} />
+                  </div>
+                  <span className="text-[13px] font-bold text-[#0F172A] tabular-nums w-8 text-right">{e.count}</span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
       {/* Tableau dernières demandes */}
       <div className="bg-white rounded-2xl border border-[#E2E8F0] overflow-hidden shadow-sm">
         <div className="flex items-center justify-between px-6 py-4 border-b border-[#F2F4F7]">
@@ -414,7 +498,7 @@ export default function DashboardPage() {
             const endpoint = item.type === 'Devis' ? `/api/quotes/${item.id}` : `/api/orders/${item.id}`;
             await fetch(endpoint, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: UI_TO_DB[newStatut] ?? newStatut }) });
             setSelectedRequest(null);
-            fetchData();
+            fetchData(true);
           }}
           onConfirmQuoteWithPrice={async (item) => {
             if (item.id) {
@@ -436,7 +520,7 @@ export default function DashboardPage() {
               });
             }
             setSelectedRequest(null);
-            fetchData();
+            fetchData(true);
           }}
         />
       )}

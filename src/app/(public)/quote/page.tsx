@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { inputClass, labelClass } from '@/lib/utils';
 import { WilayaSelect } from '@/components/ui/WilayaSelect';
+import { CommuneSelect } from '@/components/ui/CommuneSelect';
 import { useCartStore } from '@/store/cartStore';
 
 const WHATSAPP_NUMBER = '213770150656';
@@ -27,6 +28,7 @@ export default function QuotePage() {
     phone: '',
     email: '',
     wilaya: '',
+    commune: '',
     message: '',
   });
   const [products, setProducts] = useState<ProdOption[]>([]);
@@ -80,6 +82,7 @@ export default function QuotePage() {
           phone: formData.phone,
           email: formData.email || undefined,
           wilaya: formData.wilaya,
+          commune: formData.commune || undefined,
           message: formData.message,
           items,
           source: 'SITE',
@@ -173,15 +176,26 @@ export default function QuotePage() {
                   <WilayaSelect
                     name="wilaya"
                     value={formData.wilaya}
-                    onChange={(v) => setFormData({ ...formData, wilaya: v })}
+                    onChange={(v) => setFormData({ ...formData, wilaya: v, commune: '' })}
                     required
                   />
                 </div>
               </div>
 
-              <div>
-                <label className={labelClass}>Email</label>
-                <input type="email" name="email" value={formData.email} onChange={handleChange} placeholder="votre@email.com" className={inputClass} />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className={labelClass}>Commune</label>
+                  <CommuneSelect
+                    name="commune"
+                    wilaya={formData.wilaya}
+                    value={formData.commune}
+                    onChange={(v) => setFormData({ ...formData, commune: v })}
+                  />
+                </div>
+                <div>
+                  <label className={labelClass}>Email</label>
+                  <input type="email" name="email" value={formData.email} onChange={handleChange} placeholder="votre@email.com" className={inputClass} />
+                </div>
               </div>
 
               <div className="border-t border-[#F0F4F8] pt-6">

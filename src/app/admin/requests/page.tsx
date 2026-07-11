@@ -5,6 +5,7 @@ import { StatusPill } from '@/components/ui/StatusPill';
 import { RequestPanel, type RequestDetail } from '@/components/ui/RequestPanel';
 import { AdminSelect } from '@/components/ui/AdminSelect';
 import { WilayaSelect } from '@/components/ui/WilayaSelect';
+import { CommuneSelect } from '@/components/ui/CommuneSelect';
 import { RefSelect } from '@/components/ui/RefSelect';
 import { exportTableauExcel } from '@/lib/export-tableau';
 import { exportVentesExcel } from '@/lib/export-ventes';
@@ -130,6 +131,7 @@ function CreateForm({ defaultType, onClose, onSave, users, currentUserId }: {
   const [telephone, setTelephone] = useState('');
   const [email, setEmail] = useState('');
   const [wilaya, setWilaya] = useState('');
+  const [commune, setCommune] = useState('');
   const [lignes, setLignes] = useState<Ligne[]>([emptyLigne()]);
   const [tva, setTva] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -174,6 +176,7 @@ function CreateForm({ defaultType, onClose, onSave, users, currentUserId }: {
       // données brutes pour l'API
       _lignes: lignes,
       _wilaya: wilaya.trim(),
+      _commune: commune.trim(),
       _email: email.trim(),
       _telephone: telephone.trim(),
       _entreprise: entreprise.trim(),
@@ -219,14 +222,15 @@ function CreateForm({ defaultType, onClose, onSave, users, currentUserId }: {
             <div><label className={lc}>Email</label><input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="client@email.com" className={ic} /></div>
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <div><label className={lc}>Wilaya</label><WilayaSelect value={wilaya} onChange={setWilaya} /></div>
-            <div>
-              <label className={lc}>Pris en charge par</label>
-              <select value={assignedToId} onChange={e => setAssignedToId(e.target.value)} className={ic}>
-                <option value="">— Non assigné —</option>
-                {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
-              </select>
-            </div>
+            <div><label className={lc}>Wilaya</label><WilayaSelect value={wilaya} onChange={(v) => { setWilaya(v); setCommune(''); }} /></div>
+            <div><label className={lc}>Commune</label><CommuneSelect wilaya={wilaya} value={commune} onChange={setCommune} /></div>
+          </div>
+          <div>
+            <label className={lc}>Pris en charge par</label>
+            <select value={assignedToId} onChange={e => setAssignedToId(e.target.value)} className={ic}>
+              <option value="">— Non assigné —</option>
+              {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+            </select>
           </div>
 
           {/* Lignes produits */}
@@ -344,8 +348,9 @@ export default function RequestsPage() {
   const [selected, setSelected]   = useState<RequestDetail | null>(null);
   const [showCreate, setShowCreate] = useState(false);
 
-  const fetchAll = useCallback(async () => {
-    setLoading(true);
+  // silent = refetch en arrière-plan (SSE temps réel) → pas de spinner, pas de clignotement
+  const fetchAll = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const [ordRes, quoRes] = await Promise.all([
         fetch('/api/orders'),
@@ -360,12 +365,12 @@ export default function RequestsPage() {
         setQuotes(data.map(quoteToDetail));
       }
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, []);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
-  useSSE(useCallback(() => { fetchAll(); }, [fetchAll]));
+  useSSE(useCallback(() => { fetchAll(true); }, [fetchAll]));
 
   // Liste des utilisateurs actifs (pour l'assignation "pris en charge par")
   useEffect(() => {
@@ -412,7 +417,7 @@ export default function RequestsPage() {
       body: JSON.stringify({ status: dbStatus }),
     });
     if (!res.ok) console.error('PATCH failed', await res.text());
-    await fetchAll();
+    await fetchAll(true);
     setSelected(null);
   };
 
@@ -425,7 +430,7 @@ export default function RequestsPage() {
       body: JSON.stringify({ assignedToId }),
     });
     if (!res.ok) { console.error('Assign failed', await res.text()); return; }
-    await fetchAll();
+    await fetchAll(true);
     // Met à jour le panneau ouvert avec le nouvel assigné
     setSelected(prev => prev ? { ...prev, assignedToId, assignedToName: users.find(u => u.id === assignedToId)?.name ?? null } : prev);
   };
@@ -452,11 +457,11 @@ export default function RequestsPage() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status: 'VALIDE', proposedPrice }),
     });
-    await fetchAll();
+    await fetchAll(true);
     setSelected(null);
   };
 
-  const handleSaveNew = async (item: RequestDetail & { _lignes?: { productId: string | null; ref: string; qte: number; pu: number }[]; _wilaya?: string; _email?: string; _telephone?: string; _entreprise?: string; _assignedToId?: string | null }) => {
+  const handleSaveNew = async (item: RequestDetail & { _lignes?: { productId: string | null; ref: string; qte: number; pu: number }[]; _wilaya?: string; _commune?: string; _email?: string; _telephone?: string; _entreprise?: string; _assignedToId?: string | null }) => {
     const isCmd = item.type === 'Commande';
     const endpoint = isCmd ? '/api/orders' : '/api/quotes';
 
@@ -469,6 +474,7 @@ export default function RequestsPage() {
             phone: item._telephone || undefined,
             email: item._email || undefined,
             wilaya: item._wilaya || 'Non spécifié',
+            commune: item._commune || undefined,
           },
           items: lignes.filter(l => l.ref).map(l => ({
             productId: l.productId ?? undefined,
@@ -484,6 +490,7 @@ export default function RequestsPage() {
           phone: item._telephone || undefined,
           email: item._email || undefined,
           wilaya: item._wilaya || 'Non spécifié',
+          commune: item._commune || undefined,
           message: '',
           items: lignes.filter(l => l.ref).map(l => ({
             productId: l.productId ?? undefined,
@@ -509,7 +516,7 @@ export default function RequestsPage() {
       return;
     }
 
-    await fetchAll();
+    await fetchAll(true);
     setActiveTab(isCmd ? 'commandes' : 'devis');
   };
 

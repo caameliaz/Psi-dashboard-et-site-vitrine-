@@ -192,8 +192,10 @@ export default function ProductsPage() {
   const canEdit = can('modifier_produits');
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<string[]>([]);
+  const [catList, setCatList] = useState<{ id: string; name: string; photo: string | null; count: number }[]>([]);
   const [loading, setLoading]   = useState(true);
   const [newCat, setNewCat]     = useState('');
+  const catPhotoRef = useRef<Record<string, HTMLInputElement | null>>({});
   const [search, setSearch]     = useState('');
   const [filterCat, setFilterCat] = useState('all');
   const [filterActif, setFilterActif] = useState<'all' | 'actif' | 'inactif'>('all');
@@ -204,6 +206,16 @@ export default function ProductsPage() {
   const [addForm, setAddForm]   = useState(emptyForm);
   const [editForm, setEditForm] = useState(emptyForm);
 
+  const fetchCategories = useCallback(async () => {
+    const res = await fetch('/api/categories');
+    if (res.ok) {
+      const data = await res.json();
+      const list = data.map((c: any) => ({ id: c.id, name: c.name, photo: c.photo ?? null, count: c._count?.products ?? 0 }));
+      setCatList(list);
+      setCategories(list.length ? list.map((c: { name: string }) => c.name) : ['Standard']);
+    }
+  }, []);
+
   const fetchProducts = useCallback(async () => {
     setLoading(true);
     try {
@@ -212,15 +224,13 @@ export default function ProductsPage() {
         const data = await res.json();
         const mapped: Product[] = data.map(dbProductToProduct);
         setProducts(mapped);
-        const cats = [...new Set(mapped.map((p) => p.categorie))];
-        setCategories(cats.length ? cats : ['Standard']);
       }
     } finally {
       setLoading(false);
     }
   }, []);
 
-  useEffect(() => { fetchProducts(); }, [fetchProducts]);
+  useEffect(() => { fetchProducts(); fetchCategories(); }, [fetchProducts, fetchCategories]);
 
   const toggleProduct = async (id: string) => {
     const p = products.find((x) => x.id === id);
@@ -233,9 +243,37 @@ export default function ProductsPage() {
     await fetchProducts();
   };
 
-  const addCategory = () => {
+  const addCategory = async () => {
     const t = newCat.trim();
-    if (t && !categories.includes(t)) { setCategories((p) => [...p, t]); setNewCat(''); }
+    if (!t || categories.includes(t)) return;
+    const res = await fetch('/api/categories', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: t }),
+    });
+    if (res.ok) { setNewCat(''); await fetchCategories(); }
+  };
+
+  const deleteCategory = async (id: string) => {
+    const res = await fetch(`/api/categories/${id}`, { method: 'DELETE' });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      alert(err.error ?? 'Suppression impossible');
+      return;
+    }
+    await fetchCategories();
+  };
+
+  // Upload photo d'une catégorie (image → base64 → PATCH)
+  const setCategoryPhoto = async (id: string, file: File | null) => {
+    const photo = await new Promise<string>((resolve) => {
+      if (!file) return resolve('');
+      const reader = new FileReader();
+      reader.onload = (ev) => resolve((ev.target?.result as string) ?? '');
+      reader.readAsDataURL(file);
+    });
+    await fetch(`/api/categories/${id}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ photo: photo || null }),
+    });
+    await fetchCategories();
   };
 
   const handleAdd = async () => {
@@ -419,19 +457,53 @@ export default function ProductsPage() {
       )}
 
       <div className="bg-white rounded-2xl border border-[#E2E8F0] p-6 shadow-sm">
-        <h2 className="text-[15px] font-bold text-[#0F172A] mb-4">Catégories</h2>
-        <div className="flex flex-wrap gap-2 mb-4">
-          {categories.map((cat) => (
-            <span key={cat} className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium bg-[#F0FDF4] text-[#166534]">
-              {cat}
-              <button onClick={() => setCategories((p) => p.filter((c) => c !== cat))} className="w-5 h-5 flex items-center justify-center rounded-full text-[#4CAF4F] hover:bg-[#DCFCE7] hover:text-[#991B1B] transition-colors font-bold text-base leading-none">×</button>
-            </span>
+        <h2 className="text-[15px] font-bold text-[#0F172A] mb-1">Catégories</h2>
+        <p className="text-[12px] text-[#8A9BB5] mb-4">La photo s’affiche sur le site public (page produits + accueil).</p>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+          {catList.map((cat) => (
+            <div key={cat.id} className="rounded-xl border border-[#E2E8F0] overflow-hidden bg-white">
+              {/* Zone photo */}
+              <div className="relative h-24 bg-[#F5F7FA] flex items-center justify-center">
+                {cat.photo ? (
+                  <img src={cat.photo} alt={cat.name} className="w-full h-full object-cover" />
+                ) : (
+                  <span className="text-[11px] text-[#ABBED1]">Aucune photo</span>
+                )}
+                {canEdit && (
+                  <button onClick={() => catPhotoRef.current[cat.id]?.click()}
+                    className="absolute bottom-1.5 right-1.5 px-2 py-1 rounded-lg text-[10px] font-bold text-white bg-black/50 hover:bg-black/70 transition-colors">
+                    {cat.photo ? 'Changer' : 'Photo'}
+                  </button>
+                )}
+                <input ref={(el) => { catPhotoRef.current[cat.id] = el; }} type="file" accept="image/*" className="hidden"
+                  onChange={(e) => { const f = e.target.files?.[0] ?? null; setCategoryPhoto(cat.id, f); e.target.value = ''; }} />
+              </div>
+              {/* Nom + actions */}
+              <div className="flex items-center justify-between gap-1 px-3 py-2">
+                <div className="min-w-0">
+                  <p className="text-[13px] font-semibold text-[#0F172A] truncate">{cat.name}</p>
+                  <p className="text-[10px] text-[#8A9BB5]">{cat.count} produit{cat.count > 1 ? 's' : ''}</p>
+                </div>
+                {canEdit && (
+                  <div className="flex items-center gap-1 flex-shrink-0">
+                    {cat.photo && (
+                      <button onClick={() => setCategoryPhoto(cat.id, null)} title="Retirer la photo"
+                        className="w-6 h-6 flex items-center justify-center rounded-lg text-[#8A9BB5] hover:bg-[#F1F5F9] transition-colors text-xs">⊘</button>
+                    )}
+                    <button onClick={() => deleteCategory(cat.id)} title="Supprimer la catégorie"
+                      className="w-6 h-6 flex items-center justify-center rounded-lg text-[#EF4444] hover:bg-[#FEF2F2] transition-colors font-bold leading-none">×</button>
+                  </div>
+                )}
+              </div>
+            </div>
           ))}
         </div>
-        <div className="flex items-center gap-2">
-          <input value={newCat} onChange={(e) => setNewCat(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addCategory()} placeholder="Nouvelle catégorie..." className={inputClass} />
-          <button onClick={addCategory} className="flex items-center gap-1 px-4 py-2 rounded-lg text-sm font-semibold text-white" style={{ background: '#4CAF4F' }}>+ Ajouter</button>
-        </div>
+        {canEdit && (
+          <div className="flex items-center gap-2">
+            <input value={newCat} onChange={(e) => setNewCat(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addCategory()} placeholder="Nouvelle catégorie..." className={inputClass} />
+            <button onClick={addCategory} className="flex items-center gap-1 px-4 py-2 rounded-lg text-sm font-semibold text-white whitespace-nowrap" style={{ background: '#4CAF4F' }}>+ Ajouter</button>
+          </div>
+        )}
       </div>
 
       {showAdd && (

@@ -10,6 +10,7 @@ interface ClientRecord {
   contact: string;
   telephone: string;
   wilaya: string;
+  commune: string;
   adresse: string;
   email: string;
   photo?: string;
@@ -30,6 +31,8 @@ import { initials } from '@/lib/utils';
 import { RequestPanel, type RequestDetail } from '@/components/ui/RequestPanel';
 import { Modal } from '@/components/ui/Modal';
 import { WilayaSelect } from '@/components/ui/WilayaSelect';
+import { CommuneSelect } from '@/components/ui/CommuneSelect';
+import { useSSE } from '@/lib/use-sse';
 
 function avatarColor(id: number | string) {
   const n = typeof id === 'string' ? id.charCodeAt(0) + id.charCodeAt(1) : id;
@@ -45,7 +48,7 @@ function avatarColor(id: number | string) {
 }
 
 const emptyClient: Omit<ClientRecord, 'id' | 'commandes' | 'devis' | 'derniere' | 'historique'> = {
-  entreprise: '', contact: '', telephone: '', wilaya: '', adresse: '', email: '',
+  entreprise: '', contact: '', telephone: '', wilaya: '', commune: '', adresse: '', email: '',
 };
 
 function ClientForm({ form, setForm, onSubmit, onClose, submitLabel }: {
@@ -79,9 +82,15 @@ function ClientForm({ form, setForm, onSubmit, onClose, submitLabel }: {
           <input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="contact@entreprise.dz" className={inputClass} />
         </div>
       </div>
-      <div>
-        <label className={labelClass}>Wilaya</label>
-        <WilayaSelect value={form.wilaya} onChange={(v) => setForm({ ...form, wilaya: v })} />
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className={labelClass}>Wilaya</label>
+          <WilayaSelect value={form.wilaya} onChange={(v) => setForm({ ...form, wilaya: v, commune: '' })} />
+        </div>
+        <div>
+          <label className={labelClass}>Commune</label>
+          <CommuneSelect wilaya={form.wilaya} value={form.commune} onChange={(v) => setForm({ ...form, commune: v })} />
+        </div>
       </div>
       <div>
         <label className={labelClass}>Adresse</label>
@@ -305,7 +314,7 @@ function ClientSlideIn({ client, onClose, onEdit, onDelete }: {
                 <p className="text-[20px] font-extrabold text-[#0F172A] leading-tight">{client.entreprise || client.contact}</p>
                 <p className="text-[14px] font-semibold text-[#4CAF4F] mt-0.5">{client.entreprise ? client.contact : ''}</p>
                 <div className="flex items-center gap-3 mt-1.5">
-                  <span className="text-[12px] text-[#8A9BB5]">{client.wilaya}</span>
+                  <span className="text-[12px] text-[#8A9BB5]">{client.commune ? `${client.commune}, ${client.wilaya}` : client.wilaya}</span>
                   {client.adresse && <><span className="text-[#E2E8F0]">·</span><span className="text-[12px] text-[#ABBED1] truncate">{client.adresse}</span></>}
                 </div>
               </div>
@@ -498,6 +507,7 @@ function dbClientToRecord(c: any): ClientRecord {
     contact: c.name,
     telephone: phone,
     wilaya: c.wilaya ?? '',
+    commune: c.commune ?? '',
     adresse: c.address ?? '',
     email: c.email ?? '',
     commandes: ordersCount,
@@ -518,8 +528,9 @@ export default function ClientsPage() {
   const [addForm, setAddForm]   = useState({ ...emptyClient });
   const [editForm, setEditForm] = useState({ ...emptyClient });
 
-  const fetchClients = useCallback(async () => {
-    setLoading(true);
+  // silent = refetch temps réel (SSE) → pas de spinner, historique client à jour en direct
+  const fetchClients = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const res = await fetch('/api/clients');
       if (res.ok) {
@@ -527,11 +538,12 @@ export default function ClientsPage() {
         setClients(data.map(dbClientToRecord));
       }
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, []);
 
   useEffect(() => { fetchClients(); }, [fetchClients]);
+  useSSE(useCallback(() => { fetchClients(true); }, [fetchClients]));
 
   const filtered = clients.filter(
     (c) =>
@@ -550,19 +562,20 @@ export default function ClientsPage() {
         company: addForm.entreprise.trim(),
         email: addForm.email.trim() || null,
         wilaya: addForm.wilaya.trim(),
+        commune: addForm.commune.trim() || null,
         address: addForm.adresse.trim() || null,
         phone: addForm.telephone.trim() || null,
       }),
     });
     if (res.ok) {
-      await fetchClients();
+      await fetchClients(true);
       setAddForm({ ...emptyClient });
       setShowAdd(false);
     }
   };
 
   const openEdit = (c: ClientRecord) => {
-    setEditForm({ entreprise: c.entreprise, contact: c.contact, telephone: c.telephone, wilaya: c.wilaya, adresse: c.adresse, email: c.email });
+    setEditForm({ entreprise: c.entreprise, contact: c.contact, telephone: c.telephone, wilaya: c.wilaya, commune: c.commune, adresse: c.adresse, email: c.email });
     setEditClient(c);
   };
 
@@ -577,12 +590,13 @@ export default function ClientsPage() {
         company: editForm.entreprise.trim(),
         email: editForm.email.trim() || null,
         wilaya: editForm.wilaya.trim(),
+        commune: editForm.commune.trim() || null,
         address: editForm.adresse.trim() || null,
         phone: editForm.telephone.trim() || null,
       }),
     });
     if (res.ok) {
-      await fetchClients();
+      await fetchClients(true);
       setEditClient(null);
     }
   };
@@ -595,7 +609,7 @@ export default function ClientsPage() {
       alert(data.error ?? "Impossible de supprimer ce client.");
       return;
     }
-    await fetchClients();
+    await fetchClients(true);
     setDeleteClient(null);
     setSelected(null);
   };

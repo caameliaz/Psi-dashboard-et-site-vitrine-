@@ -11,6 +11,7 @@ datasource db {
 model Category {
   id        String    @id @default(cuid())
   name      String    @unique
+  photo     String?
   order     Int       @default(0)
   products  Product[]
   createdAt DateTime  @default(now())
@@ -71,6 +72,7 @@ model Client {
   company   String?
   email     String?
   wilaya    String
+  commune   String?
   address   String?
   photo     String?
   phones    ClientPhone[]

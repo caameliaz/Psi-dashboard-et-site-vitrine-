@@ -29,38 +29,46 @@ DÉCISIONS ACTÉES (P1) :
 - [x] Notif à l'assigné quand on lui assigne une demande (seul l'assigné reçoit)
   → tests détaillés dans la section « 10bis. Assignation » ci-dessous
 
-## 1.3 — Wilayas + Communes
-- [ ] Fichier lib/data/wilayas-communes.ts (58 wilayas + communes)
-- [ ] Champ Wilaya = select des 58 wilayas
-- [ ] Champ Commune = select filtré selon la wilaya, trié alpha, + saisie libre
-- [ ] Ajouter colonne `commune` sur Client (et snapshots order/quote si besoin)
-- [ ] Appliquer sur : checkout public, devis public, création commande manuelle admin, fiche client
-- [ ] Migrer les données existantes si besoin
+## 1.3 — Wilayas + Communes  ✅ FAIT
+- [x] Fichier lib/data/wilayas-communes.ts (58 wilayas + communes officielles)
+- [x] Champ Wilaya = select des 58 wilayas (WilayaSelect existant)
+- [x] Champ Commune = CommuneSelect filtré selon la wilaya, trié alpha, + saisie libre
+- [x] Colonne `commune` sur Client + migration (add_client_commune)
+- [x] Appliqué sur : checkout public, devis public, création manuelle admin, ajout/édition client
+- [x] Commune affichée dans la fiche client (à côté de la wilaya)
+  → changer de wilaya réinitialise la commune ; commune absente = saisie libre (Entrée ou « Utiliser … »)
 
-## 1.4 — Catégories refondues
-- [ ] Colonne `photo` sur la table Category + migration
-- [ ] Admin → Produits/Catégories : upload photo par catégorie
-- [ ] Accueil (/) : sélecteur de catégorie (cards/onglets) → produits de la cat s'affichent sur la même page (filtre in-place, pas de navigation)
-- [ ] Page /products : cards catégories (photo + nom) → produits en dessous ; product card = référence + "Ajouter au panier" (pas de photo produit ici)
+## 1.4 — Catégories refondues  ✅ FAIT
+- [x] Colonne `photo` sur la table Category + migration (add_category_photo)
+- [x] API categories : POST/PATCH acceptent `photo` ; GET renvoie photo + nb produits
+- [x] Admin → Produits/Catégories : cards catégorie avec upload/retrait photo, ajout/suppression (DB-backed)
+- [x] Composant CategoryBrowser : cards catégorie (photo+nom) → produits de la cat sur la MÊME page (filtre in-place)
+- [x] Accueil (/) : CategoryBrowser (limité à 6) remplace la grille statique
+- [x] Page /products : CategoryBrowser complet (toutes les catégories)
+  → carte "Tout" pour voir tous les produits ; product card = réf + dimensions + "Ajouter au panier"
 
-## 1.5 — Real-time PARTOUT (aucun rechargement visible)
-- [ ] Liste commandes/devis (/admin/requests) : nouvelle demande + changement statut en direct
-- [ ] Dashboard : stats + camembert recalculés en direct
-- [ ] Fiche client : historique à jour en direct
-- [ ] Cloche notifications : compteur + toast fluides, sans clignotement
-(à câbler EN DERNIER, une fois que 1.1→1.4 sont posés)
+## 1.5 — Real-time PARTOUT (aucun rechargement visible)  ✅ FAIT
+- [x] Fetch en 2 modes : chargement initial (spinner) vs refetch SSE **silencieux** (silent=true) → plus de clignotement
+- [x] Liste commandes/devis (/admin/requests) : refetch silencieux sur SSE + après chaque action
+- [x] Dashboard : stats + camembert recalculés en silencieux sur SSE
+- [x] Fiche client (/admin/clients) : SSE ajouté, historique à jour en direct sans spinner
+- [x] Cloche notifications : incrémentale (déjà OK) + toast ciblé (targetUserId → seul l'assigné voit le toast)
+(Priorité 1 TERMINÉE ✅)
 
 
 # 🟠 PRIORITÉ 2 — Dashboard & Stats
-## Nouvelles statistiques dashboard
 
-Carte "Commandes ce mois" avec évolution vs mois précédent (%)
-Carte "Devis en attente" (nombre + montant estimé)
-Carte "Clients qui ont recommandé et nouveauc clienrt s
-Graphique barres : commandes par wilaya (top 10)
-Graphique ligne : évolution commandes/devis sur 6 mois
-Tableau "Employés actifs" : qui a créé combien de commandes ce mois
-Conserver le camembert produits existant
+## 2.1 — Nouvelles statistiques dashboard  ✅ FAIT
+- [x] Carte "Commandes ce mois" avec évolution vs mois précédent (% ▲/▼)
+- [x] Carte "Devis en attente" (nombre + montant estimé via proposedPrice)
+- [x] Graphique barres : commandes par wilaya (top 10) — Recharts
+- [x] Graphique ligne : évolution commandes/devis sur 6 mois — Recharts
+- [x] Tableau "Employés actifs" : commandes créées ce mois par employé (barres)
+- [x] Camembert produits + carte Origine conservés
+- [x] ⚡ Recharts chargé en dynamic (ssr:false) → n'alourdit QUE le dashboard, jamais le site public
+- [ ] (reporté) Carte "clients qui ont recommandé / nouveaux clients" — à préciser
+
+## 2.2 — Pages mobiles (À FAIRE)
 
 ## Page commande rapide mobile  - Page clients sur mobile 
 Route /admin/quick-order et une ausi pour kes clients 
@@ -164,12 +172,14 @@ Mot de passe pour **tous** : `psi2026`
 ## 🌐 3. Accueil & catalogue (`/`)
 
 1. Le **hero** affiche le titre + sous-titre (modifiables depuis l'admin → Contenu)
-2. Section **Nos produits** → cartes produits (max 6, bouton "Voir tous les produits" si plus)
-3. Les cartes affichent la **photo** du produit si elle existe, sinon le visuel par défaut (cercles verts)
-4. Section **Qualité & conformité** (55 gr/m², Allemagne, BPA Free)
-5. Section **À propos** (texte modifiable depuis l'admin → Contenu)
-6. Boutons CTA → **Demander un devis** / **Nous contacter**
-7. `/products` → **tous** les produits du catalogue
+2. Section **Nos produits** → **cards catégories** (photo + nom) + carte **Tout** (nouveau)
+3. Cliquer une catégorie → les produits de cette catégorie s'affichent **sur la même page** (pas de rechargement, filtre in-place)
+4. Cliquer **Tout** → tous les produits (max 6 sur l'accueil, bouton "Voir tous les produits" si plus)
+5. Les cartes produit affichent la **photo** du produit si elle existe, sinon le visuel par défaut (cercles verts)
+6. Section **Qualité & conformité** (55 gr/m², Allemagne, BPA Free)
+7. Section **À propos** (texte modifiable depuis l'admin → Contenu)
+8. Boutons CTA → **Demander un devis** / **Nous contacter**
+9. `/products` → **toutes** les catégories + tous les produits (même système de filtre)
 
 ---
 
@@ -179,16 +189,18 @@ Mot de passe pour **tous** : `psi2026`
 2. `/cart` → ajuster les quantités (−/+), retirer une ligne, voir le **récapitulatif** (total)
 3. Panier vide → message "Votre panier est vide"
 4. **Finaliser la commande** → `/checkout`
-5. Remplir : nom *, entreprise, email, téléphone *, wilaya *, adresse
-6. Valider → écran **"Commande envoyée !"**
-7. ✅ Vérifier côté admin (`/admin/requests`) → la commande apparaît, source **Site web**, statut **En attente**
-8. ✅ Un client est créé automatiquement (visible dans `/admin/clients`)
+5. Remplir : nom *, entreprise, email, téléphone *, wilaya *, **commune** (nouveau), adresse
+6. **Commune** (nouveau) → le select ne propose que les communes de la wilaya choisie ; on peut aussi **taper** une commune absente
+7. Changer de wilaya → la commune se **réinitialise**
+8. Valider → écran **"Commande envoyée !"**
+9. ✅ Vérifier côté admin (`/admin/requests`) → la commande apparaît, source **Site web**, statut **En attente**
+10. ✅ Un client est créé automatiquement avec **wilaya + commune** (visible dans `/admin/clients`)
 
 ---
 
 ## 📝 5. Demande de devis (`/quote`)
 
-1. Remplir les coordonnées (nom *, tél *, wilaya *, email, entreprise)
+1. Remplir les coordonnées (nom *, tél *, wilaya *, **commune** nouveau, email, entreprise)
 2. **Produits souhaités** : choisir un produit du catalogue OU **dimension personnalisée** (format libre)
 3. **+ Ajouter une ligne** → plusieurs produits dans un même devis
 4. Retirer une ligne (bouton poubelle)
@@ -226,6 +238,15 @@ Mot de passe pour **tous** : `psi2026`
 4. Carte **Origine** : répartition Site web / Manuel
 5. Tableau du bas : dernières demandes → clic sur une ligne = détail
 6. ⚡ Faire une commande depuis le site → le dashboard se met à jour **tout seul** (SSE temps réel, sans rafraîchir)
+7. ⚡ **Aucun clignotement** (nouveau) : la mise à jour temps réel ne fait **pas** réapparaître les "Chargement…" — les chiffres se mettent à jour en douceur
+
+**Nouvelles stats (P2) :**
+8. Carte **Commandes ce mois** → nombre + **évolution %** vs mois précédent (▲ vert / ▼ rouge)
+9. Carte **Devis en attente** → nombre + **montant estimé** (somme des prix proposés)
+10. Graphique **Commandes par wilaya** (barres, top 10) — se charge à l'ouverture ("Chargement du graphique…" bref)
+11. Graphique **Évolution sur 6 mois** (courbe commandes vert + devis violet)
+12. Tableau **Employés actifs ce mois** (barres par employé, trié)
+13. ⚡ **Perf** : ces graphiques (Recharts) ne se chargent **que** sur le dashboard — le site public et les autres pages admin ne sont pas alourdis
 
 ---
 
@@ -303,8 +324,8 @@ Se connecter avec **`admin1`** (a la permission "assigner") et **`employe2`** (l
 2. Recherche par nom / entreprise / wilaya
 3. Clic sur un client → **fiche** (infos + historique commandes/devis)
 4. Clic sur une ligne d'historique → ouvre le détail de cette demande
-5. **Modifier** le client (dont la **photo**) → sauvegardé
-6. **+ Nouveau client** → apparaît dans la liste
+5. **Modifier** le client (dont la **photo**, la **wilaya + commune**) → sauvegardé
+6. **+ Nouveau client** → wilaya + commune (select filtré + saisie libre) → apparaît dans la liste ; la fiche montre « Commune, Wilaya »
 7. **Plusieurs téléphones** par client, chacun avec un label (Principal / Secrétaire / Mobile…)
 8. **Notes internes** sur le client
 9. **Nouvelle commande** depuis la fiche → client pré-rempli, apparaît dans /requests ET l'historique client
@@ -321,9 +342,14 @@ Se connecter avec **`admin1`** (a la permission "assigner") et **`employe2`** (l
 4. ✅ La photo apparaît sur le **site public** (`/products`) ; sans photo → visuel par défaut
 5. **Champs personnalisés** (Grammage, Origine, BPA Free…) — définis une fois, remplis par produit
 6. **Modifier** un produit → changements sauvés
-7. **Catégories** : ajouter / gérer
-8. **Activer/Désactiver** un produit (un produit inactif n'apparaît plus sur le site)
-9. ⚠️ Supprimer un produit **utilisé** dans des commandes → message "Impossible, désactivez-le plutôt"
+7. **Catégories** (refondu) : bloc **cards catégorie** en bas de page
+   - **+ Ajouter** une catégorie (nom) → apparaît en card, persistée en base
+   - **Photo / Changer** → choisir une image → s'affiche sur la card ; **⊘** la retire
+   - Nombre de produits affiché sous chaque catégorie
+   - **×** supprime la catégorie → ⚠️ refusé avec message si elle contient des produits
+8. ✅ La **photo de catégorie** apparaît sur le site public (accueil + `/products`)
+9. **Activer/Désactiver** un produit (un produit inactif n'apparaît plus sur le site)
+10. ⚠️ Supprimer un produit **utilisé** dans des commandes → message "Impossible, désactivez-le plutôt"
 
 ---
 
@@ -392,6 +418,19 @@ Ouvre `admin1` dans un navigateur et `admin2` (ou un employé) dans un autre (ou
 9. Nouvelle commande/devis depuis le **site** → tout le monde est notifié
 10. ⚠️ Celui qui fait l'action ne reçoit **jamais** sa propre notif
 11. Page dédiée `/admin/notifications` → historique complet
+12. ⚡ **Toast d'assignation ciblé** (nouveau) : quand on assigne une demande, **seul l'assigné** voit le toast (les autres ne le voient pas)
+
+---
+
+## ⚡ 17bis. Temps réel — pas de rechargement visible (nouveau)
+
+Avec 2 fenêtres ouvertes (ex. `admin1` sur une liste, `admin2` qui agit) :
+
+1. `admin2` crée/valide une demande → chez `admin1` la **liste /admin/requests** se met à jour **sans F5** et **sans clignotement** (pas de "Chargement…")
+2. Idem sur le **dashboard** : chiffres + camembert bougent en douceur
+3. **Fiche client** ouverte chez `admin1` → si une commande de ce client change → l'historique se met à jour en direct
+4. La **cloche** s'incrémente en direct, le toast apparaît sans recharger la page
+5. ⚠️ Vérifier qu'à aucun moment une vue ne "flashe" un état de chargement pendant une mise à jour temps réel
 
 ---
 

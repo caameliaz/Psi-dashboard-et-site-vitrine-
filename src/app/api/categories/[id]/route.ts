@@ -19,6 +19,7 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
       data: {
         ...(body.name !== undefined && { name: body.name }),
         ...(body.order !== undefined && { order: body.order }),
+        ...(body.photo !== undefined && { photo: body.photo }),
       },
     });
 

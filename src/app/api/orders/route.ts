@@ -60,6 +60,7 @@ export async function POST(request: NextRequest) {
           company: body.client.company ?? null,
           email: body.client.email ?? null,
           wilaya: body.client.wilaya,
+          commune: body.client.commune ?? null,
           address: body.client.address ?? null,
           phones: {
             create: primaryPhone

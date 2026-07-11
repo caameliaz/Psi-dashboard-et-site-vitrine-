@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { ProductCard } from '@/components/ProductCard';
+import { CategoryBrowser } from '@/components/CategoryBrowser';
 
 const BASE = process.env.NEXTAUTH_URL ?? 'http://localhost:3000';
 
@@ -92,19 +92,8 @@ export default async function Home() {
             </p>
           </div>
 
-          {/* Filtre */}
-          <div className="flex justify-center gap-3">
-            <button className="bg-[#4CAF4F] text-white text-[14px] font-semibold px-6 py-2.5 rounded-full shadow-[0_4px_14px_rgba(76,175,79,0.3)]">
-              Papier thermique
-            </button>
-          </div>
-
-          {/* Grille */}
-          <div className="grid grid-cols-2 lg:grid-cols-3 gap-5 md:gap-7">
-            {products.slice(0, 6).map((product: any) => (
-              <ProductCard key={product.id} product={product} />
-            ))}
-          </div>
+          {/* Navigateur par catégories : choisir une catégorie → produits en dessous (même page) */}
+          <CategoryBrowser limit={6} />
 
           {/* Bouton "Voir plus" si plus de 6 produits */}
           {products.length > 6 && (

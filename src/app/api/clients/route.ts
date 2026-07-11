@@ -55,6 +55,7 @@ export async function POST(request: NextRequest) {
         company: body.company ?? null,
         email: body.email ?? null,
         wilaya: body.wilaya ?? null,
+        commune: body.commune ?? null,
         address: body.address ?? null,
         ...(body.phone ? {
           phones: { create: [{ number: body.phone, label: 'Principal', primary: true }] },

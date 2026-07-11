@@ -60,6 +60,7 @@ export async function POST(request: NextRequest) {
           company: body.company ?? null,
           email: body.email ?? null,
           wilaya: body.wilaya ?? 'Non spécifié',
+          commune: body.commune ?? null,
           phones: {
             create: primaryPhone
               ? [{ number: primaryPhone, label: 'Principal', primary: true }]

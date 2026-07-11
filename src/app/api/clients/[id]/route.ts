@@ -59,6 +59,7 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
         ...(body.company !== undefined && { company: body.company }),
         ...(body.email !== undefined && { email: body.email }),
         ...(body.wilaya !== undefined && { wilaya: body.wilaya }),
+        ...(body.commune !== undefined && { commune: body.commune }),
         ...(body.address !== undefined && { address: body.address }),
         ...(body.photo !== undefined && { photo: body.photo }),
       },
