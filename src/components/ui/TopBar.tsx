@@ -1,10 +1,13 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useSession } from 'next-auth/react';
 import { useSSEContext } from '@/lib/sse-context';
+import { AdminSelect } from '@/components/ui/AdminSelect';
+import { notifBell } from '@/lib/notif-bell-store';
 
 type NotifType = 'SITE_COMMANDE' | 'SITE_DEVIS' | 'ACTION_AUTRE' | 'ACTION_PERSO' | 'ANNULATION';
-type Category  = 'CREATION' | 'MAJ' | 'SUPPRESSION';
+type Category  = 'COMMANDE' | 'DEVIS' | 'CLIENT' | 'UTILISATEUR' | 'ACTION';
 
 interface Notif {
   id: string;
@@ -35,22 +38,21 @@ function relativeTime(dateStr: string): string {
 }
 
 function getCategory(n: Notif): Category {
-  if (n.type === 'SITE_COMMANDE' || n.type === 'SITE_DEVIS') return 'CREATION';
-  const msg = (n.title + ' ' + n.message).toLowerCase();
-  if (msg.includes('supprimé') || msg.includes('suppression')) return 'SUPPRESSION';
-  if (
-    msg.includes('créé') || msg.includes('crée') || msg.includes('nouvel') ||
-    msg.includes('nouvelle') || msg.includes('nouveau') || msg.includes('converti')
-  ) return 'CREATION';
-  return 'MAJ';
+  if (n.type === 'SITE_COMMANDE') return 'COMMANDE';
+  if (n.type === 'SITE_DEVIS')    return 'DEVIS';
+  const text = (n.title + ' ' + n.message).toLowerCase();
+  if (text.includes('utilisateur') || text.includes('compte')) return 'UTILISATEUR';
+  if (text.includes('client'))  return 'CLIENT';
+  return 'ACTION';
 }
 
 const CAT_CONFIG: Record<Category, { label: string; bg: string; color: string; border: string }> = {
-  CREATION:    { label: 'CRÉATION',    bg: '#F0FDF4', color: '#166534', border: '#BBF7D0' },
-  MAJ:         { label: 'MISE À JOUR', bg: '#EFF6FF', color: '#1D4ED8', border: '#BFDBFE' },
-  SUPPRESSION: { label: 'SUPPRESSION', bg: '#FEF2F2', color: '#B91C1C', border: '#FECACA' },
+  COMMANDE:    { label: 'COMMANDE',    bg: '#F0FDF4', color: '#166534', border: '#BBF7D0' },
+  DEVIS:       { label: 'DEVIS',       bg: '#F5F3FF', color: '#6D28D9', border: '#DDD6FE' },
+  CLIENT:      { label: 'CLIENT',      bg: '#FFFBEB', color: '#92400E', border: '#FDE68A' },
+  UTILISATEUR: { label: 'UTILISATEUR', bg: '#F3E8FF', color: '#6B21A8', border: '#E9D5FF' },
+  ACTION:      { label: 'ACTION',      bg: '#F0F9FF', color: '#0369A1', border: '#BAE6FD' },
 };
-
 
 function mapDbNotif(n: any): Notif {
   return {
@@ -65,39 +67,32 @@ function mapDbNotif(n: any): Notif {
 
 /**
  * Retourne le message formaté avec l'employé et l'entité en gras.
- * Formats gérés (depuis notify-activity.ts) :
  *  A) "ACTEUR — TYPE de CLIENT → STATUT"
  *  B) "ACTEUR a VERB TYPE : ENTITE"
  *  C) "ACTEUR a VERB ... pour ENTITE (REF)"
  *  D) "ACTEUR a VERB ... de ENTITE (suffix)"
- *  E) "CLIENT — detail" (site sans acteur)
+ *  E) "ACTOR a VERB ..." (fallback — "X a lancé une commande (REF)")
+ *  F) "CLIENT — detail"
  */
 function renderMsg(msg: string): React.ReactNode {
-  // A) "ACTEUR — TYPE de CLIENT → STATUT"
-  {
-    const m = msg.match(/^(.+?) — (.+? de )(.+?)( →.+)?$/);
-    if (m) return <><strong>{m[1]}</strong>{` — ${m[2]}`}<strong>{m[3]}</strong>{m[4] ?? ''}</>;
-  }
-  // B) "ACTEUR a ... : ENTITE"
-  {
-    const m = msg.match(/^(.+?) (a .+? : )(.+)$/);
-    if (m) return <><strong>{m[1]}</strong>{` ${m[2]}`}<strong>{m[3]}</strong></>;
-  }
-  // C) "ACTEUR a ... pour ENTITE (REF)"
-  {
-    const m = msg.match(/^(.+?) (a .+? pour )(.+?)( \([^)]+\).*)?$/);
-    if (m) return <><strong>{m[1]}</strong>{` ${m[2]}`}<strong>{m[3]}</strong>{m[4] ?? ''}</>;
-  }
-  // D) "ACTEUR a ... de ENTITE (suffix)"
-  {
-    const m = msg.match(/^(.+?) (a .+? de )(.+?)( \([^)]+\).*| en .+)?$/);
-    if (m) return <><strong>{m[1]}</strong>{` ${m[2]}`}<strong>{m[3]}</strong>{m[4] ?? ''}</>;
-  }
-  // E) "CLIENT — detail" (notif site, pas de verbe)
-  {
-    const m = msg.match(/^(.+?) — (.+)$/);
-    if (m) return <><strong>{m[1]}</strong>{' — '}{m[2]}</>;
-  }
+  // A)
+  { const m = msg.match(/^(.+?) — (.+? de )(.+?)( →.+)?$/);
+    if (m) return <><strong>{m[1]}</strong>{` — ${m[2]}`}<strong>{m[3]}</strong>{m[4] ?? ''}</>; }
+  // B)
+  { const m = msg.match(/^(.+?) (a .+? : )(.+)$/);
+    if (m) return <><strong>{m[1]}</strong>{` ${m[2]}`}<strong>{m[3]}</strong></>; }
+  // C)
+  { const m = msg.match(/^(.+?) (a .+? pour )(.+?)( \([^)]+\).*)?$/);
+    if (m) return <><strong>{m[1]}</strong>{` ${m[2]}`}<strong>{m[3]}</strong>{m[4] ?? ''}</>; }
+  // D)
+  { const m = msg.match(/^(.+?) (a .+? de )(.+?)( \([^)]+\).*| en .+)?$/);
+    if (m) return <><strong>{m[1]}</strong>{` ${m[2]}`}<strong>{m[3]}</strong>{m[4] ?? ''}</>; }
+  // E) fallback "ACTOR a VERB ..."
+  { const m = msg.match(/^(.+?) (a .+)$/);
+    if (m) return <><strong>{m[1]}</strong>{` ${m[2]}`}</>; }
+  // F)
+  { const m = msg.match(/^(.+?) — (.+)$/);
+    if (m) return <><strong>{m[1]}</strong>{' — '}{m[2]}</>; }
   return <>{msg}</>;
 }
 
@@ -134,6 +129,11 @@ function IconBell() {
   );
 }
 
+function extractActor(msg: string): string | null {
+  const m = msg.match(/^(.+?) a /);
+  return m ? m[1] : null;
+}
+
 /* ── Carte notification ── */
 function NotifCard({ n, onRead }: { n: Notif; onRead: (id: string) => void }) {
   const cat = getCategory(n);
@@ -143,22 +143,18 @@ function NotifCard({ n, onRead }: { n: Notif; onRead: (id: string) => void }) {
       className="mx-3 my-2 px-4 py-3.5 rounded-xl border cursor-pointer transition-all"
       style={{
         borderColor:     n.read ? '#E2E8F0' : '#93C5FD',
-        backgroundColor: n.read ? '#ffffff'  : '#EFF6FF',
+        backgroundColor: '#ffffff',
       }}
       onClick={() => !n.read && onRead(n.id)}
     >
-      {/* Titre + point non-lu */}
       <div className="flex items-center justify-between gap-2 mb-1.5">
         <p className="text-[12px] font-bold text-[#0F172A] leading-snug truncate flex-1">{n.title}</p>
-        {!n.read && <span className="w-2 h-2 rounded-full bg-[#EF4444] flex-shrink-0" />}
       </div>
 
-      {/* Message avec gras */}
       <p className="text-[12px] text-[#475569] leading-snug">
         {renderMsg(n.message)}
       </p>
 
-      {/* Badge action + horodatage */}
       <div className="flex items-center gap-2 mt-2">
         <span
           className="text-[9px] font-bold tracking-wider px-1.5 py-px rounded"
@@ -173,13 +169,54 @@ function NotifCard({ n, onRead }: { n: Notif; onRead: (id: string) => void }) {
 }
 
 export function TopBar() {
-  const [notifs, setNotifs]   = useState<Notif[]>([]);
-  const [open, setOpen]       = useState(false);
-  const [toasts, setToasts]   = useState<Toast[]>([]);
+  const { data: session } = useSession();
+  const isAdmin = (session?.user as any)?.role === 'ADMIN';
+
+  const [notifs, setNotifs]         = useState<Notif[]>([]);
+  const [open, setOpen]             = useState(false);
+  const [toasts, setToasts]         = useState<Toast[]>([]);
+  const [filterType, setFilterType] = useState('all');
+  const [filterUser, setFilterUser] = useState('all');
   const notifIds = useRef(new Set<string>());
 
   const { subscribe } = useSSEContext();
   const unread = notifs.filter((n) => !n.read).length;
+
+  const actors = useMemo(() => {
+    const set = new Set<string>();
+    notifs
+      .filter((n) => n.type !== 'SITE_COMMANDE' && n.type !== 'SITE_DEVIS')
+      .forEach((n) => { const a = extractActor(n.message); if (a) set.add(a); });
+    return [...set].sort();
+  }, [notifs]);
+
+  const typeOptions = useMemo(() => {
+    const base = [
+      { value: 'all',      label: 'Tous les types' },
+      { value: 'COMMANDE', label: 'Commandes' },
+      { value: 'DEVIS',    label: 'Devis' },
+    ];
+    if (isAdmin) {
+      base.push({ value: 'CLIENT',      label: 'Clients' });
+      base.push({ value: 'UTILISATEUR', label: 'Utilisateurs' });
+    }
+    base.push({ value: 'ACTION', label: 'Actions' });
+    return base;
+  }, [isAdmin]);
+
+  const userOptions = useMemo(() => [
+    { value: 'all', label: 'Tous les users' },
+    ...actors.map((a) => ({ value: a, label: a })),
+  ], [actors]);
+
+  const filtered = useMemo(() => notifs.filter((n) => {
+    if (filterType !== 'all' && getCategory(n) !== filterType) return false;
+    if (filterUser !== 'all') {
+      const actor = extractActor(n.message);
+      if (actor !== filterUser) return false;
+    }
+    return true;
+  }), [notifs, filterType, filterUser]);
 
   const fetchNotifs = useCallback(async () => {
     try {
@@ -193,22 +230,29 @@ export function TopBar() {
   }, []);
 
   useEffect(() => {
-    return subscribe((payload) => {
-      const notif = payload?.notif;
-      if (!notif || notifIds.current.has(notif.id)) return;
-      notifIds.current.add(notif.id);
-      const mapped = mapDbNotif({ ...notif, read: false });
-      setNotifs((prev) => [mapped, ...prev]);
-      setToasts((prev) => [...prev, {
-        id: notif.id,
-        type: notif.type as NotifType,
-        title: notif.title,
-        message: notif.message,
-      }]);
+    return subscribe(async () => {
+      try {
+        const res = await fetch('/api/notifications');
+        if (!res.ok) return;
+        const data = await res.json();
+        const mapped: Notif[] = data.map(mapDbNotif);
+        // Toast uniquement pour les notifs vraiment reçues par cet utilisateur
+        mapped
+          .filter((n) => !notifIds.current.has(n.id))
+          .forEach((n) => {
+            notifIds.current.add(n.id);
+            setToasts((prev) => [...prev, { id: n.id, type: n.type, title: n.title, message: n.message }]);
+          });
+        setNotifs(mapped);
+      } catch { /* silently ignore */ }
     });
   }, [subscribe]);
 
   useEffect(() => { fetchNotifs(); }, [fetchNotifs]);
+
+  // Exposer le count et le toggle au store (pour Sidebar)
+  useEffect(() => { notifBell.setCount(unread); }, [unread]);
+  useEffect(() => { notifBell.setOpen(() => { setOpen(true); fetchNotifs(); }); }, [fetchNotifs]);
 
   const dismissToast = useCallback((id: string) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
@@ -226,30 +270,13 @@ export function TopBar() {
 
   return (
     <>
-      {/* ── Toasts (haut droite, sous le bouton cloche) ── */}
+      {/* ── Toasts ── */}
       <div className="fixed top-20 right-5 z-[200] flex flex-col gap-3 items-end pointer-events-none">
         {toasts.map((t) => (
           <div key={t.id} className="pointer-events-auto">
             <ToastItem toast={t} onDismiss={dismissToast} />
           </div>
         ))}
-      </div>
-
-      {/* ── Bouton cloche flottant ── */}
-      <div className="fixed top-4 right-5 z-[100]">
-        <button
-          onClick={() => { setOpen((v) => !v); if (!open) fetchNotifs(); }}
-          className="relative flex items-center justify-center w-10 h-10 rounded-full bg-white border border-[#E2E8F0] hover:bg-[#F8FAFC] transition-colors shadow-md"
-        >
-          <IconBell />
-          {unread > 0 && (
-            <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] rounded-full bg-[#EF4444] border-2 border-white flex items-center justify-center">
-              <span className="text-[10px] font-bold text-white leading-none px-0.5">
-                {unread > 99 ? '99+' : unread}
-              </span>
-            </span>
-          )}
-        </button>
       </div>
 
       {/* ── Backdrop ── */}
@@ -261,30 +288,30 @@ export function TopBar() {
       <aside
         className="fixed top-0 right-0 h-full z-[100] flex flex-col bg-white border-l border-[#E4EBF5] shadow-2xl"
         style={{
-          width: 360,
+          width: 420,
           transform: open ? 'translateX(0)' : 'translateX(100%)',
           transition: 'transform 0.28s cubic-bezier(0.4, 0, 0.2, 1)',
         }}
       >
         {/* Sidebar header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-[#F2F4F7] flex-shrink-0">
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2">
             <span className="text-[17px] font-bold text-[#0F172A]">Notifications</span>
             {unread > 0 && (
-              <span className="min-w-[22px] h-[22px] rounded-full bg-[#EF4444] flex items-center justify-center">
-                <span className="text-[11px] font-bold text-white leading-none px-1">
-                  {unread > 99 ? '99+' : unread}
-                </span>
-              </span>
+              <span className="text-[15px] font-bold text-[#3B82F6] leading-none">{unread > 99 ? '99+' : unread}</span>
             )}
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             {unread > 0 && (
               <button
                 onClick={markAll}
-                className="text-[12px] font-semibold text-[#4CAF4F] hover:text-[#388E3C] transition-colors"
+                title="Tout marquer lu"
+                className="flex items-center justify-center w-7 h-7 rounded-full hover:bg-[#F0FDF4] transition-colors text-[#4CAF4F] hover:text-[#388E3C]"
               >
-                Tout marquer lu
+                <svg width={16} height={16} fill="none" viewBox="0 0 24 24">
+                  <path d="M2 12.5L7.5 18L18 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  <path d="M8 12.5L13.5 18L24 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
               </button>
             )}
             <button
@@ -298,15 +325,31 @@ export function TopBar() {
           </div>
         </div>
 
-        {/* Liste chronologique (pas de groupes) */}
+        {/* Filtres */}
+        <div className="flex gap-2 px-4 py-3 border-b border-[#F2F4F7] flex-shrink-0">
+          <AdminSelect
+            value={filterType}
+            onChange={setFilterType}
+            options={typeOptions}
+            className="flex-1"
+          />
+          <AdminSelect
+            value={filterUser}
+            onChange={setFilterUser}
+            options={userOptions}
+            className="flex-1"
+          />
+        </div>
+
+        {/* Liste */}
         <div
           className="flex-1 overflow-y-auto"
           style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(0,0,0,0.08) transparent' }}
         >
-          {notifs.length === 0 ? (
+          {filtered.length === 0 ? (
             <p className="text-center text-[13px] text-[#ABBED1] py-16">Aucune notification</p>
           ) : (
-            notifs.map((n) => <NotifCard key={n.id} n={n} onRead={markRead} />)
+            filtered.map((n) => <NotifCard key={n.id} n={n} onRead={markRead} />)
           )}
         </div>
 

@@ -1,51 +1,39 @@
+'use client';
+
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { CategoryBrowser } from '@/components/CategoryBrowser';
+import { useTranslation } from '@/lib/i18n';
 
-const BASE = process.env.NEXTAUTH_URL ?? 'http://localhost:3000';
+export default function Home() {
+  const { t, lang } = useTranslation();
+  const [content, setContent] = useState<Record<string, string>>({});
+  const [productCount, setProductCount] = useState(0);
 
-async function getProducts() {
-  try {
-    const res = await fetch(`${BASE}/api/products`, { next: { revalidate: 60 } });
-    if (!res.ok) return [];
-    return res.json();
-  } catch {
-    return [];
-  }
-}
-
-async function getContent(): Promise<Record<string, string>> {
-  try {
-    const res = await fetch(`${BASE}/api/content`, { next: { revalidate: 60 } });
-    if (!res.ok) return {};
-    return res.json();
-  } catch {
-    return {};
-  }
-}
-
-export default async function Home() {
-  const [products, content] = await Promise.all([getProducts(), getContent()]);
+  useEffect(() => {
+    fetch('/api/content').then(r => r.ok ? r.json() : {}).then(setContent).catch(() => {});
+    fetch('/api/products').then(r => r.ok ? r.json() : []).then((p: any[]) => setProductCount(p.length)).catch(() => {});
+  }, []);
 
   const heroTitre     = content['hero_titre']     ?? 'PSI';
-  const heroSoustitre = content['hero_soustitre'] ?? 'Spécialiste du papier thermique professionnel en Algérie';
+  const heroSoustitre = content['hero_soustitre'] ?? t('hero.subtitle');
   const aboutTexte    = content['about_texte']    ?? '';
+
   return (
     <div className="bg-white">
 
       {/* ════════════════════════════════════════════════════════════
-          HERO  — image plein écran, 70vh min, overlay sombre
+          HERO
       ════════════════════════════════════════════════════════════ */}
       <section
         id="hero"
         className="relative min-h-[70vh] bg-cover bg-center flex items-center"
         style={{ backgroundImage: 'url(/photo%202.avif)' }}
       >
-        {/* Overlay dégradé */}
         <div className="absolute inset-0 bg-gradient-to-r from-[rgba(38,50,56,0.90)] via-[rgba(38,50,56,0.75)] to-[rgba(38,50,56,0.45)]" />
 
         <div className="relative w-full max-w-[1280px] mx-auto px-6 md:px-12 py-20">
           <div className="max-w-[620px] flex flex-col gap-6">
-            {/* Titre */}
             <div className="flex flex-col gap-2">
               <h1 className="text-[56px] md:text-[72px] font-extrabold text-white leading-none tracking-tight">
                 {heroTitre}
@@ -55,13 +43,12 @@ export default async function Home() {
               </p>
             </div>
 
-            {/* Boutons */}
             <div className="flex flex-row flex-wrap gap-4 mt-4">
               <a
                 href="#products"
                 className="flex items-center gap-2 bg-[#4CAF4F] text-white text-[15px] font-semibold px-8 py-4 rounded shadow-[0px_4px_14px_rgba(76,175,79,0.5)] hover:bg-[#43A047] transition-all"
               >
-                Voir nos produits
+                {t('hero.cta_products')}
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
                   <path d="M3 8h10M9 4l4 4-4 4" stroke="white" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
                 </svg>
@@ -70,7 +57,7 @@ export default async function Home() {
                 href="/quote"
                 className="flex items-center gap-2 border-2 border-white/70 text-white text-[15px] font-semibold px-8 py-4 rounded hover:bg-white hover:text-[#4CAF4F] transition-all"
               >
-                Demander un devis
+                {t('hero.cta_quote')}
               </Link>
             </div>
           </div>
@@ -85,24 +72,22 @@ export default async function Home() {
 
           <div className="flex flex-col items-center gap-3 text-center">
             <h2 className="text-[36px] md:text-[42px] font-bold text-[#263238] leading-tight">
-              Nos Produits
+              {t('products_section.title')}
             </h2>
             <p className="text-[16px] md:text-[18px] text-[#717171] max-w-[480px] leading-relaxed">
-              Rouleaux thermiques de haute qualité pour tous vos besoins professionnels
+              {t('products_section.subtitle')}
             </p>
           </div>
 
-          {/* Navigateur par catégories : choisir une catégorie → produits en dessous (même page) */}
           <CategoryBrowser limit={6} />
 
-          {/* Bouton "Voir plus" si plus de 6 produits */}
-          {products.length > 6 && (
+          {productCount > 6 && (
             <div className="flex justify-center">
               <Link
                 href="/products"
                 className="flex items-center gap-2 border-2 border-[#4CAF4F] text-[#4CAF4F] text-[15px] font-semibold px-8 py-3.5 rounded-xl hover:bg-[#4CAF4F] hover:text-white transition-all"
               >
-                Voir tous les produits
+                {t('products_section.cta')}
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
                   <path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
                 </svg>
@@ -118,22 +103,23 @@ export default async function Home() {
       <section className="bg-[#EBF4FF] py-16 px-6 md:px-12">
         <div className="max-w-[1280px] mx-auto flex flex-col items-center gap-10 text-center">
 
-          {/* Texte */}
           <div className="flex flex-col gap-3">
             <h2 className="text-[28px] md:text-[32px] font-bold text-[#4D4D4D] leading-snug">
-              Notre engagement <span className="text-[#4CAF4F]">qualité & conformité</span>
+              {lang === 'fr'
+                ? <>Notre engagement <span className="text-[#4CAF4F]">qualité & conformité</span></>
+                : t('quality.title')
+              }
             </h2>
             <p className="text-[16px] text-[#717171] leading-relaxed max-w-[480px] mx-auto">
-              Des produits sélectionnés pour leur fiabilité et leur conformité aux standards européens les plus exigeants.
+              {t('quality.desc')}
             </p>
           </div>
 
-          {/* Badges */}
           <div className="flex items-start justify-center gap-10 md:gap-20 flex-wrap">
             {[
               {
-                label: '55 gr/m²',
-                sub: 'Papier Premium',
+                titleKey: 'quality.badge1_title',
+                subKey:   'quality.badge1_sub',
                 icon: (
                   <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
                     <rect x="2" y="3" width="20" height="18" rx="2" stroke="#4CAF4F" strokeWidth="1.8"/>
@@ -142,8 +128,8 @@ export default async function Home() {
                 ),
               },
               {
-                label: 'Allemagne',
-                sub: 'Origine Europe',
+                titleKey: 'quality.badge2_title',
+                subKey:   'quality.badge2_sub',
                 icon: (
                   <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
                     <rect x="2" y="5" width="20" height="5" fill="#1a1a1a" rx="1"/>
@@ -153,8 +139,8 @@ export default async function Home() {
                 ),
               },
               {
-                label: 'BPA Free',
-                sub: 'Sécurité Sanitaire',
+                titleKey: 'quality.badge3_title',
+                subKey:   'quality.badge3_sub',
                 icon: (
                   <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
                     <path d="M12 2l8 3v6.5C20 16.7 16.6 21 12 22 7.4 21 4 16.7 4 11.5V5l8-3z" stroke="#4CAF4F" strokeWidth="1.8"/>
@@ -163,13 +149,13 @@ export default async function Home() {
                 ),
               },
             ].map((item) => (
-              <div key={item.label} className="flex flex-col items-center gap-3 min-w-[100px]">
+              <div key={item.titleKey} className="flex flex-col items-center gap-3 min-w-[100px]">
                 <div className="w-14 h-14 bg-white border-2 border-[#C8DFF7] shadow-[0_4px_12px_rgba(171,190,209,0.4)] rounded-xl flex items-center justify-center">
                   {item.icon}
                 </div>
                 <div className="text-center">
-                  <p className="text-[17px] font-bold text-[#263238] leading-5">{item.label}</p>
-                  <p className="text-[13px] text-[#717171] mt-0.5">{item.sub}</p>
+                  <p className="text-[17px] font-bold text-[#263238] leading-5">{t(item.titleKey)}</p>
+                  <p className="text-[13px] text-[#717171] mt-0.5">{t(item.subKey)}</p>
                 </div>
               </div>
             ))}
@@ -183,20 +169,19 @@ export default async function Home() {
       <section id="about" className="bg-white py-20 px-6 md:px-12">
         <div className="max-w-[1280px] mx-auto flex flex-col gap-8">
           <h2 className="text-[32px] md:text-[38px] font-bold text-[#4D4D4D] leading-tight">
-            À propos de PSI
+            {t('about.title')}
           </h2>
           <div className="flex flex-col lg:flex-row gap-10 lg:gap-16 items-start">
             <div className="flex flex-col gap-5 text-[16px] md:text-[17px] text-[#717171] leading-[1.75] flex-1">
               {aboutTexte
                 ? aboutTexte.split('\n\n').map((para, i) => <p key={i}>{para}</p>)
                 : <>
-                    <p>PSI (Paper Solutions Industry) est une entreprise algérienne spécialisée dans la transformation et la distribution de papier thermique professionnel. Basée à Alger, nous servons commerces, banques, restaurants et pharmacies à travers tout le territoire national.</p>
-                    <p>Nous nous approvisionnons exclusivement auprès de fournisseurs européens certifiés, garantissant à nos clients des produits de qualité supérieure, conformes aux normes sanitaires les plus strictes.</p>
-                    <p>Notre mission est d'offrir des solutions papier fiables, rapides et accessibles à tous les professionnels qui en ont besoin, avec un service client réactif et de proximité.</p>
+                    <p>{t('about.p1')}</p>
+                    <p>{t('about.p2')}</p>
+                    <p>{t('about.p3')}</p>
                   </>
               }
             </div>
-            {/* Image */}
             <div className="lg:w-[460px] shrink-0 w-full">
               <div
                 className="w-full h-[280px] md:h-[320px] bg-cover bg-center rounded-2xl shadow-[0_16px_48px_rgba(38,50,56,0.15)]"
@@ -211,29 +196,28 @@ export default async function Home() {
           CTA
       ════════════════════════════════════════════════════════════ */}
       <section id="contact" className="bg-[#4CAF4F] py-20 px-6 md:px-12 relative overflow-hidden">
-        {/* Cercles décoratifs */}
         <div className="absolute -top-24 -right-24 w-72 h-72 rounded-full bg-white/5" />
         <div className="absolute -bottom-16 -left-16 w-56 h-56 rounded-full bg-white/5" />
 
         <div className="relative max-w-[1280px] mx-auto flex flex-col items-center gap-6 text-center">
           <h2 className="text-[32px] md:text-[48px] font-bold text-white leading-tight max-w-[600px]">
-            Besoin d'un devis personnalisé ?
+            {t('cta_section.title')}
           </h2>
           <p className="text-[16px] md:text-[18px] text-[#E8F5E9] max-w-[480px] leading-relaxed">
-            Contactez notre équipe commerciale pour obtenir une offre adaptée à vos besoins.
+            {t('cta_section.desc')}
           </p>
           <div className="flex flex-col sm:flex-row gap-4 mt-4">
             <Link
               href="/contact"
               className="flex items-center justify-center gap-2 bg-white text-[#4CAF4F] text-[16px] font-bold px-10 py-4 rounded-xl shadow-[0_8px_24px_rgba(0,0,0,0.15)] hover:shadow-[0_12px_32px_rgba(0,0,0,0.2)] transition-all"
             >
-              Nous contacter
+              {t('cta_section.btn_contact')}
             </Link>
             <Link
               href="/quote"
               className="flex items-center justify-center border-2 border-white text-white text-[16px] font-bold px-10 py-4 rounded-xl hover:bg-white/10 transition-all"
             >
-              Demander un devis
+              {t('cta_section.btn_quote')}
             </Link>
           </div>
         </div>

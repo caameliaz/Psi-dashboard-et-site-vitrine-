@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { addSSEClient } from '@/lib/sse-bus';
+import { auth } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 export async function GET(request: NextRequest) {
+  const session = await auth();
+  const userId = session?.user?.id ?? 'anonymous';
   const encoder = new TextEncoder();
 
   const stream = new ReadableStream({
@@ -15,7 +18,7 @@ export async function GET(request: NextRequest) {
         } catch { /* déconnecté */ }
       };
 
-      const remove = addSSEClient(send);
+      const remove = addSSEClient(userId, send);
 
       // Keepalive ping every 25s pour éviter timeout proxy/browser
       const pingId = setInterval(() => {

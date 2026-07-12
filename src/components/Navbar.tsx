@@ -4,15 +4,17 @@ import Link from 'next/link';
 import { useState, useEffect, useRef } from 'react';
 import { useCartStore } from '@/store/cartStore';
 import { usePathname, useRouter } from 'next/navigation';
+import { useTranslation } from '@/lib/i18n';
 
 const NAV_LINKS = [
-  { label: 'Accueil',  href: '/',        sectionId: 'hero' },
-  { label: 'Produits', href: '/products', sectionId: 'products' },
-  { label: 'Devis',    href: '/quote',    sectionId: 'about' },
-  { label: 'Contact',  href: '/contact',  sectionId: 'contact' },
+  { key: 'nav.home',     href: '/',        sectionId: 'hero' },
+  { key: 'nav.products', href: '/products', sectionId: 'products' },
+  { key: 'nav.quote',    href: '/quote',    sectionId: 'about' },
+  { key: 'nav.contact',  href: '/contact',  sectionId: 'contact' },
 ];
 
 export function Navbar() {
+  const { t, lang, setLang } = useTranslation();
   const totalItems = useCartStore((state) => state.getTotalItems());
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
@@ -23,7 +25,6 @@ export function Navbar() {
 
   const isHome = pathname === '/';
 
-  // Fermer le menu si on clique en dehors
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (navRef.current && !navRef.current.contains(e.target as Node)) {
@@ -34,7 +35,6 @@ export function Navbar() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Fermer le menu au changement de route
   useEffect(() => {
     setOpen(false);
     const start = window.scrollY;
@@ -51,7 +51,6 @@ export function Navbar() {
     requestAnimationFrame(step);
   }, [pathname]);
 
-  // IntersectionObserver pour sections home
   useEffect(() => {
     if (!isHome) { setActiveSection(null); return; }
 
@@ -86,7 +85,7 @@ export function Navbar() {
     const dist = top - start;
     const duration = 600;
     let startTime: number | null = null;
-    const ease = (t: number) => t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
+    const ease = (tv: number) => tv < 0.5 ? 2 * tv * tv : -1 + (4 - 2 * tv) * tv;
     const step = (ts: number) => {
       if (!startTime) startTime = ts;
       const elapsed = ts - startTime;
@@ -127,17 +126,17 @@ export function Navbar() {
         </Link>
 
         {/* ── Desktop nav ── */}
-        <div className="hidden md:flex items-center gap-10 flex-1 justify-end">
+        <div className="hidden md:flex items-center gap-6 flex-1 justify-end">
           <div className="flex items-center gap-8">
             {NAV_LINKS.map((l) => {
               const active = isActive(l);
               return (
                 <button
-                  key={l.label}
+                  key={l.key}
                   onClick={() => handleNavClick(l)}
                   className={`text-[15px] font-medium transition-colors relative group ${active ? 'text-[#4CAF4F]' : 'text-[#4D4D4D] hover:text-[#4CAF4F]'}`}
                 >
-                  {l.label}
+                  {t(l.key)}
                   <span className={`absolute -bottom-0.5 left-0 h-0.5 bg-[#4CAF4F] transition-all duration-200 ${active ? 'w-full' : 'w-0 group-hover:w-full'}`} />
                 </button>
               );
@@ -159,8 +158,8 @@ export function Navbar() {
           </Link>
 
           {/* CTA */}
-          <Link href="/quote" className="bg-[#4CAF4F] text-white text-[15px] font-semibold px-7 py-2.5 rounded-lg flex items-center gap-2 hover:bg-[#43A047] shadow-[0_4px_14px_rgba(76,175,79,0.4)] hover:shadow-[0_6px_20px_rgba(76,175,79,0.5)] transition-all">
-            Commander
+          <Link href="/quote" className="bg-[#4CAF4F] text-white text-[15px] font-semibold px-7 py-2.5 rounded-lg flex items-center gap-2 hover:bg-[#43A047] shadow-[0_4px_14px_rgba(76,175,79,0.4)] hover:shadow-[0_6px_20px_rgba(76,175,79,0.5)] transition-all shrink-0">
+            {t('nav.order')}
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
               <path d="M3 8h10M9 4l4 4-4 4" stroke="white" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
@@ -192,20 +191,39 @@ export function Navbar() {
         </div>
       </div>
 
+      {/* ── Toggle langue flottant (bas droite) ── */}
+      <div
+        className="fixed bottom-6 left-4 z-50 flex items-center gap-0.5 bg-white rounded-full px-1 py-1 border border-[#E2E8F0]"
+        style={{ boxShadow: '0 2px 8px rgba(76,175,79,0.18)' }}
+      >
+        <button
+          onClick={() => setLang('fr')}
+          className={`px-3 py-1.5 text-[12px] font-bold rounded-full transition-all ${lang === 'fr' ? 'bg-[#4CAF4F] text-white' : 'text-[#717171] hover:text-[#263238]'}`}
+        >
+          FR
+        </button>
+        <button
+          onClick={() => setLang('ar')}
+          className={`px-3 py-1.5 text-[12px] font-bold rounded-full transition-all ${lang === 'ar' ? 'bg-[#4CAF4F] text-white' : 'text-[#717171] hover:text-[#263238]'}`}
+        >
+          AR
+        </button>
+      </div>
+
       {/* ── Mobile menu ── */}
       {open && (
         <div className="md:hidden bg-white border-t border-[#F0F4F8] px-6 py-6 flex flex-col gap-5 shadow-lg">
           {NAV_LINKS.map((l) => (
             <button
-              key={l.label}
+              key={l.key}
               onClick={() => handleNavClick(l, true)}
               className={`text-left text-[17px] font-medium transition-colors ${isActive(l) ? 'text-[#4CAF4F]' : 'text-[#4D4D4D] hover:text-[#4CAF4F]'}`}
             >
-              {l.label}
+              {t(l.key)}
             </button>
           ))}
           <Link href="/quote" onClick={() => setOpen(false)} className="mt-2 w-full bg-[#4CAF4F] text-white text-[16px] font-semibold px-6 py-3.5 rounded-xl text-center shadow-[0_4px_14px_rgba(76,175,79,0.4)]">
-            Commander →
+            {t('nav.order')} →
           </Link>
         </div>
       )}

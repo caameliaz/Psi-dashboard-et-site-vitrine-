@@ -109,12 +109,13 @@ export async function POST(request: NextRequest) {
     const isAdmin = body.source !== 'SITE';
     const actorName = session?.user?.name ?? session?.user?.email ?? 'Agent';
     const clientLabel = client.company ?? client.name;
-    const notif = await createNotif({
+    const { notif, userIds } = await createNotif({
       type: isAdmin ? 'ACTION_AUTRE' : 'SITE_COMMANDE',
       title: isAdmin ? 'Nouvelle commande · Manuel' : 'Nouvelle commande · Site web',
       message: isAdmin
         ? `${actorName} a créé une commande pour ${clientLabel} (${order.ref ?? ''})`
-        : `${clientLabel} — ${body.items?.length ?? 0} article(s)`,
+        : `${clientLabel} a lancé une commande (${order.ref ?? ''})`,
+      actorId: session?.user?.id ?? null,
       orderId: order.id,
     });
 
@@ -124,7 +125,7 @@ export async function POST(request: NextRequest) {
       title: notif.title,
       message: notif.message,
       createdAt: notif.createdAt.toISOString(),
-    });
+    }, userIds);
     createAudit({
       userId: session?.user?.id,
       action: 'Commande créée',

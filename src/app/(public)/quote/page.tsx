@@ -2,24 +2,22 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { inputClass, labelClass } from '@/lib/utils';
 import { WilayaSelect } from '@/components/ui/WilayaSelect';
 import { CommuneSelect } from '@/components/ui/CommuneSelect';
 import { useCartStore } from '@/store/cartStore';
+import { useTranslation } from '@/lib/i18n';
 
 const WHATSAPP_NUMBER = '213770150656';
-const WHATSAPP_MSG = encodeURIComponent('Bonjour, je souhaite obtenir des informations sur vos produits PSI.');
 const PHONE = '+213770150656';
 const EMAIL = 'contact@psi-algerie.com';
 
 interface ProdOption { id: string; reference: string; width: number; length: number; }
-// Une ligne du devis : dimChoice = id produit | 'autre' | '' ; customDim = texte si "Autre"
 interface QuoteLine { dimChoice: string; customDim: string; quantity: string; }
 const emptyLine = (): QuoteLine => ({ dimChoice: '', customDim: '', quantity: '' });
 
 export default function QuotePage() {
-  const router = useRouter();
+  const { t } = useTranslation();
   const cartItems = useCartStore((s) => s.items);
   const clearCart = useCartStore((s) => s.clearCart);
   const [formData, setFormData] = useState({
@@ -37,10 +35,11 @@ export default function QuotePage() {
   const [submitted, setSubmitted] = useState(false);
   const [submitError, setSubmitError] = useState('');
 
+  const WHATSAPP_MSG = encodeURIComponent(t('common.whatsapp_msg'));
+
   useEffect(() => {
     fetch('/api/products').then(r => r.json()).then((data: ProdOption[]) => {
       setProducts(data);
-      // Pré-remplit les lignes depuis le panier (si on vient de "Demander un devis")
       if (cartItems.length > 0) {
         const fromCart = cartItems.map((ci) => {
           const prod = data.find(p => p.reference === ci.reference);
@@ -60,11 +59,10 @@ export default function QuotePage() {
     setLoading(true);
     setSubmitError('');
     try {
-      // Construit les items du devis à partir des lignes
       const items = lines.map((l) => {
         const qty = l.quantity ? Number(l.quantity) : 1;
         if (l.dimChoice === 'autre') {
-          return { description: l.customDim.trim() || 'Dimension personnalisée', quantity: qty };
+          return { description: l.customDim.trim() || t('common.custom_dim'), quantity: qty };
         }
         if (l.dimChoice) {
           const prod = products.find(p => p.id === l.dimChoice);
@@ -90,19 +88,17 @@ export default function QuotePage() {
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        setSubmitError(err.error ?? 'Erreur lors de l\'envoi. Veuillez réessayer.');
+        setSubmitError(err.error ?? t('quote.error'));
         return;
       }
-      clearCart(); // vide le panier une fois le devis envoyé
+      clearCart();
       setSubmitted(true);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
-  ) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
@@ -115,15 +111,13 @@ export default function QuotePage() {
               <path d="M5 13l4 4L19 7" stroke="#0D9488" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
           </div>
-          <h2 className="text-[22px] font-bold text-[#263238] mb-3">Demande envoyée !</h2>
-          <p className="text-[15px] text-[#717171] mb-8">
-            Merci pour votre demande de devis. Notre équipe vous contactera dans les plus brefs délais.
-          </p>
+          <h2 className="text-[22px] font-bold text-[#263238] mb-3">{t('quote.success_title')}</h2>
+          <p className="text-[15px] text-[#717171] mb-8">{t('quote.success_body')}</p>
           <Link
             href="/"
             className="inline-block bg-[#0D9488] text-white text-[15px] font-semibold px-8 py-3 rounded-xl hover:bg-[#0F766E] transition-all"
           >
-            Retour à l'accueil
+            {t('quote.success_btn')}
           </Link>
         </div>
       </div>
@@ -141,38 +135,36 @@ export default function QuotePage() {
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
             <path d="M10 4L6 8l4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
           </svg>
-          Retour
+          {t('quote.back')}
         </Link>
 
-        <h1 className="text-[24px] md:text-[42px] font-bold text-[#263238] mb-2">Demander un devis</h1>
-        <p className="text-[14px] md:text-[16px] text-[#717171] mb-6 md:mb-10">
-          Remplissez le formulaire ci-dessous et notre équipe vous recontactera rapidement.
-        </p>
+        <h1 className="text-[24px] md:text-[42px] font-bold text-[#263238] mb-2">{t('quote.title')}</h1>
+        <p className="text-[14px] md:text-[16px] text-[#717171] mb-6 md:mb-10">{t('quote.subtitle')}</p>
 
         <div className="flex flex-col lg:flex-row gap-8">
 
           <form onSubmit={handleSubmit} className="flex-1">
             <div className="bg-white rounded-2xl shadow-[0_4px_24px_rgba(171,190,209,0.35)] p-8 flex flex-col gap-6">
-              <h2 className="text-[18px] font-bold text-[#263238]">Vos coordonnées</h2>
+              <h2 className="text-[18px] font-bold text-[#263238]">{t('quote.section_coords')}</h2>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                 <div>
-                  <label className={labelClass}>Nom complet *</label>
-                  <input type="text" name="name" value={formData.name} onChange={handleChange} placeholder="Votre nom et prénom" required className={inputClass} />
+                  <label className={labelClass}>{t('quote.name_label')}</label>
+                  <input type="text" name="name" value={formData.name} onChange={handleChange} placeholder={t('quote.name_ph')} required className={inputClass} />
                 </div>
                 <div>
-                  <label className={labelClass}>Entreprise</label>
-                  <input type="text" name="company" value={formData.company} onChange={handleChange} placeholder="Nom de votre entreprise" className={inputClass} />
+                  <label className={labelClass}>{t('quote.company_label')}</label>
+                  <input type="text" name="company" value={formData.company} onChange={handleChange} placeholder={t('quote.company_ph')} className={inputClass} />
                 </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                 <div>
-                  <label className={labelClass}>Téléphone *</label>
-                  <input type="tel" name="phone" value={formData.phone} onChange={handleChange} placeholder="+213 XXX XXX XXX" required className={inputClass} />
+                  <label className={labelClass}>{t('quote.phone_label')}</label>
+                  <input type="tel" name="phone" value={formData.phone} onChange={handleChange} placeholder={t('quote.phone_ph')} required className={inputClass} />
                 </div>
                 <div>
-                  <label className={labelClass}>Wilaya *</label>
+                  <label className={labelClass}>{t('quote.wilaya_label')}</label>
                   <WilayaSelect
                     name="wilaya"
                     value={formData.wilaya}
@@ -184,7 +176,7 @@ export default function QuotePage() {
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className={labelClass}>Commune</label>
+                  <label className={labelClass}>{t('quote.commune_label')}</label>
                   <CommuneSelect
                     name="commune"
                     wilaya={formData.wilaya}
@@ -193,43 +185,43 @@ export default function QuotePage() {
                   />
                 </div>
                 <div>
-                  <label className={labelClass}>Email</label>
-                  <input type="email" name="email" value={formData.email} onChange={handleChange} placeholder="votre@email.com" className={inputClass} />
+                  <label className={labelClass}>{t('quote.email_label')}</label>
+                  <input type="email" name="email" value={formData.email} onChange={handleChange} placeholder={t('quote.email_ph')} className={inputClass} />
                 </div>
               </div>
 
               <div className="border-t border-[#F0F4F8] pt-6">
-                <h2 className="text-[18px] font-bold text-[#263238] mb-5">Produits souhaités</h2>
+                <h2 className="text-[18px] font-bold text-[#263238] mb-5">{t('quote.section_products')}</h2>
 
                 <div className="flex flex-col gap-4">
                   {lines.map((line, i) => (
                     <div key={i} className="rounded-xl border border-[#F0F4F8] p-4 bg-[#FAFCFF]">
                       <div className="grid grid-cols-1 sm:grid-cols-[1fr_120px_auto] gap-3 items-end">
                         <div>
-                          <label className={labelClass}>Dimensions</label>
+                          <label className={labelClass}>{t('quote.dim_label')}</label>
                           <select value={line.dimChoice} onChange={(e) => setLine(i, { dimChoice: e.target.value })} className={inputClass}>
-                            <option value="">— Choisir —</option>
+                            <option value="">{t('quote.dim_default')}</option>
                             {products.map((p) => (
                               <option key={p.id} value={p.id}>{p.reference}</option>
                             ))}
-                            <option value="autre">Autre (préciser)</option>
+                            <option value="autre">{t('quote.dim_other')}</option>
                           </select>
                         </div>
                         <div>
-                          <label className={labelClass}>Quantité</label>
-                          <input type="number" min="1" value={line.quantity} onChange={(e) => setLine(i, { quantity: e.target.value })} placeholder="Ex : 500" className={inputClass} />
+                          <label className={labelClass}>{t('quote.qty_label')}</label>
+                          <input type="number" min="1" value={line.quantity} onChange={(e) => setLine(i, { quantity: e.target.value })} placeholder={t('quote.qty_ph')} className={inputClass} />
                         </div>
                         {lines.length > 1 && (
                           <button type="button" onClick={() => setLines(prev => prev.filter((_, idx) => idx !== i))}
-                            className="h-[50px] w-11 flex items-center justify-center rounded-xl border border-[#ABBED1] text-[#EF4444] hover:bg-[#FEF2F2] transition-colors" title="Retirer">
+                            className="h-[50px] w-11 flex items-center justify-center rounded-xl border border-[#ABBED1] text-[#EF4444] hover:bg-[#FEF2F2] transition-colors" title={t('quote.remove_title')}>
                             <svg width={16} height={16} fill="none" viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
                           </button>
                         )}
                       </div>
                       {line.dimChoice === 'autre' && (
                         <div className="mt-3">
-                          <label className={labelClass}>Précisez la dimension souhaitée</label>
-                          <input type="text" value={line.customDim} onChange={(e) => setLine(i, { customDim: e.target.value })} placeholder="Ex : 62mm × 40m, ou format spécial…" className={inputClass} />
+                          <label className={labelClass}>{t('quote.custom_dim_label')}</label>
+                          <input type="text" value={line.customDim} onChange={(e) => setLine(i, { customDim: e.target.value })} placeholder={t('quote.custom_dim_ph')} className={inputClass} />
                         </div>
                       )}
                     </div>
@@ -239,17 +231,17 @@ export default function QuotePage() {
                 <button type="button" onClick={() => setLines(prev => [...prev, emptyLine()])}
                   className="mt-4 flex items-center gap-2 text-[14px] font-bold text-[#4CAF4F] hover:text-[#43A047] transition-colors">
                   <svg width={18} height={18} fill="none" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
-                  Ajouter un produit
+                  {t('quote.add_product')}
                 </button>
               </div>
 
               <div>
-                <label className={labelClass}>Message complémentaire</label>
+                <label className={labelClass}>{t('quote.message_label')}</label>
                 <textarea
                   name="message"
                   value={formData.message}
                   onChange={handleChange}
-                  placeholder="Décrivez vos besoins, conditions de livraison, délais..."
+                  placeholder={t('quote.message_ph')}
                   rows={4}
                   required
                   className={inputClass + ' resize-none'}
@@ -264,7 +256,7 @@ export default function QuotePage() {
                 disabled={loading}
                 className="w-full bg-[#4CAF4F] text-white text-[16px] font-semibold py-4 rounded-xl shadow-[0_4px_14px_rgba(76,175,79,0.4)] hover:bg-[#43A047] transition-all disabled:opacity-50 flex items-center justify-center gap-2"
               >
-                <span>{loading ? 'Envoi en cours...' : 'Envoyer la demande'}</span>
+                <span>{loading ? t('quote.submitting') : t('quote.submit')}</span>
                 {!loading && (
                   <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
                     <path d="M3 8h10M9 4l4 4-4 4" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
@@ -278,7 +270,7 @@ export default function QuotePage() {
           <div className="lg:w-[300px] shrink-0 flex flex-col gap-4">
 
             <div className="bg-white rounded-2xl shadow-[0_4px_24px_rgba(171,190,209,0.35)] p-6 flex flex-col gap-3">
-              <p className="text-[15px] font-bold text-[#263238] mb-1">Une question ?</p>
+              <p className="text-[15px] font-bold text-[#263238] mb-1">{t('quote.sidebar_title')}</p>
 
               {/* WhatsApp */}
               <a
@@ -294,7 +286,7 @@ export default function QuotePage() {
                   </svg>
                 </div>
                 <div>
-                  <p className="text-[14px] font-semibold text-[#263238]">WhatsApp</p>
+                  <p className="text-[14px] font-semibold text-[#263238]">{t('contact.whatsapp')}</p>
                   <p className="text-[12px] text-[#89939E]">+213 770 150 656</p>
                 </div>
               </a>
@@ -310,7 +302,7 @@ export default function QuotePage() {
                   </svg>
                 </div>
                 <div>
-                  <p className="text-[14px] font-semibold text-[#263238]">Appeler</p>
+                  <p className="text-[14px] font-semibold text-[#263238]">{t('contact.call')}</p>
                   <p className="text-[12px] text-[#89939E]">+213 770 150 656</p>
                 </div>
               </a>
@@ -327,12 +319,12 @@ export default function QuotePage() {
                   </svg>
                 </div>
                 <div>
-                  <p className="text-[14px] font-semibold text-[#263238]">Email</p>
+                  <p className="text-[14px] font-semibold text-[#263238]">{t('contact.email_label')}</p>
                   <p className="text-[12px] text-[#89939E]">{EMAIL}</p>
                 </div>
               </a>
 
-              <p className="text-[12px] text-[#ABBED1] pt-1">Dim – Jeu : 8h00 – 17h00</p>
+              <p className="text-[12px] text-[#ABBED1] pt-1">{t('quote.sidebar_hours')}</p>
             </div>
 
           </div>
