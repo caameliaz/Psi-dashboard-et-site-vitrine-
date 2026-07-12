@@ -8,6 +8,7 @@ import { AdminSelect } from '@/components/ui/AdminSelect';
 const ALL_PERMISSIONS = [
   { key: 'voir_commandes',     label: 'Voir les commandes & devis',    short: 'Voir commandes'      },
   { key: 'modifier_statuts',   label: 'Modifier les statuts',          short: 'Modifier statuts'    },
+  { key: 'assign_commandes',   label: 'Assigner les commandes & devis', short: 'Assigner'           },
   { key: 'voir_clients',       label: 'Voir les fiches clients',        short: 'Voir clients'        },
   { key: 'modifier_clients',   label: 'Modifier / ajouter des clients', short: 'Modifier clients'   },
   { key: 'voir_produits',      label: 'Voir les produits',              short: 'Voir produits'       },
@@ -720,7 +721,12 @@ export default function UsersPage() {
 
   const handleDelete = async () => {
     if (!deleteUser) return;
-    await fetch(`/api/users/${deleteUser.id}`, { method: 'DELETE' });
+    const res = await fetch(`/api/users/${deleteUser.id}`, { method: 'DELETE' });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      alert(data.error ?? "Impossible de supprimer cet utilisateur.");
+      return;
+    }
     await fetchUsers();
     setDeleteUser(null);
   };

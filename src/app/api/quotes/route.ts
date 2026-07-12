@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
+import { requirePermission } from '@/lib/permissions';
 import { prisma } from '@/lib/prisma';
 import { createNotif } from '@/lib/notifications';
 import { generateQuoteRef } from '@/lib/generate-ref';
@@ -7,8 +8,8 @@ import { pushSSE } from '@/lib/sse-bus';
 import { createAudit } from '@/lib/audit';
 
 export async function GET() {
-  const session = await auth();
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const guard = await requirePermission('voir_commandes');
+  if (guard.error) return guard.error;
 
   try {
     const quotes = await prisma.quote.findMany({
@@ -16,6 +17,7 @@ export async function GET() {
         client: { include: { phones: true } },
         items: { include: { product: true } },
         createdBy: { select: { id: true, name: true } },
+        assignedTo: { select: { id: true, name: true } },
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -58,6 +60,7 @@ export async function POST(request: NextRequest) {
           company: body.company ?? null,
           email: body.email ?? null,
           wilaya: body.wilaya ?? 'Non spécifié',
+          commune: body.commune ?? null,
           phones: {
             create: primaryPhone
               ? [{ number: primaryPhone, label: 'Principal', primary: true }]
@@ -75,6 +78,8 @@ export async function POST(request: NextRequest) {
         message: body.message ?? '',
         source: body.source ?? 'SITE',
         createdById: session?.user?.id ?? null,
+        // Assignation : valeur fournie, sinon le créateur (utilisateur connecté)
+        assignedToId: body.assignedToId ?? session?.user?.id ?? null,
         items: {
           create: (body.items ?? []).map((item: {
             productId?: string;

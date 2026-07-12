@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@/lib/auth';
+import { requirePermission } from '@/lib/permissions';
 import { prisma } from '@/lib/prisma';
 
-// GET /api/audit — journal d'audit
+// GET /api/audit — journal d'audit (permission voir_historique)
 // Admin : toutes les actions
 // Employé : ses propres actions uniquement
 export async function GET(request: NextRequest) {
-  const session = await auth();
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const guard = await requirePermission('voir_historique');
+  if (guard.error) return guard.error;
+  const session = guard.session;
 
   const { searchParams } = request.nextUrl;
   const page = Number(searchParams.get('page') ?? 1);

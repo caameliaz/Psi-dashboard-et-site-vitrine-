@@ -6,6 +6,7 @@ import { useCartStore } from '@/store/cartStore';
 import { useRouter } from 'next/navigation';
 import { inputClass, labelClass } from '@/lib/utils';
 import { WilayaSelect } from '@/components/ui/WilayaSelect';
+import { CommuneSelect } from '@/components/ui/CommuneSelect';
 
 export default function CheckoutPage() {
   const router = useRouter();
@@ -24,6 +25,7 @@ export default function CheckoutPage() {
     phone: '',
     email: '',
     wilaya: '',
+    commune: '',
     address: '',
   });
   const [loading, setLoading] = useState(false);
@@ -45,6 +47,7 @@ export default function CheckoutPage() {
             phone: formData.phone,
             email: formData.email || undefined,
             wilaya: formData.wilaya,
+            commune: formData.commune || undefined,
             address: formData.address || undefined,
           },
           items: items.map((i) => ({ productId: i.productId, quantity: i.quantity, unitPrice: i.unitPrice })),
@@ -138,8 +141,17 @@ export default function CheckoutPage() {
                   <WilayaSelect
                     name="wilaya"
                     value={formData.wilaya}
-                    onChange={(v) => setFormData({ ...formData, wilaya: v })}
+                    onChange={(v) => setFormData({ ...formData, wilaya: v, commune: '' })}
                     required
+                  />
+                </div>
+                <div>
+                  <label className={labelClass}>Commune</label>
+                  <CommuneSelect
+                    name="commune"
+                    wilaya={formData.wilaya}
+                    value={formData.commune}
+                    onChange={(v) => setFormData({ ...formData, commune: v })}
                   />
                 </div>
               </div>

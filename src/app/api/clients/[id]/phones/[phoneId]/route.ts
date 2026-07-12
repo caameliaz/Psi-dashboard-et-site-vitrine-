@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@/lib/auth';
+import { requirePermission } from '@/lib/permissions';
 import { prisma } from '@/lib/prisma';
 
 type Ctx = { params: Promise<{ id: string; phoneId: string }> };
 
-// DELETE /api/clients/[id]/phones/[phoneId] — supprimer un numéro (admin + employé)
+// DELETE /api/clients/[id]/phones/[phoneId] — supprimer un numéro (permission modifier_clients)
 export async function DELETE(_request: NextRequest, { params }: Ctx) {
-  const session = await auth();
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const guard = await requirePermission('modifier_clients');
+  if (guard.error) return guard.error;
 
   const { phoneId } = await params;
 

@@ -1,13 +1,33 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@/lib/auth';
+import { requirePermission } from '@/lib/permissions';
 import { prisma } from '@/lib/prisma';
 import bcrypt from 'bcryptjs';
 import { createAudit } from '@/lib/audit';
 
-// GET /api/users — liste tous les utilisateurs (admin uniquement)
-export async function GET() {
-  const session = await auth();
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+// GET /api/users — liste tous les utilisateurs (permission gerer_utilisateurs)
+// GET /api/users?assignable=true — liste réduite (id + name) des users actifs,
+//   accessible à quiconque peut voir les commandes (pour le dropdown "pris en charge par")
+export async function GET(request: NextRequest) {
+  const assignable = request.nextUrl.searchParams.get('assignable') === 'true';
+
+  if (assignable) {
+    const guard = await requirePermission('voir_commandes');
+    if (guard.error) return guard.error;
+    try {
+      const users = await prisma.user.findMany({
+        where: { active: true },
+        select: { id: true, name: true },
+        orderBy: { name: 'asc' },
+      });
+      return NextResponse.json(users);
+    } catch (e) {
+      console.error(e);
+      return NextResponse.json({ error: 'Failed to fetch users' }, { status: 500 });
+    }
+  }
+
+  const guard = await requirePermission('gerer_utilisateurs');
+  if (guard.error) return guard.error;
 
   try {
     const users = await prisma.user.findMany({
@@ -24,10 +44,11 @@ export async function GET() {
   }
 }
 
-// POST /api/users — créer un utilisateur (admin uniquement)
+// POST /api/users — créer un utilisateur (permission gerer_utilisateurs)
 export async function POST(request: NextRequest) {
-  const session = await auth();
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const guard = await requirePermission('gerer_utilisateurs');
+  if (guard.error) return guard.error;
+  const session = guard.session;
 
   try {
     const body = await request.json();

@@ -1,5 +1,48 @@
 import { createNotif } from './notifications';
 import { pushSSE } from './sse-bus';
+import { prisma } from './prisma';
+
+// Notifie UNIQUEMENT l'utilisateur assigné qu'une demande lui a été confiée.
+// (l'assigné ne reçoit rien s'il s'assigne lui-même)
+export async function notifyAssignment({
+  actorId,
+  actorName,
+  assignedToId,
+  entityType,
+  clientLabel,
+  ref,
+  orderId,
+  quoteId,
+}: {
+  actorId: string;
+  actorName: string;
+  assignedToId: string;
+  entityType: 'commande' | 'devis';
+  clientLabel: string;
+  ref: string;
+  orderId?: string;
+  quoteId?: string;
+}) {
+  if (!assignedToId || assignedToId === actorId) return; // pas de notif pour soi-même
+  const notif = await prisma.notification.create({
+    data: {
+      type: 'ACTION_AUTRE',
+      title: 'Demande assignée',
+      message: `${actorName} vous a confié ${entityType} ${ref} — ${clientLabel}`,
+      orderId: orderId ?? null,
+      quoteId: quoteId ?? null,
+      reads: { create: [{ userId: assignedToId, read: false }] },
+    },
+  });
+  pushSSE('activity', {
+    id: notif.id,
+    type: 'ACTION_AUTRE',
+    title: notif.title,
+    message: notif.message,
+    createdAt: notif.createdAt.toISOString(),
+    targetUserId: assignedToId,
+  });
+}
 
 const STATUS_LABELS: Record<string, string> = {
   EN_ATTENTE: 'En attente',

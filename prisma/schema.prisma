@@ -11,6 +11,7 @@ datasource db {
 model Category {
   id        String    @id @default(cuid())
   name      String    @unique
+  photo     String?
   order     Int       @default(0)
   products  Product[]
   createdAt DateTime  @default(now())
@@ -71,6 +72,7 @@ model Client {
   company   String?
   email     String?
   wilaya    String
+  commune   String?
   address   String?
   photo     String?
   phones    ClientPhone[]
@@ -120,6 +122,8 @@ model Order {
   notes           String?
   createdBy     User?          @relation("OrderCreatedBy", fields: [createdById], references: [id])
   createdById   String?        // null si commande du site public
+  assignedTo    User?          @relation("OrderAssignedTo", fields: [assignedToId], references: [id])
+  assignedToId  String?        // "pris en charge par"
   notifications Notification[]
   auditLogs     AuditLog[]     @relation("AuditOrder")
   createdAt     DateTime       @default(now())
@@ -164,9 +168,10 @@ model Quote {
   paymentTerms     String?        // ex: "50% à la commande"
   adminRemarks     String?
   notes            String?        // notes internes
-  convertedOrderId String?        // id de la commande créée si converti
   createdBy        User?          @relation("QuoteCreatedBy", fields: [createdById], references: [id])
   createdById      String?
+  assignedTo       User?          @relation("QuoteAssignedTo", fields: [assignedToId], references: [id])
+  assignedToId     String?        // "pris en charge par"
   notifications    Notification[]
   auditLogs        AuditLog[]     @relation("AuditQuote")
   createdAt        DateTime       @default(now())
@@ -197,7 +202,7 @@ enum RequestStatus {
 // Les messages de contact n'ont pas de cancelReason — on les traite ou pas, pas d'annulation
 model ContactRequest {
   id        String        @id @default(cuid())
-  client    Client        @relation(fields: [clientId], references: [id])
+  client    Client        @relation(fields: [clientId], references: [id], onDelete: Cascade)
   clientId  String
   message   String
   status    ContactStatus @default(EN_ATTENTE)
@@ -268,6 +273,8 @@ model User {
   sessionVersion  Int                @default(0) // incrémenté pour invalider tous les cookies
   ordersCreated   Order[]            @relation("OrderCreatedBy")
   quotesCreated   Quote[]            @relation("QuoteCreatedBy")
+  ordersAssigned  Order[]            @relation("OrderAssignedTo")
+  quotesAssigned  Quote[]            @relation("QuoteAssignedTo")
   clientNotes     ClientNote[]       @relation("ClientNoteAuthor")
   notifications   NotificationRead[]
   auditLogs       AuditLog[]

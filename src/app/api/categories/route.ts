@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { auth } from '@/lib/auth';
+import { requirePermission } from '@/lib/permissions';
 
 // GET /api/categories — toutes les catégories (public)
 export async function GET() {
@@ -16,11 +16,10 @@ export async function GET() {
   }
 }
 
-// POST /api/categories — créer une catégorie (admin)
+// POST /api/categories — créer une catégorie (permission modifier_produits)
 export async function POST(request: NextRequest) {
-  // TODO: remettre auth avant prod
-  // const session = await auth();
-  // if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const guard = await requirePermission('modifier_produits');
+  if (guard.error) return guard.error;
 
   try {
     const body = await request.json();
@@ -36,6 +35,7 @@ export async function POST(request: NextRequest) {
       data: {
         name: body.name,
         order: body.order ?? order,
+        photo: body.photo ?? null,
       },
     });
 

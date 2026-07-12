@@ -1,38 +1,78 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { inputClass, labelClass } from '@/lib/utils';
 import { WilayaSelect } from '@/components/ui/WilayaSelect';
+import { CommuneSelect } from '@/components/ui/CommuneSelect';
+import { useCartStore } from '@/store/cartStore';
 
 const WHATSAPP_NUMBER = '213770150656';
 const WHATSAPP_MSG = encodeURIComponent('Bonjour, je souhaite obtenir des informations sur vos produits PSI.');
 const PHONE = '+213770150656';
 const EMAIL = 'contact@psi-algerie.com';
 
+interface ProdOption { id: string; reference: string; width: number; length: number; }
+// Une ligne du devis : dimChoice = id produit | 'autre' | '' ; customDim = texte si "Autre"
+interface QuoteLine { dimChoice: string; customDim: string; quantity: string; }
+const emptyLine = (): QuoteLine => ({ dimChoice: '', customDim: '', quantity: '' });
+
 export default function QuotePage() {
   const router = useRouter();
+  const cartItems = useCartStore((s) => s.items);
+  const clearCart = useCartStore((s) => s.clearCart);
   const [formData, setFormData] = useState({
     name: '',
     company: '',
     phone: '',
     email: '',
     wilaya: '',
-    width: '',
-    length: '',
-    quantity: '',
+    commune: '',
     message: '',
   });
+  const [products, setProducts] = useState<ProdOption[]>([]);
+  const [lines, setLines] = useState<QuoteLine[]>([emptyLine()]);
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [submitError, setSubmitError] = useState('');
+
+  useEffect(() => {
+    fetch('/api/products').then(r => r.json()).then((data: ProdOption[]) => {
+      setProducts(data);
+      // Pré-remplit les lignes depuis le panier (si on vient de "Demander un devis")
+      if (cartItems.length > 0) {
+        const fromCart = cartItems.map((ci) => {
+          const prod = data.find(p => p.reference === ci.reference);
+          return { dimChoice: prod?.id ?? '', customDim: '', quantity: String(ci.quantity) };
+        });
+        setLines(fromCart.length > 0 ? fromCart : [emptyLine()]);
+      }
+    }).catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const setLine = (i: number, patch: Partial<QuoteLine>) =>
+    setLines(prev => prev.map((l, idx) => idx === i ? { ...l, ...patch } : l));
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setSubmitError('');
     try {
+      // Construit les items du devis à partir des lignes
+      const items = lines.map((l) => {
+        const qty = l.quantity ? Number(l.quantity) : 1;
+        if (l.dimChoice === 'autre') {
+          return { description: l.customDim.trim() || 'Dimension personnalisée', quantity: qty };
+        }
+        if (l.dimChoice) {
+          const prod = products.find(p => p.id === l.dimChoice);
+          if (prod) return { productId: prod.id, width: prod.width, length: prod.length, quantity: qty };
+        }
+        return null;
+      }).filter((x): x is NonNullable<typeof x> => x !== null);
+
       const res = await fetch('/api/quotes', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -42,10 +82,9 @@ export default function QuotePage() {
           phone: formData.phone,
           email: formData.email || undefined,
           wilaya: formData.wilaya,
+          commune: formData.commune || undefined,
           message: formData.message,
-          items: formData.width || formData.length || formData.quantity
-            ? [{ width: formData.width ? Number(formData.width) : undefined, length: formData.length ? Number(formData.length) : undefined, quantity: formData.quantity ? Number(formData.quantity) : 1 }]
-            : [],
+          items,
           source: 'SITE',
         }),
       });
@@ -54,6 +93,7 @@ export default function QuotePage() {
         setSubmitError(err.error ?? 'Erreur lors de l\'envoi. Veuillez réessayer.');
         return;
       }
+      clearCart(); // vide le panier une fois le devis envoyé
       setSubmitted(true);
     } finally {
       setLoading(false);
@@ -136,33 +176,71 @@ export default function QuotePage() {
                   <WilayaSelect
                     name="wilaya"
                     value={formData.wilaya}
-                    onChange={(v) => setFormData({ ...formData, wilaya: v })}
+                    onChange={(v) => setFormData({ ...formData, wilaya: v, commune: '' })}
                     required
                   />
                 </div>
               </div>
 
-              <div>
-                <label className={labelClass}>Email</label>
-                <input type="email" name="email" value={formData.email} onChange={handleChange} placeholder="votre@email.com" className={inputClass} />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className={labelClass}>Commune</label>
+                  <CommuneSelect
+                    name="commune"
+                    wilaya={formData.wilaya}
+                    value={formData.commune}
+                    onChange={(v) => setFormData({ ...formData, commune: v })}
+                  />
+                </div>
+                <div>
+                  <label className={labelClass}>Email</label>
+                  <input type="email" name="email" value={formData.email} onChange={handleChange} placeholder="votre@email.com" className={inputClass} />
+                </div>
               </div>
 
               <div className="border-t border-[#F0F4F8] pt-6">
-                <h2 className="text-[18px] font-bold text-[#263238] mb-5">Spécifications du produit</h2>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                  <div>
-                    <label className={labelClass}>Largeur (mm)</label>
-                    <input type="number" name="width" value={formData.width} onChange={handleChange} placeholder="Ex : 80" className={inputClass} />
-                  </div>
-                  <div>
-                    <label className={labelClass}>Longueur (m)</label>
-                    <input type="number" name="length" value={formData.length} onChange={handleChange} placeholder="Ex : 80" className={inputClass} />
-                  </div>
-                  <div>
-                    <label className={labelClass}>Quantité</label>
-                    <input type="number" name="quantity" value={formData.quantity} onChange={handleChange} placeholder="Ex : 500" className={inputClass} />
-                  </div>
+                <h2 className="text-[18px] font-bold text-[#263238] mb-5">Produits souhaités</h2>
+
+                <div className="flex flex-col gap-4">
+                  {lines.map((line, i) => (
+                    <div key={i} className="rounded-xl border border-[#F0F4F8] p-4 bg-[#FAFCFF]">
+                      <div className="grid grid-cols-1 sm:grid-cols-[1fr_120px_auto] gap-3 items-end">
+                        <div>
+                          <label className={labelClass}>Dimensions</label>
+                          <select value={line.dimChoice} onChange={(e) => setLine(i, { dimChoice: e.target.value })} className={inputClass}>
+                            <option value="">— Choisir —</option>
+                            {products.map((p) => (
+                              <option key={p.id} value={p.id}>{p.reference}</option>
+                            ))}
+                            <option value="autre">Autre (préciser)</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className={labelClass}>Quantité</label>
+                          <input type="number" min="1" value={line.quantity} onChange={(e) => setLine(i, { quantity: e.target.value })} placeholder="Ex : 500" className={inputClass} />
+                        </div>
+                        {lines.length > 1 && (
+                          <button type="button" onClick={() => setLines(prev => prev.filter((_, idx) => idx !== i))}
+                            className="h-[50px] w-11 flex items-center justify-center rounded-xl border border-[#ABBED1] text-[#EF4444] hover:bg-[#FEF2F2] transition-colors" title="Retirer">
+                            <svg width={16} height={16} fill="none" viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
+                          </button>
+                        )}
+                      </div>
+                      {line.dimChoice === 'autre' && (
+                        <div className="mt-3">
+                          <label className={labelClass}>Précisez la dimension souhaitée</label>
+                          <input type="text" value={line.customDim} onChange={(e) => setLine(i, { customDim: e.target.value })} placeholder="Ex : 62mm × 40m, ou format spécial…" className={inputClass} />
+                        </div>
+                      )}
+                    </div>
+                  ))}
                 </div>
+
+                <button type="button" onClick={() => setLines(prev => [...prev, emptyLine()])}
+                  className="mt-4 flex items-center gap-2 text-[14px] font-bold text-[#4CAF4F] hover:text-[#43A047] transition-colors">
+                  <svg width={18} height={18} fill="none" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
+                  Ajouter un produit
+                </button>
               </div>
 
               <div>

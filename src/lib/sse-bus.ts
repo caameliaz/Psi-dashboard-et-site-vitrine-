@@ -17,6 +17,7 @@ export function addSSEClient(fn: SendFn): () => void {
 
 export interface SSENotif {
   id: string; type: string; title: string; message: string; createdAt: string;
+  targetUserId?: string; // si présent, le toast ne concerne que cet utilisateur
 }
 
 export function pushSSE(event: string, notif?: SSENotif) {

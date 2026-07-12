@@ -1,15 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@/lib/auth';
+import { requirePermission } from '@/lib/permissions';
 import { prisma } from '@/lib/prisma';
 import { createAudit } from '@/lib/audit';
 import { notifyDeletion } from '@/lib/notify-activity';
 
 type Ctx = { params: Promise<{ id: string }> };
 
-// GET /api/clients/[id] — fiche client complète (admin + employé)
+// GET /api/clients/[id] — fiche client complète (permission voir_clients)
 export async function GET(_request: NextRequest, { params }: Ctx) {
-  const session = await auth();
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const guard = await requirePermission('voir_clients');
+  if (guard.error) return guard.error;
 
   const { id } = await params;
 
@@ -41,10 +41,11 @@ export async function GET(_request: NextRequest, { params }: Ctx) {
   }
 }
 
-// PATCH /api/clients/[id] — modifier infos client (admin + employé)
+// PATCH /api/clients/[id] — modifier infos client (permission modifier_clients)
 export async function PATCH(request: NextRequest, { params }: Ctx) {
-  const session = await auth();
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const guard = await requirePermission('modifier_clients');
+  if (guard.error) return guard.error;
+  const session = guard.session;
 
   const { id } = await params;
 
@@ -58,6 +59,7 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
         ...(body.company !== undefined && { company: body.company }),
         ...(body.email !== undefined && { email: body.email }),
         ...(body.wilaya !== undefined && { wilaya: body.wilaya }),
+        ...(body.commune !== undefined && { commune: body.commune }),
         ...(body.address !== undefined && { address: body.address }),
         ...(body.photo !== undefined && { photo: body.photo }),
       },
@@ -83,9 +85,9 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
 
 // DELETE /api/clients/[id] — supprime le client, les commandes/devis restent (clientId → null)
 export async function DELETE(_request: NextRequest, { params }: Ctx) {
-  const session = await auth();
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  if ((session.user as { role?: string }).role !== 'ADMIN') return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  const guard = await requirePermission('modifier_clients');
+  if (guard.error) return guard.error;
+  const session = guard.session;
 
   const { id } = await params;
 

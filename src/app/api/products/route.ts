@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { auth } from '@/lib/auth';
+import { requirePermission } from '@/lib/permissions';
 import { createAudit } from '@/lib/audit';
 
 // GET /api/products — produits actifs (public)
@@ -29,9 +30,11 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST /api/products — créer un produit (admin)
+// POST /api/products — créer un produit (permission modifier_produits)
 export async function POST(request: NextRequest) {
-  const session = await auth();
+  const guard = await requirePermission('modifier_produits');
+  if (guard.error) return guard.error;
+  const session = guard.session;
 
   try {
     const body = await request.json();

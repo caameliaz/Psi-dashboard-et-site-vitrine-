@@ -103,8 +103,8 @@ export async function Footer() {
             <li className="flex items-center gap-3">
               <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center shrink-0">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-                  <path d="M12 2C8 2 5 5 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-4-3-7-7-7z" stroke="#4CAF4F" strokeWidth="1.8"/>
-                  <circle cx="12" cy="9" r="2.5" stroke="#4CAF4F" strokeWidth="1.8"/>
+                  <circle cx="12" cy="12" r="9" stroke="#4CAF4F" strokeWidth="1.8"/>
+                  <path d="M12 7v5l3 2" stroke="#4CAF4F" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
                 </svg>
               </div>
               <span className="text-[13px] text-[#89939E]">Dim – Jeu : 8h00 – 17h00</span>

@@ -5,9 +5,12 @@ import { StatusPill } from '@/components/ui/StatusPill';
 import { RequestPanel, type RequestDetail } from '@/components/ui/RequestPanel';
 import { AdminSelect } from '@/components/ui/AdminSelect';
 import { WilayaSelect } from '@/components/ui/WilayaSelect';
+import { CommuneSelect } from '@/components/ui/CommuneSelect';
+import { RefSelect } from '@/components/ui/RefSelect';
 import { exportTableauExcel } from '@/lib/export-tableau';
 import { exportVentesExcel } from '@/lib/export-ventes';
 import { useSSE } from '@/lib/use-sse';
+import { useSession } from 'next-auth/react';
 
 const ARCHIVED = ['Livré', 'Annulé'];
 
@@ -59,6 +62,8 @@ function orderToDetail(o: any): RequestDetail {
     items,
     montant: total > 0 ? `${total.toLocaleString('fr-FR')} DA` : '—',
     statut: DB_TO_UI[o.status] ?? o.status,
+    assignedToId: o.assignedTo?.id ?? o.assignedToId ?? null,
+    assignedToName: o.assignedTo?.name ?? null,
     date: new Date(o.createdAt).toLocaleDateString('fr-FR'),
     heure: new Date(o.createdAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
   };
@@ -88,6 +93,8 @@ function quoteToDetail(q: any): RequestDetail {
     items,
     montant: q.proposedPrice ? `${Number(q.proposedPrice).toLocaleString('fr-FR')} DA` : 'Sur devis',
     statut: DB_TO_UI[q.status] ?? q.status,
+    assignedToId: q.assignedTo?.id ?? q.assignedToId ?? null,
+    assignedToName: q.assignedTo?.name ?? null,
     date: new Date(q.createdAt).toLocaleDateString('fr-FR'),
     heure: new Date(q.createdAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
     message: q.message ?? '',
@@ -103,68 +110,17 @@ function sortItems(items: RequestDetail[]): RequestDetail[] {
 }
 
 const ALL_STATUTS_COMMANDE = ['En attente', 'Confirmé', 'Livré', 'Annulé'];
-const ALL_STATUTS_DEVIS    = ['En attente', 'Confirmé', 'Annulé'];
+const ALL_STATUTS_DEVIS    = ['En attente', 'Confirmé', 'Livré', 'Annulé'];
 
 interface Ligne { ref: string; productId: string | null; qte: number; pu: number; }
 const emptyLigne = (): Ligne => ({ ref: '', productId: null, qte: 1, pu: 0 });
 
-function RefSelect({ value, products, onChange }: {
-  value: string;
-  products: { id: string; reference: string; price: number }[];
-  onChange: (ref: string) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const [query, setQuery] = useState('');
-  const filtered = products.filter(p =>
-    !query || p.reference.toLowerCase().includes(query.toLowerCase())
-  );
-  return (
-    <div className="relative">
-      <button type="button" onClick={() => setOpen(o => !o)}
-        className="w-full flex items-center justify-between px-3 py-2 rounded-xl border border-[#E2E8F0] bg-white text-[13px] transition-colors hover:border-[#4CAF4F] focus:outline-none"
-        style={{ color: value ? '#0F172A' : '#94A3B8' }}>
-        <span>{value || '— Réf —'}</span>
-        <svg width={12} height={12} fill="none" viewBox="0 0 24 24" className="flex-shrink-0 text-[#ABBED1]" style={{ transform: open ? 'rotate(180deg)' : undefined, transition: 'transform 0.15s' }}>
-          <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-        </svg>
-      </button>
-      {open && (
-        <>
-          <div className="fixed inset-0 z-[100]" onClick={() => setOpen(false)} />
-          <div className="absolute top-full left-0 right-0 mt-1 z-[110] bg-white rounded-xl border border-[#E2E8F0] shadow-xl overflow-hidden" style={{ minWidth: 180 }}>
-            <div className="px-3 py-2 border-b border-[#F2F4F7]">
-              <input
-                autoFocus
-                value={query}
-                onChange={e => setQuery(e.target.value)}
-                placeholder="Rechercher..."
-                className="w-full text-[12px] text-[#0F172A] bg-transparent outline-none placeholder-[#ABBED1]"
-              />
-            </div>
-            <div className="max-h-[180px] overflow-y-auto py-1">
-              {filtered.length === 0 ? (
-                <p className="px-3 py-2 text-[12px] text-[#ABBED1]">Aucun résultat</p>
-              ) : filtered.map(p => (
-                <button key={p.id} type="button"
-                  onClick={() => { onChange(p.reference); setOpen(false); setQuery(''); }}
-                  className="w-full text-left px-3 py-2.5 flex items-center justify-between gap-2 hover:bg-[#F0FDF4] transition-colors group"
-                  style={{ background: value === p.reference ? '#F0FDF4' : undefined }}>
-                  <span className="text-[13px] font-semibold" style={{ color: value === p.reference ? '#0D9488' : '#0F172A' }}>{p.reference}</span>
-                  <span className="text-[11px] text-[#ABBED1]">{p.price.toLocaleString('fr-FR')} DA</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
-
-function CreateForm({ defaultType, onClose, onSave }: {
+function CreateForm({ defaultType, onClose, onSave, users, currentUserId }: {
   defaultType: 'Commande' | 'Devis';
   onClose: () => void;
   onSave: (item: any) => Promise<void>;
+  users: { id: string; name: string }[];
+  currentUserId?: string;
 }) {
   const ic = "w-full px-3 py-2 rounded-xl border border-[#E2E8F0] text-[13px] text-[#263238] focus:outline-none focus:border-[#4CAF4F] focus:ring-[2px] focus:ring-[#4CAF4F]/15 transition-all bg-white";
   const lc = "block text-[11px] font-bold text-[#8A9BB5] uppercase tracking-wide mb-1";
@@ -175,9 +131,11 @@ function CreateForm({ defaultType, onClose, onSave }: {
   const [telephone, setTelephone] = useState('');
   const [email, setEmail] = useState('');
   const [wilaya, setWilaya] = useState('');
+  const [commune, setCommune] = useState('');
   const [lignes, setLignes] = useState<Ligne[]>([emptyLigne()]);
   const [tva, setTva] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [assignedToId, setAssignedToId] = useState<string>(currentUserId ?? '');
   const [products, setProducts] = useState<{ id: string; reference: string; price: number }[]>([]);
 
   useEffect(() => {
@@ -218,9 +176,11 @@ function CreateForm({ defaultType, onClose, onSave }: {
       // données brutes pour l'API
       _lignes: lignes,
       _wilaya: wilaya.trim(),
+      _commune: commune.trim(),
       _email: email.trim(),
       _telephone: telephone.trim(),
       _entreprise: entreprise.trim(),
+      _assignedToId: assignedToId || undefined,
     } as any);
     setSaving(false);
     onClose();
@@ -233,7 +193,7 @@ function CreateForm({ defaultType, onClose, onSave }: {
 
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-[#F2F4F7]">
-          <h3 className="text-[15px] font-bold text-[#0F172A]">Nouvelle demande</h3>
+          <h3 className="text-[15px] font-bold text-[#0F172A]">{type === 'Commande' ? 'Nouvelle commande' : 'Nouvelle demande de devis'}</h3>
           <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-[#F2F4F7] text-[#ABBED1]">
             <svg width={14} height={14} viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"/></svg>
           </button>
@@ -261,7 +221,17 @@ function CreateForm({ defaultType, onClose, onSave }: {
             <div><label className={lc}>Téléphone</label><input value={telephone} onChange={e => setTelephone(e.target.value)} placeholder="+213 5XX XXX XXX" className={ic} /></div>
             <div><label className={lc}>Email</label><input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="client@email.com" className={ic} /></div>
           </div>
-          <div><label className={lc}>Wilaya</label><WilayaSelect value={wilaya} onChange={setWilaya} /></div>
+          <div className="grid grid-cols-2 gap-3">
+            <div><label className={lc}>Wilaya</label><WilayaSelect value={wilaya} onChange={(v) => { setWilaya(v); setCommune(''); }} /></div>
+            <div><label className={lc}>Commune</label><CommuneSelect wilaya={wilaya} value={commune} onChange={setCommune} /></div>
+          </div>
+          <div>
+            <label className={lc}>Pris en charge par</label>
+            <select value={assignedToId} onChange={e => setAssignedToId(e.target.value)} className={ic}>
+              <option value="">— Non assigné —</option>
+              {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+            </select>
+          </div>
 
           {/* Lignes produits */}
           <div>
@@ -364,6 +334,8 @@ function CreateForm({ defaultType, onClose, onSave }: {
 }
 
 export default function RequestsPage() {
+  const { data: session } = useSession();
+  const currentUserId = (session?.user as { id?: string } | undefined)?.id;
   const [activeTab, setActiveTab] = useState<'tous' | 'commandes' | 'devis'>('tous');
   const [orders, setOrders]       = useState<RequestDetail[]>([]);
   const [quotes, setQuotes]       = useState<RequestDetail[]>([]);
@@ -371,11 +343,14 @@ export default function RequestsPage() {
   const [search, setSearch]       = useState('');
   const [filterStatut, setFilterStatut] = useState('all');
   const [filterPeriode, setFilterPeriode] = useState('mois');
+  const [filterAssigne, setFilterAssigne] = useState('all');
+  const [users, setUsers] = useState<{ id: string; name: string }[]>([]);
   const [selected, setSelected]   = useState<RequestDetail | null>(null);
   const [showCreate, setShowCreate] = useState(false);
 
-  const fetchAll = useCallback(async () => {
-    setLoading(true);
+  // silent = refetch en arrière-plan (SSE temps réel) → pas de spinner, pas de clignotement
+  const fetchAll = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const [ordRes, quoRes] = await Promise.all([
         fetch('/api/orders'),
@@ -390,12 +365,17 @@ export default function RequestsPage() {
         setQuotes(data.map(quoteToDetail));
       }
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, []);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
-  useSSE(useCallback(() => { fetchAll(); }, [fetchAll]));
+  useSSE(useCallback(() => { fetchAll(true); }, [fetchAll]));
+
+  // Liste des utilisateurs actifs (pour l'assignation "pris en charge par")
+  useEffect(() => {
+    fetch('/api/users?assignable=true').then(r => r.ok ? r.json() : []).then(setUsers).catch(() => {});
+  }, []);
 
   const isDevis = activeTab === 'devis';
   const rawItems = activeTab === 'tous' ? [...orders, ...quotes] : isDevis ? quotes : orders;
@@ -416,11 +396,13 @@ export default function RequestsPage() {
     const q = search.toLowerCase();
     const matchSearch = !q || r.client.toLowerCase().includes(q) || r.entreprise.toLowerCase().includes(q) || r.ref.toLowerCase().includes(q);
     const matchStatut = filterStatut === 'all' || r.statut === filterStatut;
+    const matchAssigne = filterAssigne === 'all'
+      || (filterAssigne === 'none' ? !r.assignedToId : r.assignedToId === filterAssigne);
     const matchPeriode = !periodeStart || (() => {
       const [d, m, y] = r.date.split('/').map(Number);
       return new Date(y, m - 1, d) >= periodeStart;
     })();
-    return matchSearch && matchStatut && matchPeriode;
+    return matchSearch && matchStatut && matchAssigne && matchPeriode;
   });
 
   const handleStatusChange = async (ref: string, newStatut: string) => {
@@ -435,27 +417,51 @@ export default function RequestsPage() {
       body: JSON.stringify({ status: dbStatus }),
     });
     if (!res.ok) console.error('PATCH failed', await res.text());
-    await fetchAll();
+    await fetchAll(true);
     setSelected(null);
   };
 
-  const handleConvertToOrder = async (item: RequestDetail) => {
-    if (!item.id) {
-      // fallback local
-      const newOrder: RequestDetail = { ...item, ref: item.ref.replace('DEV-', 'CMD-'), type: 'Commande', statut: 'En attente', date: new Date().toLocaleDateString('fr-FR'), heure: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) };
-      setQuotes((p) => p.map((q) => q.ref === item.ref ? { ...q, statut: 'Confirmé' } : q));
-      setOrders((p) => [newOrder, ...p]);
-      setSelected(null);
-      setActiveTab('commandes');
-      return;
+  // Change l'assignation ("pris en charge par") d'une commande/devis
+  const handleAssign = async (id: string, type: string, assignedToId: string | null) => {
+    const endpoint = type === 'Devis' ? `/api/quotes/${id}` : `/api/orders/${id}`;
+    const res = await fetch(endpoint, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ assignedToId }),
+    });
+    if (!res.ok) { console.error('Assign failed', await res.text()); return; }
+    await fetchAll(true);
+    // Met à jour le panneau ouvert avec le nouvel assigné
+    setSelected(prev => prev ? { ...prev, assignedToId, assignedToName: users.find(u => u.id === assignedToId)?.name ?? null } : prev);
+  };
+
+  // Confirme un devis en fixant son prix (proposedPrice). Le prix est saisi
+  // dans le popup au moment du passage "En attente → Confirmé".
+  const handleConfirmQuoteWithPrice = async (
+    item: RequestDetail & { _prix?: { totalOverride?: number; itemPrices?: { designation: string; unitPrice: number }[] } }
+  ) => {
+    if (!item.id) return;
+    // Calcule le montant total du devis à partir du popup (total direct OU somme des lignes)
+    const prix = item._prix;
+    let proposedPrice = 0;
+    if (prix?.totalOverride !== undefined) {
+      proposedPrice = prix.totalOverride;
+    } else if (prix?.itemPrices) {
+      proposedPrice = (item.items ?? []).reduce((acc, it) => {
+        const p = prix.itemPrices!.find((x) => x.designation === it.designation);
+        return acc + it.quantite * (p?.unitPrice ?? 0);
+      }, 0);
     }
-    await fetch(`/api/quotes/${item.id}/convert`, { method: 'PATCH' });
-    await fetchAll();
+    await fetch(`/api/quotes/${item.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'VALIDE', proposedPrice }),
+    });
+    await fetchAll(true);
     setSelected(null);
-    setActiveTab('commandes');
   };
 
-  const handleSaveNew = async (item: RequestDetail & { _lignes?: { productId: string | null; ref: string; qte: number; pu: number }[]; _wilaya?: string; _email?: string; _telephone?: string; _entreprise?: string }) => {
+  const handleSaveNew = async (item: RequestDetail & { _lignes?: { productId: string | null; ref: string; qte: number; pu: number }[]; _wilaya?: string; _commune?: string; _email?: string; _telephone?: string; _entreprise?: string; _assignedToId?: string | null }) => {
     const isCmd = item.type === 'Commande';
     const endpoint = isCmd ? '/api/orders' : '/api/quotes';
 
@@ -468,12 +474,14 @@ export default function RequestsPage() {
             phone: item._telephone || undefined,
             email: item._email || undefined,
             wilaya: item._wilaya || 'Non spécifié',
+            commune: item._commune || undefined,
           },
           items: lignes.filter(l => l.ref).map(l => ({
             productId: l.productId ?? undefined,
             quantity: l.qte,
             unitPrice: l.pu,
           })),
+          assignedToId: item._assignedToId ?? undefined,
           source: 'AUTRE',
         }
       : {
@@ -482,12 +490,14 @@ export default function RequestsPage() {
           phone: item._telephone || undefined,
           email: item._email || undefined,
           wilaya: item._wilaya || 'Non spécifié',
+          commune: item._commune || undefined,
           message: '',
           items: lignes.filter(l => l.ref).map(l => ({
             productId: l.productId ?? undefined,
             description: l.productId ? undefined : l.ref,
             quantity: l.qte,
           })),
+          assignedToId: item._assignedToId ?? undefined,
           source: 'AUTRE',
         };
 
@@ -506,7 +516,7 @@ export default function RequestsPage() {
       return;
     }
 
-    await fetchAll();
+    await fetchAll(true);
     setActiveTab(isCmd ? 'commandes' : 'devis');
   };
 
@@ -587,7 +597,7 @@ export default function RequestsPage() {
           </button>
           <button onClick={() => setShowCreate(true)}
             className="px-4 py-2 rounded-xl text-[13px] font-bold border border-[#4CAF4F] text-[#4CAF4F] hover:bg-[#F0FDF4] transition-colors">
-            + Nouvelle demande
+            + Nouvelle commande
           </button>
         </div>
       </div>
@@ -616,8 +626,17 @@ export default function RequestsPage() {
             { value: 'tout',  label: 'Tout afficher' },
           ]}
         />
-        {(search || filterStatut !== 'all' || filterPeriode !== 'mois') && (
-          <button onClick={() => { setSearch(''); setFilterStatut('all'); setFilterPeriode('mois'); }} className="text-[12px] font-semibold text-[#8A9BB5] hover:text-[#374151]">Effacer</button>
+        <AdminSelect
+          value={filterAssigne}
+          onChange={setFilterAssigne}
+          options={[
+            { value: 'all',  label: 'Tous les responsables' },
+            { value: 'none', label: 'Non assigné' },
+            ...users.map((u) => ({ value: u.id, label: u.name })),
+          ]}
+        />
+        {(search || filterStatut !== 'all' || filterPeriode !== 'mois' || filterAssigne !== 'all') && (
+          <button onClick={() => { setSearch(''); setFilterStatut('all'); setFilterPeriode('mois'); setFilterAssigne('all'); }} className="text-[12px] font-semibold text-[#8A9BB5] hover:text-[#374151]">Effacer</button>
         )}
       </div>
 
@@ -625,16 +644,16 @@ export default function RequestsPage() {
         <table className="w-full" style={{ borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ background: '#F8FAFC' }}>
-              {['N°', 'Type', 'Source', 'Entreprise', 'Client', 'Date', 'Statut'].map((h) => (
+              {['N°', 'Type', 'Source', 'Entreprise', 'Client', 'Responsable', 'Date', 'Statut'].map((h) => (
                 <th key={h} className="px-5 py-3.5 text-left font-semibold text-[#8A9BB5] uppercase tracking-wider" style={{ fontSize: 11 }}>{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={7} className="px-6 py-14 text-center text-[13px] text-[#8A9BB5]">Chargement…</td></tr>
+              <tr><td colSpan={8} className="px-6 py-14 text-center text-[13px] text-[#8A9BB5]">Chargement…</td></tr>
             ) : filtered.length === 0 ? (
-              <tr><td colSpan={7} className="px-6 py-14 text-center text-[13px] text-[#8A9BB5]">Aucune demande trouvée</td></tr>
+              <tr><td colSpan={8} className="px-6 py-14 text-center text-[13px] text-[#8A9BB5]">Aucune demande trouvée</td></tr>
             ) : filtered.map((row, i) => {
               const isEnAttente = row.statut === 'En attente';
               const isArchived  = ARCHIVED.includes(row.statut);
@@ -662,6 +681,11 @@ export default function RequestsPage() {
                   </td>
                   <td className={`px-5 py-3.5 text-[13px] font-semibold ${isArchived ? 'text-[#ABBED1]' : 'text-[#0F172A]'}`}>{row.entreprise}</td>
                   <td className="px-5 py-3.5 text-[13px] text-[#8A9BB5]">{row.client}</td>
+                  <td className="px-5 py-3.5 text-[13px]">
+                    {row.assignedToName
+                      ? <span className="text-[#374151] font-medium">{row.assignedToName}</span>
+                      : <span className="text-[#CBD5E1] italic">—</span>}
+                  </td>
                   <td className="px-5 py-3.5 text-[13px] text-[#8A9BB5] tabular-nums">{row.date}</td>
                   <td className="px-5 py-3.5"><StatusPill status={row.statut} /></td>
                 </tr>
@@ -676,7 +700,9 @@ export default function RequestsPage() {
           item={selected}
           onClose={() => setSelected(null)}
           onStatusChange={handleStatusChange}
-          onConvertToOrder={isDevis ? handleConvertToOrder : undefined}
+          onConfirmQuoteWithPrice={selected.type === 'Devis' ? handleConfirmQuoteWithPrice : undefined}
+          users={users}
+          onAssign={handleAssign}
         />
       )}
       {showCreate && (
@@ -684,6 +710,8 @@ export default function RequestsPage() {
           defaultType={isDevis ? 'Devis' : 'Commande'}
           onClose={() => setShowCreate(false)}
           onSave={handleSaveNew}
+          users={users}
+          currentUserId={currentUserId}
         />
       )}
     </div>

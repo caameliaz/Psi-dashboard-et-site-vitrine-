@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
+import { requirePermission } from '@/lib/permissions';
 import { prisma } from '@/lib/prisma';
 import { createNotif } from '@/lib/notifications';
 import { generateOrderRef } from '@/lib/generate-ref';
@@ -7,8 +8,8 @@ import { pushSSE } from '@/lib/sse-bus';
 import { createAudit } from '@/lib/audit';
 
 export async function GET() {
-  const session = await auth();
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const guard = await requirePermission('voir_commandes');
+  if (guard.error) return guard.error;
 
   try {
     const orders = await prisma.order.findMany({
@@ -16,6 +17,7 @@ export async function GET() {
         client: { include: { phones: true } },
         items: { include: { product: true } },
         createdBy: { select: { id: true, name: true } },
+        assignedTo: { select: { id: true, name: true } },
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -30,8 +32,6 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const session = await auth();
-
-    console.log('[POST /api/orders] body:', JSON.stringify(body, null, 2));
 
     const primaryPhone: string = body.client?.phone ?? '';
     const clientName: string = body.client?.name ?? '';
@@ -60,6 +60,7 @@ export async function POST(request: NextRequest) {
           company: body.client.company ?? null,
           email: body.client.email ?? null,
           wilaya: body.client.wilaya,
+          commune: body.client.commune ?? null,
           address: body.client.address ?? null,
           phones: {
             create: primaryPhone
@@ -83,8 +84,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Au moins un produit valide est requis' }, { status: 400 });
     }
 
-    console.log('[POST /api/orders] validItems:', JSON.stringify(validItems));
-
     const order = await prisma.order.create({
       data: {
         ref,
@@ -94,6 +93,8 @@ export async function POST(request: NextRequest) {
         clientWilaya: client.wilaya ?? null,
         source: source as any,
         createdById: session?.user?.id ?? null,
+        // Assignation : valeur fournie, sinon le créateur (utilisateur connecté)
+        assignedToId: body.assignedToId ?? session?.user?.id ?? null,
         items: {
           create: validItems.map((item: { productId: string; quantity: number; unitPrice: number }) => ({
             productId: item.productId,

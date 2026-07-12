@@ -5,6 +5,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import { useRole } from '@/lib/role-context';
+import type { PermKey } from '@/lib/permissions';
 import { useSession, signOut } from 'next-auth/react';
 
 function IconHome({ color = '#717171' }) {
@@ -49,27 +50,25 @@ function IconLogout({ color = '#717171' }) {
 }
 function IconChevron({ collapsed }: { collapsed: boolean }) {
   return (
-    <svg width={16} height={16} fill="none" viewBox="0 0 24 24" style={{ transform: collapsed ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>
+    <svg width={14} height={14} fill="none" viewBox="0 0 24 24" style={{ transform: collapsed ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>
       <path d="M15 18l-6-6 6-6" stroke="#ABBED1" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
     </svg>
   );
 }
 
-const navItems = [
-  { href: '/admin/dashboard', label: 'Dashboard',    Icon: IconHome },
-  { href: '/admin/requests',  label: 'Commandes',    Icon: IconDocument },
-  { href: '/admin/products',  label: 'Produits',     Icon: IconLayers },
-  { href: '/admin/clients',   label: 'Clients',      Icon: IconUsers },
-  { href: '/admin/history',   label: 'Historique',   Icon: IconHistory },
-  { href: '/admin/content',   label: 'Contenu',      Icon: IconEdit },
-  { href: '/admin/users',     label: 'Utilisateurs', Icon: IconUserPlus },
+const navItems: { href: string; label: string; Icon: typeof IconHome; perm: PermKey | null }[] = [
+  { href: '/admin/dashboard', label: 'Dashboard',    Icon: IconHome,     perm: null },
+  { href: '/admin/requests',  label: 'Commandes',    Icon: IconDocument, perm: 'voir_commandes' },
+  { href: '/admin/products',  label: 'Produits',     Icon: IconLayers,   perm: 'voir_produits' },
+  { href: '/admin/clients',   label: 'Clients',      Icon: IconUsers,    perm: 'voir_clients' },
+  { href: '/admin/history',   label: 'Historique',   Icon: IconHistory,  perm: 'voir_historique' },
+  { href: '/admin/content',   label: 'Contenu',      Icon: IconEdit,     perm: 'modifier_contenu' },
+  { href: '/admin/users',     label: 'Utilisateurs', Icon: IconUserPlus, perm: 'gerer_utilisateurs' },
 ];
-
-const adminOnlyItems = ['/admin/content', '/admin/users'];
 
 export function Sidebar() {
   const pathname = usePathname();
-  const { role, isAdmin } = useRole();
+  const { role, can } = useRole();
   const { data: session } = useSession();
   const [collapsed, setCollapsed] = useState(false);
   const userName  = session?.user?.name ?? '—';
@@ -78,12 +77,25 @@ export function Sidebar() {
 
   return (
     <aside
-      className="flex flex-col h-screen sticky top-0 bg-white border-r border-[#E4EBF5] transition-all duration-200"
+      className="relative flex flex-col h-screen sticky top-0 bg-white border-r border-[#E4EBF5] transition-all duration-200"
       style={{ width: collapsed ? 64 : 220, minWidth: collapsed ? 64 : 220 }}
     >
-      {/* Logo + toggle */}
-      <div className="flex items-center justify-between px-4 py-5 border-b border-[#E4EBF5]" style={{ minHeight: 80 }}>
-        {!collapsed && (
+      {/* Bouton collapse — rond flottant à mi-hauteur sur le bord droit */}
+      <button
+        onClick={() => setCollapsed((v) => !v)}
+        className="absolute top-1/2 -translate-y-1/2 -right-3 z-20 w-6 h-6 flex items-center justify-center rounded-full border border-[#E4EBF5] bg-white hover:bg-[#F2F4F7] shadow-md transition-colors"
+        title={collapsed ? 'Ouvrir' : 'Fermer'}
+      >
+        <IconChevron collapsed={collapsed} />
+      </button>
+
+      {/* Logo */}
+      {collapsed ? (
+        <div className="flex flex-col items-center py-4 border-b border-[#E4EBF5]">
+          <Image src="/Logo PSI-new.jpeg" alt="PSI Logo" width={32} height={32} className="w-8 h-8 object-contain rounded-full"/>
+        </div>
+      ) : (
+        <div className="flex items-center px-4 py-5 border-b border-[#E4EBF5]" style={{ minHeight: 80 }}>
           <div className="flex items-center gap-3 min-w-0">
             <Image src="/Logo PSI-new.jpeg" alt="PSI Logo" width={36} height={36} className="w-9 h-9 object-contain rounded-full flex-shrink-0"/>
             <div className="leading-tight min-w-0">
@@ -91,22 +103,12 @@ export function Sidebar() {
               <p className="text-[11px] font-medium text-[#8A9BB5]">Industrielles</p>
             </div>
           </div>
-        )}
-        {collapsed && (
-          <Image src="/Logo PSI-new.jpeg" alt="PSI Logo" width={32} height={32} className="w-8 h-8 object-contain rounded-full mx-auto"/>
-        )}
-        <button
-          onClick={() => setCollapsed((v) => !v)}
-          className="flex-shrink-0 w-7 h-7 flex items-center justify-center rounded-lg hover:bg-[#F2F4F7] transition-colors"
-          title={collapsed ? 'Ouvrir' : 'Fermer'}
-        >
-          <IconChevron collapsed={collapsed} />
-        </button>
-      </div>
+        </div>
+      )}
 
       {/* Nav */}
       <nav className="flex-1 py-4 overflow-y-auto overflow-x-hidden">
-        {navItems.filter(({ href }) => isAdmin || !adminOnlyItems.includes(href)).map(({ href, label, Icon }) => {
+        {navItems.filter(({ perm }) => perm === null || can(perm)).map(({ href, label, Icon }) => {
           const isActive = pathname === href || pathname.startsWith(href + '/');
           return (
             <Link

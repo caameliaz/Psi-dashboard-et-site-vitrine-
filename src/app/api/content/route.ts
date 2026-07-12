@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { revalidatePath } from 'next/cache';
 import { prisma } from '@/lib/prisma';
-import { auth } from '@/lib/auth';
+import { requirePermission } from '@/lib/permissions';
 
 export async function GET() {
   try {
@@ -26,8 +26,8 @@ export async function GET() {
 }
 
 export async function PUT(request: NextRequest) {
-  const session = await auth();
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const guard = await requirePermission('modifier_contenu');
+  if (guard.error) return guard.error;
 
   try {
     const body = await request.json();

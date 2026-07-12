@@ -1,12 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { auth } from '@/lib/auth';
+import { requirePermission } from '@/lib/permissions';
 
-// GET /api/products/fields — tous les champs personnalisés définis (admin)
+// GET /api/products/fields — tous les champs personnalisés définis (permission modifier_produits)
 export async function GET() {
-  // TODO: remettre auth avant prod
-  // const session = await auth();
-  // if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const guard = await requirePermission('modifier_produits');
+  if (guard.error) return guard.error;
 
   try {
     const fields = await prisma.productFieldDef.findMany({
@@ -21,9 +20,8 @@ export async function GET() {
 
 // POST /api/products/fields — créer une définition de champ (admin)
 export async function POST(request: NextRequest) {
-  // TODO: remettre auth avant prod
-  // const session = await auth();
-  // if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const guard = await requirePermission('modifier_produits');
+  if (guard.error) return guard.error;
 
   try {
     const body = await request.json();

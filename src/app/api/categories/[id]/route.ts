@@ -1,14 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { auth } from '@/lib/auth';
+import { requirePermission } from '@/lib/permissions';
 
 type Ctx = { params: Promise<{ id: string }> };
 
-// PATCH /api/categories/[id] — renommer une catégorie (admin)
+// PATCH /api/categories/[id] — renommer une catégorie (permission modifier_produits)
 export async function PATCH(request: NextRequest, { params }: Ctx) {
-  // TODO: remettre auth avant prod
-  // const session = await auth();
-  // if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const guard = await requirePermission('modifier_produits');
+  if (guard.error) return guard.error;
 
   const { id } = await params;
 
@@ -20,6 +19,7 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
       data: {
         ...(body.name !== undefined && { name: body.name }),
         ...(body.order !== undefined && { order: body.order }),
+        ...(body.photo !== undefined && { photo: body.photo }),
       },
     });
 
@@ -32,9 +32,8 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
 
 // DELETE /api/categories/[id] — supprimer une catégorie (admin)
 export async function DELETE(_request: NextRequest, { params }: Ctx) {
-  // TODO: remettre auth avant prod
-  // const session = await auth();
-  // if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const guard = await requirePermission('modifier_produits');
+  if (guard.error) return guard.error;
 
   const { id } = await params;
 

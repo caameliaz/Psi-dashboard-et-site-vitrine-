@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@/lib/auth';
+import { requirePermission } from '@/lib/permissions';
 import { prisma } from '@/lib/prisma';
 import { createAudit } from '@/lib/audit';
 
-// GET /api/clients — liste tous les clients (admin + employé)
+// GET /api/clients — liste tous les clients (permission voir_clients)
 export async function GET() {
-  const session = await auth();
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const guard = await requirePermission('voir_clients');
+  if (guard.error) return guard.error;
 
   try {
     const clients = await prisma.client.findMany({
@@ -15,23 +15,19 @@ export async function GET() {
         _count: { select: { orders: true, quotes: true } },
         orders: {
           select: {
-            id: true,
-            ref: true,
-            createdAt: true,
-            status: true,
+            id: true, ref: true, createdAt: true, status: true,
             items: { select: { quantity: true, unitPrice: true, product: { select: { reference: true } } } },
           },
           orderBy: { createdAt: 'desc' },
+          take: 10,
         },
         quotes: {
           select: {
-            id: true,
-            ref: true,
-            createdAt: true,
-            status: true,
+            id: true, ref: true, createdAt: true, status: true,
             items: { select: { quantity: true, product: { select: { reference: true } } } },
           },
           orderBy: { createdAt: 'desc' },
+          take: 10,
         },
       },
       orderBy: { createdAt: 'desc' },
@@ -43,10 +39,11 @@ export async function GET() {
   }
 }
 
-// POST /api/clients — créer un nouveau client
+// POST /api/clients — créer un nouveau client (permission modifier_clients)
 export async function POST(request: NextRequest) {
-  const session = await auth();
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const guard = await requirePermission('modifier_clients');
+  if (guard.error) return guard.error;
+  const session = guard.session;
 
   try {
     const body = await request.json();
@@ -58,6 +55,7 @@ export async function POST(request: NextRequest) {
         company: body.company ?? null,
         email: body.email ?? null,
         wilaya: body.wilaya ?? null,
+        commune: body.commune ?? null,
         address: body.address ?? null,
         ...(body.phone ? {
           phones: { create: [{ number: body.phone, label: 'Principal', primary: true }] },

@@ -1,14 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { requirePermission } from '@/lib/permissions';
 import { createAudit } from '@/lib/audit';
 
 type Ctx = { params: Promise<{ id: string }> };
 
-// PATCH /api/quotes/[id]/cancel — annuler un devis avec justificatif
+// PATCH /api/quotes/[id]/cancel — annuler un devis (permission modifier_statuts)
 export async function PATCH(request: NextRequest, { params }: Ctx) {
-  const session = await auth();
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const guard = await requirePermission('modifier_statuts');
+  if (guard.error) return guard.error;
+  const session = guard.session;
 
   const { id } = await params;
 

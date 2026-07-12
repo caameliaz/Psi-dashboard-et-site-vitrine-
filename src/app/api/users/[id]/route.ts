@@ -1,16 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@/lib/auth';
+import { requirePermission } from '@/lib/permissions';
 import { prisma } from '@/lib/prisma';
 import bcrypt from 'bcryptjs';
 import { createAudit } from '@/lib/audit';
 
 type Ctx = { params: Promise<{ id: string }> };
 
-// PATCH /api/users/[id] — modifier rôle / statut / infos (admin uniquement)
+// PATCH /api/users/[id] — modifier rôle / statut / infos (permission gerer_utilisateurs)
 export async function PATCH(request: NextRequest, { params }: Ctx) {
-  const session = await auth();
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  if ((session.user as { role?: string }).role !== 'ADMIN') return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  const guard = await requirePermission('gerer_utilisateurs');
+  if (guard.error) return guard.error;
+  const session = guard.session;
 
   const { id } = await params;
 
@@ -48,18 +48,39 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
   }
 }
 
-// DELETE /api/users/[id] — supprimer un utilisateur (admin uniquement)
+// DELETE /api/users/[id] — supprimer un utilisateur (permission gerer_utilisateurs)
 export async function DELETE(_request: NextRequest, { params }: Ctx) {
-  const session = await auth();
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  if ((session.user as { role?: string }).role !== 'ADMIN') return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  const guard = await requirePermission('gerer_utilisateurs');
+  if (guard.error) return guard.error;
+  const session = guard.session;
 
   const { id } = await params;
 
   try {
     const target = await prisma.user.findUnique({ where: { id }, select: { name: true, email: true } });
+    if (!target) return NextResponse.json({ error: 'Utilisateur introuvable' }, { status: 404 });
+
+    // Empêcher de supprimer son propre compte
+    if (id === session.user.id) {
+      return NextResponse.json({ error: 'Vous ne pouvez pas supprimer votre propre compte.' }, { status: 409 });
+    }
+
+    // Blocage si l'utilisateur a de l'activité (préserve l'historique) — proposer la désactivation
+    const [orders, quotes, notes, logs] = await Promise.all([
+      prisma.order.count({ where: { createdById: id } }),
+      prisma.quote.count({ where: { createdById: id } }),
+      prisma.clientNote.count({ where: { authorId: id } }),
+      prisma.auditLog.count({ where: { userId: id } }),
+    ]);
+    if (orders + quotes + notes + logs > 0) {
+      return NextResponse.json(
+        { error: "Impossible de supprimer : cet utilisateur a de l'activité (commandes, devis, notes ou journal). Désactivez-le plutôt." },
+        { status: 409 }
+      );
+    }
+
     await prisma.user.delete({ where: { id } });
-    createAudit({ userId: session.user.id, action: 'Utilisateur supprimé', entity: 'UTILISATEUR', entityId: id, detail: target ? `${target.name} (${target.email})` : id });
+    createAudit({ userId: session.user.id, action: 'Utilisateur supprimé', entity: 'UTILISATEUR', entityId: id, detail: `${target.name} (${target.email})` });
     return NextResponse.json({ success: true });
   } catch (e) {
     console.error(e);
