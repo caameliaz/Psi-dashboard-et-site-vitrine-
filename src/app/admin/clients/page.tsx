@@ -28,7 +28,7 @@ interface ClientRecord {
 }
 import { StatusPill } from '@/components/ui/StatusPill';
 import { initials } from '@/lib/utils';
-import { RequestPanel, type RequestDetail } from '@/components/ui/RequestPanel';
+import { RequestPanel, TemplatePopover, type RequestDetail } from '@/components/ui/RequestPanel';
 import { Modal } from '@/components/ui/Modal';
 import { WilayaSelect } from '@/components/ui/WilayaSelect';
 import { CommuneSelect } from '@/components/ui/CommuneSelect';
@@ -263,7 +263,15 @@ function ClientSlideIn({ client, onClose, onEdit, onDelete }: {
   const [photo, setPhoto] = useState<string | undefined>(client.photo);
   const [selectedRequest, setSelectedRequest] = useState<RequestDetail | null>(null);
   const [showNewOrder, setShowNewOrder] = useState(false);
+  const [waTemplate, setWaTemplate] = useState(false);
   const ac = avatarColor(client.id);
+
+  // Item minimal (niveau client) pour le sélecteur de templates WhatsApp
+  const clientAsItem: RequestDetail = {
+    ref: '', type: 'Commande', date: '', statut: '', montant: '', produits: '',
+    client: client.contact, entreprise: client.entreprise, telephone: client.telephone,
+    wilaya: client.wilaya, email: client.email,
+  };
 
   const handlePhoto = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -280,7 +288,7 @@ function ClientSlideIn({ client, onClose, onEdit, onDelete }: {
   return (
     <>
       <div className="fixed inset-0 bg-black/30 z-40 backdrop-blur-[2px]" onClick={onClose} />
-      <div className="fixed right-0 top-0 h-full bg-white z-50 shadow-2xl flex flex-col overflow-hidden" style={{ width: '46vw', minWidth: 500 }}>
+      <div className="fixed right-0 top-0 h-full bg-white z-50 shadow-2xl flex flex-col overflow-hidden w-full md:w-[46vw] md:min-w-[500px] max-w-full">
 
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-[#F2F4F7]">
@@ -293,32 +301,40 @@ function ClientSlideIn({ client, onClose, onEdit, onDelete }: {
         <div className="flex-1 overflow-y-auto">
 
           {/* Profil */}
-          <div className="px-6 pt-6 pb-5 border-b border-[#F2F4F7]">
-            <div className="flex items-start gap-4 mb-5">
-              {/* Avatar cliquable */}
-              <div className="relative group flex-shrink-0 cursor-pointer" onClick={() => fileRef.current?.click()}>
-                {photo ? (
-                  <img src={photo} alt={client.contact} className="w-16 h-16 rounded-2xl object-cover" />
-                ) : (
-                  <div className="w-16 h-16 rounded-2xl flex items-center justify-center text-[20px] font-extrabold" style={{ background: ac.bg, color: ac.text }}>
-                    {initials(client.entreprise || client.contact)}
-                  </div>
-                )}
-                <div className="absolute inset-0 rounded-2xl bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                  <span className="text-white text-[10px] font-bold text-center leading-tight">Photo</span>
+          <div className="px-5 md:px-6 pt-5 md:pt-6 pb-5 border-b border-[#F2F4F7]">
+            {/* Ligne haut : entreprise + lieu à gauche, avatar+nom à droite */}
+            <div className="flex items-start justify-between gap-3 mb-4">
+              <div className="min-w-0 flex-1">
+                <p className="text-[18px] md:text-[20px] font-extrabold text-[#0F172A] leading-tight truncate">{client.entreprise || client.contact}</p>
+                <div className="flex items-center gap-1.5 mt-1 text-[12px] text-[#8A9BB5]">
+                  <svg width={12} height={12} viewBox="0 0 24 24" fill="none" className="flex-shrink-0"><path d="M12 21s-7-5.7-7-11a7 7 0 0114 0c0 5.3-7 11-7 11z" stroke="currentColor" strokeWidth="1.6"/><circle cx="12" cy="10" r="2.4" stroke="currentColor" strokeWidth="1.6"/></svg>
+                  <span className="truncate">{client.commune ? `${client.commune}, ${client.wilaya}` : client.wilaya}</span>
                 </div>
+              </div>
+              {/* Avatar + nom du contact à droite */}
+              <div className="flex flex-col items-center gap-1 flex-shrink-0">
+                <div className="relative group cursor-pointer" onClick={() => fileRef.current?.click()}>
+                  {photo ? (
+                    <img src={photo} alt={client.contact} className="w-12 h-12 rounded-xl object-cover" />
+                  ) : (
+                    <div className="w-12 h-12 rounded-xl flex items-center justify-center text-[15px] font-extrabold" style={{ background: ac.bg, color: ac.text }}>
+                      {initials(client.entreprise || client.contact)}
+                    </div>
+                  )}
+                  <div className="absolute inset-0 rounded-xl bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                    <span className="text-white text-[9px] font-bold">Photo</span>
+                  </div>
+                </div>
+                <span className="text-[11px] font-semibold text-[#374151] text-center max-w-[90px] truncate">{client.contact}</span>
               </div>
               <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handlePhoto} />
-
-              <div className="flex-1 min-w-0">
-                <p className="text-[20px] font-extrabold text-[#0F172A] leading-tight">{client.entreprise || client.contact}</p>
-                <p className="text-[14px] font-semibold text-[#4CAF4F] mt-0.5">{client.entreprise ? client.contact : ''}</p>
-                <div className="flex items-center gap-3 mt-1.5">
-                  <span className="text-[12px] text-[#8A9BB5]">{client.commune ? `${client.commune}, ${client.wilaya}` : client.wilaya}</span>
-                  {client.adresse && <><span className="text-[#E2E8F0]">·</span><span className="text-[12px] text-[#ABBED1] truncate">{client.adresse}</span></>}
-                </div>
-              </div>
             </div>
+
+            {/* Téléphone en évidence */}
+            <a href={callHref} className="flex items-center gap-2 mb-4 text-[15px] font-bold text-[#0F172A]">
+              <svg width={15} height={15} fill="none" viewBox="0 0 24 24" className="text-[#4CAF4F]"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.08 9.81 19.79 19.79 0 01.01 1.18 2 2 0 012 0h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.09 7.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>
+              {client.telephone || '—'}
+            </a>
 
             {/* Stats inline */}
             <div className="flex items-center gap-4 mb-5">
@@ -336,38 +352,21 @@ function ClientSlideIn({ client, onClose, onEdit, onDelete }: {
               </div>
             </div>
 
-            {/* Infos contact à plat */}
-            <div className="flex flex-col gap-2.5">
-              <div className="flex items-center gap-3">
-                <svg width={14} height={14} fill="none" viewBox="0 0 24 24" className="flex-shrink-0"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.08 9.81 19.79 19.79 0 01.01 1.18 2 2 0 012 0h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.09 7.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z" stroke="#8A9BB5" strokeWidth="1.6" strokeLinecap="round"/></svg>
-                <span className="text-[13px] text-[#374151] font-medium">{client.telephone}</span>
-              </div>
-              {client.email && (
-                <div className="flex items-center gap-3">
-                  <svg width={14} height={14} fill="none" viewBox="0 0 24 24" className="flex-shrink-0"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" stroke="#8A9BB5" strokeWidth="1.6"/><path d="M22 6l-10 7L2 6" stroke="#8A9BB5" strokeWidth="1.6" strokeLinecap="round"/></svg>
-                  <span className="text-[13px] text-[#374151] font-medium">{client.email}</span>
-                </div>
-              )}
-            </div>
-
-            {/* Boutons contact */}
-            <div className="flex gap-2 mt-4">
-              <a href={waHref} target="_blank" rel="noopener noreferrer"
-                className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-[12px] font-semibold text-white"
-                style={{ background: '#25D366' }}>
-                <svg width={13} height={13} viewBox="0 0 24 24" fill="white"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12 0C5.373 0 0 5.373 0 12c0 2.124.554 4.118 1.522 5.854L.057 23.714a.5.5 0 00.61.639l5.963-1.562A11.942 11.942 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 21.894a9.878 9.878 0 01-5.031-1.378l-.361-.214-3.741.981.998-3.648-.235-.374A9.862 9.862 0 012.106 12C2.106 6.53 6.53 2.106 12 2.106c5.471 0 9.894 4.424 9.894 9.894 0 5.471-4.423 9.894-9.894 9.894z"/></svg>
+            {/* Boutons contact — pleine largeur, bordures fines */}
+            <div className="grid grid-cols-3 gap-2">
+              <button type="button" onClick={() => setWaTemplate(true)}
+                className="flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-[13px] font-semibold border border-[#25D366]/40 text-[#128C42] active:scale-[0.97] hover:bg-[#F0FDF4] transition-all">
+                <svg width={16} height={16} viewBox="0 0 24 24" fill="#25D366"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12 0C5.373 0 0 5.373 0 12c0 2.124.554 4.118 1.522 5.854L.057 23.714a.5.5 0 00.61.639l5.963-1.562A11.942 11.942 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 21.894a9.878 9.878 0 01-5.031-1.378l-.361-.214-3.741.981.998-3.648-.235-.374A9.862 9.862 0 012.106 12C2.106 6.53 6.53 2.106 12 2.106c5.471 0 9.894 4.424 9.894 9.894 0 5.471-4.423 9.894-9.894 9.894z"/></svg>
                 WhatsApp
-              </a>
-              <a href={callHref} className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-[12px] font-semibold border border-[#E2E8F0] text-[#374151] hover:bg-[#F8FAFC] transition-colors">
-                <svg width={13} height={13} fill="none" viewBox="0 0 24 24"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.08 9.81 19.79 19.79 0 01.01 1.18 2 2 0 012 0h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.09 7.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
+              </button>
+              <a href={callHref} className="flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-[13px] font-semibold border border-[#E2E8F0] text-[#374151] active:scale-[0.97] hover:bg-[#F8FAFC] transition-all">
+                <svg width={16} height={16} fill="none" viewBox="0 0 24 24" className="text-[#3B82F6]"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.08 9.81 19.79 19.79 0 01.01 1.18 2 2 0 012 0h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.09 7.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>
                 Appeler
               </a>
-              {emailHref && (
-                <a href={emailHref} className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-[12px] font-semibold border border-[#E2E8F0] text-[#374151] hover:bg-[#F8FAFC] transition-colors">
-                  <svg width={13} height={13} fill="none" viewBox="0 0 24 24"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" stroke="currentColor" strokeWidth="1.6"/><path d="M22 6l-10 7L2 6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
-                  Email
-                </a>
-              )}
+              <a href={emailHref || undefined} className={`flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-[13px] font-semibold border border-[#E2E8F0] transition-all ${emailHref ? 'text-[#374151] active:scale-[0.97] hover:bg-[#F8FAFC]' : 'text-[#CBD5E1] pointer-events-none'}`}>
+                <svg width={16} height={16} fill="none" viewBox="0 0 24 24" className={emailHref ? 'text-[#F59E0B]' : 'text-[#CBD5E1]'}><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" stroke="currentColor" strokeWidth="1.8"/><path d="M22 6l-10 7L2 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>
+                Email
+              </a>
             </div>
           </div>
 
@@ -431,6 +430,7 @@ function ClientSlideIn({ client, onClose, onEdit, onDelete }: {
 
       {selectedRequest && <RequestPanel item={selectedRequest} onClose={() => setSelectedRequest(null)} />}
       {showNewOrder && <NewOrderForm client={client} onClose={() => setShowNewOrder(false)} />}
+      {waTemplate && <TemplatePopover item={clientAsItem} mode="wa" onClose={() => setWaTemplate(false)} />}
     </>
   );
 }
@@ -617,9 +617,9 @@ export default function ClientsPage() {
   return (
     <div className="w-full">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between gap-3 flex-wrap mb-6">
         <div>
-          <h1 className="text-[22px] font-bold text-[#0F172A]">Clients</h1>
+          <h1 className="text-[20px] md:text-[22px] font-bold text-[#0F172A]">Clients</h1>
           <p className="text-[13px] text-[#8A9BB5] mt-0.5">{loading ? 'Chargement…' : `${clients.length} clients enregistrés`}</p>
         </div>
         <button onClick={() => { setAddForm({ ...emptyClient }); setShowAdd(true); }} className="flex items-center gap-2 px-4 py-2 rounded-xl text-[13px] font-semibold text-white transition-colors" style={{ background: '#4CAF4F' }}>
@@ -644,36 +644,35 @@ export default function ClientsPage() {
           <p className="text-[15px] font-semibold">Aucun client trouvé</p>
         </div>
       ) : (
-        <div className="grid grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 md:gap-3">
           {filtered.map((c) => {
             const ac = avatarColor(c.id);
             return (
               <button
                 key={c.id}
                 onClick={() => setSelected(c)}
-                className="bg-white rounded-xl border border-[#E2E8F0] p-4 text-left hover:border-[#4CAF4F] hover:shadow-md transition-all group"
+                className="bg-white rounded-xl border border-[#E2E8F0] p-2.5 md:p-3.5 text-left hover:border-[#4CAF4F] hover:shadow-md transition-all group"
               >
-                <div className="flex items-center gap-2.5 mb-3">
-                  <div className="w-9 h-9 rounded-lg flex items-center justify-center text-[12px] font-extrabold flex-shrink-0" style={{ background: ac.bg, color: ac.text }}>
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="w-8 h-8 rounded-lg flex items-center justify-center text-[11px] font-extrabold flex-shrink-0" style={{ background: ac.bg, color: ac.text }}>
                     {initials(c.entreprise || c.contact)}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-[13px] font-bold text-[#0F172A] truncate group-hover:text-[#4CAF4F] transition-colors">{c.entreprise || c.contact}</p>
-                    <p className="text-[11px] text-[#8A9BB5] truncate">{c.contact}</p>
+                    <p className="text-[12px] font-bold text-[#0F172A] truncate group-hover:text-[#4CAF4F] transition-colors">{c.entreprise || c.contact}</p>
+                    <p className="text-[10px] text-[#8A9BB5] truncate">{c.contact}</p>
                   </div>
                 </div>
 
-                <div className="flex items-center justify-between text-[11px] text-[#ABBED1] mb-2.5">
-                  <span>{c.wilaya}</span>
-                  <span>{c.derniere}</span>
+                <div className="flex items-center justify-between text-[10px] text-[#ABBED1] mb-2">
+                  <span className="truncate">{c.wilaya}</span>
                 </div>
 
-                <div className="flex items-center gap-1.5">
-                  <span className="flex-1 bg-[#F0FDF4] text-[#166534] text-[10px] font-bold px-2 py-1 rounded-md text-center">
+                <div className="flex items-center gap-1">
+                  <span className="flex-1 bg-[#F0FDF4] text-[#166534] text-[10px] font-bold px-1.5 py-0.5 rounded-md text-center">
                     {c.commandes} cmd
                   </span>
                   {c.devis > 0 && (
-                    <span className="flex-1 bg-[#F5F3FF] text-[#5B21B6] text-[10px] font-bold px-2 py-1 rounded-md text-center">
+                    <span className="flex-1 bg-[#F5F3FF] text-[#5B21B6] text-[10px] font-bold px-1.5 py-0.5 rounded-md text-center">
                       {c.devis} devis
                     </span>
                   )}

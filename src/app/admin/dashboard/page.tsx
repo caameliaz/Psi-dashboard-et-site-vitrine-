@@ -310,7 +310,7 @@ export default function DashboardPage() {
               style={{ width: 220 }}
             />
           </div>
-          <NotifBell />
+          <div className="hidden md:block"><NotifBell /></div>
         </div>
       </div>
 
