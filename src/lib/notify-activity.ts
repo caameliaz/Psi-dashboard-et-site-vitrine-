@@ -75,6 +75,7 @@ export async function notifyStatusChange({
   const message = `${actorName} — ${entityType} de ${clientLabel} → ${label}`;
 
   const isAnnulation = newStatus === 'ANNULE';
+  const entityLabel = entityType === 'commande' ? 'la commande' : 'le devis';
   const { notif, userIds } = await createNotif({
     type: isAnnulation ? 'ANNULATION' : 'ACTION_AUTRE',
     title,
@@ -82,6 +83,9 @@ export async function notifyStatusChange({
     actorId,
     orderId,
     quoteId,
+    selfToastMessage: isAnnulation
+      ? `Vous avez annulé ${entityLabel}`
+      : `Vous avez mis à jour ${entityLabel} → ${label}`,
   });
 
   pushSSE('activity', {
@@ -115,6 +119,7 @@ export async function notifyConversion({
     actorId,
     orderId,
     quoteId,
+    selfToastMessage: 'Vous avez converti le devis en commande',
   });
 
   pushSSE('activity', {
@@ -141,6 +146,7 @@ export async function notifyUserCreated({
     message: `${actorName} a créé le compte de ${userName}`,
     actorId,
     adminOnly: true,
+    selfToastMessage: `Vous avez créé le compte de ${userName}`,
   });
 
   pushSSE('activity', {
@@ -168,6 +174,7 @@ export async function notifyDeletion({
     title: 'Suppression',
     message: `${actorName} a supprimé ${entityType} : ${label}`,
     actorId,
+    selfToastMessage: `Vous avez supprimé ${entityType} : ${label}`,
   });
 
   pushSSE('activity', {
@@ -202,6 +209,7 @@ export async function notifyCreation({
     actorId,
     orderId,
     quoteId,
+    selfToastMessage: `Vous avez créé ${entityType} : ${label}`,
   });
 
   pushSSE('activity', {

@@ -1,16 +1,41 @@
 # Rapport de session — PSI Dashboard
-**Dernière mise à jour :** 1er juillet 2026
+**Dernière mise à jour :** 15 juillet 2026
 
 ---
 
 ## Migrations DB à lancer (obligatoire au démarrage)
 
+Toutes les migrations sont déjà créées dans `prisma/migrations/` — pour un collègue qui clone le repo, il suffit d'appliquer celles qui manquent :
+
 ```bash
-npx prisma migrate dev --name add_ref_order_quote
-npx prisma migrate dev --name add_admin_source
+npx prisma migrate deploy
 npx prisma generate
 npm run dev
 ```
+
+---
+
+## Dépendances ajoutées cette session
+
+```bash
+npm install nodemailer
+npm install -D @types/nodemailer
+```
+Sert à l'envoi d'email réel (voir section "Envoi d'email" plus bas).
+
+---
+
+## Changements DB (migrations créées depuis le dernier rapport)
+
+- `add_client_commune` — `Client.commune` (String, optionnel), en plus de `wilaya`
+- `add_category_photo` — `Category.photo` (String, optionnel)
+- `add_assigned_to` — `Order.assignedToId` / `Quote.assignedToId` (« pris en charge par »)
+- `remove_converted_order_id` — suppression de l'ancien lien devis→commande converti
+- `add_livre_status` — statut `LIVRE` ajouté à `RequestStatus`
+- `products_categories` — extraction des catégories dans leur propre table `Category` (`Product.categoryId`)
+- `sync_schema_catchup` — rattrapage de synchro schéma/DB
+
+Aucune nouvelle migration n'a été créée dans cette session précise (envoi d'email = pas de changement DB, juste un nouveau fichier `.env` + une route API).
 
 ---
 
@@ -76,10 +101,30 @@ npm run dev
 - Badge **Source** visible dans le header (Site web vert / Manuel orange)
 - Workflow simplifié : `En attente → Confirmer → Marquer Livré` (ou "Convertir en commande" pour les devis)
 - Bouton "Marquer Contacté" supprimé
-- Boutons contact : WA, Tel, MAIL avec templates
-- **PDF impression** + **Export Excel** par commande
+- **Boutons contact repensés** (menus déroulants au clic) :
+  - **Appeler** → choix Appel téléphonique / WhatsApp / Viber
+  - **Message** → choix WhatsApp / SMS (garde le flux de templates existant)
+  - **Email** → envoie réellement l'email (voir section "Envoi d'email")
+- **PDF impression** + **Export Excel** par commande — commune client + catégorie produit (avant désignation) + TVA/TTC systématiques sur les commandes, tableaux entièrement bordés (police 11, retour à la ligne auto, colonnes élargies)
 
 ---
+
+### Envoi d'email (nouveau — remplace les liens `mailto:`/webmail)
+- Le bouton **Email** du panel commande envoie maintenant un vrai email, directement depuis le compte Gmail de l'entreprise (pas d'ouverture de Gmail/Outlook/mailto côté client)
+- `src/lib/email/send.ts` : point d'entrée **unique** `sendEmail({ to, subject, html, text })` — toute la logique d'envoi passe par là, pour pouvoir migrer vers un autre provider (ex. Resend) sans toucher au reste du code
+- `POST /api/send-email` : route protégée (permission `voir_commandes`), appelle `sendEmail()`, expéditeur fixé côté serveur
+- Variables d'env requises : `GMAIL_USER`, `GMAIL_APP_PASSWORD` (mot de passe d'application, généré sur [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords), nécessite la validation en 2 étapes activée sur le compte Google)
+- Si une commande/devis n'a pas d'email enregistré, une invite demande l'adresse du destinataire avant l'envoi
+
+---
+
+### Exports Excel (bordures, lisibilité)
+- Toutes les tables (commande individuelle, tableau filtré, rapport de ventes) utilisent `xlsx-js-style` (le fork qui écrit vraiment les styles, contrairement à `xlsx` de base) via `src/lib/xlsx-style.ts`
+- Bordures fines sur toutes les cellules, en-têtes verts avec texte blanc, zébrage, retour à la ligne auto pour ne plus jamais couper un texte trop long
+- Titres de section fusionnés sur toute la largeur (sinon Excel coupe le texte à cause d'une cellule vide juste après)
+- Tableau récapitulatif (export "Exporter") : colonnes Indicateur / Valeur (nombre) / Prix (DA) — total final mis en évidence
+- Rapport de ventes : Total ventes + Nombre commandes en bas à gauche, bien visibles
+- Filtres actifs de la page (statut, période, responsable) affichés en haut des fichiers Excel exportés, plus dans l'UI
 
 ### Export rapport de ventes (`/api/orders/export`)
 Colonnes : N° Facture · **Source** · Date commande · Date livraison · Client · Entreprise · Wilaya · Agent · Réf produit · Qté · Prix unitaire · Total ligne
@@ -123,8 +168,12 @@ Met à jour les prix : 57/30=43, 57/40=80, 57/50=90, 80/60=140, 80/80=200, 80/75
 DATABASE_URL=...
 NEXTAUTH_SECRET=...
 NEXTAUTH_URL=http://localhost:3000
+GMAIL_USER=...
+GMAIL_APP_PASSWORD=...
 ```
 Le collègue fait : `npm install` → copie le `.env` → `npx prisma generate` → migrations ci-dessus → `npm run dev`
+
+Pas de `.env.example` dans ce repo : `.gitignore` bloque tout fichier `.env*`, donc un `.env.example` ne serait jamais partagé via git de toute façon — la liste ci-dessus fait office de doc.
 
 ---
 

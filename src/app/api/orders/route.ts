@@ -15,7 +15,7 @@ export async function GET() {
     const orders = await prisma.order.findMany({
       include: {
         client: { include: { phones: true } },
-        items: { include: { product: true } },
+        items: { include: { product: { include: { category: true } } } },
         createdBy: { select: { id: true, name: true } },
         assignedTo: { select: { id: true, name: true } },
       },
@@ -117,6 +117,7 @@ export async function POST(request: NextRequest) {
         : `${clientLabel} a lancé une commande (${order.ref ?? ''})`,
       actorId: session?.user?.id ?? null,
       orderId: order.id,
+      selfToastMessage: isAdmin ? 'Vous avez créé une commande' : undefined,
     });
 
     pushSSE('new_order', {

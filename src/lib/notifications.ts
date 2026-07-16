@@ -1,4 +1,5 @@
 import { prisma } from './prisma';
+import { pushSSE } from './sse-bus';
 
 type NotifType = 'SITE_COMMANDE' | 'SITE_DEVIS' | 'ACTION_PERSO' | 'ACTION_AUTRE' | 'ANNULATION';
 
@@ -12,6 +13,7 @@ export async function createNotif({
   assignedToId,
   adminOnly,
   actorOnly,
+  selfToastMessage,
 }: {
   type: NotifType;
   title: string;
@@ -22,6 +24,10 @@ export async function createNotif({
   assignedToId?: string | null;
   adminOnly?: boolean;
   actorOnly?: boolean;
+  // Message court affiché en toast à l'acteur lui-même (ex: "Vous avez créé un devis").
+  // L'acteur ne reçoit jamais la notif détaillée persistée (donc jamais dans sa sidebar) —
+  // seulement ce toast transitoire, non lié à un enregistrement Notification.
+  selfToastMessage?: string;
 }) {
   let users: { id: string }[];
 
@@ -69,7 +75,14 @@ export async function createNotif({
   }
 
   // Déduplication (un admin peut aussi être l'acteur)
-  const uniqueIds = [...new Map(users.map((u) => [u.id, u])).values()];
+  let uniqueIds = [...new Map(users.map((u) => [u.id, u])).values()];
+
+  // L'acteur ne doit jamais voir sa propre action dans sa sidebar de notifs —
+  // on l'exclut des destinataires persistés (sauf si la notif est explicitement
+  // réservée à lui seul via actorOnly).
+  if (!actorOnly && actorId) {
+    uniqueIds = uniqueIds.filter((u) => u.id !== actorId);
+  }
 
   const notif = await prisma.notification.create({
     data: {
@@ -83,6 +96,16 @@ export async function createNotif({
       },
     },
   });
+
+  if (actorId && selfToastMessage) {
+    pushSSE('self-toast', {
+      id: `self-${notif.id}`,
+      type,
+      title,
+      message: selfToastMessage,
+      createdAt: notif.createdAt.toISOString(),
+    }, [actorId]);
+  }
 
   return { notif, userIds: uniqueIds.map((u) => u.id) };
 }

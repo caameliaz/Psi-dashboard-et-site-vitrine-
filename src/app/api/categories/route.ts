@@ -36,6 +36,7 @@ export async function POST(request: NextRequest) {
         name: body.name,
         order: body.order ?? order,
         photo: body.photo ?? null,
+        description: body.description ?? null,
       },
     });
 

@@ -15,7 +15,7 @@ export async function GET() {
     const quotes = await prisma.quote.findMany({
       include: {
         client: { include: { phones: true } },
-        items: { include: { product: true } },
+        items: { include: { product: { include: { category: true } } } },
         createdBy: { select: { id: true, name: true } },
         assignedTo: { select: { id: true, name: true } },
       },
@@ -110,6 +110,7 @@ export async function POST(request: NextRequest) {
         : `${clientLabel} a lancé un devis (${quote.ref ?? ''})`,
       actorId: session?.user?.id ?? null,
       quoteId: quote.id,
+      selfToastMessage: isAdmin ? 'Vous avez créé un devis' : undefined,
     });
 
     pushSSE('new_quote', {

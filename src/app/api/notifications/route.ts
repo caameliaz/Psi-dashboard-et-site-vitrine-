@@ -9,6 +9,9 @@ export async function GET() {
 
   try {
     const notifications = await prisma.notification.findMany({
+      // Uniquement les notifs dont l'utilisateur courant est vraiment destinataire
+      // (createNotif n'enregistre pas de `reads` pour l'acteur de sa propre action).
+      where: { reads: { some: { userId: session.user.id } } },
       include: {
         reads: {
           where: { userId: session.user.id },

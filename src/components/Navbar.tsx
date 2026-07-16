@@ -7,10 +7,11 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useTranslation } from '@/lib/i18n';
 
 const NAV_LINKS = [
-  { key: 'nav.home',     href: '/',        sectionId: 'hero' },
-  { key: 'nav.products', href: '/products', sectionId: 'products' },
-  { key: 'nav.quote',    href: '/quote',    sectionId: 'about' },
-  { key: 'nav.contact',  href: '/contact',  sectionId: 'contact' },
+  { key: 'nav.home',         href: '/',        sectionId: 'hero' },
+  { key: 'nav.products',     href: '/products', sectionId: 'products' },
+  { key: 'nav.quote',        href: '/quote',    sectionId: 'devis', center: true },
+  { key: 'nav.presentation', href: '/',        sectionId: 'about' },
+  { key: 'nav.contact',      href: '/contact',  sectionId: 'site-footer' },
 ];
 
 export function Navbar() {
@@ -54,7 +55,7 @@ export function Navbar() {
   useEffect(() => {
     if (!isHome) { setActiveSection(null); return; }
 
-    const sections = ['hero', 'products', 'about', 'contact'];
+    const sections = ['hero', 'products', 'devis', 'about', 'site-footer'];
     const visible = new Map<string, number>();
 
     observerRef.current = new IntersectionObserver(
@@ -76,11 +77,14 @@ export function Navbar() {
     return () => observerRef.current?.disconnect();
   }, [isHome]);
 
-  const scrollTo = (sectionId: string) => {
+  const scrollTo = (sectionId: string, center = false) => {
     const el = document.getElementById(sectionId);
     if (!el) return;
     const navHeight = navRef.current?.offsetHeight ?? 0;
-    const top = el.getBoundingClientRect().top + window.scrollY - navHeight;
+    const rect = el.getBoundingClientRect();
+    const top = center
+      ? rect.top + window.scrollY - (window.innerHeight - rect.height) / 2
+      : rect.top + window.scrollY - navHeight;
     const start = window.scrollY;
     const dist = top - start;
     const duration = 600;
@@ -99,10 +103,10 @@ export function Navbar() {
   const handleNavClick = (l: typeof NAV_LINKS[0], closeMenu = false) => {
     if (closeMenu) setOpen(false);
     if (isHome && l.sectionId) {
-      scrollTo(l.sectionId);
+      scrollTo(l.sectionId, 'center' in l && l.center);
     } else if (!isHome && l.sectionId) {
       router.push('/');
-      setTimeout(() => scrollTo(l.sectionId!), 400);
+      setTimeout(() => scrollTo(l.sectionId!, 'center' in l && l.center), 400);
     } else {
       router.push(l.href);
     }

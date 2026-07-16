@@ -81,7 +81,7 @@ Submit → commande créée, redirect vers son détail
 notifs sur le tel de creation et tt quand cesty fait 
 
 
-# 🟡 PRIORITÉ 3 — Notifications & Emails
+# 🟡 PRIORITÉ 3 — Notifications & Emails  ✅ FAIT
 ## Revue des notifications in-app
 
 Vérifier que TOUTES ces actions génèrent une notif : nouvelle commande site, nouvelle commande manuelle, changement statut, assignation changée, nouveau devis, nouveau message contact
@@ -97,7 +97,7 @@ Cron job via Vercel Cron (vercel.json) ou service externe (Trigger.dev)
 Template HTML propre avec logo PSI, tableau des commandes, lien vers l'admin
 
 # 🟢 PRIORITÉ 4 — Site public arabe
-## Bouton AR/FR
+## Bouton AR/FR  ✅ FAIT reste traduction auto quand on fais changement du contenu
 
 Fichiers de traduction lib/i18n/fr.ts et lib/i18n/ar.ts
 Bouton toggle dans le header public (FR | AR)
@@ -117,7 +117,7 @@ Vérifier que les tokens de session expirent bien (sessionVersion déjà en plac
 Sanitize les champs texte libre (notes, messages contact) contre XSS
 
 
- # PRIORITÉ 6 — Vérifications exports & factures
+  # PRIORITÉ 6 — Vérifications exports & factures  ✅ FAIT
 
 Vérifier que le PDF commande contient : référence, date, client complet (wilaya + commune), lignes produits, prix HT, TVA si applicable, total TTC, "pris en charge par", confieer avec radja 
 Excel rapport ventes : ajouter colonnes "Commune", "Assigné à", "Wilaya"

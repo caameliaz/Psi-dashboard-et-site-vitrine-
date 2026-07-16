@@ -198,15 +198,15 @@ function BellButton() {
   return (
     <button
       onClick={() => notifBell.open()}
-      className="relative flex items-center justify-center w-10 h-10 rounded-full bg-white border border-[#E2E8F0] hover:bg-[#F8FAFC] transition-colors shadow-sm"
+      className="flex items-center gap-2 h-10 pl-2.5 pr-3 rounded-full bg-white border border-[#E2E8F0] hover:bg-[#F8FAFC] transition-colors shadow-sm"
     >
       <svg width={20} height={20} fill="none" viewBox="0 0 24 24">
         <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 01-3.46 0"
           stroke="#717171" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
       </svg>
       {unread > 0 && (
-        <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] rounded-full bg-[#3B82F6] border-2 border-white flex items-center justify-center">
-          <span className="text-[10px] font-bold text-white leading-none px-0.5">{unread > 99 ? '99+' : unread}</span>
+        <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-[#3B82F6] flex items-center justify-center">
+          <span className="text-[10px] font-bold text-white leading-none">{unread > 99 ? '99+' : unread}</span>
         </span>
       )}
     </button>

@@ -9,12 +9,13 @@ datasource db {
 
 // ─── CATÉGORIE ───────────────────────────────────────────────────────────────
 model Category {
-  id        String    @id @default(cuid())
-  name      String    @unique
-  photo     String?
-  order     Int       @default(0)
-  products  Product[]
-  createdAt DateTime  @default(now())
+  id          String    @id @default(cuid())
+  name        String    @unique
+  photo       String?
+  description String?
+  order       Int       @default(0)
+  products    Product[]
+  createdAt   DateTime  @default(now())
 }
 
 // ─── PRODUIT ─────────────────────────────────────────────────────────────────

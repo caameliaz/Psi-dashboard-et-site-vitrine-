@@ -18,7 +18,7 @@ export function Footer() {
   const instagram = content['contact_instagram'] ?? 'https://www.instagram.com/psi04_2026';
 
   return (
-    <footer className="bg-[#263238]">
+    <footer id="site-footer" className="bg-[#263238]">
       <div className="max-w-[1280px] mx-auto px-6 md:px-12 py-14 grid grid-cols-1 sm:grid-cols-3 gap-10">
 
         {/* Brand */}

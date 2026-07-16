@@ -48,7 +48,7 @@ function getCategory(n: Notif): Category {
 
 const CAT_CONFIG: Record<Category, { label: string; bg: string; color: string; border: string }> = {
   COMMANDE:    { label: 'COMMANDE',    bg: '#F0FDF4', color: '#166534', border: '#BBF7D0' },
-  DEVIS:       { label: 'DEVIS',       bg: '#F5F3FF', color: '#6D28D9', border: '#DDD6FE' },
+  DEVIS:       { label: 'DEVIS',       bg: '#EFF6FF', color: '#1D4ED8', border: '#BFDBFE' },
   CLIENT:      { label: 'CLIENT',      bg: '#FFFBEB', color: '#92400E', border: '#FDE68A' },
   UTILISATEUR: { label: 'UTILISATEUR', bg: '#F3E8FF', color: '#6B21A8', border: '#E9D5FF' },
   ACTION:      { label: 'ACTION',      bg: '#F0F9FF', color: '#0369A1', border: '#BAE6FD' },
@@ -200,7 +200,6 @@ export function TopBar() {
       base.push({ value: 'CLIENT',      label: 'Clients' });
       base.push({ value: 'UTILISATEUR', label: 'Utilisateurs' });
     }
-    base.push({ value: 'ACTION', label: 'Actions' });
     return base;
   }, [isAdmin]);
 
@@ -230,7 +229,14 @@ export function TopBar() {
   }, []);
 
   useEffect(() => {
-    return subscribe(async () => {
+    return subscribe(async (payload) => {
+      // Toast simple pour l'acteur lui-même : jamais persisté, jamais dans la sidebar,
+      // pas de refetch de /api/notifications.
+      if (payload.event === 'self-toast') {
+        const n = payload.notif;
+        if (n) setToasts((prev) => [...prev, { id: n.id, type: n.type as NotifType, title: n.title, message: n.message }]);
+        return;
+      }
       try {
         const res = await fetch('/api/notifications');
         if (!res.ok) return;
