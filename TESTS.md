@@ -175,7 +175,7 @@ Vérifier les raccourcis WhatsApp/Email/Appel dans le détail client avec un vra
 
 ## 7.4 — Dashboard web
 - [ ] Panneau détail commande : layout "goofy" (trop de gris / boutons à revoir) → nettoyer visuellement
-- [ ] Page Produits : ok en l'état ; réfléchir si une section "produits" en plus serait utile (à trancher, pas urgent)
+- [ ] Page Produits : ok en l'état ; réfléchir si une section "tous les produits" en plus serait utile (à trancher, pas urgent)
 - [ ] Fiche client : réorganiser l'affichage des infos ; envisager un **tableau type "historique"** pour les commandes du client (plus propre que l'actuel)
 - [ ] Page Historique : revoir comment les infos s'affichent (même traitement que les notifs) + rendre les lignes **cliquables** (clic sur une ligne commande → ouvre le détail de la commande) — pareil pour les notifs
 - [ ] Page Utilisateurs : remplacer l'overlay d'édition par une **édition directe dans le détail** (clic sur un utilisateur → pseudo/email en haut, rôle + permissions en dessous, modifiables sur place) ; le clic sur la **carte** utilisateur (liste) doit juste afficher un aperçu des permissions
