@@ -331,7 +331,7 @@ export default function DashboardPage() {
               style={{ width: 220 }}
             />
           </div>
-          <BellButton />
+          <div className="hidden md:block"><BellButton /></div>
         </div>
       </div>
 

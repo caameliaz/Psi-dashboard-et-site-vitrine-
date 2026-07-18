@@ -1,3 +1,13 @@
+
+Email	Rôle
+admin1@psi.dz	Admin (tout) — utilise celui-là
+admin2@psi.dz	Admin (2e, pour tester notifs à 2)
+employe1@psi.dz	Employé complet
+employe2@psi.dz	Employé limité (lecture seule)
+
+
+
+
 TODO LIST — ce qui reste à faire
 
 DÉCISIONS ACTÉES (P1) :
@@ -6,6 +16,7 @@ DÉCISIONS ACTÉES (P1) :
 - Real-time PARTOUT (listes, dashboard, fiche client, cloche) — aucun rechargement visible
 - Commune = select filtré selon la wilaya + saisie libre possible
 - Catégories : page /products dédiée ET filtre in-place sur l'accueil (select cat → produits s'affichent, même page)
+
 
 ═══════════════════════════════════════════════════════════
 🔴 PRIORITÉ 1 — Logique métier core  (EN COURS — on traite ça d'abord)
@@ -38,14 +49,15 @@ DÉCISIONS ACTÉES (P1) :
 - [x] Commune affichée dans la fiche client (à côté de la wilaya)
   → changer de wilaya réinitialise la commune ; commune absente = saisie libre (Entrée ou « Utiliser … »)
 
-## 1.4 — Catégories refondues  ✅ FAIT
-- [x] Colonne `photo` sur la table Category + migration (add_category_photo)
-- [x] API categories : POST/PATCH acceptent `photo` ; GET renvoie photo + nb produits
-- [x] Admin → Produits/Catégories : cards catégorie avec upload/retrait photo, ajout/suppression (DB-backed)
-- [x] Composant CategoryBrowser : cards catégorie (photo+nom) → produits de la cat sur la MÊME page (filtre in-place)
-- [x] Accueil (/) : CategoryBrowser (limité à 6) remplace la grille statique
-- [x] Page /products : CategoryBrowser complet (toutes les catégories)
-  → carte "Tout" pour voir tous les produits ; product card = réf + dimensions + "Ajouter au panier"
+## 1.4 — Catégories refondues / Produits  ⚠️ À REFAIRE (par le collègue)
+> Cette partie a été codée puis remise À FAIRE : le collègue la reprend de zéro.
+> Ne pas se fier à l'existant côté produits/catégories — à revoir entièrement.
+- [ ] Colonne `photo` sur la table Category (+ migration si repris)
+- [ ] API categories : POST/PATCH acceptent `photo` ; GET renvoie photo + nb produits
+- [ ] Admin → Produits/Catégories : cards catégorie avec upload/retrait photo, ajout/suppression
+- [ ] Composant d'affichage : cards catégorie (photo+nom) → produits de la cat (filtre in-place)
+- [ ] Accueil (/) : sélecteur de catégorie → produits sur la même page
+- [ ] Page /products : cards catégories + produits ; product card = réf + dimensions + "Ajouter au panier"
 
 ## 1.5 — Real-time PARTOUT (aucun rechargement visible)  ✅ FAIT
 - [x] Fetch en 2 modes : chargement initial (spinner) vs refetch SSE **silencieux** (silent=true) → plus de clignotement
@@ -68,17 +80,37 @@ DÉCISIONS ACTÉES (P1) :
 - [x] ⚡ Recharts chargé en dynamic (ssr:false) → n'alourdit QUE le dashboard, jamais le site public
 - [ ] (reporté) Carte "clients qui ont recommandé / nouveaux clients" — à préciser
 
-## 2.2 — Pages mobiles (À FAIRE)
+## 2.2 — Mobile : accès terrain  🔨 EN COURS
 
-## Page commande rapide mobile  - Page clients sur mobile 
-Route /admin/quick-order et une ausi pour kes clients 
-Accessible depuis sidebar (icône visible sur mobile)
-Layout optimisé mobile : steps simples (1. Client → 2. Produits → 3. Résumé → 4. Valider) et celle des clients je veux plutot pouvpir vois la liste et cliquer voir detail et tout comme ca neout cliquer su rtel appeler direct et envyer mails ou whtatsapp 
-Recherche client existant ou création rapide (nom + tel + wilaya)
-Ajout produits avec quantité
-Pas de TVA par défaut (checkbox pour l'activer)
-Submit → commande créée, redirect vers son détail
-notifs sur le tel de creation et tt quand cesty fait 
+PRINCIPE : PAS de pages dupliquées. Ce sont les MÊMES pages web, rendues responsive.
+Le "mobile" = un layout adapté + un menu d'accueil qui pointe vers ces pages. Zéro maintenance en double.
+
+- [x] Layout admin responsive : sur mobile, sidebar → menu hamburger (☰), contenu pleine largeur
+- [x] Login sur mobile → atterrit sur le **menu d'accueil mobile** (`/admin/mobile`)
+- [x] Menu mobile = 1 bouton rond "+" (nouvelle commande → `/admin/quick-order`) + 2 rectangles (Clients, Commandes)
+      → Notifications retiré (déjà dans la cloche du header)
+- [x] Dashboard + pages non-terrain (produits, contenu, users, historique) → **bloqués sur mobile** (message + retour menu)
+- [x] Clients responsive : cartes compactes + fiche → gros boutons **Appeler / WhatsApp / Mail**
+- [x] Commande rapide (`/admin/quick-order`) : formulaire seul (inline, pas de tableau) → écran "créée"
+- [x] Commandes/devis responsive : titre "Commandes", tableau scrollable, filtres empilés, exports cachés sur mobile
+- [x] Panneau détail commande responsive (pleine largeur, footer qui wrappe)
+- [x] Message de confirmation type facture (template WhatsApp/Email avec [Récapitulatif])
+- [x] Login : message "Identifiant ou mot de passe incorrect" + case "Rester connecté" (session 24h glissante)
+- [x] Config IP auto (next.config.ts détecte les IP locales) → plus de galère au changement de WiFi
+- [x] Fix auth mobile : trustHost, useSecureCookies:false, NEXTAUTH_SECRET généré, NEXTAUTH_URL retiré (dev)
+- [x] 🔴 FIX CLAVIER qui se fermait à chaque frappe : SessionProvider refetchOnWindowFocus=false + quick-order client-only + Wrapper non dynamique
+- [x] Formulaire : téléphone (chiffres + clavier tel + OBLIGATOIRE), qté/prix (clavier numérique)
+- [x] Formulaire : "Pris en charge par" → renommé "Commercial" (partout)
+- [x] Devis : référence en dropdown des réfs existantes + option "Référence libre"
+- [x] Menu mobile : couleurs pro (bouton rond vert + 2 cartes blanches épurées)
+- [x] Fiche client refaite : header (entreprise+lieu / avatar+nom / tél en évidence), 3 boutons contact fins pleine largeur
+- [x] Fiche client : WhatsApp → sélecteur de templates (+ option "Écrire sans template")
+- [x] Cloche notifications : ne déborde plus sur mobile (pleine largeur contenue)
+- [x] Panneau détail : toggle "Site web" réparé + boutons Imprimer/Excel cachés sur mobile
+- [ ] Bouton "Modifier" (montant si non défini) dans le panneau détail — à préciser (le Commercial est déjà éditable)
+- [ ] Formulaire commande rapide en VRAIS steps (1.Client → 2.Produits → 3.Résumé) — actuellement tout sur une page
+- [ ] ⚠️ AU DÉPLOIEMENT : remettre NEXTAUTH_URL (prod) + useSecureCookies:true (HTTPS)
+- [x] ⚠️ Garantie tenue : mêmes composants/pages que le web → aucun code dupliqué
 
 
 # 🟡 PRIORITÉ 3 — Notifications & Emails  ✅ FAIT
@@ -482,6 +514,21 @@ Se connecter en **`employe2@psi.dz`** (limité) et comparer avec **`admin1@psi.d
 4. **Utilisateur** ayant créé commandes/notes → "Impossible, désactivez-le plutôt"
 5. Son **propre compte** → refusé
 6. **Client** (même avec messages de contact) → doit marcher
+
+---
+
+## 📱 21bis. Mobile — accès terrain (nouveau)
+
+Tester en ouvrant l'app sur un **téléphone** (adresse `http://192.168.X.X:3000` affichée par `npm run dev`, même WiFi).
+
+1. Sur mobile, la **sidebar est cachée** → un **menu hamburger (☰)** l'ouvre ; le contenu prend toute la largeur
+2. Se connecter sur mobile → on **n'atterrit PAS sur le dashboard** mais sur un **menu d'accueil mobile**
+3. Le menu montre les actions terrain : **Commande rapide · Clients · Commandes/devis · Notifications**
+4. Ouvrir **Clients** → liste → une fiche → gros boutons **📞 Appeler / 💬 WhatsApp / ✉️ Mail** qui marchent en un tap
+5. **Commande rapide** → formulaire en **steps** (Client → Produits → Résumé → Valider), sans TVA par défaut
+6. **Commandes/devis** → consultables + changement de statut depuis le tel
+7. **Dashboard** (ou produits/contenu/users/historique) sur mobile → message **"Disponible sur ordinateur"**
+8. ⚠️ Vérifier que ce sont bien les **mêmes données** que sur le web (pas une version séparée)
 
 ---
 

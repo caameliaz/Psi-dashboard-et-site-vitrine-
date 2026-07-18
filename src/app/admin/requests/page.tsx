@@ -123,12 +123,44 @@ const ALL_STATUTS_DEVIS    = ['En attente', 'Confirmé', 'Livré', 'Annulé'];
 interface Ligne { ref: string; productId: string | null; qte: number; pu: number; }
 const emptyLigne = (): Ligne => ({ ref: '', productId: null, qte: 1, pu: 0 });
 
-function CreateForm({ defaultType, onClose, onSave, users, currentUserId }: {
+// Construit le payload + poste la commande/devis. Réutilisable (page requests + quick-order mobile).
+export async function submitNewRequest(
+  item: any
+): Promise<{ ok: boolean; type: 'Commande' | 'Devis'; error?: string }> {
+  const isCmd = item.type === 'Commande';
+  const endpoint = isCmd ? '/api/orders' : '/api/quotes';
+  const lignes = item._lignes ?? [];
+  const body = isCmd
+    ? {
+        client: {
+          name: item.client, company: item._entreprise || undefined, phone: item._telephone || undefined,
+          email: item._email || undefined, wilaya: item._wilaya || 'Non spécifié', commune: item._commune || undefined,
+        },
+        items: lignes.filter((l: any) => l.ref).map((l: any) => ({ productId: l.productId ?? undefined, quantity: l.qte, unitPrice: l.pu })),
+        assignedToId: item._assignedToId ?? undefined, source: 'AUTRE',
+      }
+    : {
+        name: item.client, company: item._entreprise || undefined, phone: item._telephone || undefined,
+        email: item._email || undefined, wilaya: item._wilaya || 'Non spécifié', commune: item._commune || undefined, message: '',
+        items: lignes.filter((l: any) => l.ref).map((l: any) => ({ productId: l.productId ?? undefined, description: l.productId ? undefined : l.ref, quantity: l.qte })),
+        assignedToId: item._assignedToId ?? undefined, source: 'AUTRE',
+      };
+  const res = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  if (!res.ok) {
+    const text = await res.text();
+    let errBody: any = {}; try { errBody = JSON.parse(text); } catch { /* not json */ }
+    return { ok: false, type: isCmd ? 'Commande' : 'Devis', error: errBody.detail ?? errBody.error ?? text.slice(0, 200) };
+  }
+  return { ok: true, type: isCmd ? 'Commande' : 'Devis' };
+}
+
+export function CreateForm({ defaultType, onClose, onSave, users, currentUserId, inline = false }: {
   defaultType: 'Commande' | 'Devis';
   onClose: () => void;
   onSave: (item: any) => Promise<void>;
   users: { id: string; name: string }[];
   currentUserId?: string;
+  inline?: boolean;
 }) {
   const ic = "w-full px-3 py-2 rounded-xl border border-[#E2E8F0] text-[13px] text-[#263238] focus:outline-none focus:border-[#4CAF4F] focus:ring-[2px] focus:ring-[#4CAF4F]/15 transition-all bg-white";
   const lc = "block text-[11px] font-bold text-[#8A9BB5] uppercase tracking-wide mb-1";
@@ -164,7 +196,7 @@ function CreateForm({ defaultType, onClose, onSave, users, currentUserId }: {
   const total = tva ? Math.round(ht * 1.19) : ht;
 
   const handleSave = async () => {
-    if (!client.trim() || lignes.every(l => !l.ref)) return;
+    if (!client.trim() || !telephone.trim() || lignes.every(l => !l.ref)) return;
     setSaving(true);
     const now = new Date();
     const produits = lignes.filter(l => l.ref).map(l => `${l.ref} × ${l.qte}`).join(', ');
@@ -194,10 +226,11 @@ function CreateForm({ defaultType, onClose, onSave, users, currentUserId }: {
     onClose();
   };
 
-  return (
-    <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-white rounded-2xl shadow-2xl w-[560px] max-w-[96vw] z-10 flex flex-col overflow-hidden" style={{ maxHeight: '94vh' }}>
+  // inline = pleine page (quick-order mobile) ; sinon modal overlay (bouton dans la liste).
+  // ⚠️ Le contenu (formBody) doit être défini SANS composant dynamique, sinon React
+  // remonte tout à chaque frappe et le clavier mobile se ferme.
+  const formBody = (
+    <>
 
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-[#F2F4F7]">
@@ -226,7 +259,7 @@ function CreateForm({ defaultType, onClose, onSave, users, currentUserId }: {
           <div className="grid grid-cols-2 gap-3">
             <div><label className={lc}>Nom *</label><input value={client} onChange={e => setClient(e.target.value)} placeholder="Prénom Nom" className={ic} /></div>
             <div><label className={lc}>Entreprise</label><input value={entreprise} onChange={e => setEntreprise(e.target.value)} placeholder="Nom entreprise" className={ic} /></div>
-            <div><label className={lc}>Téléphone</label><input value={telephone} onChange={e => setTelephone(e.target.value)} placeholder="+213 5XX XXX XXX" className={ic} /></div>
+            <div><label className={lc}>Téléphone *</label><input type="tel" inputMode="tel" value={telephone} onChange={e => setTelephone(e.target.value.replace(/[^\d+ ]/g, ''))} placeholder="+213 5XX XXX XXX" className={ic} /></div>
             <div><label className={lc}>Email</label><input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="client@email.com" className={ic} /></div>
           </div>
           <div className="grid grid-cols-2 gap-3">
@@ -234,8 +267,8 @@ function CreateForm({ defaultType, onClose, onSave, users, currentUserId }: {
             <div><label className={lc}>Commune</label><CommuneSelect wilaya={wilaya} value={commune} onChange={setCommune} /></div>
           </div>
           <div>
-            <label className={lc}>Pris en charge par</label>
-            <select value={assignedToId} onChange={e => setAssignedToId(e.target.value)} className={ic}>
+            <label className={lc}>Commercial</label>
+            <select value={assignedToId} onChange={e => setAssignedToId(e.target.value)} className={ic + ' py-2.5 text-[14px]'}>
               <option value="">— Non assigné —</option>
               {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
             </select>
@@ -258,24 +291,27 @@ function CreateForm({ defaultType, onClose, onSave, users, currentUserId }: {
             <div className="flex flex-col gap-2">
               {lignes.map((ligne, i) => (
                 <div key={i} className="grid gap-2 items-center" style={{ gridTemplateColumns: '1fr 64px 96px 24px' }}>
-                  {/* Ref : dropdown stylisé pour Commande, input libre pour Devis */}
-                  {type === 'Commande' ? (
-                    <RefSelect
-                      value={ligne.ref}
-                      products={products}
-                      onChange={(ref) => selectRef(i, ref)}
-                    />
-                  ) : (
-                    <input value={ligne.ref} onChange={e => setLigne(i, { ref: e.target.value, productId: null })} placeholder="Réf libre" className={ic} />
-                  )}
+                  {/* Ref : dropdown des réfs existantes. Devis → option "Référence libre" en plus */}
+                  <RefSelect
+                    value={ligne.ref}
+                    products={products}
+                    allowFree={type === 'Devis'}
+                    onChange={(ref, isFree) => {
+                      if (isFree) {
+                        setLigne(i, { ref, productId: null });
+                      } else {
+                        selectRef(i, ref);
+                      }
+                    }}
+                  />
 
                   {/* Quantité */}
-                  <input type="number" min={1} value={ligne.qte}
+                  <input type="number" inputMode="numeric" min={1} value={ligne.qte}
                     onChange={e => setLigne(i, { qte: Math.max(1, Number(e.target.value)) })}
                     className={ic + ' text-center'} />
 
                   {/* Prix unitaire — toujours modifiable */}
-                  <input type="number" min={0} value={ligne.pu || ''}
+                  <input type="number" inputMode="numeric" min={0} value={ligne.pu || ''}
                     onChange={e => setLigne(i, { pu: Number(e.target.value) })}
                     placeholder="0"
                     className={ic + ' text-right'} />
@@ -330,13 +366,22 @@ function CreateForm({ defaultType, onClose, onSave, users, currentUserId }: {
         {/* Footer */}
         <div className="flex gap-3 px-6 py-4 border-t border-[#F2F4F7]">
           <button onClick={onClose} className="flex-1 px-4 py-2.5 rounded-xl border border-[#E2E8F0] text-[13px] font-semibold text-[#374151] hover:bg-[#F8FAFC] transition-colors">Annuler</button>
-          <button onClick={handleSave} disabled={saving || !client.trim() || lignes.every(l => !l.ref)}
+          <button onClick={handleSave} disabled={saving || !client.trim() || !telephone.trim() || lignes.every(l => !l.ref)}
             className="flex-1 px-4 py-2.5 rounded-xl text-[13px] font-bold text-white disabled:opacity-40 transition-opacity"
             style={{ background: '#4CAF4F' }}>
-            {saving ? 'Création…' : 'Créer la demande'}
+            {saving ? 'Création…' : `Créer ${type === 'Commande' ? 'la commande' : 'le devis'}`}
           </button>
         </div>
-      </div>
+    </>
+  );
+
+  if (inline) {
+    return <div className="w-full max-w-[560px] mx-auto bg-white rounded-2xl border border-[#E2E8F0] flex flex-col overflow-hidden">{formBody}</div>;
+  }
+  return (
+    <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-white rounded-2xl shadow-2xl w-[560px] max-w-[96vw] z-10 flex flex-col overflow-hidden" style={{ maxHeight: '94vh' }}>{formBody}</div>
     </div>
   );
 }
@@ -469,63 +514,14 @@ export default function RequestsPage() {
     setSelected(null);
   };
 
-  const handleSaveNew = async (item: RequestDetail & { _lignes?: { productId: string | null; ref: string; qte: number; pu: number }[]; _wilaya?: string; _commune?: string; _email?: string; _telephone?: string; _entreprise?: string; _assignedToId?: string | null }) => {
-    const isCmd = item.type === 'Commande';
-    const endpoint = isCmd ? '/api/orders' : '/api/quotes';
-
-    const lignes = item._lignes ?? [];
-    const body = isCmd
-      ? {
-          client: {
-            name: item.client,
-            company: item._entreprise || undefined,
-            phone: item._telephone || undefined,
-            email: item._email || undefined,
-            wilaya: item._wilaya || 'Non spécifié',
-            commune: item._commune || undefined,
-          },
-          items: lignes.filter(l => l.ref).map(l => ({
-            productId: l.productId ?? undefined,
-            quantity: l.qte,
-            unitPrice: l.pu,
-          })),
-          assignedToId: item._assignedToId ?? undefined,
-          source: 'AUTRE',
-        }
-      : {
-          name: item.client,
-          company: item._entreprise || undefined,
-          phone: item._telephone || undefined,
-          email: item._email || undefined,
-          wilaya: item._wilaya || 'Non spécifié',
-          commune: item._commune || undefined,
-          message: '',
-          items: lignes.filter(l => l.ref).map(l => ({
-            productId: l.productId ?? undefined,
-            description: l.productId ? undefined : l.ref,
-            quantity: l.qte,
-          })),
-          assignedToId: item._assignedToId ?? undefined,
-          source: 'AUTRE',
-        };
-
-    const res = await fetch(endpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-
-    if (!res.ok) {
-      const text = await res.text();
-      let errBody: any = {};
-      try { errBody = JSON.parse(text); } catch { /* not json */ }
-      alert(`[${res.status}] ${errBody.detail ?? errBody.error ?? text.slice(0, 200)}`);
-      console.error('Erreur création raw:', text);
+  const handleSaveNew = async (item: any) => {
+    const result = await submitNewRequest(item);
+    if (!result.ok) {
+      alert(result.error ?? 'Erreur lors de la création');
       return;
     }
-
     await fetchAll(true);
-    setActiveTab(isCmd ? 'commandes' : 'devis');
+    setActiveTab(result.type === 'Commande' ? 'commandes' : 'devis');
   };
 
   const counts = {
@@ -558,9 +554,9 @@ export default function RequestsPage() {
   return (
     <div className="w-full">
       {/* Titre + boutons export/création en haut à droite */}
-      <div className="flex items-start justify-between mb-4">
+      <div className="flex items-start justify-between flex-wrap gap-3 mb-4">
         <div>
-          <h1 className="text-[22px] font-bold text-[#0F172A]">Demandes</h1>
+          <h1 className="text-[20px] md:text-[22px] font-bold text-[#0F172A]">Commandes</h1>
           <p className="text-[13px] text-[#8A9BB5] mt-0.5">
             {loading ? 'Chargement…' : `${filtered.length} résultat${filtered.length !== 1 ? 's' : ''}`}
           </p>
@@ -568,7 +564,7 @@ export default function RequestsPage() {
         <div className="flex items-center gap-2">
           <button
             onClick={() => exportVentesExcel(activeFilters.join(' | '))}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-[13px] font-semibold border border-[#E2E8F0] text-[#374151] hover:bg-[#F8FAFC] hover:border-[#4CAF4F] hover:text-[#4CAF4F] transition-colors"
+            className="hidden md:flex items-center gap-1.5 px-3 py-2 rounded-xl text-[13px] font-semibold border border-[#E2E8F0] text-[#374151] hover:bg-[#F8FAFC] hover:border-[#4CAF4F] hover:text-[#4CAF4F] transition-colors"
             title="Rapport de ventes — commandes livrées">
             <svg width={14} height={14} fill="none" viewBox="0 0 24 24">
               <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6z" stroke="currentColor" strokeWidth="1.8"/>
@@ -582,7 +578,7 @@ export default function RequestsPage() {
               const label = activeTab === 'devis' ? 'Devis' : activeTab === 'commandes' ? 'Commandes' : 'Demandes';
               exportTableauExcel(filtered, `PSI_${label}`, label, activeFilters.join(' | '));
             }}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-[13px] font-semibold border border-[#E2E8F0] text-[#374151] hover:bg-[#F8FAFC] transition-colors"
+            className="hidden md:flex items-center gap-1.5 px-3 py-2 rounded-xl text-[13px] font-semibold border border-[#E2E8F0] text-[#374151] hover:bg-[#F8FAFC] transition-colors"
             title="Exporter le tableau filtré en Excel">
             <svg width={14} height={14} fill="none" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6z" stroke="currentColor" strokeWidth="1.8"/><path d="M14 2v6h6M8 13h8M8 17h8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>
             Exporter
@@ -596,7 +592,7 @@ export default function RequestsPage() {
 
       {/* Tabs (gauche) + filtres (droite), même ligne */}
       <div className="flex items-center justify-between flex-wrap gap-3 mb-4">
-        <div className="flex gap-1 p-1 rounded-2xl flex-shrink-0" style={{ background: '#EEF2F7' }}>
+        <div className="flex gap-1 p-1 rounded-2xl overflow-x-auto max-w-full flex-shrink-0" style={{ background: '#EEF2F7' }}>
           {TABS.map((tab) => {
             const isActive = activeTab === tab.key;
             const pendingCount = tab.key === 'commandes' ? attente.commandes : tab.key === 'devis' ? attente.devis : attente.commandes + attente.devis;
@@ -623,47 +619,54 @@ export default function RequestsPage() {
           })}
         </div>
 
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="relative">
+        <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-2 sm:gap-3 w-full sm:w-auto min-w-0">
+          <div className="relative w-full sm:w-auto min-w-0">
             <svg className="absolute left-3 top-1/2 -translate-y-1/2" width={14} height={14} fill="none">
               <circle cx="6" cy="6" r="4.5" stroke="#8A9BB5" strokeWidth="1.4"/>
               <path d="M10 10L13 13" stroke="#8A9BB5" strokeLinecap="round" strokeWidth="1.4"/>
             </svg>
-            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Rechercher client, entreprise..." className="px-3 py-2 pl-8 w-[220px] rounded-lg border border-[#E2E8F0] text-sm text-[#0F172A] bg-white focus:outline-none focus:border-[#4CAF4F] focus:ring-1 focus:ring-[#4CAF4F] transition-colors" />
+            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Rechercher client, entreprise..." className="px-3 py-2 pl-8 w-full sm:w-[220px] rounded-lg border border-[#E2E8F0] text-sm text-[#0F172A] bg-white focus:outline-none focus:border-[#4CAF4F] focus:ring-1 focus:ring-[#4CAF4F] transition-colors" />
           </div>
-          <AdminSelect
-            value={filterStatut}
-            onChange={setFilterStatut}
-            options={[{ value: 'all', label: 'Tous les statuts' }, ...allStatuts.map((s) => ({ value: s, label: s }))]}
-          />
-          <AdminSelect
-            value={filterPeriode}
-            onChange={setFilterPeriode}
-            options={[
-              { value: 'mois',  label: 'Ce mois' },
-              { value: '3mois', label: '3 derniers mois' },
-              { value: '6mois', label: '6 derniers mois' },
-              { value: 'annee', label: 'Cette année' },
-              { value: 'tout',  label: 'Tout afficher' },
-            ]}
-          />
-          <AdminSelect
-            value={filterAssigne}
-            onChange={setFilterAssigne}
-            options={[
-              { value: 'all',  label: 'Tous les responsables' },
-              { value: 'none', label: 'Non assigné' },
-              ...users.map((u) => ({ value: u.id, label: u.name })),
-            ]}
-          />
+
+          {/* Statut / Période / Responsable — même ligne, largeur adaptée à l'écran */}
+          <div className="flex items-center gap-2 w-full min-w-0 sm:contents">
+            <AdminSelect
+              className="flex-1 min-w-0 sm:flex-none sm:w-auto"
+              value={filterStatut}
+              onChange={setFilterStatut}
+              options={[{ value: 'all', label: 'Tous les statuts' }, ...allStatuts.map((s) => ({ value: s, label: s }))]}
+            />
+            <AdminSelect
+              className="flex-1 min-w-0 sm:flex-none sm:w-auto"
+              value={filterPeriode}
+              onChange={setFilterPeriode}
+              options={[
+                { value: 'mois',  label: 'Ce mois' },
+                { value: '3mois', label: '3 derniers mois' },
+                { value: '6mois', label: '6 derniers mois' },
+                { value: 'annee', label: 'Cette année' },
+                { value: 'tout',  label: 'Tout afficher' },
+              ]}
+            />
+            <AdminSelect
+              className="flex-1 min-w-0 sm:flex-none sm:w-auto"
+              value={filterAssigne}
+              onChange={setFilterAssigne}
+              options={[
+                { value: 'all',  label: 'Tous les responsables' },
+                { value: 'none', label: 'Non assigné' },
+                ...users.map((u) => ({ value: u.id, label: u.name })),
+              ]}
+            />
+          </div>
           {(search || filterStatut !== 'all' || filterPeriode !== 'mois' || filterAssigne !== 'all') && (
-            <button onClick={() => { setSearch(''); setFilterStatut('all'); setFilterPeriode('mois'); setFilterAssigne('all'); }} className="text-[12px] font-semibold text-[#8A9BB5] hover:text-[#374151]">Effacer</button>
+            <button onClick={() => { setSearch(''); setFilterStatut('all'); setFilterPeriode('mois'); setFilterAssigne('all'); }} className="text-[12px] font-semibold text-[#8A9BB5] hover:text-[#374151] self-start sm:self-auto">Effacer</button>
           )}
         </div>
       </div>
 
-      <div className="rounded-2xl border-2 border-[#E2E8F0] overflow-hidden shadow-sm bg-white">
-        <table className="w-full" style={{ borderCollapse: 'collapse' }}>
+      <div className="rounded-2xl border-2 border-[#E2E8F0] overflow-x-auto shadow-sm bg-white">
+        <table className="w-full min-w-[720px]" style={{ borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ background: '#F8FAFC' }}>
               {['N°', 'Type', 'Source', 'Entreprise', 'Client', 'Responsable', 'Date', 'Statut'].map((h) => (
@@ -691,12 +694,12 @@ export default function RequestsPage() {
                   onMouseLeave={(e) => (e.currentTarget.style.background = rowBg)}>
                   <td className="px-5 py-3.5 text-[12px] font-mono font-bold" style={{ color: isCommande ? '#4CAF4F' : '#8B5CF6' }}>{row.ref}</td>
                   <td className="px-5 py-3.5">
-                    <span style={{ display: 'inline-flex', alignItems: 'center', padding: '3px 10px', borderRadius: 8, fontSize: 12, fontWeight: 700, border: `2px solid ${isCommande ? '#4CAF4F' : '#8B5CF6'}`, background: isCommande ? '#F0FDF4' : '#F5F3FF', color: isCommande ? '#166534' : '#5B21B6' }}>
+                    <span className="whitespace-nowrap" style={{ display: 'inline-flex', alignItems: 'center', padding: '3px 10px', borderRadius: 8, fontSize: 12, fontWeight: 700, border: `2px solid ${isCommande ? '#4CAF4F' : '#8B5CF6'}`, background: isCommande ? '#F0FDF4' : '#F5F3FF', color: isCommande ? '#166534' : '#5B21B6' }}>
                       {row.type}
                     </span>
                   </td>
                   <td className="px-5 py-3.5">
-                    <span className="text-[11px] font-bold px-2 py-1 rounded-lg border"
+                    <span className="text-[11px] font-bold px-2 py-1 rounded-lg border whitespace-nowrap"
                       style={{ background: srcCfg.bg, color: srcCfg.color, borderColor: srcCfg.border }}>
                       {getSourceLabel(src)}
                     </span>

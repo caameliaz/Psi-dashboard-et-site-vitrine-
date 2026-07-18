@@ -26,17 +26,17 @@ export function AdminSelect({ value, onChange, options, className = '' }: AdminS
   }, []);
 
   return (
-    <div ref={ref} className={`relative ${className}`}>
+    <div ref={ref} className={`relative min-w-0 ${className}`}>
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className={`w-full flex items-center justify-between gap-2 px-4 py-2.5 rounded-xl border bg-white text-[14px] text-[#263238] transition-all outline-none min-w-[120px] ${
+        className={`flex items-center justify-between gap-2 px-4 py-2.5 rounded-xl border bg-white text-[14px] text-[#263238] transition-all outline-none w-full sm:w-auto sm:min-w-[160px] ${
           open
             ? 'border-[#4CAF4F] ring-[3px] ring-[#4CAF4F]/15'
             : 'border-[#E2E8F0] hover:border-[#ABBED1]'
         }`}
       >
-        <span className="truncate">{selected?.label ?? value}</span>
+        <span className="truncate min-w-0">{selected?.label ?? value}</span>
         <svg
           width={14} height={14} viewBox="0 0 16 16" fill="none"
           className={`flex-shrink-0 transition-transform duration-200 ${open ? 'rotate-180' : ''}`}

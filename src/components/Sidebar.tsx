@@ -66,7 +66,7 @@ const navItems: { href: string; label: string; Icon: typeof IconHome; perm: Perm
   { href: '/admin/users',     label: 'Utilisateurs', Icon: IconUserPlus, perm: 'gerer_utilisateurs' },
 ];
 
-export function Sidebar() {
+export function Sidebar({ mobileOpen = false, onCloseMobile }: { mobileOpen?: boolean; onCloseMobile?: () => void } = {}) {
   const pathname = usePathname();
   const { role, can } = useRole();
   const { data: session } = useSession();
@@ -76,14 +76,22 @@ export function Sidebar() {
   const userInitials = userName.split(' ').map((p) => p[0]).join('').slice(0, 2).toUpperCase();
 
   return (
-    <aside
-      className="relative flex flex-col h-screen sticky top-0 bg-white border-r border-[#E4EBF5] transition-all duration-200"
-      style={{ width: collapsed ? 64 : 220, minWidth: collapsed ? 64 : 220 }}
-    >
-      {/* Bouton collapse — rond flottant à mi-hauteur sur le bord droit */}
+    <>
+      {/* Overlay sombre sur mobile quand le drawer est ouvert */}
+      {mobileOpen && (
+        <div className="md:hidden fixed inset-0 z-40 bg-black/40" onClick={onCloseMobile} />
+      )}
+
+      <aside
+        className={`flex flex-col h-screen bg-white border-r border-[#E4EBF5] transition-all duration-200
+          md:relative md:sticky md:top-0 md:translate-x-0
+          fixed top-0 left-0 z-50 ${mobileOpen ? 'translate-x-0' : '-translate-x-full'} md:!translate-x-0`}
+        style={{ width: collapsed ? 64 : 220, minWidth: collapsed ? 64 : 220 }}
+      >
+      {/* Bouton collapse — rond flottant, desktop uniquement */}
       <button
         onClick={() => setCollapsed((v) => !v)}
-        className="absolute top-1/2 -translate-y-1/2 -right-3 z-20 w-6 h-6 flex items-center justify-center rounded-full border border-[#E4EBF5] bg-white hover:bg-[#F2F4F7] shadow-md transition-colors"
+        className="hidden md:flex absolute top-1/2 -translate-y-1/2 -right-3 z-20 w-6 h-6 items-center justify-center rounded-full border border-[#E4EBF5] bg-white hover:bg-[#F2F4F7] shadow-md transition-colors"
         title={collapsed ? 'Ouvrir' : 'Fermer'}
       >
         <IconChevron collapsed={collapsed} />
@@ -115,6 +123,7 @@ export function Sidebar() {
               key={href}
               href={href}
               title={collapsed ? label : undefined}
+              onClick={onCloseMobile}
               className="relative flex items-center gap-3 px-4 py-3 transition-colors"
               style={{ background: isActive ? '#F0FDF4' : 'transparent', justifyContent: collapsed ? 'center' : undefined }}
             >
@@ -159,6 +168,7 @@ export function Sidebar() {
           </Link>
         </div>
       )}
-    </aside>
+      </aside>
+    </>
   );
 }

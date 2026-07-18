@@ -8,6 +8,7 @@ interface ClientRecord {
   contact: string;
   telephone: string;
   wilaya: string;
+  commune?: string;
   adresse: string;
   email: string;
   photo?: string;
@@ -25,7 +26,7 @@ interface ClientRecord {
 }
 import { StatusPill } from '@/components/ui/StatusPill';
 import { initials } from '@/lib/utils';
-import { RequestPanel, type RequestDetail } from '@/components/ui/RequestPanel';
+import { RequestPanel, TemplatePopover, type RequestDetail } from '@/components/ui/RequestPanel';
 import { Modal } from '@/components/ui/Modal';
 import { WilayaSelect } from '@/components/ui/WilayaSelect';
 
@@ -202,7 +203,15 @@ function ClientSlideIn({ client, onClose, onEdit, onDelete }: {
   const [photo, setPhoto] = useState<string | undefined>(client.photo);
   const [selectedRequest, setSelectedRequest] = useState<RequestDetail | null>(null);
   const [showNewOrder, setShowNewOrder] = useState(false);
+  const [waTemplate, setWaTemplate] = useState(false);
   const ac = avatarColor(client.id);
+
+  // Item minimal (niveau client) pour le sélecteur de templates WhatsApp
+  const clientAsItem: RequestDetail = {
+    ref: '', type: 'Commande', date: '', statut: '', montant: '', produits: '',
+    client: client.contact, entreprise: client.entreprise, telephone: client.telephone,
+    wilaya: client.wilaya, email: client.email,
+  };
 
   const handlePhoto = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -219,7 +228,7 @@ function ClientSlideIn({ client, onClose, onEdit, onDelete }: {
   return (
     <>
       <div className="fixed inset-0 bg-black/30 z-[110] backdrop-blur-[2px]" onClick={onClose} />
-      <div className="fixed right-0 top-0 h-full bg-white z-[120] shadow-2xl flex flex-col overflow-hidden" style={{ width: '46vw', minWidth: 500 }}>
+      <div className="fixed right-0 top-0 h-full bg-white z-[120] shadow-2xl flex flex-col overflow-hidden w-full md:w-[46vw] md:min-w-[500px] max-w-full">
 
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-[#F2F4F7]">
@@ -232,20 +241,31 @@ function ClientSlideIn({ client, onClose, onEdit, onDelete }: {
         <div className="flex-1 overflow-y-auto">
 
           {/* Profil */}
-          <div className="px-6 pt-6 pb-5 border-b border-[#F2F4F7]">
-            <div className="flex items-start gap-4 mb-5">
-              {/* Avatar cliquable */}
-              <div className="relative group flex-shrink-0 cursor-pointer" onClick={() => fileRef.current?.click()}>
-                {photo ? (
-                  <img src={photo} alt={client.contact} className="w-16 h-16 rounded-2xl object-cover" />
-                ) : (
-                  <div className="w-16 h-16 rounded-2xl flex items-center justify-center text-[20px] font-extrabold" style={{ background: ac.bg, color: ac.text }}>
-                    {initials(client.entreprise || client.contact)}
-                  </div>
-                )}
-                <div className="absolute inset-0 rounded-2xl bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                  <span className="text-white text-[10px] font-bold text-center leading-tight">Photo</span>
+          <div className="px-5 md:px-6 pt-5 md:pt-6 pb-5 border-b border-[#F2F4F7]">
+            {/* Ligne haut : entreprise + lieu à gauche, avatar+nom à droite */}
+            <div className="flex items-start justify-between gap-3 mb-4">
+              <div className="min-w-0 flex-1">
+                <p className="text-[18px] md:text-[20px] font-extrabold text-[#0F172A] leading-tight truncate">{client.entreprise || client.contact}</p>
+                <div className="flex items-center gap-1.5 mt-1 text-[12px] text-[#8A9BB5]">
+                  <svg width={12} height={12} viewBox="0 0 24 24" fill="none" className="flex-shrink-0"><path d="M12 21s-7-5.7-7-11a7 7 0 0114 0c0 5.3-7 11-7 11z" stroke="currentColor" strokeWidth="1.6"/><circle cx="12" cy="10" r="2.4" stroke="currentColor" strokeWidth="1.6"/></svg>
+                  <span className="truncate">{client.commune ? `${client.commune}, ${client.wilaya}` : client.wilaya}</span>
                 </div>
+              </div>
+              {/* Avatar + nom du contact à droite */}
+              <div className="flex flex-col items-center gap-1 flex-shrink-0">
+                <div className="relative group cursor-pointer" onClick={() => fileRef.current?.click()}>
+                  {photo ? (
+                    <img src={photo} alt={client.contact} className="w-12 h-12 rounded-xl object-cover" />
+                  ) : (
+                    <div className="w-12 h-12 rounded-xl flex items-center justify-center text-[15px] font-extrabold" style={{ background: ac.bg, color: ac.text }}>
+                      {initials(client.entreprise || client.contact)}
+                    </div>
+                  )}
+                  <div className="absolute inset-0 rounded-xl bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                    <span className="text-white text-[9px] font-bold">Photo</span>
+                  </div>
+                </div>
+                <span className="text-[11px] font-semibold text-[#374151] text-center max-w-[90px] truncate">{client.contact}</span>
               </div>
               <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handlePhoto} />
 
@@ -371,6 +391,7 @@ function ClientSlideIn({ client, onClose, onEdit, onDelete }: {
 
       {selectedRequest && <RequestPanel item={selectedRequest} onClose={() => setSelectedRequest(null)} />}
       {showNewOrder && <NewOrderForm client={client} onClose={() => setShowNewOrder(false)} />}
+      {waTemplate && <TemplatePopover item={clientAsItem} mode="wa" onClose={() => setWaTemplate(false)} />}
     </>
   );
 }
@@ -447,6 +468,7 @@ function dbClientToRecord(c: any): ClientRecord {
     contact: c.name,
     telephone: phone,
     wilaya: c.wilaya ?? '',
+    commune: c.commune ?? '',
     adresse: c.address ?? '',
     email: c.email ?? '',
     commandes: ordersCount,
@@ -550,19 +572,19 @@ export default function ClientsPage() {
     <div className="w-full">
       {/* Header */}
       <div className="mb-6">
-        <h1 className="text-[22px] font-bold text-[#0F172A]">Clients</h1>
+        <h1 className="text-[20px] md:text-[22px] font-bold text-[#0F172A]">Clients</h1>
         <p className="text-[13px] text-[#8A9BB5] mt-0.5">{loading ? 'Chargement…' : `${clients.length} clients enregistrés`}</p>
       </div>
 
       {/* Search + Nouveau client */}
-      <div className="flex items-center gap-3 mb-6">
-        <div className="relative">
+      <div className="flex items-center gap-3 mb-6 flex-wrap">
+        <div className="relative w-full sm:w-auto">
           <span className="absolute left-3 top-1/2 -translate-y-1/2"><IconSearch /></span>
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Rechercher un client..."
-            className="pl-9 pr-4 py-2.5 w-[280px] rounded-xl border border-[#E2E8F0] bg-white text-[14px] text-[#263238] placeholder-[#8A9BB5] focus:outline-none focus:border-[#4CAF4F] focus:ring-[3px] focus:ring-[#4CAF4F]/15 transition-all"
+            className="pl-9 pr-4 py-2.5 w-full sm:w-[280px] rounded-xl border border-[#E2E8F0] bg-white text-[14px] text-[#263238] placeholder-[#8A9BB5] focus:outline-none focus:border-[#4CAF4F] focus:ring-[3px] focus:ring-[#4CAF4F]/15 transition-all"
           />
         </div>
         <button onClick={() => { setAddForm({ ...emptyClient }); setShowAdd(true); }} className="flex items-center gap-2 px-4 py-2 rounded-xl text-[13px] font-semibold text-white transition-colors" style={{ background: '#4CAF4F' }}>
@@ -576,17 +598,17 @@ export default function ClientsPage() {
           <p className="text-[15px] font-semibold">Aucun client trouvé</p>
         </div>
       ) : (
-        <div className="grid grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 md:gap-3">
           {filtered.map((c) => {
             const ac = avatarColor(c.id);
             return (
               <button
                 key={c.id}
                 onClick={() => setSelected(c)}
-                className="bg-white rounded-xl border border-[#E2E8F0] p-4 text-left hover:border-[#4CAF4F] hover:shadow-md transition-all group"
+                className="bg-white rounded-xl border border-[#E2E8F0] p-2.5 md:p-3.5 text-left hover:border-[#4CAF4F] hover:shadow-md transition-all group"
               >
-                <div className="flex items-center gap-2.5 mb-3">
-                  <div className="w-9 h-9 rounded-lg flex items-center justify-center text-[12px] font-extrabold flex-shrink-0" style={{ background: ac.bg, color: ac.text }}>
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="w-8 h-8 rounded-lg flex items-center justify-center text-[11px] font-extrabold flex-shrink-0" style={{ background: ac.bg, color: ac.text }}>
                     {initials(c.entreprise || c.contact)}
                   </div>
                   <div className="flex-1 min-w-0">

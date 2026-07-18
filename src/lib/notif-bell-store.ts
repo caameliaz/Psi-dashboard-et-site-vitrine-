@@ -13,7 +13,7 @@ export const notifBell = {
   getCount() { return count; },
   subscribe(fn: Listener) {
     listeners.add(fn);
-    return () => listeners.delete(fn);
+    return () => { listeners.delete(fn); };
   },
   setOpen(fn: () => void) { openFn = fn; },
   open() { openFn?.(); },

@@ -1,13 +1,23 @@
 import type { NextConfig } from "next";
+import os from "os";
+
+// Détecte automatiquement toutes les IP locales du PC (WiFi, Ethernet, partage
+// de connexion…) → autorisées pour le HMR en dev. Ainsi, quel que soit le réseau
+// (WiFi maison, 4G partagée, autre lieu), le test sur mobile marche sans rien changer.
+function localIPs(): string[] {
+  const ips = new Set<string>(['localhost', '127.0.0.1']);
+  const nets = os.networkInterfaces();
+  for (const name of Object.keys(nets)) {
+    for (const net of nets[name] ?? []) {
+      if (net.family === 'IPv4' && !net.internal) ips.add(net.address);
+    }
+  }
+  return [...ips];
+}
 
 const nextConfig: NextConfig = {
-  // Autorise tout le réseau local à charger les scripts de dev (test sur mobile,
-  // quelle que soit l'IP du WiFi). Couvre les plages privées 192.168.x.x et 10.x.x.x.
-  allowedDevOrigins: [
-    '192.168.0.0/16',
-    '10.0.0.0/8',
-    '172.16.0.0/12',
-  ],
+  // Toutes les IP locales du PC + localhost (recalculé à chaque démarrage de `npm run dev`).
+  allowedDevOrigins: localIPs(),
 };
 
 export default nextConfig;
