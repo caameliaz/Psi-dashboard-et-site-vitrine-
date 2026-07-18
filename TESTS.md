@@ -158,6 +158,29 @@ Tester les filtres combinés (statut + période + recherche + assigné) — vér
 Vérifier les raccourcis WhatsApp/Email/Appel dans le détail client avec un vrai numéro algérien (+213)
 
 
+# 🟣 PRIORITÉ 7 — Retours (site public + dashboard)  🔨 À FAIRE
+
+## 7.1 — Site public : responsive
+- [ ] Grille produits (accueil + `/products`) : passer à **2 produits par ligne** sur mobile
+- [ ] Page détail produit : le titre + l'image sont trop gros sur mobile → rétrécir l'image et la rendre **cliquable pour l'agrandir** (façon zoom Amazon), ou trouver un autre système compact
+- [ ] Filtres des notifs (dashboard) : leur **largeur a rétréci** après les derniers changements → à corriger
+
+## 7.2 — Site public : contenu (hors responsive)
+- [ ] Mettre les **bonnes photos** pour l'accueil et les produits
+- [ ] Revoir **comment les références produits s'affichent** (à redesigner)
+
+## 7.3 — Dashboard mobile
+- [ ] Notifications : le panneau **s'ouvre plus large que l'écran** (déborde horizontalement) — probable régression des derniers changements
+- [ ] Filtres + barre de recherche : même souci, débordent de l'écran
+
+## 7.4 — Dashboard web
+- [ ] Panneau détail commande : layout "goofy" (trop de gris / boutons à revoir) → nettoyer visuellement
+- [ ] Page Produits : ok en l'état ; réfléchir si une section "produits" en plus serait utile (à trancher, pas urgent)
+- [ ] Fiche client : réorganiser l'affichage des infos ; envisager un **tableau type "historique"** pour les commandes du client (plus propre que l'actuel)
+- [ ] Page Historique : revoir comment les infos s'affichent (même traitement que les notifs) + rendre les lignes **cliquables** (clic sur une ligne commande → ouvre le détail de la commande) — pareil pour les notifs
+- [ ] Page Utilisateurs : remplacer l'overlay d'édition par une **édition directe dans le détail** (clic sur un utilisateur → pseudo/email en haut, rôle + permissions en dessous, modifiables sur place) ; le clic sur la **carte** utilisateur (liste) doit juste afficher un aperçu des permissions
+- [ ] **Rôles personnalisés réutilisables** : pouvoir créer un rôle nommé (ex "Chef des ventes") avec un set de permissions, pour ne pas re-cocher les permissions à chaque nouvel utilisateur
+
 
 # PSI — Guide de tests complet
 
