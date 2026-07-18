@@ -3,7 +3,6 @@ import { pushSSE } from './sse-bus';
 import { prisma } from './prisma';
 
 // Notifie UNIQUEMENT l'utilisateur assigné qu'une demande lui a été confiée.
-// (l'assigné ne reçoit rien s'il s'assigne lui-même)
 export async function notifyAssignment({
   actorId,
   actorName,
@@ -23,7 +22,7 @@ export async function notifyAssignment({
   orderId?: string;
   quoteId?: string;
 }) {
-  if (!assignedToId || assignedToId === actorId) return; // pas de notif pour soi-même
+  if (!assignedToId || assignedToId === actorId) return;
   const notif = await prisma.notification.create({
     data: {
       type: 'ACTION_AUTRE',
@@ -41,7 +40,7 @@ export async function notifyAssignment({
     message: notif.message,
     createdAt: notif.createdAt.toISOString(),
     targetUserId: assignedToId,
-  });
+  }, [assignedToId]);
 }
 
 const STATUS_LABELS: Record<string, string> = {
@@ -76,23 +75,26 @@ export async function notifyStatusChange({
   const message = `${actorName} — ${entityType} de ${clientLabel} → ${label}`;
 
   const isAnnulation = newStatus === 'ANNULE';
-  const notif = await createNotif({
+  const entityLabel = entityType === 'commande' ? 'la commande' : 'le devis';
+  const { notif, userIds } = await createNotif({
     type: isAnnulation ? 'ANNULATION' : 'ACTION_AUTRE',
     title,
     message,
     actorId,
-    actorOnly: !isAnnulation,
     orderId,
     quoteId,
+    selfToastMessage: isAnnulation
+      ? `Vous avez annulé ${entityLabel}`
+      : `Vous avez mis à jour ${entityLabel} → ${label}`,
   });
 
   pushSSE('activity', {
     id: notif.id,
-    type: 'ACTION_AUTRE',
+    type: notif.type,
     title: notif.title,
     message: notif.message,
     createdAt: notif.createdAt.toISOString(),
-  });
+  }, userIds);
 }
 
 export async function notifyConversion({
@@ -110,22 +112,23 @@ export async function notifyConversion({
   orderId?: string;
   quoteId?: string;
 }) {
-  const notif = await createNotif({
+  const { notif, userIds } = await createNotif({
     type: 'ACTION_AUTRE',
     title: 'Devis converti en commande',
     message: `${actorName} a converti le devis de ${clientLabel} (${quoteRef}) en commande`,
     actorId,
     orderId,
     quoteId,
+    selfToastMessage: 'Vous avez converti le devis en commande',
   });
 
   pushSSE('activity', {
     id: notif.id,
-    type: 'ACTION_AUTRE',
+    type: notif.type,
     title: notif.title,
     message: notif.message,
     createdAt: notif.createdAt.toISOString(),
-  });
+  }, userIds);
 }
 
 export async function notifyUserCreated({
@@ -137,21 +140,22 @@ export async function notifyUserCreated({
   actorName: string;
   userName: string;
 }) {
-  const notif = await createNotif({
+  const { notif, userIds } = await createNotif({
     type: 'ACTION_AUTRE',
     title: 'Nouvel utilisateur',
     message: `${actorName} a créé le compte de ${userName}`,
     actorId,
     adminOnly: true,
+    selfToastMessage: `Vous avez créé le compte de ${userName}`,
   });
 
   pushSSE('activity', {
     id: notif.id,
-    type: 'ACTION_AUTRE',
+    type: notif.type,
     title: notif.title,
     message: notif.message,
     createdAt: notif.createdAt.toISOString(),
-  });
+  }, userIds);
 }
 
 export async function notifyDeletion({
@@ -165,20 +169,21 @@ export async function notifyDeletion({
   entityType: string;
   label: string;
 }) {
-  const notif = await createNotif({
+  const { notif, userIds } = await createNotif({
     type: 'ACTION_AUTRE',
     title: 'Suppression',
     message: `${actorName} a supprimé ${entityType} : ${label}`,
     actorId,
+    selfToastMessage: `Vous avez supprimé ${entityType} : ${label}`,
   });
 
   pushSSE('activity', {
     id: notif.id,
-    type: 'ACTION_AUTRE',
+    type: notif.type,
     title: notif.title,
     message: notif.message,
     createdAt: notif.createdAt.toISOString(),
-  });
+  }, userIds);
 }
 
 export async function notifyCreation({
@@ -197,20 +202,21 @@ export async function notifyCreation({
   quoteId?: string;
 }) {
   const capitalType = entityType.charAt(0).toUpperCase() + entityType.slice(1);
-  const notif = await createNotif({
+  const { notif, userIds } = await createNotif({
     type: 'ACTION_AUTRE',
     title: `${capitalType} — Manuel`,
     message: `${actorName} a créé ${entityType} : ${label}`,
     actorId,
     orderId,
     quoteId,
+    selfToastMessage: `Vous avez créé ${entityType} : ${label}`,
   });
 
   pushSSE('activity', {
     id: notif.id,
-    type: 'ACTION_AUTRE',
+    type: notif.type,
     title: notif.title,
     message: notif.message,
     createdAt: notif.createdAt.toISOString(),
-  });
+  }, userIds);
 }

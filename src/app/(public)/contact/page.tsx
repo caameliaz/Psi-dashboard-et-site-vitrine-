@@ -1,26 +1,23 @@
+'use client';
+
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useTranslation } from '@/lib/i18n';
 
-async function getContent(): Promise<Record<string, string>> {
-  try {
-    const base = process.env.NEXTAUTH_URL ?? 'http://localhost:3000';
-    const res = await fetch(`${base}/api/content`, { next: { revalidate: 60 } });
-    if (!res.ok) return {};
-    return res.json();
-  } catch {
-    return {};
-  }
-}
+export default function ContactPage() {
+  const { t } = useTranslation();
+  const [content, setContent] = useState<Record<string, string>>({});
 
-const WHATSAPP_MSG = encodeURIComponent('Bonjour, je souhaite obtenir des informations sur vos produits PSI.');
-
-export default async function ContactPage() {
-  const content = await getContent();
+  useEffect(() => {
+    fetch('/api/content').then(r => r.ok ? r.json() : {}).then(setContent).catch(() => {});
+  }, []);
 
   const telephone = content['contact_telephone'] ?? '+213770150656';
   const email     = content['contact_email']     ?? 'contact@psi-algerie.com';
   const adresse   = content['contact_adresse']   ?? 'Centre El Qods, Niveau M1, Chéraga, Alger';
 
   const whatsappNumber = telephone.replace(/\D/g, '').replace(/^0/, '213');
+  const WHATSAPP_MSG   = encodeURIComponent(t('common.whatsapp_msg'));
 
   return (
     <div className="min-h-screen bg-[#F5F7FA] py-12 px-6">
@@ -33,13 +30,11 @@ export default async function ContactPage() {
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
             <path d="M10 4L6 8l4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
           </svg>
-          Retour
+          {t('contact.back')}
         </Link>
 
-        <h1 className="text-[36px] md:text-[42px] font-bold text-[#263238] mb-2">Nous contacter</h1>
-        <p className="text-[16px] text-[#717171] mb-10">
-          Choisissez le moyen qui vous convient le mieux.
-        </p>
+        <h1 className="text-[36px] md:text-[42px] font-bold text-[#263238] mb-2">{t('contact.title')}</h1>
+        <p className="text-[16px] text-[#717171] mb-10">{t('contact.subtitle')}</p>
 
         {/* Boutons de contact */}
         <div className="flex flex-col gap-4 mb-10">
@@ -58,7 +53,7 @@ export default async function ContactPage() {
               </svg>
             </div>
             <div className="flex-1">
-              <p className="text-[17px] font-bold text-[#263238]">WhatsApp</p>
+              <p className="text-[17px] font-bold text-[#263238]">{t('contact.whatsapp')}</p>
               <p className="text-[14px] text-[#717171] mt-0.5">{telephone}</p>
             </div>
             <svg width="20" height="20" viewBox="0 0 20 20" fill="none" className="text-[#ABBED1] group-hover:text-[#4CAF4F] transition-colors">
@@ -77,7 +72,7 @@ export default async function ContactPage() {
               </svg>
             </div>
             <div className="flex-1">
-              <p className="text-[17px] font-bold text-[#263238]">Appeler</p>
+              <p className="text-[17px] font-bold text-[#263238]">{t('contact.call')}</p>
               <p className="text-[14px] text-[#717171] mt-0.5">{telephone}</p>
             </div>
             <svg width="20" height="20" viewBox="0 0 20 20" fill="none" className="text-[#ABBED1] group-hover:text-[#3B82F6] transition-colors">
@@ -97,7 +92,7 @@ export default async function ContactPage() {
               </svg>
             </div>
             <div className="flex-1">
-              <p className="text-[17px] font-bold text-[#263238]">Email</p>
+              <p className="text-[17px] font-bold text-[#263238]">{t('contact.email_label')}</p>
               <p className="text-[14px] text-[#717171] mt-0.5">{email}</p>
             </div>
             <svg width="20" height="20" viewBox="0 0 20 20" fill="none" className="text-[#ABBED1] group-hover:text-[#F97316] transition-colors">
@@ -118,14 +113,14 @@ export default async function ContactPage() {
         {/* CTA Devis */}
         <div className="bg-[#4CAF4F] rounded-2xl p-6 flex flex-col sm:flex-row items-center justify-between gap-4">
           <div>
-            <p className="text-[16px] font-bold text-white">Besoin d'un devis ?</p>
-            <p className="text-[13px] text-[#E8F5E9] mt-1">Envoyez-nous vos spécifications et on vous répond rapidement.</p>
+            <p className="text-[16px] font-bold text-white">{t('contact.quote_cta_title')}</p>
+            <p className="text-[13px] text-[#E8F5E9] mt-1">{t('contact.quote_cta_sub')}</p>
           </div>
           <Link
             href="/quote"
             className="shrink-0 bg-white text-[#4CAF4F] text-[14px] font-bold px-6 py-3 rounded-xl hover:bg-[#F5F7FA] transition-colors whitespace-nowrap"
           >
-            Demander un devis →
+            {t('contact.quote_cta_btn')}
           </Link>
         </div>
 

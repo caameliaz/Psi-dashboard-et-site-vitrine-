@@ -15,7 +15,7 @@ export async function GET() {
     const quotes = await prisma.quote.findMany({
       include: {
         client: { include: { phones: true } },
-        items: { include: { product: true } },
+        items: { include: { product: { include: { category: true } } } },
         createdBy: { select: { id: true, name: true } },
         assignedTo: { select: { id: true, name: true } },
       },
@@ -102,13 +102,15 @@ export async function POST(request: NextRequest) {
     const isAdmin = body.source !== 'SITE';
     const actorName = session?.user?.name ?? session?.user?.email ?? 'Agent';
     const clientLabel = client.company ?? client.name;
-    const notif = await createNotif({
+    const { notif, userIds } = await createNotif({
       type: isAdmin ? 'ACTION_AUTRE' : 'SITE_DEVIS',
       title: isAdmin ? 'Nouveau devis · Manuel' : 'Nouveau devis · Site web',
       message: isAdmin
         ? `${actorName} a créé un devis pour ${clientLabel} (${quote.ref ?? ''})`
-        : `${clientLabel} — ${body.message?.slice(0, 60) ?? ''}`,
+        : `${clientLabel} a lancé un devis (${quote.ref ?? ''})`,
+      actorId: session?.user?.id ?? null,
       quoteId: quote.id,
+      selfToastMessage: isAdmin ? 'Vous avez créé un devis' : undefined,
     });
 
     pushSSE('new_quote', {
@@ -117,7 +119,7 @@ export async function POST(request: NextRequest) {
       title: notif.title,
       message: notif.message,
       createdAt: notif.createdAt.toISOString(),
-    });
+    }, userIds);
     createAudit({
       userId: session?.user?.id,
       action: 'Devis créé',

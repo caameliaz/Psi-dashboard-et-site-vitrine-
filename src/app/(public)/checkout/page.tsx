@@ -7,8 +7,10 @@ import { useRouter } from 'next/navigation';
 import { inputClass, labelClass } from '@/lib/utils';
 import { WilayaSelect } from '@/components/ui/WilayaSelect';
 import { CommuneSelect } from '@/components/ui/CommuneSelect';
+import { useTranslation } from '@/lib/i18n';
 
 export default function CheckoutPage() {
+  const { t } = useTranslation();
   const router = useRouter();
   const items = useCartStore((state) => state.items);
   const clearCart = useCartStore((state) => state.clearCart);
@@ -56,7 +58,7 @@ export default function CheckoutPage() {
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        setSubmitError(err.error ?? 'Erreur lors de l\'envoi. Veuillez réessayer.');
+        setSubmitError(err.error ?? t('checkout.error'));
         return;
       }
       clearCart();
@@ -79,15 +81,13 @@ export default function CheckoutPage() {
               <path d="M5 13l4 4L19 7" stroke="#0D9488" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
           </div>
-          <h2 className="text-[22px] font-bold text-[#263238] mb-3">Commande envoyée !</h2>
-          <p className="text-[15px] text-[#717171] mb-8">
-            Merci pour votre commande. Notre équipe vous contactera dans les plus brefs délais pour confirmer la livraison.
-          </p>
+          <h2 className="text-[22px] font-bold text-[#263238] mb-3">{t('checkout.success_title')}</h2>
+          <p className="text-[15px] text-[#717171] mb-8">{t('checkout.success_body')}</p>
           <Link
             href="/"
             className="inline-block bg-[#0D9488] text-white text-[15px] font-semibold px-8 py-3 rounded-xl hover:bg-[#0F766E] transition-all"
           >
-            Retour à l'accueil
+            {t('checkout.success_btn')}
           </Link>
         </div>
       </div>
@@ -102,42 +102,40 @@ export default function CheckoutPage() {
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
             <path d="M10 4L6 8l4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
           </svg>
-          Retour au panier
+          {t('checkout.back')}
         </Link>
 
-        <h1 className="text-[36px] md:text-[42px] font-bold text-[#263238] mb-2">Finaliser la commande</h1>
-        <p className="text-[16px] text-[#717171] mb-10">
-          Remplissez vos coordonnées et notre équipe vous recontactera pour confirmer la livraison.
-        </p>
+        <h1 className="text-[36px] md:text-[42px] font-bold text-[#263238] mb-2">{t('checkout.title')}</h1>
+        <p className="text-[16px] text-[#717171] mb-10">{t('checkout.subtitle')}</p>
 
         <div className="flex flex-col lg:flex-row gap-8">
 
           <form onSubmit={handleSubmit} className="flex-1">
             <div className="bg-white rounded-2xl shadow-[0_4px_24px_rgba(171,190,209,0.35)] p-8 flex flex-col gap-6">
-              <h2 className="text-[18px] font-bold text-[#263238]">Vos coordonnées</h2>
+              <h2 className="text-[18px] font-bold text-[#263238]">{t('checkout.section_coords')}</h2>
 
               <div>
-                <label className={labelClass}>Nom complet *</label>
-                <input type="text" name="name" value={formData.name} onChange={handleChange} placeholder="Votre nom et prénom" required className={inputClass} />
+                <label className={labelClass}>{t('checkout.name_label')}</label>
+                <input type="text" name="name" value={formData.name} onChange={handleChange} placeholder={t('checkout.name_ph')} required className={inputClass} />
               </div>
 
               <div>
-                <label className={labelClass}>Entreprise</label>
-                <input type="text" name="company" value={formData.company} onChange={handleChange} placeholder="Nom de votre entreprise" className={inputClass} />
+                <label className={labelClass}>{t('checkout.company_label')}</label>
+                <input type="text" name="company" value={formData.company} onChange={handleChange} placeholder={t('checkout.company_ph')} className={inputClass} />
               </div>
 
               <div>
-                <label className={labelClass}>Email</label>
-                <input type="email" name="email" value={formData.email} onChange={handleChange} placeholder="votre@email.com" className={inputClass} />
+                <label className={labelClass}>{t('checkout.email_label')}</label>
+                <input type="email" name="email" value={formData.email} onChange={handleChange} placeholder={t('checkout.email_ph')} className={inputClass} />
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                 <div>
-                  <label className={labelClass}>Téléphone *</label>
-                  <input type="tel" name="phone" value={formData.phone} onChange={handleChange} placeholder="+213 XXX XXX XXX" required className={inputClass} />
+                  <label className={labelClass}>{t('checkout.phone_label')}</label>
+                  <input type="tel" name="phone" value={formData.phone} onChange={handleChange} placeholder={t('checkout.phone_ph')} required className={inputClass} />
                 </div>
                 <div>
-                  <label className={labelClass}>Wilaya *</label>
+                  <label className={labelClass}>{t('checkout.wilaya_label')}</label>
                   <WilayaSelect
                     name="wilaya"
                     value={formData.wilaya}
@@ -146,7 +144,7 @@ export default function CheckoutPage() {
                   />
                 </div>
                 <div>
-                  <label className={labelClass}>Commune</label>
+                  <label className={labelClass}>{t('checkout.commune_label')}</label>
                   <CommuneSelect
                     name="commune"
                     wilaya={formData.wilaya}
@@ -157,8 +155,8 @@ export default function CheckoutPage() {
               </div>
 
               <div>
-                <label className={labelClass}>Adresse de livraison</label>
-                <input type="text" name="address" value={formData.address} onChange={handleChange} placeholder="Adresse complète (optionnel)" className={inputClass} />
+                <label className={labelClass}>{t('checkout.address_label')}</label>
+                <input type="text" name="address" value={formData.address} onChange={handleChange} placeholder={t('checkout.address_ph')} className={inputClass} />
               </div>
 
               {submitError && (
@@ -169,7 +167,7 @@ export default function CheckoutPage() {
                 disabled={loading}
                 className="w-full bg-[#4CAF4F] text-white text-[16px] font-semibold py-4 rounded-xl shadow-[0_4px_14px_rgba(76,175,79,0.4)] hover:bg-[#43A047] transition-all disabled:opacity-50 flex items-center justify-center gap-2 mt-2"
               >
-                <span>{loading ? 'Envoi en cours...' : 'Envoyer la commande'}</span>
+                <span>{loading ? t('checkout.submitting') : t('checkout.submit')}</span>
                 {!loading && (
                   <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
                     <path d="M3 8h10M9 4l4 4-4 4" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
@@ -182,7 +180,7 @@ export default function CheckoutPage() {
           {/* Récapitulatif */}
           <div className="lg:w-[320px] shrink-0">
             <div className="bg-white rounded-2xl shadow-[0_4px_24px_rgba(171,190,209,0.35)] p-6 sticky top-24">
-              <h2 className="text-[17px] font-bold text-[#263238] mb-5">Votre commande</h2>
+              <h2 className="text-[17px] font-bold text-[#263238] mb-5">{t('checkout.summary_title')}</h2>
 
               <div className="flex flex-col gap-4">
                 {items.map((item) => (
@@ -195,7 +193,7 @@ export default function CheckoutPage() {
                       </div>
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-[14px] font-semibold text-[#263238]">Réf. {item.reference}</p>
+                      <p className="text-[14px] font-semibold text-[#263238]">{t('checkout.ref')} {item.reference}</p>
                       <p className="text-[12px] text-[#89939E]">× {item.quantity}</p>
                     </div>
                     <p className="text-[14px] font-bold text-[#263238]">{item.unitPrice * item.quantity} DA</p>
@@ -204,19 +202,19 @@ export default function CheckoutPage() {
               </div>
 
               <div className="mt-5 pt-5 border-t border-[#F0F4F8] flex justify-between items-center">
-                <span className="text-[16px] font-semibold text-[#263238]">Total</span>
+                <span className="text-[16px] font-semibold text-[#263238]">{t('checkout.total')}</span>
                 <span className="text-[24px] font-bold text-[#4CAF4F]">{totalPrice} DA</span>
               </div>
 
               <div className="mt-5 pt-5 border-t border-[#F0F4F8] flex flex-col gap-3">
                 {[
-                  { text: 'Livraison dans toute l\'Algérie' },
-                  { text: 'Qualité garantie, origine Europe' },
-                  { text: 'Réponse rapide sous 24h' },
+                  t('checkout.guarantee_1'),
+                  t('checkout.guarantee_2'),
+                  t('checkout.guarantee_3'),
                 ].map((g) => (
-                  <div key={g.text} className="flex items-center gap-2.5 text-[13px] text-[#717171]">
+                  <div key={g} className="flex items-center gap-2.5 text-[13px] text-[#717171]">
                     <div className="w-1.5 h-1.5 rounded-full bg-[#4CAF4F] shrink-0" />
-                    <span>{g.text}</span>
+                    <span>{g}</span>
                   </div>
                 ))}
               </div>

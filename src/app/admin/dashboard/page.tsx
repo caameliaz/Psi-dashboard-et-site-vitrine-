@@ -3,10 +3,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { StatusPill } from '@/components/ui/StatusPill';
 import { RequestPanel, type RequestDetail } from '@/components/ui/RequestPanel';
-import { NotifBell } from '@/components/ui/NotifBell';
 import { useSSE } from '@/lib/use-sse';
 import dynamic from 'next/dynamic';
 import type { Order, Quote } from '@/types';
+import { notifBell } from '@/lib/notif-bell-store';
 
 // Graphiques Recharts chargés à la demande (ssr:false) → aucun poids ailleurs
 const WilayaBarChart = dynamic(() => import('@/components/ui/DashboardCharts').then((m) => m.WilayaBarChart), {
@@ -192,6 +192,27 @@ function TypeChip({ type }: { type: string }) {
 
 type SortKey = 'client' | 'date' | 'statut' | null;
 
+function BellButton() {
+  const [unread, setUnread] = useState(() => notifBell.getCount());
+  useEffect(() => notifBell.subscribe(setUnread), []);
+  return (
+    <button
+      onClick={() => notifBell.open()}
+      className="flex items-center gap-2 h-10 pl-2.5 pr-3 rounded-full bg-white border border-[#E2E8F0] hover:bg-[#F8FAFC] transition-colors shadow-sm"
+    >
+      <svg width={20} height={20} fill="none" viewBox="0 0 24 24">
+        <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 01-3.46 0"
+          stroke="#717171" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+      </svg>
+      {unread > 0 && (
+        <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-[#3B82F6] flex items-center justify-center">
+          <span className="text-[10px] font-bold text-white leading-none">{unread > 99 ? '99+' : unread}</span>
+        </span>
+      )}
+    </button>
+  );
+}
+
 export default function DashboardPage() {
   const [greeting, setGreeting] = useState('Bonjour');
   const [today, setToday]   = useState('');
@@ -310,7 +331,7 @@ export default function DashboardPage() {
               style={{ width: 220 }}
             />
           </div>
-          <div className="hidden md:block"><NotifBell /></div>
+          <div className="hidden md:block"><BellButton /></div>
         </div>
       </div>
 

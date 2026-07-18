@@ -1,8 +1,6 @@
 'use client';
 
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { RefSelect } from '@/components/ui/RefSelect';
-
 interface ClientRecord {
   id: string | number;
   _dbId?: string;
@@ -10,7 +8,7 @@ interface ClientRecord {
   contact: string;
   telephone: string;
   wilaya: string;
-  commune: string;
+  commune?: string;
   adresse: string;
   email: string;
   photo?: string;
@@ -31,8 +29,6 @@ import { initials } from '@/lib/utils';
 import { RequestPanel, TemplatePopover, type RequestDetail } from '@/components/ui/RequestPanel';
 import { Modal } from '@/components/ui/Modal';
 import { WilayaSelect } from '@/components/ui/WilayaSelect';
-import { CommuneSelect } from '@/components/ui/CommuneSelect';
-import { useSSE } from '@/lib/use-sse';
 
 function avatarColor(id: number | string) {
   const n = typeof id === 'string' ? id.charCodeAt(0) + id.charCodeAt(1) : id;
@@ -48,7 +44,7 @@ function avatarColor(id: number | string) {
 }
 
 const emptyClient: Omit<ClientRecord, 'id' | 'commandes' | 'devis' | 'derniere' | 'historique'> = {
-  entreprise: '', contact: '', telephone: '', wilaya: '', commune: '', adresse: '', email: '',
+  entreprise: '', contact: '', telephone: '', wilaya: '', adresse: '', email: '',
 };
 
 function ClientForm({ form, setForm, onSubmit, onClose, submitLabel }: {
@@ -82,15 +78,9 @@ function ClientForm({ form, setForm, onSubmit, onClose, submitLabel }: {
           <input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="contact@entreprise.dz" className={inputClass} />
         </div>
       </div>
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <label className={labelClass}>Wilaya</label>
-          <WilayaSelect value={form.wilaya} onChange={(v) => setForm({ ...form, wilaya: v, commune: '' })} />
-        </div>
-        <div>
-          <label className={labelClass}>Commune</label>
-          <CommuneSelect wilaya={form.wilaya} value={form.commune} onChange={(v) => setForm({ ...form, commune: v })} />
-        </div>
+      <div>
+        <label className={labelClass}>Wilaya</label>
+        <WilayaSelect value={form.wilaya} onChange={(v) => setForm({ ...form, wilaya: v })} />
       </div>
       <div>
         <label className={labelClass}>Adresse</label>
@@ -104,69 +94,41 @@ function ClientForm({ form, setForm, onSubmit, onClose, submitLabel }: {
   );
 }
 
-interface CLigne { ref: string; productId: string | null; qte: number; pu: number; }
-const emptyCLigne = (): CLigne => ({ ref: '', productId: null, qte: 1, pu: 0 });
-
-function NewOrderForm({ client, onClose, onCreated }: { client: ClientRecord; onClose: () => void; onCreated?: () => void }) {
-  const inputClass = "w-full px-3 py-2 rounded-xl border border-[#E2E8F0] text-[13px] text-[#263238] focus:outline-none focus:border-[#4CAF4F] focus:ring-[2px] focus:ring-[#4CAF4F]/15 transition-all bg-white";
-  const labelClass = "block text-[11px] font-bold text-[#8A9BB5] uppercase tracking-wide mb-1";
+function NewOrderForm({ client, onClose }: { client: ClientRecord; onClose: () => void }) {
+  const inputClass = "w-full px-3 py-2.5 rounded-xl border border-[#E2E8F0] text-[14px] text-[#263238] focus:outline-none focus:border-[#4CAF4F] focus:ring-[3px] focus:ring-[#4CAF4F]/15 transition-all bg-white";
+  const labelClass = "block text-[12px] font-semibold text-[#374151] mb-1.5";
+  const [produits, setProduits] = useState('');
+  const [montant, setMontant] = useState('');
   const [type, setType] = useState<'Commande' | 'Devis'>('Commande');
-  const [lignes, setLignes] = useState<CLigne[]>([emptyCLigne()]);
-  const [tva, setTva] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [products, setProducts] = useState<{ id: string; reference: string; price: number }[]>([]);
-
-  useEffect(() => {
-    fetch('/api/products?all=true').then(r => r.json()).then((data: any[]) => {
-      setProducts(data.map(p => ({ id: p.id, reference: p.reference, price: p.price ?? 0 })));
-    }).catch(() => {});
-  }, []);
-
-  const setLigne = (i: number, patch: Partial<CLigne>) =>
-    setLignes(prev => prev.map((l, idx) => idx === i ? { ...l, ...patch } : l));
-  const selectRef = (i: number, reference: string) => {
-    const p = products.find(p => p.reference === reference);
-    setLigne(i, { ref: reference, productId: p?.id ?? null, pu: p?.price ?? 0 });
-  };
-
-  const ht = lignes.reduce((acc, l) => acc + l.qte * l.pu, 0);
-  const total = tva ? Math.round(ht * 1.19) : ht;
 
   const handleSubmit = async () => {
-    if (lignes.every(l => !l.ref)) return;
+    if (!produits.trim()) return;
     setSaving(true);
     const dbId = (client as any)._dbId ?? client.id;
-    const validLignes = lignes.filter(l => l.ref);
     const endpoint = type === 'Commande' ? '/api/orders' : '/api/quotes';
-    const clientBlock = {
-      name: client.contact,
-      company: client.entreprise,
-      phone: client.telephone,
-      wilaya: client.wilaya,
-      email: client.email,
-    };
     const body = type === 'Commande'
       ? {
           source: 'ADMIN',
-          client: clientBlock,
-          tva,
-          items: validLignes.map(l => ({
-            productId: l.productId ?? undefined,
-            description: l.productId ? undefined : l.ref,
-            quantity: l.qte,
-            unitPrice: l.pu,
-          })),
+          client: {
+            name: client.contact,
+            company: client.entreprise,
+            phone: client.telephone,
+            wilaya: client.wilaya,
+            email: client.email,
+          },
+          items: [],
         }
       : {
           source: 'ADMIN',
           clientId: dbId,
-          ...clientBlock,
-          message: validLignes.map(l => `${l.ref} × ${l.qte}`).join(', '),
-          items: validLignes.map(l => ({
-            productId: l.productId ?? undefined,
-            description: l.productId ? undefined : l.ref,
-            quantity: l.qte,
-          })),
+          name: client.contact,
+          company: client.entreprise,
+          phone: client.telephone,
+          wilaya: client.wilaya,
+          email: client.email,
+          message: produits,
+          items: [],
         };
     await fetch(endpoint, {
       method: 'POST',
@@ -174,14 +136,13 @@ function NewOrderForm({ client, onClose, onCreated }: { client: ClientRecord; on
       body: JSON.stringify(body),
     });
     setSaving(false);
-    onCreated?.();
     onClose();
   };
 
   return (
     <div className="fixed inset-0 z-[80] flex items-center justify-center p-6">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-white rounded-2xl shadow-2xl w-[520px] max-w-[94vw] p-6 z-10 max-h-[90vh] overflow-y-auto">
+      <div className="relative bg-white rounded-2xl shadow-2xl w-[460px] max-w-[92vw] p-6 z-10">
         <div className="flex items-center justify-between mb-5">
           <div>
             <h3 className="text-[16px] font-bold text-[#0F172A]">Nouvelle {type === 'Commande' ? 'commande' : 'demande de devis'}</h3>
@@ -195,7 +156,7 @@ function NewOrderForm({ client, onClose, onCreated }: { client: ClientRecord; on
         <div className="flex gap-2 mb-4">
           {(['Commande', 'Devis'] as const).map((t) => (
             <button key={t} onClick={() => setType(t)}
-              className="flex-1 py-2 rounded-xl text-[13px] font-bold transition-colors border"
+              className="flex-1 py-2 rounded-xl text-[13px] font-bold transition-colors border-2"
               style={type === t
                 ? { background: t === 'Commande' ? '#F0FDF4' : '#F5F3FF', color: t === 'Commande' ? '#166534' : '#5B21B6', borderColor: t === 'Commande' ? '#4CAF4F' : '#8B5CF6' }
                 : { background: '#F8FAFC', color: '#8A9BB5', borderColor: '#E2E8F0' }}>
@@ -204,42 +165,21 @@ function NewOrderForm({ client, onClose, onCreated }: { client: ClientRecord; on
           ))}
         </div>
 
-        {/* Lignes produits */}
-        <label className={labelClass}>Produits</label>
-        <div className="flex flex-col gap-2">
-          <div className="grid grid-cols-[1fr_60px_90px_28px] gap-2 px-1">
-            <span className="text-[10px] font-bold text-[#ABBED1] uppercase">Référence</span>
-            <span className="text-[10px] font-bold text-[#ABBED1] uppercase">Qté</span>
-            <span className="text-[10px] font-bold text-[#ABBED1] uppercase">Prix</span>
-            <span />
+        <div className="space-y-3">
+          <div>
+            <label className={labelClass}>Produits / Spécifications</label>
+            <textarea value={produits} onChange={(e) => setProduits(e.target.value)}
+              placeholder="ex: 80/80 × 50 rouleaux, 57/40 × 30 rouleaux"
+              rows={3}
+              className={inputClass + ' resize-none'} />
           </div>
-          {lignes.map((ligne, i) => (
-            <div key={i} className="grid grid-cols-[1fr_60px_90px_28px] gap-2 items-center">
-              <RefSelect value={ligne.ref} products={products} onChange={(ref) => selectRef(i, ref)} />
-              <input type="number" min="1" value={ligne.qte} onChange={e => setLigne(i, { qte: Math.max(1, Number(e.target.value)) })} className={inputClass} />
-              <input type="number" min="0" value={ligne.pu} onChange={e => setLigne(i, { pu: Number(e.target.value) })} className={inputClass} />
-              <button type="button" onClick={() => setLignes(prev => prev.filter((_, idx) => idx !== i))}
-                className="w-7 h-7 flex items-center justify-center rounded-lg text-[#EF4444] hover:bg-[#FEF2F2]" title="Retirer">
-                <svg width={14} height={14} fill="none" viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
-              </button>
-            </div>
-          ))}
+          <div>
+            <label className={labelClass}>Montant {type === 'Devis' ? '(estimé, optionnel)' : ''}</label>
+            <input value={montant} onChange={(e) => setMontant(e.target.value)}
+              placeholder={type === 'Devis' ? 'Sur devis' : 'ex: 45 000 DA'}
+              className={inputClass} />
+          </div>
         </div>
-        <button type="button" onClick={() => setLignes(prev => [...prev, emptyCLigne()])}
-          className="mt-2 flex items-center gap-1.5 text-[12px] font-bold text-[#4CAF4F] hover:text-[#388E3C] transition-colors">
-          <svg width={14} height={14} fill="none" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
-          Ajouter un produit
-        </button>
-
-        {type === 'Commande' && (
-          <div className="flex items-center justify-between mt-4 py-2 px-1">
-            <label className="flex items-center gap-2 text-[13px] font-semibold text-[#374151] cursor-pointer">
-              <input type="checkbox" checked={tva} onChange={e => setTva(e.target.checked)} className="w-4 h-4 accent-[#4CAF4F]" />
-              TVA 19%
-            </label>
-            <span className="text-[15px] font-extrabold text-[#4CAF4F]">{total.toLocaleString('fr-FR')} DA</span>
-          </div>
-        )}
 
         <div className="flex gap-3 mt-5">
           <button onClick={onClose} className="flex-1 px-4 py-2.5 rounded-xl border border-[#E2E8F0] text-[13px] font-semibold text-[#374151] hover:bg-[#F8FAFC] transition-colors">
@@ -287,8 +227,8 @@ function ClientSlideIn({ client, onClose, onEdit, onDelete }: {
 
   return (
     <>
-      <div className="fixed inset-0 bg-black/30 z-40 backdrop-blur-[2px]" onClick={onClose} />
-      <div className="fixed right-0 top-0 h-full bg-white z-50 shadow-2xl flex flex-col overflow-hidden w-full md:w-[46vw] md:min-w-[500px] max-w-full">
+      <div className="fixed inset-0 bg-black/30 z-[110] backdrop-blur-[2px]" onClick={onClose} />
+      <div className="fixed right-0 top-0 h-full bg-white z-[120] shadow-2xl flex flex-col overflow-hidden w-full md:w-[46vw] md:min-w-[500px] max-w-full">
 
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-[#F2F4F7]">
@@ -328,45 +268,56 @@ function ClientSlideIn({ client, onClose, onEdit, onDelete }: {
                 <span className="text-[11px] font-semibold text-[#374151] text-center max-w-[90px] truncate">{client.contact}</span>
               </div>
               <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handlePhoto} />
-            </div>
 
-            {/* Téléphone en évidence */}
-            <a href={callHref} className="flex items-center gap-2 mb-4 text-[15px] font-bold text-[#0F172A]">
-              <svg width={15} height={15} fill="none" viewBox="0 0 24 24" className="text-[#4CAF4F]"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.08 9.81 19.79 19.79 0 01.01 1.18 2 2 0 012 0h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.09 7.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>
-              {client.telephone || '—'}
-            </a>
-
-            {/* Stats inline */}
-            <div className="flex items-center gap-4 mb-5">
-              <div className="flex-1 rounded-xl border border-[#F2F4F7] px-4 py-3 text-center">
-                <p className="text-[22px] font-extrabold text-[#0F172A] leading-none">{client.commandes}</p>
-                <p className="text-[11px] text-[#8A9BB5] mt-1">Commandes</p>
+              <div className="flex-1 min-w-0">
+                {/* Ligne nom + badges + boutons */}
+                <div className="flex items-center gap-2 flex-wrap mb-0.5">
+                  <p className="text-[20px] font-extrabold text-[#0F172A] leading-tight">{client.entreprise || client.contact}</p>
+                  <span className="bg-[#F0FDF4] text-[#166534] text-[10px] font-bold px-1.5 py-0.5 rounded border border-[#BBF7D0] flex-shrink-0">
+                    {client.commandes} cmd
+                  </span>
+                  {client.devis > 0 && (
+                    <span className="bg-[#F5F3FF] text-[#5B21B6] text-[10px] font-bold px-1.5 py-0.5 rounded border border-[#DDD6FE] flex-shrink-0">
+                      {client.devis} devis
+                    </span>
+                  )}
+                  <div className="flex items-center gap-1.5 ml-auto flex-shrink-0">
+                    <a href={waHref} target="_blank" rel="noopener noreferrer" title="WhatsApp"
+                      className="w-7 h-7 flex items-center justify-center rounded-lg text-white"
+                      style={{ background: '#25D366' }}>
+                      <svg width={14} height={14} viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+                    </a>
+                    <a href={callHref} title="Appeler"
+                      className="w-7 h-7 flex items-center justify-center rounded-lg border border-[#E2E8F0] text-[#374151] hover:bg-[#F8FAFC] transition-colors">
+                      <svg width={13} height={13} fill="none" viewBox="0 0 24 24"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.08 9.81 19.79 19.79 0 01.01 1.18 2 2 0 012 0h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.09 7.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
+                    </a>
+                    {emailHref && (
+                      <a href={emailHref} title="Envoyer un email"
+                        className="w-7 h-7 flex items-center justify-center rounded-lg border border-[#E2E8F0] text-[#374151] hover:bg-[#F8FAFC] transition-colors">
+                        <svg width={13} height={13} fill="none" viewBox="0 0 24 24"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" stroke="currentColor" strokeWidth="1.6"/><path d="M22 6l-10 7L2 6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
+                      </a>
+                    )}
+                  </div>
+                </div>
+                <p className="text-[14px] font-semibold text-[#4CAF4F] mt-0.5">{client.entreprise ? client.contact : ''}</p>
+                {/* Téléphone + email */}
+                <div className="flex items-center gap-5 mt-2 flex-wrap">
+                  <div className="flex items-center gap-2">
+                    <svg width={16} height={16} fill="none" viewBox="0 0 24 24" className="flex-shrink-0"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.08 9.81 19.79 19.79 0 01.01 1.18 2 2 0 012 0h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.09 7.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z" stroke="#8A9BB5" strokeWidth="1.6" strokeLinecap="round"/></svg>
+                    <span className="text-[15px] font-medium text-[#374151]">{client.telephone}</span>
+                  </div>
+                  {client.email && (
+                    <div className="flex items-center gap-2">
+                      <svg width={16} height={16} fill="none" viewBox="0 0 24 24" className="flex-shrink-0"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" stroke="#8A9BB5" strokeWidth="1.6"/><path d="M22 6l-10 7L2 6" stroke="#8A9BB5" strokeWidth="1.6" strokeLinecap="round"/></svg>
+                      <span className="text-[15px] font-medium text-[#374151] truncate">{client.email}</span>
+                    </div>
+                  )}
+                  <div className="flex items-center gap-1.5 mt-1">
+                    <span className="text-[13px] text-[#8A9BB5]">{client.wilaya}</span>
+                    {client.adresse && <><span className="text-[#E2E8F0]">·</span><span className="text-[13px] text-[#ABBED1] truncate">{client.adresse}</span></>}
+                  </div>
+                </div>
               </div>
-              <div className="flex-1 rounded-xl border border-[#F2F4F7] px-4 py-3 text-center">
-                <p className="text-[22px] font-extrabold text-[#8B5CF6] leading-none">{client.devis}</p>
-                <p className="text-[11px] text-[#8A9BB5] mt-1">Devis</p>
-              </div>
-              <div className="flex-1 rounded-xl border border-[#F2F4F7] px-4 py-3 text-center">
-                <p className="text-[13px] font-bold text-[#0F172A] leading-none">{client.derniere}</p>
-                <p className="text-[11px] text-[#8A9BB5] mt-1">Dernière cmd</p>
-              </div>
-            </div>
-
-            {/* Boutons contact — pleine largeur, bordures fines */}
-            <div className="grid grid-cols-3 gap-2">
-              <button type="button" onClick={() => setWaTemplate(true)}
-                className="flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-[13px] font-semibold border border-[#25D366]/40 text-[#128C42] active:scale-[0.97] hover:bg-[#F0FDF4] transition-all">
-                <svg width={16} height={16} viewBox="0 0 24 24" fill="#25D366"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12 0C5.373 0 0 5.373 0 12c0 2.124.554 4.118 1.522 5.854L.057 23.714a.5.5 0 00.61.639l5.963-1.562A11.942 11.942 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 21.894a9.878 9.878 0 01-5.031-1.378l-.361-.214-3.741.981.998-3.648-.235-.374A9.862 9.862 0 012.106 12C2.106 6.53 6.53 2.106 12 2.106c5.471 0 9.894 4.424 9.894 9.894 0 5.471-4.423 9.894-9.894 9.894z"/></svg>
-                WhatsApp
-              </button>
-              <a href={callHref} className="flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-[13px] font-semibold border border-[#E2E8F0] text-[#374151] active:scale-[0.97] hover:bg-[#F8FAFC] transition-all">
-                <svg width={16} height={16} fill="none" viewBox="0 0 24 24" className="text-[#3B82F6]"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.08 9.81 19.79 19.79 0 01.01 1.18 2 2 0 012 0h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.09 7.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>
-                Appeler
-              </a>
-              <a href={emailHref || undefined} className={`flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-[13px] font-semibold border border-[#E2E8F0] transition-all ${emailHref ? 'text-[#374151] active:scale-[0.97] hover:bg-[#F8FAFC]' : 'text-[#CBD5E1] pointer-events-none'}`}>
-                <svg width={16} height={16} fill="none" viewBox="0 0 24 24" className={emailHref ? 'text-[#F59E0B]' : 'text-[#CBD5E1]'}><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" stroke="currentColor" strokeWidth="1.8"/><path d="M22 6l-10 7L2 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>
-                Email
-              </a>
             </div>
           </div>
 
@@ -391,21 +342,31 @@ function ClientSlideIn({ client, onClose, onEdit, onDelete }: {
                   adresse: client.adresse, email: client.email,
                 };
                 const isCmd = h.type === 'Commande';
+                const typeCfg = isCmd
+                  ? { bg: '#F0FDF4', color: '#15803D', border: '#BBF7D0', label: 'Commande' }
+                  : { bg: '#F5F3FF', color: '#6D28D9', border: '#DDD6FE', label: 'Devis' };
                 return (
                   <button key={h.ref} onClick={() => setSelectedRequest(detail)}
-                    className="w-full text-left rounded-xl border border-[#F2F4F7] hover:border-[#4CAF4F] transition-all px-4 py-3 flex items-center gap-4">
-                    <div className="flex-shrink-0">
-                      <span className="text-[11px] font-bold px-2 py-0.5 rounded-full" style={{ background: isCmd ? '#F0FDF4' : '#F5F3FF', color: isCmd ? '#166534' : '#5B21B6' }}>{h.type}</span>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[12px] font-mono text-[#8A9BB5]">{h.ref}</p>
-                      <p className="text-[12px] text-[#374151] truncate">{h.produits}</p>
-                    </div>
-                    <div className="flex-shrink-0 text-right">
-                      <p className="text-[13px] font-bold text-[#0F172A]">{h.montant}</p>
+                    className="w-full text-left rounded-xl border border-[#E2E8F0] hover:border-[#4CAF4F] hover:bg-[#F8FFF8] transition-all px-4 py-3.5">
+                    <div className="flex items-center justify-between gap-2 mb-1.5">
+                      <span
+                        className="text-[9px] font-bold tracking-wide px-1.5 py-px rounded"
+                        style={{ background: typeCfg.bg, color: typeCfg.color, border: `1px solid ${typeCfg.border}` }}
+                      >
+                        {typeCfg.label}
+                      </span>
                       <p className="text-[11px] text-[#ABBED1]">{h.date}</p>
                     </div>
-                    <StatusPill status={h.statut} />
+                    <div className="flex items-center gap-3">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[12px] font-bold font-mono text-[#374151]">{h.ref}</p>
+                        <p className="text-[12px] text-[#8A9BB5] truncate mt-0.5">{h.produits}</p>
+                      </div>
+                      <div className="flex-shrink-0 flex items-center gap-2">
+                        <p className="text-[13px] font-bold text-[#0F172A]">{h.montant}</p>
+                        <StatusPill status={h.statut} />
+                      </div>
+                    </div>
                   </button>
                 );
               })}
@@ -481,7 +442,7 @@ function dbClientToRecord(c: any): ClientRecord {
     date: new Date(o.createdAt).toLocaleDateString('fr-FR'),
     statut: STATUS_DB_TO_UI[o.status] ?? o.status,
     montant: `${(o.items ?? []).reduce((acc: number, i: any) => acc + i.quantity * (i.unitPrice ?? 0), 0).toLocaleString('fr-FR')} DA`,
-    produits: (o.items ?? []).map((i: any) => `${i.product?.reference ?? 'Produit supprimé'} × ${i.quantity}`).join(', ') || '—',
+    produits: (o.items ?? []).map((i: any) => `${i.product?.reference ?? '?'} × ${i.quantity}`).join(', ') || '—',
     _ts: new Date(o.createdAt).getTime(),
   }));
   const quoteHist = (c.quotes ?? []).map((q: any) => ({
@@ -490,7 +451,7 @@ function dbClientToRecord(c: any): ClientRecord {
     date: new Date(q.createdAt).toLocaleDateString('fr-FR'),
     statut: STATUS_DB_TO_UI[q.status] ?? q.status,
     montant: 'Sur devis',
-    produits: (q.items ?? []).map((i: any) => `${i.product?.reference ?? i.description ?? 'Produit supprimé'} × ${i.quantity}`).join(', ') || '—',
+    produits: (q.items ?? []).map((i: any) => `${i.product?.reference ?? '?'} × ${i.quantity}`).join(', ') || '—',
     _ts: new Date(q.createdAt).getTime(),
   }));
 
@@ -528,9 +489,8 @@ export default function ClientsPage() {
   const [addForm, setAddForm]   = useState({ ...emptyClient });
   const [editForm, setEditForm] = useState({ ...emptyClient });
 
-  // silent = refetch temps réel (SSE) → pas de spinner, historique client à jour en direct
-  const fetchClients = useCallback(async (silent = false) => {
-    if (!silent) setLoading(true);
+  const fetchClients = useCallback(async () => {
+    setLoading(true);
     try {
       const res = await fetch('/api/clients');
       if (res.ok) {
@@ -538,12 +498,11 @@ export default function ClientsPage() {
         setClients(data.map(dbClientToRecord));
       }
     } finally {
-      if (!silent) setLoading(false);
+      setLoading(false);
     }
   }, []);
 
   useEffect(() => { fetchClients(); }, [fetchClients]);
-  useSSE(useCallback(() => { fetchClients(true); }, [fetchClients]));
 
   const filtered = clients.filter(
     (c) =>
@@ -562,20 +521,19 @@ export default function ClientsPage() {
         company: addForm.entreprise.trim(),
         email: addForm.email.trim() || null,
         wilaya: addForm.wilaya.trim(),
-        commune: addForm.commune.trim() || null,
         address: addForm.adresse.trim() || null,
         phone: addForm.telephone.trim() || null,
       }),
     });
     if (res.ok) {
-      await fetchClients(true);
+      await fetchClients();
       setAddForm({ ...emptyClient });
       setShowAdd(false);
     }
   };
 
   const openEdit = (c: ClientRecord) => {
-    setEditForm({ entreprise: c.entreprise, contact: c.contact, telephone: c.telephone, wilaya: c.wilaya, commune: c.commune, adresse: c.adresse, email: c.email });
+    setEditForm({ entreprise: c.entreprise, contact: c.contact, telephone: c.telephone, wilaya: c.wilaya, adresse: c.adresse, email: c.email });
     setEditClient(c);
   };
 
@@ -590,13 +548,12 @@ export default function ClientsPage() {
         company: editForm.entreprise.trim(),
         email: editForm.email.trim() || null,
         wilaya: editForm.wilaya.trim(),
-        commune: editForm.commune.trim() || null,
         address: editForm.adresse.trim() || null,
         phone: editForm.telephone.trim() || null,
       }),
     });
     if (res.ok) {
-      await fetchClients(true);
+      await fetchClients();
       setEditClient(null);
     }
   };
@@ -604,12 +561,9 @@ export default function ClientsPage() {
   const handleDelete = async (c: ClientRecord) => {
     const id = (c as any)._dbId ?? c.id;
     const res = await fetch(`/api/clients/${id}`, { method: 'DELETE' });
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
-      alert(data.error ?? "Impossible de supprimer ce client.");
-      return;
+    if (res.ok) {
+      await fetchClients();
     }
-    await fetchClients(true);
     setDeleteClient(null);
     setSelected(null);
   };
@@ -617,25 +571,25 @@ export default function ClientsPage() {
   return (
     <div className="w-full">
       {/* Header */}
-      <div className="flex items-center justify-between gap-3 flex-wrap mb-6">
-        <div>
-          <h1 className="text-[20px] md:text-[22px] font-bold text-[#0F172A]">Clients</h1>
-          <p className="text-[13px] text-[#8A9BB5] mt-0.5">{loading ? 'Chargement…' : `${clients.length} clients enregistrés`}</p>
+      <div className="mb-6">
+        <h1 className="text-[20px] md:text-[22px] font-bold text-[#0F172A]">Clients</h1>
+        <p className="text-[13px] text-[#8A9BB5] mt-0.5">{loading ? 'Chargement…' : `${clients.length} clients enregistrés`}</p>
+      </div>
+
+      {/* Search + Nouveau client */}
+      <div className="flex items-center gap-3 mb-6 flex-wrap">
+        <div className="relative w-full sm:w-auto">
+          <span className="absolute left-3 top-1/2 -translate-y-1/2"><IconSearch /></span>
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Rechercher un client..."
+            className="pl-9 pr-4 py-2.5 w-full sm:w-[280px] rounded-xl border border-[#E2E8F0] bg-white text-[14px] text-[#263238] placeholder-[#8A9BB5] focus:outline-none focus:border-[#4CAF4F] focus:ring-[3px] focus:ring-[#4CAF4F]/15 transition-all"
+          />
         </div>
         <button onClick={() => { setAddForm({ ...emptyClient }); setShowAdd(true); }} className="flex items-center gap-2 px-4 py-2 rounded-xl text-[13px] font-semibold text-white transition-colors" style={{ background: '#4CAF4F' }}>
           + Nouveau client
         </button>
-      </div>
-
-      {/* Search */}
-      <div className="relative mb-6 max-w-sm">
-        <span className="absolute left-3 top-1/2 -translate-y-1/2"><IconSearch /></span>
-        <input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Rechercher un client..."
-          className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-[#E2E8F0] bg-white text-[14px] text-[#263238] placeholder-[#8A9BB5] focus:outline-none focus:border-[#4CAF4F] focus:ring-[3px] focus:ring-[#4CAF4F]/15 transition-all"
-        />
       </div>
 
       {/* Grille */}
@@ -658,24 +612,24 @@ export default function ClientsPage() {
                     {initials(c.entreprise || c.contact)}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-[12px] font-bold text-[#0F172A] truncate group-hover:text-[#4CAF4F] transition-colors">{c.entreprise || c.contact}</p>
-                    <p className="text-[10px] text-[#8A9BB5] truncate">{c.contact}</p>
+                    <div className="flex items-center gap-1.5 flex-wrap mb-0.5">
+                      <p className="text-[13px] font-bold text-[#0F172A] truncate group-hover:text-[#4CAF4F] transition-colors">{c.entreprise || c.contact}</p>
+                      <span className="bg-[#F0FDF4] text-[#166534] text-[10px] font-bold px-1.5 py-px rounded flex-shrink-0 border border-[#BBF7D0]">
+                        {c.commandes} cmd
+                      </span>
+                      {c.devis > 0 && (
+                        <span className="bg-[#F5F3FF] text-[#5B21B6] text-[10px] font-bold px-1.5 py-px rounded flex-shrink-0 border border-[#DDD6FE]">
+                          {c.devis} devis
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-[#8A9BB5] truncate">{c.contact}</p>
                   </div>
                 </div>
 
-                <div className="flex items-center justify-between text-[10px] text-[#ABBED1] mb-2">
-                  <span className="truncate">{c.wilaya}</span>
-                </div>
-
-                <div className="flex items-center gap-1">
-                  <span className="flex-1 bg-[#F0FDF4] text-[#166534] text-[10px] font-bold px-1.5 py-0.5 rounded-md text-center">
-                    {c.commandes} cmd
-                  </span>
-                  {c.devis > 0 && (
-                    <span className="flex-1 bg-[#F5F3FF] text-[#5B21B6] text-[10px] font-bold px-1.5 py-0.5 rounded-md text-center">
-                      {c.devis} devis
-                    </span>
-                  )}
+                <div className="flex items-center justify-between text-[11px] text-[#ABBED1]">
+                  <span>{c.wilaya}</span>
+                  <span>{c.derniere}</span>
                 </div>
               </button>
             );

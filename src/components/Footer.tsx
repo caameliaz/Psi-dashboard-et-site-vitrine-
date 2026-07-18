@@ -1,18 +1,16 @@
+'use client';
+
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useTranslation } from '@/lib/i18n';
 
-async function getContent(): Promise<Record<string, string>> {
-  try {
-    const base = process.env.NEXTAUTH_URL ?? 'http://localhost:3000';
-    const res = await fetch(`${base}/api/content`, { next: { revalidate: 60 } });
-    if (!res.ok) return {};
-    return res.json();
-  } catch {
-    return {};
-  }
-}
+export function Footer() {
+  const { t } = useTranslation();
+  const [content, setContent] = useState<Record<string, string>>({});
 
-export async function Footer() {
-  const content = await getContent();
+  useEffect(() => {
+    fetch('/api/content').then(r => r.ok ? r.json() : {}).then(setContent).catch(() => {});
+  }, []);
 
   const adresse   = content['contact_adresse']   ?? 'Centre El Qods, Niveau M1, Chéraga, Alger';
   const email     = content['contact_email']     ?? 'contact@psi-algerie.com';
@@ -20,7 +18,7 @@ export async function Footer() {
   const instagram = content['contact_instagram'] ?? 'https://www.instagram.com/psi04_2026';
 
   return (
-    <footer className="bg-[#263238]">
+    <footer id="site-footer" className="bg-[#263238]">
       <div className="max-w-[1280px] mx-auto px-6 md:px-12 py-14 grid grid-cols-1 sm:grid-cols-3 gap-10">
 
         {/* Brand */}
@@ -33,9 +31,8 @@ export async function Footer() {
             </div>
           </div>
           <p className="text-[14px] text-[#89939E] leading-relaxed">
-            Spécialiste du papier thermique professionnel en Algérie
+            {t('footer.tagline')}
           </p>
-          {/* Réseaux */}
           <div className="flex items-center gap-3">
             <a href={facebook} target="_blank" rel="noopener noreferrer"
               className="w-9 h-9 rounded-lg bg-white/10 hover:bg-[#1877F2]/30 flex items-center justify-center transition-colors group"
@@ -58,18 +55,18 @@ export async function Footer() {
 
         {/* Liens */}
         <div className="flex flex-col gap-4">
-          <p className="text-white text-[16px] font-bold">Liens rapides</p>
+          <p className="text-white text-[16px] font-bold">{t('footer.links_title')}</p>
           <ul className="flex flex-col gap-3">
             {[
-              { l: 'Accueil', h: '/#' },
-              { l: 'Produits', h: '/#products' },
-              { l: 'À propos', h: '/#about' },
-              { l: 'Contact', h: '/#contact' },
+              { key: 'footer.link_home',    h: '/#' },
+              { key: 'footer.link_products', h: '/#products' },
+              { key: 'footer.link_about',   h: '/#about' },
+              { key: 'footer.link_contact', h: '/#contact' },
             ].map((item) => (
-              <li key={item.l}>
+              <li key={item.key}>
                 <Link href={item.h} className="text-[14px] text-[#89939E] hover:text-white transition-colors flex items-center gap-1.5 group">
                   <span className="w-0 h-px bg-[#4CAF4F] group-hover:w-3 transition-all" />
-                  {item.l}
+                  {t(item.key)}
                 </Link>
               </li>
             ))}
@@ -78,7 +75,7 @@ export async function Footer() {
 
         {/* Contact */}
         <div className="flex flex-col gap-4">
-          <p className="text-white text-[16px] font-bold">Contact</p>
+          <p className="text-white text-[16px] font-bold">{t('footer.contact_title')}</p>
           <ul className="flex flex-col gap-4">
             <li className="flex items-start gap-3">
               <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center shrink-0 mt-0.5">
@@ -107,7 +104,7 @@ export async function Footer() {
                   <path d="M12 7v5l3 2" stroke="#4CAF4F" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
                 </svg>
               </div>
-              <span className="text-[13px] text-[#89939E]">Dim – Jeu : 8h00 – 17h00</span>
+              <span className="text-[13px] text-[#89939E]">{t('footer.hours')}</span>
             </li>
           </ul>
         </div>
@@ -116,10 +113,10 @@ export async function Footer() {
       <div className="border-t border-white/10">
         <div className="max-w-[1280px] mx-auto px-6 md:px-12 py-5 flex flex-col sm:flex-row items-center justify-between gap-2">
           <p className="text-[13px] text-[#89939E]/60">
-            © 2026 PSI — Paper Solutions Industry. Tous droits réservés.
+            {t('footer.copyright')}
           </p>
           <div className="flex items-center gap-4">
-            <span className="text-[12px] text-[#89939E]/40">RC Alger · NIF · Registre du commerce</span>
+            <span className="text-[12px] text-[#89939E]/40">{t('footer.legal')}</span>
           </div>
         </div>
       </div>

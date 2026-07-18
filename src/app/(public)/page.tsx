@@ -1,76 +1,52 @@
+'use client';
+
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { CategoryBrowser } from '@/components/CategoryBrowser';
+import { QuoteCTA } from '@/components/QuoteCTA';
+import { useTranslation } from '@/lib/i18n';
 
-const BASE = process.env.NEXTAUTH_URL ?? 'http://localhost:3000';
+export default function Home() {
+  const { t } = useTranslation();
+  const [content, setContent] = useState<Record<string, string>>({});
 
-async function getProducts() {
-  try {
-    const res = await fetch(`${BASE}/api/products`, { next: { revalidate: 60 } });
-    if (!res.ok) return [];
-    return res.json();
-  } catch {
-    return [];
-  }
-}
+  useEffect(() => {
+    fetch('/api/content').then(r => r.ok ? r.json() : {}).then(setContent).catch(() => {});
+  }, []);
 
-async function getContent(): Promise<Record<string, string>> {
-  try {
-    const res = await fetch(`${BASE}/api/content`, { next: { revalidate: 60 } });
-    if (!res.ok) return {};
-    return res.json();
-  } catch {
-    return {};
-  }
-}
+  const heroTitreCustom = content['hero_titre'];
+  const aboutTexte      = content['about_texte'] ?? '';
 
-export default async function Home() {
-  const [products, content] = await Promise.all([getProducts(), getContent()]);
-
-  const heroTitre     = content['hero_titre']     ?? 'PSI';
-  const heroSoustitre = content['hero_soustitre'] ?? 'Spécialiste du papier thermique professionnel en Algérie';
-  const aboutTexte    = content['about_texte']    ?? '';
   return (
     <div className="bg-white">
 
       {/* ════════════════════════════════════════════════════════════
-          HERO  — image plein écran, 70vh min, overlay sombre
+          HERO
       ════════════════════════════════════════════════════════════ */}
       <section
         id="hero"
         className="relative min-h-[70vh] bg-cover bg-center flex items-center"
         style={{ backgroundImage: 'url(/photo%202.avif)' }}
       >
-        {/* Overlay dégradé */}
         <div className="absolute inset-0 bg-gradient-to-r from-[rgba(38,50,56,0.90)] via-[rgba(38,50,56,0.75)] to-[rgba(38,50,56,0.45)]" />
 
         <div className="relative w-full max-w-[1280px] mx-auto px-6 md:px-12 py-20">
           <div className="max-w-[620px] flex flex-col gap-6">
-            {/* Titre */}
             <div className="flex flex-col gap-2">
-              <h1 className="text-[56px] md:text-[72px] font-extrabold text-white leading-none tracking-tight">
-                {heroTitre}
+              <h1 className="text-[28px] md:text-[38px] font-extrabold text-white leading-tight tracking-tight">
+                {heroTitreCustom ?? <>{t('hero.title_pre')}<span className="text-[#4CAF4F]">{t('hero.title_highlight')}</span>{t('hero.title_post')}</>}
               </h1>
-              <p className="text-[18px] md:text-[22px] font-light text-white/80 mt-1 leading-relaxed">
-                {heroSoustitre}
-              </p>
             </div>
 
-            {/* Boutons */}
             <div className="flex flex-row flex-wrap gap-4 mt-4">
-              <a
-                href="#products"
-                className="flex items-center gap-2 bg-[#4CAF4F] text-white text-[15px] font-semibold px-8 py-4 rounded shadow-[0px_4px_14px_rgba(76,175,79,0.5)] hover:bg-[#43A047] transition-all"
+              <Link
+                href="/quote"
+                className="flex items-center gap-2 bg-[#4CAF4F] text-white text-[14px] font-semibold px-6 py-3 rounded-lg shadow-[0px_4px_14px_rgba(76,175,79,0.5)] hover:bg-[#43A047] transition-all"
               >
-                Voir nos produits
+                {t('hero.cta_order')}
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
                   <path d="M3 8h10M9 4l4 4-4 4" stroke="white" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
                 </svg>
-              </a>
-              <Link
-                href="/quote"
-                className="flex items-center gap-2 border-2 border-white/70 text-white text-[15px] font-semibold px-8 py-4 rounded hover:bg-white hover:text-[#4CAF4F] transition-all"
-              >
-                Demander un devis
               </Link>
             </div>
           </div>
@@ -80,72 +56,49 @@ export default async function Home() {
       {/* ════════════════════════════════════════════════════════════
           PRODUITS
       ════════════════════════════════════════════════════════════ */}
-      <section id="products" className="bg-white py-20 px-6 md:px-12">
+      <section id="products" className="bg-white pt-10 pb-20 px-6 md:px-12">
         <div className="max-w-[1280px] mx-auto flex flex-col gap-10">
 
           <div className="flex flex-col items-center gap-3 text-center">
-            <h2 className="text-[36px] md:text-[42px] font-bold text-[#263238] leading-tight">
-              Nos Produits
+            <h2 className="text-[32px] md:text-[38px] font-bold text-[#263238] leading-tight">
+              {t('products_section.title')}
             </h2>
             <p className="text-[16px] md:text-[18px] text-[#717171] max-w-[480px] leading-relaxed">
-              Rouleaux thermiques de haute qualité pour tous vos besoins professionnels
+              {t('products_section.subtitle')}
             </p>
           </div>
 
-          {/* Navigateur par catégories : choisir une catégorie → produits en dessous (même page) */}
           <CategoryBrowser limit={6} />
-
-          {/* Bouton "Voir plus" si plus de 6 produits */}
-          {products.length > 6 && (
-            <div className="flex justify-center">
-              <Link
-                href="/products"
-                className="flex items-center gap-2 border-2 border-[#4CAF4F] text-[#4CAF4F] text-[15px] font-semibold px-8 py-3.5 rounded-xl hover:bg-[#4CAF4F] hover:text-white transition-all"
-              >
-                Voir tous les produits
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                  <path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-              </Link>
-            </div>
-          )}
         </div>
       </section>
 
       {/* ════════════════════════════════════════════════════════════
           QUALITÉ & CONFORMITÉ
       ════════════════════════════════════════════════════════════ */}
-      <section className="bg-[#EBF4FF] py-16 px-6 md:px-12">
-        <div className="max-w-[1280px] mx-auto flex flex-col items-center gap-10 text-center">
-
-          {/* Texte */}
+      <section id="contact" className="bg-[#F5F7FA] py-16 px-6 md:px-12">
+        <div className="max-w-[1280px] mx-auto flex flex-col gap-10">
           <div className="flex flex-col gap-3">
-            <h2 className="text-[28px] md:text-[32px] font-bold text-[#4D4D4D] leading-snug">
-              Notre engagement <span className="text-[#4CAF4F]">qualité & conformité</span>
+            <h2 className="text-[22px] md:text-[28px] font-bold text-[#263238] italic leading-snug">
+              <span className="text-[#4CAF4F] mr-2">»</span>
+              {t('quality.title2')}
             </h2>
-            <p className="text-[16px] text-[#717171] leading-relaxed max-w-[480px] mx-auto">
-              Des produits sélectionnés pour leur fiabilité et leur conformité aux standards européens les plus exigeants.
-            </p>
+            <div className="w-16 h-[3px] bg-[#4CAF4F] rounded-full" />
           </div>
 
-          {/* Badges */}
-          <div className="flex items-start justify-center gap-10 md:gap-20 flex-wrap">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 md:gap-8">
             {[
               {
-                label: '55 gr/m²',
-                sub: 'Papier Premium',
+                titleKey: 'quality.badge1_title',
+                descKey:  'quality.badge1_desc',
                 icon: (
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-                    <rect x="2" y="3" width="20" height="18" rx="2" stroke="#4CAF4F" strokeWidth="1.8"/>
-                    <path d="M2 9h20M8 3v6" stroke="#4CAF4F" strokeWidth="1.8" strokeLinecap="round"/>
-                  </svg>
+                  <img src="/lot-de-3-rouleaux-de-papier-pour-tableau.avif" alt="" className="w-full h-full object-cover" />
                 ),
               },
               {
-                label: 'Allemagne',
-                sub: 'Origine Europe',
+                titleKey: 'quality.badge2_title',
+                descKey:  'quality.badge2_desc',
                 icon: (
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                  <svg width="26" height="26" viewBox="0 0 24 24" fill="none">
                     <rect x="2" y="5" width="20" height="5" fill="#1a1a1a" rx="1"/>
                     <rect x="2" y="10" width="20" height="4.5" fill="#D32F2F"/>
                     <rect x="2" y="14.5" width="20" height="5" fill="#FDD835" rx="1"/>
@@ -153,27 +106,24 @@ export default async function Home() {
                 ),
               },
               {
-                label: 'BPA Free',
-                sub: 'Sécurité Sanitaire',
+                titleKey: 'quality.badge3_title',
+                descKey:  'quality.badge3_desc',
                 icon: (
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-                    <path d="M12 2l8 3v6.5C20 16.7 16.6 21 12 22 7.4 21 4 16.7 4 11.5V5l8-3z" stroke="#4CAF4F" strokeWidth="1.8"/>
-                    <path d="M8.5 12l3 3 5-5" stroke="#4CAF4F" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
+                  <img src="/images.jpg" alt="" className="w-full h-full object-cover" />
                 ),
               },
             ].map((item) => (
-              <div key={item.label} className="flex flex-col items-center gap-3 min-w-[100px]">
-                <div className="w-14 h-14 bg-white border-2 border-[#C8DFF7] shadow-[0_4px_12px_rgba(171,190,209,0.4)] rounded-xl flex items-center justify-center">
+              <div key={item.titleKey} className="bg-white border border-[#E0E0E0] rounded-2xl shadow-[0_4px_16px_rgba(171,190,209,0.3)] p-8 flex flex-col items-center text-center gap-4">
+                <div className="w-16 h-16 rounded-full border-2 border-[#E0E0E0] overflow-hidden flex items-center justify-center">
                   {item.icon}
                 </div>
-                <div className="text-center">
-                  <p className="text-[17px] font-bold text-[#263238] leading-5">{item.label}</p>
-                  <p className="text-[13px] text-[#717171] mt-0.5">{item.sub}</p>
-                </div>
+                <h3 className="text-[18px] font-bold text-[#4CAF4F] italic">{t(item.titleKey)}</h3>
+                <p className="text-[14px] text-[#717171] leading-relaxed">{t(item.descKey)}</p>
               </div>
             ))}
           </div>
+
+          <QuoteCTA id="devis" />
         </div>
       </section>
 
@@ -183,58 +133,25 @@ export default async function Home() {
       <section id="about" className="bg-white py-20 px-6 md:px-12">
         <div className="max-w-[1280px] mx-auto flex flex-col gap-8">
           <h2 className="text-[32px] md:text-[38px] font-bold text-[#4D4D4D] leading-tight">
-            À propos de PSI
+            {t('about.title')}
           </h2>
           <div className="flex flex-col lg:flex-row gap-10 lg:gap-16 items-start">
             <div className="flex flex-col gap-5 text-[16px] md:text-[17px] text-[#717171] leading-[1.75] flex-1">
               {aboutTexte
                 ? aboutTexte.split('\n\n').map((para, i) => <p key={i}>{para}</p>)
                 : <>
-                    <p>PSI (Paper Solutions Industry) est une entreprise algérienne spécialisée dans la transformation et la distribution de papier thermique professionnel. Basée à Alger, nous servons commerces, banques, restaurants et pharmacies à travers tout le territoire national.</p>
-                    <p>Nous nous approvisionnons exclusivement auprès de fournisseurs européens certifiés, garantissant à nos clients des produits de qualité supérieure, conformes aux normes sanitaires les plus strictes.</p>
-                    <p>Notre mission est d'offrir des solutions papier fiables, rapides et accessibles à tous les professionnels qui en ont besoin, avec un service client réactif et de proximité.</p>
+                    <p>{t('about.p1')}</p>
+                    <p>{t('about.p2')}</p>
+                    <p>{t('about.p3')}</p>
                   </>
               }
             </div>
-            {/* Image */}
             <div className="lg:w-[460px] shrink-0 w-full">
               <div
                 className="w-full h-[280px] md:h-[320px] bg-cover bg-center rounded-2xl shadow-[0_16px_48px_rgba(38,50,56,0.15)]"
                 style={{ backgroundImage: 'url(/photo%202.avif)' }}
               />
             </div>
-          </div>
-        </div>
-      </section>
-
-      {/* ════════════════════════════════════════════════════════════
-          CTA
-      ════════════════════════════════════════════════════════════ */}
-      <section id="contact" className="bg-[#4CAF4F] py-20 px-6 md:px-12 relative overflow-hidden">
-        {/* Cercles décoratifs */}
-        <div className="absolute -top-24 -right-24 w-72 h-72 rounded-full bg-white/5" />
-        <div className="absolute -bottom-16 -left-16 w-56 h-56 rounded-full bg-white/5" />
-
-        <div className="relative max-w-[1280px] mx-auto flex flex-col items-center gap-6 text-center">
-          <h2 className="text-[32px] md:text-[48px] font-bold text-white leading-tight max-w-[600px]">
-            Besoin d'un devis personnalisé ?
-          </h2>
-          <p className="text-[16px] md:text-[18px] text-[#E8F5E9] max-w-[480px] leading-relaxed">
-            Contactez notre équipe commerciale pour obtenir une offre adaptée à vos besoins.
-          </p>
-          <div className="flex flex-col sm:flex-row gap-4 mt-4">
-            <Link
-              href="/contact"
-              className="flex items-center justify-center gap-2 bg-white text-[#4CAF4F] text-[16px] font-bold px-10 py-4 rounded-xl shadow-[0_8px_24px_rgba(0,0,0,0.15)] hover:shadow-[0_12px_32px_rgba(0,0,0,0.2)] transition-all"
-            >
-              Nous contacter
-            </Link>
-            <Link
-              href="/quote"
-              className="flex items-center justify-center border-2 border-white text-white text-[16px] font-bold px-10 py-4 rounded-xl hover:bg-white/10 transition-all"
-            >
-              Demander un devis
-            </Link>
           </div>
         </div>
       </section>

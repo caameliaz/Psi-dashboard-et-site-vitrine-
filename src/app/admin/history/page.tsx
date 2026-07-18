@@ -22,11 +22,11 @@ interface HistoryEntry {
 
 function dbActionType(entity: string): ActionType {
   const e = (entity ?? '').toUpperCase();
-  if (e === 'ORDER')   return 'commande';
-  if (e === 'QUOTE')   return 'devis';
-  if (e === 'PRODUCT') return 'produit';
-  if (e === 'CLIENT')  return 'client';
-  if (e === 'USER')    return 'utilisateur';
+  if (e === 'ORDER'    || e === 'COMMANDE')    return 'commande';
+  if (e === 'QUOTE'    || e === 'DEVIS')       return 'devis';
+  if (e === 'PRODUCT'  || e === 'PRODUIT')     return 'produit';
+  if (e === 'CLIENT')                          return 'client';
+  if (e === 'USER'     || e === 'UTILISATEUR') return 'utilisateur';
   return 'contenu';
 }
 
@@ -130,72 +130,51 @@ export default function HistoryPage() {
           <p className="text-[15px] font-semibold">Aucune action trouvée</p>
         </div>
       ) : (
-        <div className="flex flex-col gap-8">
-          {Object.entries(byDate).map(([date, entries]) => (
-            <div key={date}>
+        <div className="rounded-2xl border border-[#E2E8F0] bg-white overflow-hidden">
+          {Object.entries(byDate).map(([date, entries], groupIdx) => (
+            <div key={date} className={groupIdx > 0 ? 'border-t border-[#E2E8F0]' : ''}>
               {/* Date header */}
-              <div className="flex items-center gap-3 mb-4">
-                <div className="h-px flex-1 bg-[#E2E8F0]" />
-                <span className="text-[11px] font-bold text-[#8A9BB5] uppercase tracking-widest px-2">{date}</span>
-                <div className="h-px flex-1 bg-[#E2E8F0]" />
+              <div className="px-5 py-2.5 bg-[#F8FAFC] border-b border-[#E2E8F0]">
+                <span className="text-[11px] font-bold text-[#8A9BB5] uppercase tracking-widest">{date}</span>
               </div>
 
               {/* Entrées */}
-              <div className="relative pl-6">
-                {/* Ligne verticale */}
-                <div className="absolute left-[7px] top-2 bottom-2 w-[2px] bg-[#E2E8F0]" />
+              {entries.map((h, i) => {
+                const tc = typeConfig[h.type];
+                const isAdmin = h.userRole === 'Admin';
+                const clickable = !!h.request;
+                return (
+                  <div
+                    key={h.id}
+                    onClick={() => h.request && setSelected(h.request)}
+                    className={`flex items-start gap-4 px-5 py-4 transition-colors ${i > 0 ? 'border-t border-[#F2F4F7]' : ''} ${clickable ? 'hover:bg-[#F8FFF8] cursor-pointer' : ''}`}
+                  >
+                    {/* Avatar user */}
+                    <div className="w-9 h-9 rounded-full flex items-center justify-center text-[11px] font-bold flex-shrink-0 mt-0.5" style={{ background: isAdmin ? '#F3E8FF' : '#D1FAE5', color: isAdmin ? '#6B21A8' : '#166534' }}>
+                      {initials(h.user)}
+                    </div>
 
-                <div className="flex flex-col gap-4">
-                  {entries.map((h) => {
-                    const tc = typeConfig[h.type];
-                    const isAdmin = h.userRole === 'Admin';
-                    const clickable = !!h.request;
-                    return (
-                      <div
-                        key={h.id}
-                        onClick={() => h.request && setSelected(h.request)}
-                        className={`relative flex items-start gap-4 bg-white border rounded-xl p-4 transition-all ${
-                          clickable
-                            ? 'border-[#E2E8F0] hover:border-[#4CAF4F] hover:shadow-md cursor-pointer'
-                            : 'border-[#F2F4F7]'
-                        }`}
-                      >
-                        {/* Dot sur la ligne */}
-                        <div className="absolute -left-[22px] top-5 w-3.5 h-3.5 rounded-full border-2 border-white shadow-sm flex-shrink-0" style={{ background: tc.dot }} />
-
-                        {/* Avatar user */}
-                        <div className="w-9 h-9 rounded-full flex items-center justify-center text-[11px] font-bold flex-shrink-0 mt-0.5" style={{ background: isAdmin ? '#F3E8FF' : '#D1FAE5', color: isAdmin ? '#6B21A8' : '#166534' }}>
-                          {initials(h.user)}
-                        </div>
-
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-start justify-between gap-2">
                         <div className="flex-1 min-w-0">
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="flex-1 min-w-0">
-                              <p className="text-[14px] font-bold text-[#0F172A]">{h.action}</p>
-                              <p className="text-[13px] text-[#374151] mt-0.5 font-medium">{h.detail}</p>
-                            </div>
-                            <div className="flex items-center gap-2 flex-shrink-0">
-                              <span className="text-[11px] font-semibold px-2.5 py-1 rounded-full" style={{ background: tc.bg, color: tc.text }}>{tc.label}</span>
-                              <span className="text-[12px] text-[#8A9BB5] font-mono">{h.heure}</span>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-3 mt-2 pt-2 border-t border-[#F2F4F7]">
-                            <div className="flex items-center gap-1.5">
-                              <div className="w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-bold" style={{ background: isAdmin ? '#F3E8FF' : '#D1FAE5', color: isAdmin ? '#6B21A8' : '#166534' }}>
-                                {initials(h.user).charAt(0)}
-                              </div>
-                              <p className="text-[12px] font-semibold text-[#374151]">{h.user}</p>
-                              <span className="text-[11px] text-[#ABBED1]">·</span>
-                              <p className="text-[12px] text-[#8A9BB5]">{h.userRole === 'Admin' ? 'Admin' : 'Employé'}</p>
-                            </div>
-                            {clickable && <span className="ml-auto text-[11px] text-[#4CAF4F] font-semibold">Voir détail →</span>}
-                          </div>
+                          <p className="text-[14px] font-bold text-[#0F172A]">{h.action}</p>
+                          <p className="text-[13px] text-[#374151] mt-0.5">{h.detail}</p>
+                        </div>
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded border" style={{ background: tc.bg, color: tc.text, borderColor: tc.dot + '55' }}>{tc.label}</span>
+                          <span className="text-[12px] text-[#8A9BB5] font-mono">{h.heure}</span>
                         </div>
                       </div>
-                    );
-                  })}
-                </div>
-              </div>
+                      <div className="flex items-center gap-2 mt-1.5">
+                        <p className="text-[12px] font-semibold text-[#374151]">{h.user}</p>
+                        <span className="text-[#E2E8F0]">·</span>
+                        <p className="text-[12px] text-[#8A9BB5]">{h.userRole === 'Admin' ? 'Admin' : 'Employé'}</p>
+                        {clickable && <span className="ml-auto text-[11px] text-[#4CAF4F] font-semibold">Voir détail →</span>}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           ))}
         </div>

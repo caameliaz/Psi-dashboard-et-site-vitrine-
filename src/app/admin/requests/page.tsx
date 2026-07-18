@@ -29,6 +29,10 @@ const DB_TO_UI: Record<string, string> = {
   ANNULE:     'Annulé',
 };
 
+const PERIODE_LABEL: Record<string, string> = {
+  mois: 'Ce mois', '3mois': '3 derniers mois', '6mois': '6 derniers mois', annee: 'Cette année', tout: 'Tout afficher',
+};
+
 // UI label → DB status
 const UI_TO_DB: Record<string, string> = {
   'En attente': 'EN_ATTENTE',
@@ -42,6 +46,7 @@ function orderToDetail(o: any): RequestDetail {
   const rawItems = o.items ?? [];
   const items = rawItems.map((i: any) => ({
     designation: i.product?.reference ?? i.product?.ref ?? '?',
+    categorie: i.product?.category?.name ?? '',
     quantite: i.quantity ?? 0,
     prixUnitaire: i.unitPrice ?? 0,
   }));
@@ -56,6 +61,7 @@ function orderToDetail(o: any): RequestDetail {
     entreprise: o.client?.company ?? '—',
     telephone: phone,
     wilaya: o.client?.wilaya ?? '',
+    commune: o.client?.commune ?? '',
     adresse: o.client?.address ?? '',
     email: o.client?.email ?? '',
     produits,
@@ -74,6 +80,7 @@ function quoteToDetail(q: any): RequestDetail {
   const rawItems = q.items ?? [];
   const items = rawItems.map((i: any) => ({
     designation: i.product?.reference ?? i.product?.ref ?? i.description ?? '?',
+    categorie: i.product?.category?.name ?? '',
     quantite: i.quantity ?? 0,
     prixUnitaire: i.unitPrice ?? 0,
   }));
@@ -87,6 +94,7 @@ function quoteToDetail(q: any): RequestDetail {
     entreprise: q.client?.company ?? '—',
     telephone: phone,
     wilaya: q.client?.wilaya ?? '',
+    commune: q.client?.commune ?? '',
     adresse: q.client?.address ?? '',
     email: q.client?.email ?? '',
     produits,
@@ -533,60 +541,42 @@ export default function RequestsPage() {
     { key: 'devis', label: 'Devis', count: counts.devis },
   ] as const;
 
+  // ── Résumé des filtres actifs, affiché à côté du titre ──────────────────────
+  const assigneLabel = filterAssigne === 'all' ? 'Tous les responsables'
+    : filterAssigne === 'none' ? 'Non assigné'
+    : users.find((u) => u.id === filterAssigne)?.name ?? 'Responsable';
+  const activeFilters = [
+    filterStatut === 'all' ? 'Tous les statuts' : filterStatut,
+    PERIODE_LABEL[filterPeriode] ?? filterPeriode,
+    assigneLabel,
+  ];
+
   return (
     <div className="w-full">
-      <div className="flex items-center justify-between gap-3 flex-wrap mb-4">
+      {/* Titre + boutons export/création en haut à droite */}
+      <div className="flex items-start justify-between flex-wrap gap-3 mb-4">
         <div>
           <h1 className="text-[20px] md:text-[22px] font-bold text-[#0F172A]">Commandes</h1>
           <p className="text-[13px] text-[#8A9BB5] mt-0.5">
             {loading ? 'Chargement…' : `${filtered.length} résultat${filtered.length !== 1 ? 's' : ''}`}
           </p>
         </div>
-        <button
-          onClick={() => exportVentesExcel()}
-          className="hidden md:flex items-center gap-2 px-4 py-2 rounded-xl border border-[#E2E8F0] text-[13px] font-semibold text-[#374151] hover:bg-[#F8FAFC] hover:border-[#4CAF4F] hover:text-[#4CAF4F] transition-colors"
-          title="Exporter toutes les commandes livrées (rapport de ventes)">
-          <svg width={14} height={14} fill="none" viewBox="0 0 24 24">
-            <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6z" stroke="currentColor" strokeWidth="1.8"/>
-            <path d="M14 2v6h6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
-            <path d="M12 18v-6M9 15l3 3 3-3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
-          </svg>
-          Rapport de ventes
-        </button>
-      </div>
-
-      {/* Tabs + bouton Nouvelle demande */}
-      <div className="flex items-center justify-between gap-3 flex-wrap mb-5">
-        <div className="flex gap-1 p-1 rounded-2xl overflow-x-auto max-w-full" style={{ background: '#EEF2F7' }}>
-          {TABS.map((tab) => {
-            const isActive = activeTab === tab.key;
-            const pendingCount = tab.key === 'commandes' ? attente.commandes : tab.key === 'devis' ? attente.devis : attente.commandes + attente.devis;
-            return (
-              <button key={tab.key} onClick={() => { setActiveTab(tab.key as typeof activeTab); setFilterStatut('all'); setSearch(''); setFilterPeriode('mois'); }}
-                className="flex items-center gap-2 px-5 py-2 rounded-xl text-[13px] font-semibold transition-all"
-                style={{ background: isActive ? '#fff' : 'transparent', color: isActive ? '#0F172A' : '#94A3B8', boxShadow: isActive ? '0 2px 8px rgba(0,0,0,0.08)' : 'none' }}>
-                {tab.label}
-                {pendingCount > 0 ? (
-                  <>
-                    <span className="text-[11px] font-bold tabular-nums" style={{ color: '#F97316' }}>
-                      {pendingCount}
-                    </span>
-                    <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: '#F97316' }} />
-                  </>
-                ) : (
-                  <span className="text-[11px] font-bold tabular-nums" style={{ color: isActive ? '#4CAF4F' : '#CBD5E1' }}>
-                    {tab.count}
-                  </span>
-                )}
-              </button>
-            );
-          })}
-        </div>
         <div className="flex items-center gap-2">
+          <button
+            onClick={() => exportVentesExcel(activeFilters.join(' | '))}
+            className="hidden md:flex items-center gap-1.5 px-3 py-2 rounded-xl text-[13px] font-semibold border border-[#E2E8F0] text-[#374151] hover:bg-[#F8FAFC] hover:border-[#4CAF4F] hover:text-[#4CAF4F] transition-colors"
+            title="Rapport de ventes — commandes livrées">
+            <svg width={14} height={14} fill="none" viewBox="0 0 24 24">
+              <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6z" stroke="currentColor" strokeWidth="1.8"/>
+              <path d="M14 2v6h6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
+              <path d="M12 18v-6M9 15l3 3 3-3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+            Rapport
+          </button>
           <button
             onClick={() => {
               const label = activeTab === 'devis' ? 'Devis' : activeTab === 'commandes' ? 'Commandes' : 'Demandes';
-              exportTableauExcel(filtered, `PSI_${label}`, label);
+              exportTableauExcel(filtered, `PSI_${label}`, label, activeFilters.join(' | '));
             }}
             className="hidden md:flex items-center gap-1.5 px-3 py-2 rounded-xl text-[13px] font-semibold border border-[#E2E8F0] text-[#374151] hover:bg-[#F8FAFC] transition-colors"
             title="Exporter le tableau filtré en Excel">
@@ -600,48 +590,82 @@ export default function RequestsPage() {
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-3 mb-5">
-        <div className="relative w-full sm:w-auto">
-          <svg className="absolute left-3 top-1/2 -translate-y-1/2" width={14} height={14} fill="none">
-            <circle cx="6" cy="6" r="4.5" stroke="#8A9BB5" strokeWidth="1.4"/>
-            <path d="M10 10L13 13" stroke="#8A9BB5" strokeLinecap="round" strokeWidth="1.4"/>
-          </svg>
-          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Rechercher client, entreprise..." className="px-3 py-2 pl-8 w-full sm:w-[240px] rounded-lg border border-[#E2E8F0] text-sm text-[#0F172A] bg-white focus:outline-none focus:border-[#4CAF4F] focus:ring-1 focus:ring-[#4CAF4F] transition-colors" />
+      {/* Tabs (gauche) + filtres (droite), même ligne */}
+      <div className="flex items-center justify-between flex-wrap gap-3 mb-4">
+        <div className="flex gap-1 p-1 rounded-2xl overflow-x-auto max-w-full flex-shrink-0" style={{ background: '#EEF2F7' }}>
+          {TABS.map((tab) => {
+            const isActive = activeTab === tab.key;
+            const pendingCount = tab.key === 'commandes' ? attente.commandes : tab.key === 'devis' ? attente.devis : attente.commandes + attente.devis;
+            const pendingColor = tab.key === 'commandes' ? '#4CAF4F' : tab.key === 'devis' ? '#3B82F6' : '#F97316';
+            return (
+              <button key={tab.key} onClick={() => { setActiveTab(tab.key as typeof activeTab); setFilterStatut('all'); setSearch(''); setFilterPeriode('mois'); }}
+                className="flex items-center gap-2 px-5 py-2 rounded-xl text-[13px] font-semibold transition-all"
+                style={{ background: isActive ? '#fff' : 'transparent', color: isActive ? '#0F172A' : '#94A3B8', boxShadow: isActive ? '0 2px 8px rgba(0,0,0,0.08)' : 'none' }}>
+                {tab.label}
+                {pendingCount > 0 ? (
+                  <>
+                    <span className="text-[11px] font-bold tabular-nums" style={{ color: pendingColor }}>
+                      {pendingCount}
+                    </span>
+                    <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: pendingColor }} />
+                  </>
+                ) : (
+                  <span className="text-[11px] font-bold tabular-nums" style={{ color: isActive ? '#4CAF4F' : '#CBD5E1' }}>
+                    {tab.count}
+                  </span>
+                )}
+              </button>
+            );
+          })}
         </div>
-        <AdminSelect
-          className="w-full sm:w-auto"
-          value={filterStatut}
-          onChange={setFilterStatut}
-          options={[{ value: 'all', label: 'Tous les statuts' }, ...allStatuts.map((s) => ({ value: s, label: s }))]}
-        />
-        <AdminSelect
-          className="w-full sm:w-auto"
-          value={filterPeriode}
-          onChange={setFilterPeriode}
-          options={[
-            { value: 'mois',  label: 'Ce mois' },
-            { value: '3mois', label: '3 derniers mois' },
-            { value: '6mois', label: '6 derniers mois' },
-            { value: 'annee', label: 'Cette année' },
-            { value: 'tout',  label: 'Tout afficher' },
-          ]}
-        />
-        <AdminSelect
-          className="w-full sm:w-auto"
-          value={filterAssigne}
-          onChange={setFilterAssigne}
-          options={[
-            { value: 'all',  label: 'Tous les responsables' },
-            { value: 'none', label: 'Non assigné' },
-            ...users.map((u) => ({ value: u.id, label: u.name })),
-          ]}
-        />
-        {(search || filterStatut !== 'all' || filterPeriode !== 'mois' || filterAssigne !== 'all') && (
-          <button onClick={() => { setSearch(''); setFilterStatut('all'); setFilterPeriode('mois'); setFilterAssigne('all'); }} className="text-[12px] font-semibold text-[#8A9BB5] hover:text-[#374151]">Effacer</button>
-        )}
+
+        <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-2 sm:gap-3 w-full sm:w-auto min-w-0">
+          <div className="relative w-full sm:w-auto min-w-0">
+            <svg className="absolute left-3 top-1/2 -translate-y-1/2" width={14} height={14} fill="none">
+              <circle cx="6" cy="6" r="4.5" stroke="#8A9BB5" strokeWidth="1.4"/>
+              <path d="M10 10L13 13" stroke="#8A9BB5" strokeLinecap="round" strokeWidth="1.4"/>
+            </svg>
+            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Rechercher client, entreprise..." className="px-3 py-2 pl-8 w-full sm:w-[220px] rounded-lg border border-[#E2E8F0] text-sm text-[#0F172A] bg-white focus:outline-none focus:border-[#4CAF4F] focus:ring-1 focus:ring-[#4CAF4F] transition-colors" />
+          </div>
+
+          {/* Statut / Période / Responsable — même ligne, largeur adaptée à l'écran */}
+          <div className="flex items-center gap-2 w-full min-w-0 sm:contents">
+            <AdminSelect
+              className="flex-1 min-w-0 sm:flex-none sm:w-auto"
+              value={filterStatut}
+              onChange={setFilterStatut}
+              options={[{ value: 'all', label: 'Tous les statuts' }, ...allStatuts.map((s) => ({ value: s, label: s }))]}
+            />
+            <AdminSelect
+              className="flex-1 min-w-0 sm:flex-none sm:w-auto"
+              value={filterPeriode}
+              onChange={setFilterPeriode}
+              options={[
+                { value: 'mois',  label: 'Ce mois' },
+                { value: '3mois', label: '3 derniers mois' },
+                { value: '6mois', label: '6 derniers mois' },
+                { value: 'annee', label: 'Cette année' },
+                { value: 'tout',  label: 'Tout afficher' },
+              ]}
+            />
+            <AdminSelect
+              className="flex-1 min-w-0 sm:flex-none sm:w-auto"
+              value={filterAssigne}
+              onChange={setFilterAssigne}
+              options={[
+                { value: 'all',  label: 'Tous les responsables' },
+                { value: 'none', label: 'Non assigné' },
+                ...users.map((u) => ({ value: u.id, label: u.name })),
+              ]}
+            />
+          </div>
+          {(search || filterStatut !== 'all' || filterPeriode !== 'mois' || filterAssigne !== 'all') && (
+            <button onClick={() => { setSearch(''); setFilterStatut('all'); setFilterPeriode('mois'); setFilterAssigne('all'); }} className="text-[12px] font-semibold text-[#8A9BB5] hover:text-[#374151] self-start sm:self-auto">Effacer</button>
+          )}
+        </div>
       </div>
 
-      <div className="rounded-2xl border border-[#E2E8F0] overflow-x-auto shadow-sm bg-white">
+      <div className="rounded-2xl border-2 border-[#E2E8F0] overflow-x-auto shadow-sm bg-white">
         <table className="w-full min-w-[720px]" style={{ borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ background: '#F8FAFC' }}>
@@ -670,12 +694,12 @@ export default function RequestsPage() {
                   onMouseLeave={(e) => (e.currentTarget.style.background = rowBg)}>
                   <td className="px-5 py-3.5 text-[12px] font-mono font-bold" style={{ color: isCommande ? '#4CAF4F' : '#8B5CF6' }}>{row.ref}</td>
                   <td className="px-5 py-3.5">
-                    <span style={{ display: 'inline-flex', alignItems: 'center', padding: '3px 10px', borderRadius: 8, fontSize: 12, fontWeight: 700, border: `2px solid ${isCommande ? '#4CAF4F' : '#8B5CF6'}`, background: isCommande ? '#F0FDF4' : '#F5F3FF', color: isCommande ? '#166534' : '#5B21B6' }}>
+                    <span className="whitespace-nowrap" style={{ display: 'inline-flex', alignItems: 'center', padding: '3px 10px', borderRadius: 8, fontSize: 12, fontWeight: 700, border: `2px solid ${isCommande ? '#4CAF4F' : '#8B5CF6'}`, background: isCommande ? '#F0FDF4' : '#F5F3FF', color: isCommande ? '#166534' : '#5B21B6' }}>
                       {row.type}
                     </span>
                   </td>
                   <td className="px-5 py-3.5">
-                    <span className="text-[11px] font-bold px-2 py-1 rounded-lg border"
+                    <span className="text-[11px] font-bold px-2 py-1 rounded-lg border whitespace-nowrap"
                       style={{ background: srcCfg.bg, color: srcCfg.color, borderColor: srcCfg.border }}>
                       {getSourceLabel(src)}
                     </span>

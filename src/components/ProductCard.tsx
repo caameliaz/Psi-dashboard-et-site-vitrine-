@@ -2,8 +2,10 @@
 
 import { useCartStore } from '@/store/cartStore';
 import type { Product } from '@/types';
+import { useTranslation } from '@/lib/i18n';
 
 export function ProductCard({ product }: { product: Product }) {
+  const { t } = useTranslation();
   const addItem = useCartStore((s) => s.addItem);
 
   return (
@@ -43,7 +45,7 @@ export function ProductCard({ product }: { product: Product }) {
           <svg width="11" height="11" viewBox="0 0 13 13" fill="none">
             <path d="M6.5 2.71v7.58M2.71 6.5h7.58" stroke="white" strokeWidth="1.3" strokeLinecap="round"/>
           </svg>
-          <span className="text-[11px] md:text-[13px] font-semibold">Ajouter</span>
+          <span className="text-[11px] md:text-[13px] font-semibold">{t('common.add_to_cart')}</span>
         </button>
       </div>
     </div>
