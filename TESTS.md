@@ -51,7 +51,8 @@ DÉCISIONS ACTÉES (P1) :
 
 ## 1.4 — Catégories refondues / Produits  ⚠️ À REFAIRE (par le collègue)
 > Cette partie a été codée puis remise À FAIRE : le collègue la reprend de zéro.
-> Ne pas se fier à l'existant côté produits/catégories — à revoir entièrement.
+> Ne pas se fier à l'existant côté produits/catégories —
+ à revoir entièrement.
 - [ ] Colonne `photo` sur la table Category (+ migration si repris)
 - [ ] API categories : POST/PATCH acceptent `photo` ; GET renvoie photo + nb produits
 - [ ] Admin → Produits/Catégories : cards catégorie avec upload/retrait photo, ajout/suppression
@@ -108,7 +109,6 @@ Le "mobile" = un layout adapté + un menu d'accueil qui pointe vers ces pages. Z
 - [x] Cloche notifications : ne déborde plus sur mobile (pleine largeur contenue)
 - [x] Panneau détail : toggle "Site web" réparé + boutons Imprimer/Excel cachés sur mobile
 - [ ] Bouton "Modifier" (montant si non défini) dans le panneau détail — à préciser (le Commercial est déjà éditable)
-- [ ] Formulaire commande rapide en VRAIS steps (1.Client → 2.Produits → 3.Résumé) — actuellement tout sur une page
 - [ ] ⚠️ AU DÉPLOIEMENT : remettre NEXTAUTH_URL (prod) + useSecureCookies:true (HTTPS)
 - [x] ⚠️ Garantie tenue : mêmes composants/pages que le web → aucun code dupliqué
 
@@ -127,6 +127,33 @@ Email récap hebdomadaire (lundi matin) : bilan semaine — total commandes, tot
 Destinataires : tous les admins (configurable)
 Cron job via Vercel Cron (vercel.json) ou service externe (Trigger.dev)
 Template HTML propre avec logo PSI, tableau des commandes, lien vers l'admin
+
+## 3bis — Notifications SYSTÈME (vraies notifs sur l'appareil)  🔨 À FAIRE
+> Objectif : de vraies notifs de l'OS (comme WhatsApp/Insta) quand nouvelle commande / assignation / etc.
+> Aujourd'hui : notifs seulement IN-APP (cloche + toast, visibles si l'app est ouverte).
+> ⚠️ Le vrai test se fait EN PROD (HTTPS requis). Redéployer = git push (Vercel auto ~2 min).
+
+DEUX OPTIONS (à décider au moment de coder) :
+
+### Option A — Notification API (simple, app/onglet ouvert)
+- [ ] Demander la permission "Autoriser les notifications" (1 fois)
+- [ ] Sur event SSE (déjà en place) → `new Notification(titre, { body, icon })`
+- [ ] Marche PC + Android quand l'onglet est ouvert (même minimisé)
+- [ ] ❌ Ne marche PAS si le navigateur est fermé
+- [ ] Léger : pas de Service Worker, pas de migration, testable en LOCAL
+
+### Option B — Web Push complet (app fermée)  ← la vraie solution "pro"
+- [ ] Service Worker `public/sw.js`
+- [ ] Lib `web-push` + génération clés VAPID (.env : VAPID_PUBLIC / VAPID_PRIVATE)
+- [ ] Table `PushSubscription` (userId, endpoint, keys) + migration
+- [ ] Route API `/api/push/subscribe` (s'abonner) + `/api/push/unsubscribe`
+- [ ] Bouton "Activer les notifications" dans l'admin (profil ou header)
+- [ ] Brancher l'envoi push là où on fait déjà `createNotif` (notifications.ts / notify-activity.ts)
+- [ ] Notif reçue même app/navigateur FERMÉ (Android + PC direct)
+- [ ] ⚠️ iPhone (Safari) : marche seulement si le site est "ajouté à l'écran d'accueil" (PWA)
+- [ ] ⚠️ HTTPS obligatoire → testable seulement EN PROD (pas localhost)
+
+DÉCISION À PRENDRE : A puis B, ou directement B.
 
 # 🟢 PRIORITÉ 4 — Site public arabe
 ## Bouton AR/FR  ✅ FAIT reste traduction auto quand on fais changement du contenu
@@ -474,6 +501,25 @@ Ouvre `admin1` dans un navigateur et `admin2` (ou un employé) dans un autre (ou
 10. ⚠️ Celui qui fait l'action ne reçoit **jamais** sa propre notif
 11. Page dédiée `/admin/notifications` → historique complet
 12. ⚡ **Toast d'assignation ciblé** (nouveau) : quand on assigne une demande, **seul l'assigné** voit le toast (les autres ne le voient pas)
+
+---
+
+## 🔔 17ter. Notifications SYSTÈME / push (À VENIR — voir todo « 3bis »)
+
+⚠️ Pas encore codé. Tests à faire une fois développé (surtout EN PROD, HTTPS requis) :
+
+**Si Option A (app ouverte) :**
+1. Autoriser les notifs à la 1ère demande → popup navigateur
+2. Onglet ouvert (même minimisé) + nouvelle commande site → une **vraie notif système** apparaît (hors de la page)
+3. Cliquer la notif → ouvre la demande concernée
+
+**Si Option B (push, app fermée) :**
+4. Bouton "Activer les notifications" → autoriser
+5. **Fermer complètement** l'app / le navigateur
+6. Créer une commande / assigner depuis un autre compte → la notif système arrive **quand même**
+7. Sur **iPhone** : ajouter le site à l'écran d'accueil d'abord, puis tester
+8. Cliquer la notif → ouvre l'app sur la bonne page
+9. ⚠️ Chaque appareil a son propre abonnement (tester tel + PC séparément)
 
 ---
 

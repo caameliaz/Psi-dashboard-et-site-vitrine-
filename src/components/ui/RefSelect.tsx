@@ -60,7 +60,7 @@ export function RefSelect({ value, products, onChange, allowFree = false }: {
                 className="w-full text-[12px] text-[#0F172A] bg-transparent outline-none placeholder-[#ABBED1]"
               />
             </div>
-            <div className="max-h-[180px] overflow-y-auto py-1">
+            <div className="max-h-[180px] overflow-y-auto py-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
               {filtered.length === 0 ? (
                 <p className="px-3 py-2 text-[12px] text-[#ABBED1]">Aucun résultat</p>
               ) : filtered.map(p => (

@@ -268,10 +268,12 @@ export function CreateForm({ defaultType, onClose, onSave, users, currentUserId,
           </div>
           <div>
             <label className={lc}>Commercial</label>
-            <select value={assignedToId} onChange={e => setAssignedToId(e.target.value)} className={ic + ' py-2.5 text-[14px]'}>
-              <option value="">— Non assigné —</option>
-              {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
-            </select>
+            <AdminSelect
+              className="w-full"
+              value={assignedToId}
+              onChange={setAssignedToId}
+              options={[{ value: '', label: '— Non assigné —' }, ...users.map(u => ({ value: u.id, label: u.name }))]}
+            />
           </div>
 
           {/* Lignes produits */}
