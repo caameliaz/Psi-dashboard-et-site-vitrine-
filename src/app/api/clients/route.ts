@@ -4,7 +4,33 @@ import { prisma } from '@/lib/prisma';
 import { createAudit } from '@/lib/audit';
 
 // GET /api/clients — liste tous les clients (permission voir_clients)
-export async function GET() {
+// GET /api/clients?light=true — liste légère (autocomplete lors de la création
+//   d'une commande), accessible avec voir_commandes.
+export async function GET(request: NextRequest) {
+  const light = request.nextUrl.searchParams.get('light') === 'true';
+
+  if (light) {
+    const guard = await requirePermission('voir_commandes');
+    if (guard.error) return guard.error;
+    try {
+      const clients = await prisma.client.findMany({
+        select: {
+          id: true, name: true, company: true, email: true, wilaya: true, commune: true,
+          phones: { where: { primary: true }, select: { number: true } },
+        },
+        orderBy: { name: 'asc' },
+      });
+      return NextResponse.json(clients.map((c) => ({
+        id: c.id, name: c.name, company: c.company, email: c.email,
+        wilaya: c.wilaya, commune: c.commune,
+        phone: c.phones[0]?.number ?? '',
+      })));
+    } catch (e) {
+      console.error(e);
+      return NextResponse.json({ error: 'Failed to fetch clients' }, { status: 500 });
+    }
+  }
+
   const guard = await requirePermission('voir_clients');
   if (guard.error) return guard.error;
 

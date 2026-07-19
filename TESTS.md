@@ -19,6 +19,24 @@ DÉCISIONS ACTÉES (P1) :
 
 
 ═══════════════════════════════════════════════════════════
+🟤 PRIORITÉ 8 — Lien commande ↔ client  🔨 EN COURS
+═══════════════════════════════════════════════════════════
+
+## 8.1 — Autocomplete client sur le champ Nom (formulaire commande/devis)  ✅ FAIT
+- [x] API clients : mode léger `?light=true` (id, name, company, phone, wilaya, commune, email) accessible avec `voir_commandes`
+- [x] Composant `ClientAutocomplete` : champ "Nom" → taper → liste des clients existants → choisir
+- [x] Choisir un client → pré-remplit entreprise, téléphone, wilaya, commune, email
+- [x] Ne rien choisir + taper = nouveau client (comportement actuel conservé)
+- [x] Appliqué partout : commande + devis, mobile + web (même CreateForm)
+
+## 8.2 — Ré-assigner une commande/devis à un autre client  ✅ FAIT
+- [x] Détail commande/devis → bouton "Changer de client" (visible si permission, sauf si archivé)
+- [x] Nouvelle permission `reassigner_client` (permissions.ts + users page + seed-prod admins)
+- [x] PATCH orders/quotes accepte `clientId` (gardé par la permission → 403 sinon)
+- [x] Après ré-assignation → refetch, l'historique des 2 clients est à jour
+
+
+═══════════════════════════════════════════════════════════
 🔴 PRIORITÉ 1 — Logique métier core  (EN COURS — on traite ça d'abord)
 ═══════════════════════════════════════════════════════════
 
@@ -196,9 +214,18 @@ Vérifier les raccourcis WhatsApp/Email/Appel dans le détail client avec un vra
 - [ ] Mettre les **bonnes photos** pour l'accueil et les produits
 - [ ] Revoir **comment les références produits s'affichent** (à redesigner)
 
-## 7.3 — Dashboard mobile
-- [ ] Notifications : le panneau **s'ouvre plus large que l'écran** (déborde horizontalement) — probable régression des derniers changements
-- [ ] Filtres + barre de recherche : même souci, débordent de l'écran
+## 7.3 — Dashboard mobile  🔨 EN COURS
+- [x] Notifications : panneau **plein écran** sur mobile (avant : débordait) — panneau cloche (TopBar)
+- [x] Panneau cloche : filtre "Tous les users" → renommé "Utilisateurs" + ne charge que les notifs des 2 derniers jours
+- [x] Page Commandes : toggle "Tous/Commandes/Devis" **pleine largeur** sur mobile (compact sur web)
+- [x] Page Commandes : onglets tous de la **même taille** (zone compteur fixe, plus de décalage)
+- [x] Page Commandes : recherche + Statut + Ce mois + Responsable → **tous sur la même ligne** (mobile)
+- [x] Page Commandes : "Tous les responsables" → juste "Responsable"
+- [x] Page Commandes : la page ne **s'élargit plus** en changeant d'onglet (overflow-x-hidden)
+- [x] Page Commandes : scrollbar horizontale du tableau **masquée**
+- [x] Page Clients : bouton "Nouveau client" poussé à droite (plus collé à la recherche)
+- [x] Fiche client : doublon d'en-tête réparé
+- [ ] (à voir avec toi) autres écrans mobile à passer en revue : dashboard(bloqué), produits(bloqué), profil, historique, users
 
 ## 7.4 — Dashboard web
 - [ ] Panneau détail commande : layout "goofy" (trop de gris / boutons à revoir) → nettoyer visuellement
@@ -207,6 +234,14 @@ Vérifier les raccourcis WhatsApp/Email/Appel dans le détail client avec un vra
 - [ ] Page Historique : revoir comment les infos s'affichent (même traitement que les notifs) + rendre les lignes **cliquables** (clic sur une ligne commande → ouvre le détail de la commande) — pareil pour les notifs
 - [ ] Page Utilisateurs : remplacer l'overlay d'édition par une **édition directe dans le détail** (clic sur un utilisateur → pseudo/email en haut, rôle + permissions en dessous, modifiables sur place) ; le clic sur la **carte** utilisateur (liste) doit juste afficher un aperçu des permissions
 - [ ] **Rôles personnalisés réutilisables** : pouvoir créer un rôle nommé (ex "Chef des ventes") avec un set de permissions, pour ne pas re-cocher les permissions à chaque nouvel utilisateur
+
+## 7.5 — Performance : chargement des données par période (fluidifier le site)
+> AUJOURD'HUI : la page Commandes charge TOUTES les commandes/devis d'un coop (fetch /api/orders + /api/quotes),
+> puis le filtre "Ce mois / 3 mois / Tout" se fait côté CLIENT. OK avec peu de données, lent à grande échelle.
+- [ ] API orders/quotes : accepter un paramètre de période (from/to) → ne renvoyer que la période demandée
+- [ ] Charger seulement ce qui est affiché (ex : "Ce mois" → charge juste le mois) + pagination si besoin
+- [ ] Idem stats dashboard si pertinent
+- [ ] But : fluidifier le site quand la base grossit
 
 
 # PSI — Guide de tests complet
@@ -348,12 +383,13 @@ Mot de passe pour **tous** : `psi2026`
 
 ### Créer une demande à la main
 1. **+ Nouvelle commande** → choisir **Commande** ou **Devis**
-2. Remplir le client (nom, wilaya, téléphone)
-3. Choisir un produit → le **prix se remplit tout seul**
-4. Ajouter plusieurs lignes (devis multi-lignes)
-5. Activer **TVA 19 %** → le total se recalcule (HT → TTC)
-6. **Pris en charge par** (nouveau) → dropdown pré-rempli sur **soi-même**, modifiable
-7. Valider → apparaît avec le badge **Manuel** + la colonne **Responsable** remplie
+2. **Champ Nom = autocomplete** (nouveau) → taper le début d'un client existant → une liste apparaît → **choisir** → entreprise/téléphone/wilaya/commune/email se **remplissent tout seuls**
+3. Ne rien choisir + taper un nouveau nom = **nouveau client** créé (comme avant)
+4. Choisir un produit → le **prix se remplit tout seul**
+5. Ajouter plusieurs lignes (devis multi-lignes)
+6. Activer **TVA 19 %** → le total se recalcule (HT → TTC)
+7. **Commercial** (ex-"Pris en charge par") → dropdown pré-rempli sur **soi-même**, modifiable
+8. Valider → apparaît avec le badge **Manuel** + la colonne **Responsable** remplie
 
 ### Le panneau de détail (clic sur une demande)
 1. Clic sur une demande → **panneau latéral** s'ouvre
@@ -364,8 +400,10 @@ Mot de passe pour **tous** : `psi2026`
 6. Bouton **Email** → même chose avec un template → ouvre la messagerie
 7. Bouton **Appeler** → lien téléphone
 8. **Notes internes** → écrire une remarque, enregistrer
-9. **Pris en charge par** (nouveau) → si permission "assigner", un select modifie l'assigné ; sinon **lecture seule**
-10. Actions statut (si permission "modifier statuts") :
+9. **Commercial** → si permission "assigner", un select modifie le commercial ; sinon **lecture seule**
+10. **Changer de client** (nouveau) → si permission "ré-assigner client", un bouton apparaît en haut du bloc Client → rechercher un autre client → le choisir → la demande passe à ce client (visible dans l'historique du nouveau client)
+    - ⚠️ Sans la permission `reassigner_client` → le bouton n'apparaît pas ; via API un PATCH `clientId` → **403**
+11. Actions statut (si permission "modifier statuts") :
    - **Commande** : Confirmer → Livrer, ou Annuler → Restaurer
    - **Devis** : Confirmer (popup prix) → Livrer, ou Annuler → Restaurer
    - **Modifier** (commande) → éditer les lignes (produits/quantités)

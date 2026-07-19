@@ -204,18 +204,23 @@ export function TopBar() {
   }, [isAdmin]);
 
   const userOptions = useMemo(() => [
-    { value: 'all', label: 'Tous les users' },
+    { value: 'all', label: 'Utilisateurs' },
     ...actors.map((a) => ({ value: a, label: a })),
   ], [actors]);
 
-  const filtered = useMemo(() => notifs.filter((n) => {
-    if (filterType !== 'all' && getCategory(n) !== filterType) return false;
-    if (filterUser !== 'all') {
-      const actor = extractActor(n.message);
-      if (actor !== filterUser) return false;
-    }
-    return true;
-  }), [notifs, filterType, filterUser]);
+  // Ne garder que les notifs des 2 derniers jours
+  const filtered = useMemo(() => {
+    const limite = Date.now() - 2 * 24 * 60 * 60 * 1000;
+    return notifs.filter((n) => {
+      if (new Date(n.createdAt).getTime() < limite) return false;
+      if (filterType !== 'all' && getCategory(n) !== filterType) return false;
+      if (filterUser !== 'all') {
+        const actor = extractActor(n.message);
+        if (actor !== filterUser) return false;
+      }
+      return true;
+    });
+  }, [notifs, filterType, filterUser]);
 
   const fetchNotifs = useCallback(async () => {
     try {
@@ -290,11 +295,10 @@ export function TopBar() {
         <div className="fixed inset-0 z-[90] bg-black/10" onClick={() => setOpen(false)} />
       )}
 
-      {/* ── Sidebar ── */}
+      {/* ── Sidebar ── (plein écran sur mobile, drawer 420px sur desktop) */}
       <aside
-        className="fixed top-0 right-0 h-full z-[100] flex flex-col bg-white border-l border-[#E4EBF5] shadow-2xl"
+        className="fixed top-0 right-0 h-full z-[100] flex flex-col bg-white border-l border-[#E4EBF5] shadow-2xl w-full md:w-[420px]"
         style={{
-          width: 420,
           transform: open ? 'translateX(0)' : 'translateX(100%)',
           transition: 'transform 0.28s cubic-bezier(0.4, 0, 0.2, 1)',
         }}

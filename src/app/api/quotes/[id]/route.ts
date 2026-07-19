@@ -49,12 +49,18 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
       return NextResponse.json({ error: "Vous n'avez pas la permission d'assigner" }, { status: 403 });
     }
 
+    // Ré-assigner le devis à un autre client → nécessite reassigner_client
+    if (body.clientId !== undefined && !hasPermission(session.user as any, 'reassigner_client')) {
+      return NextResponse.json({ error: "Vous n'avez pas la permission de ré-assigner le client" }, { status: 403 });
+    }
+
     const quote = await prisma.quote.update({
       where: { id },
       data: {
         ...(body.status !== undefined && { status: body.status }),
         ...(body.notes !== undefined && { notes: body.notes }),
         ...(body.assignedToId !== undefined && { assignedToId: body.assignedToId || null }),
+        ...(body.clientId !== undefined && { clientId: body.clientId || null }),
         ...(body.proposedPrice !== undefined && { proposedPrice: Number(body.proposedPrice) }),
         ...(body.deliveryDelay !== undefined && { deliveryDelay: body.deliveryDelay }),
         ...(body.paymentTerms !== undefined && { paymentTerms: body.paymentTerms }),

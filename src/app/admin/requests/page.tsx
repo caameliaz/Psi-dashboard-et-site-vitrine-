@@ -6,6 +6,7 @@ import { RequestPanel, type RequestDetail } from '@/components/ui/RequestPanel';
 import { AdminSelect } from '@/components/ui/AdminSelect';
 import { WilayaSelect } from '@/components/ui/WilayaSelect';
 import { CommuneSelect } from '@/components/ui/CommuneSelect';
+import { ClientAutocomplete } from '@/components/ui/ClientAutocomplete';
 import { RefSelect } from '@/components/ui/RefSelect';
 import { exportTableauExcel } from '@/lib/export-tableau';
 import { exportVentesExcel } from '@/lib/export-ventes';
@@ -257,7 +258,22 @@ export function CreateForm({ defaultType, onClose, onSave, users, currentUserId,
 
           {/* Coordonnées */}
           <div className="grid grid-cols-2 gap-3">
-            <div><label className={lc}>Nom *</label><input value={client} onChange={e => setClient(e.target.value)} placeholder="Prénom Nom" className={ic} /></div>
+            <div>
+              <label className={lc}>Nom *</label>
+              <ClientAutocomplete
+                value={client}
+                onChange={setClient}
+                inputClass={ic}
+                onPick={(c) => {
+                  setClient(c.name);
+                  setEntreprise(c.company ?? '');
+                  setTelephone(c.phone ?? '');
+                  setEmail(c.email ?? '');
+                  setWilaya(c.wilaya ?? '');
+                  setCommune(c.commune ?? '');
+                }}
+              />
+            </div>
             <div><label className={lc}>Entreprise</label><input value={entreprise} onChange={e => setEntreprise(e.target.value)} placeholder="Nom entreprise" className={ic} /></div>
             <div><label className={lc}>Téléphone *</label><input type="tel" inputMode="tel" value={telephone} onChange={e => setTelephone(e.target.value.replace(/[^\d+ ]/g, ''))} placeholder="+213 5XX XXX XXX" className={ic} /></div>
             <div><label className={lc}>Email</label><input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="client@email.com" className={ic} /></div>
@@ -554,7 +570,7 @@ export default function RequestsPage() {
   ];
 
   return (
-    <div className="w-full">
+    <div className="w-full max-w-full overflow-x-hidden">
       {/* Titre + boutons export/création en haut à droite */}
       <div className="flex items-start justify-between flex-wrap gap-3 mb-4">
         <div>
@@ -592,82 +608,74 @@ export default function RequestsPage() {
         </div>
       </div>
 
-      {/* Tabs (gauche) + filtres (droite), même ligne */}
-      <div className="flex items-center justify-between flex-wrap gap-3 mb-4">
-        <div className="flex gap-1 p-1 rounded-2xl overflow-x-auto max-w-full flex-shrink-0" style={{ background: '#EEF2F7' }}>
-          {TABS.map((tab) => {
-            const isActive = activeTab === tab.key;
-            const pendingCount = tab.key === 'commandes' ? attente.commandes : tab.key === 'devis' ? attente.devis : attente.commandes + attente.devis;
-            const pendingColor = tab.key === 'commandes' ? '#4CAF4F' : tab.key === 'devis' ? '#3B82F6' : '#F97316';
-            return (
-              <button key={tab.key} onClick={() => { setActiveTab(tab.key as typeof activeTab); setFilterStatut('all'); setSearch(''); setFilterPeriode('mois'); }}
-                className="flex items-center gap-2 px-5 py-2 rounded-xl text-[13px] font-semibold transition-all"
-                style={{ background: isActive ? '#fff' : 'transparent', color: isActive ? '#0F172A' : '#94A3B8', boxShadow: isActive ? '0 2px 8px rgba(0,0,0,0.08)' : 'none' }}>
-                {tab.label}
-                {pendingCount > 0 ? (
-                  <>
-                    <span className="text-[11px] font-bold tabular-nums" style={{ color: pendingColor }}>
-                      {pendingCount}
-                    </span>
-                    <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: pendingColor }} />
-                  </>
-                ) : (
-                  <span className="text-[11px] font-bold tabular-nums" style={{ color: isActive ? '#4CAF4F' : '#CBD5E1' }}>
-                    {tab.count}
-                  </span>
-                )}
-              </button>
-            );
-          })}
-        </div>
+      {/* Tabs — pleine largeur sur MOBILE, compact (auto) sur web */}
+      <div className="flex gap-1 p-1 rounded-2xl mb-3 w-full md:w-fit" style={{ background: '#EEF2F7' }}>
+        {TABS.map((tab) => {
+          const isActive = activeTab === tab.key;
+          const pendingCount = tab.key === 'commandes' ? attente.commandes : tab.key === 'devis' ? attente.devis : attente.commandes + attente.devis;
+          const pendingColor = tab.key === 'commandes' ? '#4CAF4F' : tab.key === 'devis' ? '#3B82F6' : '#F97316';
+          return (
+            <button key={tab.key} onClick={() => { setActiveTab(tab.key as typeof activeTab); setFilterStatut('all'); setSearch(''); setFilterPeriode('mois'); }}
+              className="flex-1 md:flex-none flex items-center justify-center gap-1.5 px-2 md:px-5 py-2 rounded-xl text-[13px] font-semibold transition-all"
+              style={{ background: isActive ? '#fff' : 'transparent', color: isActive ? '#0F172A' : '#94A3B8', boxShadow: isActive ? '0 2px 8px rgba(0,0,0,0.08)' : 'none' }}>
+              {tab.label}
+              {/* Zone compteur+point à largeur fixe → tous les onglets restent identiques */}
+              <span className="inline-flex items-center gap-1 min-w-[22px] justify-center">
+                <span className="text-[11px] font-bold tabular-nums" style={{ color: pendingCount > 0 ? pendingColor : (isActive ? '#4CAF4F' : '#CBD5E1') }}>
+                  {pendingCount > 0 ? pendingCount : tab.count}
+                </span>
+                <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: pendingCount > 0 ? pendingColor : 'transparent' }} />
+              </span>
+            </button>
+          );
+        })}
+      </div>
 
-        <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-2 sm:gap-3 w-full sm:w-auto min-w-0">
-          <div className="relative w-full sm:w-auto min-w-0">
-            <svg className="absolute left-3 top-1/2 -translate-y-1/2" width={14} height={14} fill="none">
+      {/* Recherche + 3 filtres — TOUS sur la même ligne (mobile compris) */}
+      <div className="mb-4">
+        <div className="flex items-center gap-2 min-w-0">
+          <div className="relative flex-1 min-w-0">
+            <svg className="absolute left-2.5 top-1/2 -translate-y-1/2" width={13} height={13} fill="none">
               <circle cx="6" cy="6" r="4.5" stroke="#8A9BB5" strokeWidth="1.4"/>
               <path d="M10 10L13 13" stroke="#8A9BB5" strokeLinecap="round" strokeWidth="1.4"/>
             </svg>
-            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Rechercher client, entreprise..." className="px-3 py-2 pl-8 w-full sm:w-[220px] rounded-lg border border-[#E2E8F0] text-sm text-[#0F172A] bg-white focus:outline-none focus:border-[#4CAF4F] focus:ring-1 focus:ring-[#4CAF4F] transition-colors" />
+            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Rechercher..." className="px-2 py-2 pl-7 w-full rounded-lg border border-[#E2E8F0] text-[13px] text-[#0F172A] bg-white focus:outline-none focus:border-[#4CAF4F] focus:ring-1 focus:ring-[#4CAF4F] transition-colors" />
           </div>
-
-          {/* Statut / Période / Responsable — même ligne, largeur adaptée à l'écran */}
-          <div className="flex items-center gap-2 w-full min-w-0 sm:contents">
-            <AdminSelect
-              className="flex-1 min-w-0 sm:flex-none sm:w-auto"
-              value={filterStatut}
-              onChange={setFilterStatut}
-              options={[{ value: 'all', label: 'Tous les statuts' }, ...allStatuts.map((s) => ({ value: s, label: s }))]}
-            />
-            <AdminSelect
-              className="flex-1 min-w-0 sm:flex-none sm:w-auto"
-              value={filterPeriode}
-              onChange={setFilterPeriode}
-              options={[
-                { value: 'mois',  label: 'Ce mois' },
-                { value: '3mois', label: '3 derniers mois' },
-                { value: '6mois', label: '6 derniers mois' },
-                { value: 'annee', label: 'Cette année' },
-                { value: 'tout',  label: 'Tout afficher' },
-              ]}
-            />
-            <AdminSelect
-              className="flex-1 min-w-0 sm:flex-none sm:w-auto"
-              value={filterAssigne}
-              onChange={setFilterAssigne}
-              options={[
-                { value: 'all',  label: 'Tous les responsables' },
-                { value: 'none', label: 'Non assigné' },
-                ...users.map((u) => ({ value: u.id, label: u.name })),
-              ]}
-            />
-          </div>
-          {(search || filterStatut !== 'all' || filterPeriode !== 'mois' || filterAssigne !== 'all') && (
-            <button onClick={() => { setSearch(''); setFilterStatut('all'); setFilterPeriode('mois'); setFilterAssigne('all'); }} className="text-[12px] font-semibold text-[#8A9BB5] hover:text-[#374151] self-start sm:self-auto">Effacer</button>
-          )}
+          <AdminSelect
+            className="flex-1 min-w-0"
+            value={filterStatut}
+            onChange={setFilterStatut}
+            options={[{ value: 'all', label: 'Statut' }, ...allStatuts.map((s) => ({ value: s, label: s }))]}
+          />
+          <AdminSelect
+            className="flex-1 min-w-0"
+            value={filterPeriode}
+            onChange={setFilterPeriode}
+            options={[
+              { value: 'mois',  label: 'Ce mois' },
+              { value: '3mois', label: '3 derniers mois' },
+              { value: '6mois', label: '6 derniers mois' },
+              { value: 'annee', label: 'Cette année' },
+              { value: 'tout',  label: 'Tout afficher' },
+            ]}
+          />
+          <AdminSelect
+            className="flex-1 min-w-0"
+            value={filterAssigne}
+            onChange={setFilterAssigne}
+            options={[
+              { value: 'all',  label: 'Responsable' },
+              { value: 'none', label: 'Non assigné' },
+              ...users.map((u) => ({ value: u.id, label: u.name })),
+            ]}
+          />
         </div>
+        {(search || filterStatut !== 'all' || filterPeriode !== 'mois' || filterAssigne !== 'all') && (
+          <button onClick={() => { setSearch(''); setFilterStatut('all'); setFilterPeriode('mois'); setFilterAssigne('all'); }} className="mt-2 text-[12px] font-semibold text-[#8A9BB5] hover:text-[#374151]">Effacer les filtres</button>
+        )}
       </div>
 
-      <div className="rounded-2xl border-2 border-[#E2E8F0] overflow-x-auto shadow-sm bg-white">
+      <div className="rounded-2xl border-2 border-[#E2E8F0] overflow-x-auto shadow-sm bg-white [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         <table className="w-full min-w-[720px]" style={{ borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ background: '#F8FAFC' }}>

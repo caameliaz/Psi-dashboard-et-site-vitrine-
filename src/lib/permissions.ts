@@ -9,6 +9,7 @@ export const ALL_PERMISSIONS = [
   { key: 'voir_commandes',     label: 'Voir les commandes & devis',     short: 'Voir commandes'      },
   { key: 'modifier_statuts',   label: 'Modifier les statuts',           short: 'Modifier statuts'    },
   { key: 'assign_commandes',   label: 'Assigner les commandes & devis', short: 'Assigner'            },
+  { key: 'reassigner_client',  label: 'Ré-assigner une demande à un autre client', short: 'Ré-assigner client' },
   { key: 'voir_clients',       label: 'Voir les fiches clients',        short: 'Voir clients'        },
   { key: 'modifier_clients',   label: 'Modifier / ajouter des clients', short: 'Modifier clients'    },
   { key: 'voir_produits',      label: 'Voir les produits',              short: 'Voir produits'       },

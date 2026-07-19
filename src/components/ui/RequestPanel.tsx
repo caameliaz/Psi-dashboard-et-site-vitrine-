@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { StatusPill } from './StatusPill';
 import { useRole } from '@/lib/role-context';
+import { ClientAutocomplete } from './ClientAutocomplete';
 
 interface Template { id: string; title: string; content: string; category: string; }
 
@@ -766,10 +767,23 @@ export function RequestPanel({ item, onClose, onStatusChange, onConfirmQuoteWith
   const { can } = useRole();
   const canModifierStatuts = can('modifier_statuts');
   const canAssign = can('assign_commandes');
+  const canReassign = can('reassigner_client');
+  const [showReassign, setShowReassign] = useState(false);
   const [showPriceModal, setShowPriceModal] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
   const [editingNotes, setEditingNotes] = useState(false);
   const [notesValue, setNotesValue] = useState('');
+
+  // Ré-assigner la demande à un autre client (permission reassigner_client)
+  const reassignClient = async (clientId: string) => {
+    if (!item.id) return;
+    const endpoint = item.type === 'Devis' ? `/api/quotes/${item.id}` : `/api/orders/${item.id}`;
+    const res = await fetch(endpoint, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ clientId }) });
+    if (!res.ok) { alert('Ré-assignation impossible'); return; }
+    setShowReassign(false);
+    onStatusChange?.(item.ref, item.statut); // déclenche un refetch parent
+    onClose();
+  };
   const [templateMode, setTemplateMode] = useState<'wa' | 'mail' | 'sms' | null>(null);
   const [emailOverride, setEmailOverride] = useState('');
   const isCommande = item.type === 'Commande';
@@ -862,7 +876,15 @@ export function RequestPanel({ item, onClose, onStatusChange, onConfirmQuoteWith
 
               {/* Infos client */}
               <div>
-                <p className="text-[11px] font-bold text-[#0F172A] uppercase tracking-wide mb-3">Client</p>
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-[11px] font-bold text-[#0F172A] uppercase tracking-wide">Client</p>
+                  {canReassign && !isArchived && (
+                    <button onClick={() => setShowReassign(true)}
+                      className="text-[11px] font-semibold text-[#8B5CF6] hover:underline">
+                      Changer de client
+                    </button>
+                  )}
+                </div>
                 <div className="rounded-xl border-2 border-[#E2E8F0] overflow-hidden">
                   <div className="grid grid-cols-2">
                     {[
@@ -1122,6 +1144,27 @@ export function RequestPanel({ item, onClose, onStatusChange, onConfirmQuoteWith
           recipientEmail={emailOverride}
           onClose={() => setTemplateMode(null)}
         />
+      )}
+
+      {/* Ré-assigner à un autre client */}
+      {showReassign && (
+        <>
+          <div className="fixed inset-0 z-[95] bg-black/40 backdrop-blur-sm" onClick={() => setShowReassign(false)} />
+          <div className="fixed inset-0 z-[96] flex items-center justify-center p-4 pointer-events-none">
+            <div className="pointer-events-auto bg-white rounded-2xl shadow-2xl p-5 w-[420px] max-w-[94vw]">
+              <p className="text-[15px] font-bold text-[#0F172A] mb-1">Changer de client</p>
+              <p className="text-[12px] text-[#8A9BB5] mb-4">Ré-assigner {item.type.toLowerCase()} {item.ref} à un autre client existant.</p>
+              <ClientAutocomplete
+                value=""
+                onChange={() => {}}
+                placeholder="Rechercher un client…"
+                inputClass="w-full px-3 py-2.5 rounded-xl border border-[#E2E8F0] text-[13px] text-[#0F172A] focus:outline-none focus:border-[#4CAF4F]"
+                onPick={(c) => reassignClient(c.id)}
+              />
+              <button onClick={() => setShowReassign(false)} className="mt-4 w-full px-4 py-2.5 rounded-xl border border-[#E2E8F0] text-[13px] font-semibold text-[#374151]">Annuler</button>
+            </div>
+          </div>
+        </>
       )}
     </>
   );

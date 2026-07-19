@@ -48,6 +48,11 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
       return NextResponse.json({ error: "Vous n'avez pas la permission d'assigner" }, { status: 403 });
     }
 
+    // Ré-assigner la commande à un autre client → nécessite reassigner_client
+    if (body.clientId !== undefined && !hasPermission(session.user as any, 'reassigner_client')) {
+      return NextResponse.json({ error: "Vous n'avez pas la permission de ré-assigner le client" }, { status: 403 });
+    }
+
     // Mise à jour des prix unitaires par produit si fournis
     if (body.itemPrices && Array.isArray(body.itemPrices)) {
       const existing = await prisma.orderItem.findMany({ where: { orderId: id }, include: { product: true } });
@@ -86,6 +91,7 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
         ...(body.notes !== undefined && { notes: body.notes }),
         ...(body.source !== undefined && { source: body.source }),
         ...(body.assignedToId !== undefined && { assignedToId: body.assignedToId || null }),
+        ...(body.clientId !== undefined && { clientId: body.clientId || null }),
         ...(body.totalOverride !== undefined && { notes: `TOTAL:${body.totalOverride}${body.notes ? '\n' + body.notes : ''}` }),
       },
       include: {

@@ -30,7 +30,7 @@ export function AdminSelect({ value, onChange, options, className = '' }: AdminS
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className={`flex items-center justify-between gap-2 px-4 py-2.5 rounded-xl border bg-white text-[14px] text-[#263238] transition-all outline-none w-full sm:w-auto sm:min-w-[160px] ${
+        className={`flex items-center justify-between gap-1 px-2.5 md:px-4 py-2.5 rounded-xl border bg-white text-[13px] md:text-[14px] text-[#263238] transition-all outline-none w-full sm:w-auto sm:min-w-[150px] ${
           open
             ? 'border-[#4CAF4F] ring-[3px] ring-[#4CAF4F]/15'
             : 'border-[#E2E8F0] hover:border-[#ABBED1]'

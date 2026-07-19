@@ -242,16 +242,8 @@ function ClientSlideIn({ client, onClose, onEdit, onDelete }: {
 
           {/* Profil */}
           <div className="px-5 md:px-6 pt-5 md:pt-6 pb-5 border-b border-[#F2F4F7]">
-            {/* Ligne haut : entreprise + lieu à gauche, avatar+nom à droite */}
-            <div className="flex items-start justify-between gap-3 mb-4">
-              <div className="min-w-0 flex-1">
-                <p className="text-[18px] md:text-[20px] font-extrabold text-[#0F172A] leading-tight truncate">{client.entreprise || client.contact}</p>
-                <div className="flex items-center gap-1.5 mt-1 text-[12px] text-[#8A9BB5]">
-                  <svg width={12} height={12} viewBox="0 0 24 24" fill="none" className="flex-shrink-0"><path d="M12 21s-7-5.7-7-11a7 7 0 0114 0c0 5.3-7 11-7 11z" stroke="currentColor" strokeWidth="1.6"/><circle cx="12" cy="10" r="2.4" stroke="currentColor" strokeWidth="1.6"/></svg>
-                  <span className="truncate">{client.commune ? `${client.commune}, ${client.wilaya}` : client.wilaya}</span>
-                </div>
-              </div>
-              {/* Avatar + nom du contact à droite */}
+            <div className="flex items-start gap-3 mb-4">
+              {/* Avatar + nom du contact */}
               <div className="flex flex-col items-center gap-1 flex-shrink-0">
                 <div className="relative group cursor-pointer" onClick={() => fileRef.current?.click()}>
                   {photo ? (
@@ -587,7 +579,7 @@ export default function ClientsPage() {
             className="pl-9 pr-4 py-2.5 w-full sm:w-[280px] rounded-xl border border-[#E2E8F0] bg-white text-[14px] text-[#263238] placeholder-[#8A9BB5] focus:outline-none focus:border-[#4CAF4F] focus:ring-[3px] focus:ring-[#4CAF4F]/15 transition-all"
           />
         </div>
-        <button onClick={() => { setAddForm({ ...emptyClient }); setShowAdd(true); }} className="flex items-center gap-2 px-4 py-2 rounded-xl text-[13px] font-semibold text-white transition-colors" style={{ background: '#4CAF4F' }}>
+        <button onClick={() => { setAddForm({ ...emptyClient }); setShowAdd(true); }} className="flex items-center gap-2 px-4 py-2 rounded-xl text-[13px] font-semibold text-white transition-colors sm:ml-auto whitespace-nowrap" style={{ background: '#4CAF4F' }}>
           + Nouveau client
         </button>
       </div>
