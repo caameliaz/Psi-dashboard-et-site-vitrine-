@@ -62,10 +62,12 @@ DONNÉES DE CONNEXION UTILISÉES PAR L'APP (déjà configurées côté code) :
 - [x] Secteur affiché en badge dans la fiche client (à côté du nom)
 - [x] ❌ Mails promotionnels : ABANDONNÉ (on ne fait pas)
 
-## 9.4 — Champ "longueur / métrage" (facultatif) PARTOUT
-- [ ] Champ **longueur en mètres FACULTATIF** ajouté partout :
-      · lignes de commande/devis · produits (admin) · produit sur le SITE public · exports Excel
-- [ ] Affichage type : `80 · diam 80 · métrage (facultatif)`
+## 9.4 — Champ "longueur / métrage" (facultatif) PARTOUT  ✅ FAIT
+- [x] Champ **longueur en mètres FACULTATIF** ajouté :
+      · lignes de commande/devis (formulaire création) · produits (admin) · produit sur le SITE public
+- [x] Affichage type : `réf · 80 m` dans les lignes et la fiche produit publique
+- [x] Persisté sur OrderItem / QuoteItem / Product (migration p9)
+- [ ] Export Excel : intégré dans **9.9** (réécriture ligne-par-ligne)
 
 ## 9.5 — Référence libre dans les COMMANDES (pas que les devis)  ✅ FAIT
 - [x] Le dropdown référence des commandes → option "Référence libre" activée (allowFree pour commande ET devis)
@@ -73,10 +75,13 @@ DONNÉES DE CONNEXION UTILISÉES PAR L'APP (déjà configurées côté code) :
 ## 9.6 — Bouton "+ Nouvelle commande" → renommer "+ Nouveau"  ✅ FAIT
 - [x] Le bouton de la page Commandes affiche juste "+ Nouveau"
 
-## 9.7 — Numéro auto par référence produit (préfixe = catégorie)
-- [ ] Chaque catégorie a un **préfixe** (ex: Papier thermique → PTT, Imprimantes → IMP)
-- [ ] À la création d'un produit → code auto-incrémenté : PTT-001, PTT-002… / IMP-001…
-- [ ] Le préfixe change selon la catégorie choisie
+## 9.7 — Numéro auto par référence produit (préfixe = catégorie)  ✅ FAIT
+- [x] Champ **préfixe** sur la catégorie (Category.prefix + refCounter, migration p9)
+      → saisi à la création de catégorie ET modifiable après (édition catégorie)
+- [x] Si la catégorie a un préfixe → chaque produit reçoit un code auto : PTT-001, PTT-002… (incrément atomique refCounter)
+- [x] Si PAS de préfixe → comportement inchangé (réf = dimensions largeur/diamètre)
+- [x] L'édition d'un produit à préfixe ne réécrit PAS son code (garde PTT-001)
+- [x] Badge préfixe affiché à côté du nom de la catégorie
 
 ## 9.8 — Nom de produit éditable  ✅ FAIT
 - [x] Champ `name` (facultatif) sur Product + migration (p9_products_sectors_metrage)

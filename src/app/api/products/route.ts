@@ -39,13 +39,31 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
 
-    if (!body.reference || !body.categoryId || body.width == null || body.length == null || body.price == null) {
+    if (!body.categoryId || body.width == null || body.length == null || body.price == null) {
       return NextResponse.json({ error: 'Champs requis manquants' }, { status: 400 });
+    }
+
+    // Référence auto-générée si la catégorie a un préfixe (ex: PTT → PTT-001),
+    // sinon on garde la référence saisie manuellement.
+    const category = await prisma.category.findUnique({
+      where: { id: body.categoryId },
+      select: { prefix: true, refCounter: true },
+    });
+    if (!category) return NextResponse.json({ error: 'Catégorie introuvable' }, { status: 400 });
+
+    let reference: string;
+    if (category.prefix) {
+      const next = category.refCounter + 1;
+      reference = `${category.prefix}-${String(next).padStart(3, '0')}`;
+      await prisma.category.update({ where: { id: body.categoryId }, data: { refCounter: next } });
+    } else {
+      if (!body.reference) return NextResponse.json({ error: 'Référence requise (catégorie sans préfixe)' }, { status: 400 });
+      reference = body.reference;
     }
 
     const product = await prisma.product.create({
       data: {
-        reference: body.reference,
+        reference,
         name: body.name ?? null,
         width: Number(body.width),
         length: Number(body.length),

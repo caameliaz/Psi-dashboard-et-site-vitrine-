@@ -37,6 +37,7 @@ export async function POST(request: NextRequest) {
         order: body.order ?? order,
         photo: body.photo ?? null,
         description: body.description ?? null,
+        prefix: body.prefix ? String(body.prefix).toUpperCase().trim() : null,
       },
     });
 

@@ -86,12 +86,14 @@ export async function POST(request: NextRequest) {
             description?: string;
             width?: number;
             length?: number;
+            metrage?: number;
             quantity: number;
           }) => ({
             productId: item.productId ?? null,
             description: item.description ?? null,
             width: item.width ?? null,
             length: item.length ?? null,
+            metrage: item.metrage ?? null,
             quantity: item.quantity,
           })),
         },

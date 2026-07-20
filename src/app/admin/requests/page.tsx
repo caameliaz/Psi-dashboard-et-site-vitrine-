@@ -45,12 +45,15 @@ const UI_TO_DB: Record<string, string> = {
 function orderToDetail(o: any): RequestDetail {
   const phone = o.client?.phones?.find((p: any) => p.primary)?.number ?? o.client?.phones?.[0]?.number ?? '';
   const rawItems = o.items ?? [];
-  const items = rawItems.map((i: any) => ({
-    designation: i.product?.reference ?? i.product?.ref ?? '?',
-    categorie: i.product?.category?.name ?? '',
-    quantite: i.quantity ?? 0,
-    prixUnitaire: i.unitPrice ?? 0,
-  }));
+  const items = rawItems.map((i: any) => {
+    const baseName = i.product?.reference ?? i.product?.ref ?? i.description ?? '?';
+    return {
+      designation: i.metrage != null ? `${baseName} · ${i.metrage} m` : baseName,
+      categorie: i.product?.category?.name ?? '',
+      quantite: i.quantity ?? 0,
+      prixUnitaire: i.unitPrice ?? 0,
+    };
+  });
   const produits = items.map((i: any) => `${i.designation} × ${i.quantite}`).join(', ') || '—';
   const total = items.reduce((acc: number, i: any) => acc + i.quantite * i.prixUnitaire, 0);
   return {
@@ -79,12 +82,15 @@ function orderToDetail(o: any): RequestDetail {
 function quoteToDetail(q: any): RequestDetail {
   const phone = q.client?.phones?.find((p: any) => p.primary)?.number ?? q.client?.phones?.[0]?.number ?? '';
   const rawItems = q.items ?? [];
-  const items = rawItems.map((i: any) => ({
-    designation: i.product?.reference ?? i.product?.ref ?? i.description ?? '?',
-    categorie: i.product?.category?.name ?? '',
-    quantite: i.quantity ?? 0,
-    prixUnitaire: i.unitPrice ?? 0,
-  }));
+  const items = rawItems.map((i: any) => {
+    const baseName = i.product?.reference ?? i.product?.ref ?? i.description ?? '?';
+    return {
+      designation: i.metrage != null ? `${baseName} · ${i.metrage} m` : baseName,
+      categorie: i.product?.category?.name ?? '',
+      quantite: i.quantity ?? 0,
+      prixUnitaire: i.unitPrice ?? 0,
+    };
+  });
   const produits = items.map((i: any) => `${i.designation} × ${i.quantite}`).join(', ') || '—';
   return {
     id: q.id,
@@ -137,13 +143,13 @@ export async function submitNewRequest(
           name: item.client, company: item._entreprise || undefined, phone: item._telephone || undefined,
           email: item._email || undefined, wilaya: item._wilaya || 'Non spécifié', commune: item._commune || undefined,
         },
-        items: lignes.filter((l: any) => l.ref).map((l: any) => ({ productId: l.productId ?? undefined, quantity: l.qte, unitPrice: l.pu })),
+        items: lignes.filter((l: any) => l.ref).map((l: any) => ({ productId: l.productId ?? undefined, description: l.productId ? undefined : l.ref, quantity: l.qte, unitPrice: l.pu, metrage: l.metrage ? Number(l.metrage) : undefined })),
         assignedToId: item._assignedToId ?? undefined, source: 'AUTRE',
       }
     : {
         name: item.client, company: item._entreprise || undefined, phone: item._telephone || undefined,
         email: item._email || undefined, wilaya: item._wilaya || 'Non spécifié', commune: item._commune || undefined, message: '',
-        items: lignes.filter((l: any) => l.ref).map((l: any) => ({ productId: l.productId ?? undefined, description: l.productId ? undefined : l.ref, quantity: l.qte })),
+        items: lignes.filter((l: any) => l.ref).map((l: any) => ({ productId: l.productId ?? undefined, description: l.productId ? undefined : l.ref, quantity: l.qte, metrage: l.metrage ? Number(l.metrage) : undefined })),
         assignedToId: item._assignedToId ?? undefined, source: 'AUTRE',
       };
   const res = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
@@ -299,8 +305,9 @@ export function CreateForm({ defaultType, onClose, onSave, users, currentUserId,
             </div>
 
             {/* En-têtes colonnes */}
-            <div className="grid gap-2 mb-1" style={{ gridTemplateColumns: '1fr 64px 96px 24px' }}>
+            <div className="grid gap-2 mb-1" style={{ gridTemplateColumns: '1fr 72px 64px 96px 24px' }}>
               <span className="text-[10px] font-bold text-[#ABBED1] uppercase tracking-wide">Référence</span>
+              <span className="text-[10px] font-bold text-[#ABBED1] uppercase tracking-wide">Métrage (m)</span>
               <span className="text-[10px] font-bold text-[#ABBED1] uppercase tracking-wide">Qté</span>
               <span className="text-[10px] font-bold text-[#ABBED1] uppercase tracking-wide">Prix unit. DA</span>
               <span />
@@ -308,7 +315,7 @@ export function CreateForm({ defaultType, onClose, onSave, users, currentUserId,
 
             <div className="flex flex-col gap-2">
               {lignes.map((ligne, i) => (
-                <div key={i} className="grid gap-2 items-center" style={{ gridTemplateColumns: '1fr 64px 96px 24px' }}>
+                <div key={i} className="grid gap-2 items-center" style={{ gridTemplateColumns: '1fr 72px 64px 96px 24px' }}>
                   {/* Ref : dropdown des réfs existantes + option "Référence libre" (commande ET devis) */}
                   <RefSelect
                     value={ligne.ref}
@@ -322,6 +329,12 @@ export function CreateForm({ defaultType, onClose, onSave, users, currentUserId,
                       }
                     }}
                   />
+
+                  {/* Métrage (facultatif) */}
+                  <input type="number" inputMode="decimal" min={0} step="any" value={ligne.metrage}
+                    onChange={e => setLigne(i, { metrage: e.target.value })}
+                    placeholder="—"
+                    className={ic + ' text-center'} />
 
                   {/* Quantité */}
                   <input type="number" inputMode="numeric" min={1} value={ligne.qte}

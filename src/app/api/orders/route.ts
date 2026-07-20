@@ -76,8 +76,8 @@ export async function POST(request: NextRequest) {
 
     const ref = await generateOrderRef(client.wilaya);
     const validItems = (body.items ?? []).filter(
-      (i: { productId?: string | null; quantity?: number }) =>
-        i.productId && i.productId !== '' && (i.quantity ?? 0) > 0
+      (i: { productId?: string | null; description?: string; quantity?: number }) =>
+        ((i.productId && i.productId !== '') || (i.description && i.description.trim() !== '')) && (i.quantity ?? 0) > 0
     );
 
     if (validItems.length === 0) {
@@ -96,10 +96,12 @@ export async function POST(request: NextRequest) {
         // Assignation : valeur fournie, sinon le créateur (utilisateur connecté)
         assignedToId: body.assignedToId ?? session?.user?.id ?? null,
         items: {
-          create: validItems.map((item: { productId: string; quantity: number; unitPrice: number }) => ({
-            productId: item.productId,
+          create: validItems.map((item: { productId?: string | null; description?: string; quantity: number; unitPrice: number; metrage?: number }) => ({
+            productId: item.productId || null,
+            description: item.productId ? null : (item.description ?? null),
             quantity: item.quantity,
             unitPrice: item.unitPrice ?? 0,
+            metrage: item.metrage ?? null,
           })),
         },
       },
