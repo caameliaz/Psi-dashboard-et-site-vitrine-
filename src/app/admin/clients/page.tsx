@@ -15,7 +15,12 @@ interface ClientRecord {
   commandes: number;
   devis: number;
   derniere: string;
+  active?: boolean;
+  deactivatedReason?: string | null;
+  deactivatedByName?: string | null;
+  deactivatedAt?: string | null;
   historique: Array<{
+    id: string;
     ref: string;
     type: 'Commande' | 'Devis';
     date: string;
@@ -196,14 +201,15 @@ function NewOrderForm({ client, onClose }: { client: ClientRecord; onClose: () =
   );
 }
 
-function ClientSlideIn({ client, onClose, onEdit, onDelete }: {
+function ClientSlideIn({ client, onClose, onEdit, onDelete, onReactivate, onDeleteDefinitif, onRefresh }: {
   client: ClientRecord; onClose: () => void; onEdit: () => void; onDelete: () => void;
+  onReactivate?: () => void; onDeleteDefinitif?: () => void; onRefresh?: () => void;
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [photo, setPhoto] = useState<string | undefined>(client.photo);
   const [selectedRequest, setSelectedRequest] = useState<RequestDetail | null>(null);
   const [showNewOrder, setShowNewOrder] = useState(false);
-  const [waTemplate, setWaTemplate] = useState(false);
+  const [templateMode, setTemplateMode] = useState<'wa' | 'mail' | null>(null);
   const ac = avatarColor(client.id);
 
   // Item minimal (niveau client) pour le sélecteur de templates WhatsApp
@@ -243,75 +249,100 @@ function ClientSlideIn({ client, onClose, onEdit, onDelete }: {
           {/* Profil */}
           <div className="px-5 md:px-6 pt-5 md:pt-6 pb-5 border-b border-[#F2F4F7]">
             <div className="flex items-start gap-3 mb-4">
-              {/* Avatar + nom du contact */}
-              <div className="flex flex-col items-center gap-1 flex-shrink-0">
-                <div className="relative group cursor-pointer" onClick={() => fileRef.current?.click()}>
-                  {photo ? (
-                    <img src={photo} alt={client.contact} className="w-12 h-12 rounded-xl object-cover" />
-                  ) : (
-                    <div className="w-12 h-12 rounded-xl flex items-center justify-center text-[15px] font-extrabold" style={{ background: ac.bg, color: ac.text }}>
-                      {initials(client.entreprise || client.contact)}
-                    </div>
-                  )}
-                  <div className="absolute inset-0 rounded-xl bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                    <span className="text-white text-[9px] font-bold">Photo</span>
+              {/* Avatar (sans nom dessous) */}
+              <div className="relative group cursor-pointer flex-shrink-0" onClick={() => fileRef.current?.click()}>
+                {photo ? (
+                  <img src={photo} alt={client.contact} className="w-12 h-12 rounded-xl object-cover" />
+                ) : (
+                  <div className="w-12 h-12 rounded-xl flex items-center justify-center text-[15px] font-extrabold" style={{ background: ac.bg, color: ac.text }}>
+                    {initials(client.entreprise || client.contact)}
                   </div>
+                )}
+                <div className="absolute inset-0 rounded-xl bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                  <span className="text-white text-[9px] font-bold">Photo</span>
                 </div>
-                <span className="text-[11px] font-semibold text-[#374151] text-center max-w-[90px] truncate">{client.contact}</span>
               </div>
               <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handlePhoto} />
 
               <div className="flex-1 min-w-0">
-                {/* Ligne nom + badges + boutons */}
-                <div className="flex items-center gap-2 flex-wrap mb-0.5">
-                  <p className="text-[20px] font-extrabold text-[#0F172A] leading-tight">{client.entreprise || client.contact}</p>
-                  <span className="bg-[#F0FDF4] text-[#166534] text-[10px] font-bold px-1.5 py-0.5 rounded border border-[#BBF7D0] flex-shrink-0">
-                    {client.commandes} cmd
-                  </span>
-                  {client.devis > 0 && (
-                    <span className="bg-[#F5F3FF] text-[#5B21B6] text-[10px] font-bold px-1.5 py-0.5 rounded border border-[#DDD6FE] flex-shrink-0">
-                      {client.devis} devis
-                    </span>
-                  )}
-                  <div className="flex items-center gap-1.5 ml-auto flex-shrink-0">
-                    <a href={waHref} target="_blank" rel="noopener noreferrer" title="WhatsApp"
-                      className="w-7 h-7 flex items-center justify-center rounded-lg text-white"
-                      style={{ background: '#25D366' }}>
-                      <svg width={14} height={14} viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
-                    </a>
+                {/* Ligne 1 : nom entreprise + badges (à gauche), boutons contact (à droite) */}
+                <div className="flex items-start gap-2 mb-1">
+                  <div className="min-w-0 flex-1 flex items-center gap-2 flex-wrap">
+                    <p className="text-[19px] font-extrabold text-[#0F172A] leading-tight truncate">{client.entreprise || client.contact}</p>
+                    <span className="bg-[#F0FDF4] text-[#166534] text-[10px] font-bold px-1.5 py-0.5 rounded border border-[#BBF7D0]">{client.commandes} cmd</span>
+                    {client.devis > 0 && (
+                      <span className="bg-[#F5F3FF] text-[#5B21B6] text-[10px] font-bold px-1.5 py-0.5 rounded border border-[#DDD6FE]">{client.devis} devis</span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-1.5 flex-shrink-0">
+                    <button onClick={() => setTemplateMode('wa')} title="WhatsApp (avec template)"
+                      className="w-8 h-8 flex items-center justify-center rounded-lg text-white" style={{ background: '#25D366' }}>
+                      <svg width={15} height={15} viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+                    </button>
                     <a href={callHref} title="Appeler"
-                      className="w-7 h-7 flex items-center justify-center rounded-lg border border-[#E2E8F0] text-[#374151] hover:bg-[#F8FAFC] transition-colors">
-                      <svg width={13} height={13} fill="none" viewBox="0 0 24 24"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.08 9.81 19.79 19.79 0 01.01 1.18 2 2 0 012 0h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.09 7.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
+                      className="w-8 h-8 flex items-center justify-center rounded-lg border border-[#E2E8F0] text-[#3B82F6] hover:bg-[#F8FAFC] transition-colors">
+                      <svg width={14} height={14} fill="none" viewBox="0 0 24 24"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.08 9.81 19.79 19.79 0 01.01 1.18 2 2 0 012 0h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.09 7.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"/></svg>
                     </a>
-                    {emailHref && (
-                      <a href={emailHref} title="Envoyer un email"
-                        className="w-7 h-7 flex items-center justify-center rounded-lg border border-[#E2E8F0] text-[#374151] hover:bg-[#F8FAFC] transition-colors">
-                        <svg width={13} height={13} fill="none" viewBox="0 0 24 24"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" stroke="currentColor" strokeWidth="1.6"/><path d="M22 6l-10 7L2 6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
-                      </a>
+                    {client.email && (
+                      <button onClick={() => setTemplateMode('mail')} title="Email (avec template)"
+                        className="w-8 h-8 flex items-center justify-center rounded-lg border border-[#E2E8F0] text-[#F59E0B] hover:bg-[#F8FAFC] transition-colors">
+                        <svg width={14} height={14} fill="none" viewBox="0 0 24 24"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" stroke="currentColor" strokeWidth="1.6"/><path d="M22 6l-10 7L2 6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
+                      </button>
                     )}
                   </div>
                 </div>
-                <p className="text-[14px] font-semibold text-[#4CAF4F] mt-0.5">{client.entreprise ? client.contact : ''}</p>
-                {/* Téléphone + email */}
-                <div className="flex items-center gap-5 mt-2 flex-wrap">
-                  <div className="flex items-center gap-2">
-                    <svg width={16} height={16} fill="none" viewBox="0 0 24 24" className="flex-shrink-0"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.08 9.81 19.79 19.79 0 01.01 1.18 2 2 0 012 0h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.09 7.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z" stroke="#8A9BB5" strokeWidth="1.6" strokeLinecap="round"/></svg>
-                    <span className="text-[15px] font-medium text-[#374151]">{client.telephone}</span>
-                  </div>
-                  {client.email && (
-                    <div className="flex items-center gap-2">
-                      <svg width={16} height={16} fill="none" viewBox="0 0 24 24" className="flex-shrink-0"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" stroke="#8A9BB5" strokeWidth="1.6"/><path d="M22 6l-10 7L2 6" stroke="#8A9BB5" strokeWidth="1.6" strokeLinecap="round"/></svg>
-                      <span className="text-[15px] font-medium text-[#374151] truncate">{client.email}</span>
+
+                {/* Ligne 2 : nom du client */}
+                <p className="text-[13px] font-semibold text-[#4CAF4F]">{client.contact}</p>
+
+                {/* Petit espace, puis 2 colonnes : tél/mail à gauche, wilaya/adresse à droite */}
+                <div className="grid grid-cols-2 gap-x-4 gap-y-2 mt-4">
+                  {/* Colonne gauche : tél + mail */}
+                  <div className="flex flex-col gap-2 min-w-0">
+                    <div className="flex items-center gap-2 text-[13px] text-[#374151]">
+                      <svg width={14} height={14} fill="none" viewBox="0 0 24 24" className="flex-shrink-0 text-[#8A9BB5]"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.08 9.81 19.79 19.79 0 01.01 1.18 2 2 0 012 0h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.09 7.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
+                      <span className="font-medium truncate">{client.telephone || '—'}</span>
                     </div>
-                  )}
-                  <div className="flex items-center gap-1.5 mt-1">
-                    <span className="text-[13px] text-[#8A9BB5]">{client.wilaya}</span>
-                    {client.adresse && <><span className="text-[#E2E8F0]">·</span><span className="text-[13px] text-[#ABBED1] truncate">{client.adresse}</span></>}
+                    <div className="flex items-center gap-2 text-[13px] text-[#374151]">
+                      <svg width={14} height={14} fill="none" viewBox="0 0 24 24" className="flex-shrink-0 text-[#8A9BB5]"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" stroke="currentColor" strokeWidth="1.6"/><path d="M22 6l-10 7L2 6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
+                      <span className="font-medium truncate">{client.email || '—'}</span>
+                    </div>
+                  </div>
+                  {/* Colonne droite : wilaya + adresse */}
+                  <div className="flex flex-col gap-2 min-w-0">
+                    <div className="flex items-center gap-2 text-[13px] text-[#374151]">
+                      <svg width={14} height={14} viewBox="0 0 24 24" fill="none" className="flex-shrink-0 text-[#8A9BB5]"><path d="M12 21s-7-5.7-7-11a7 7 0 0114 0c0 5.3-7 11-7 11z" stroke="currentColor" strokeWidth="1.6"/><circle cx="12" cy="10" r="2.4" stroke="currentColor" strokeWidth="1.6"/></svg>
+                      <span className="truncate">{client.commune ? `${client.commune}, ${client.wilaya}` : client.wilaya}</span>
+                    </div>
+                    {client.adresse && (
+                      <div className="flex items-center gap-2 text-[13px] text-[#8A9BB5]">
+                        <svg width={14} height={14} viewBox="0 0 24 24" fill="none" className="flex-shrink-0"><path d="M3 12l9-9 9 9M5 10v10a1 1 0 001 1h4v-6h4v6h4a1 1 0 001-1V10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                        <span className="truncate">{client.adresse}</span>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
             </div>
           </div>
+
+          {/* Bandeau si client désactivé */}
+          {client.active === false && (
+            <div className="mx-5 md:mx-6 mt-4 rounded-xl border border-[#FDE68A] bg-[#FFFBEB] px-4 py-3">
+              <div className="flex items-start gap-2.5">
+                <svg width={16} height={16} fill="none" viewBox="0 0 24 24" className="flex-shrink-0 mt-0.5"><path d="M12 8v4M12 16h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" stroke="#B45309" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                <div className="min-w-0">
+                  <p className="text-[13px] font-bold text-[#92400E]">Client désactivé</p>
+                  {client.deactivatedReason && <p className="text-[12px] text-[#B45309] mt-0.5">Motif : {client.deactivatedReason}</p>}
+                  {(client.deactivatedByName || client.deactivatedAt) && (
+                    <p className="text-[11px] text-[#B45309]/70 mt-0.5">
+                      Par {client.deactivatedByName ?? '—'}{client.deactivatedAt ? ` · ${client.deactivatedAt}` : ''}
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Historique commandes */}
           <div className="px-6 py-5">
@@ -327,7 +358,7 @@ function ClientSlideIn({ client, onClose, onEdit, onDelete }: {
             <div className="flex flex-col gap-2">
               {client.historique.map((h) => {
                 const detail: RequestDetail = {
-                  ref: h.ref, type: h.type, date: h.date, statut: h.statut,
+                  id: h.id, ref: h.ref, type: h.type, date: h.date, statut: h.statut,
                   montant: h.montant, produits: h.produits,
                   client: client.contact, entreprise: client.entreprise,
                   telephone: client.telephone, wilaya: client.wilaya,
@@ -370,36 +401,99 @@ function ClientSlideIn({ client, onClose, onEdit, onDelete }: {
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-4 border-t border-[#F2F4F7] flex items-center gap-3">
-          <button onClick={() => { onClose(); onDelete(); }} className="px-4 py-2 rounded-lg text-[12px] font-semibold text-[#EF4444] border border-[#FECACA] hover:bg-[#FEF2F2] transition-colors">
-            Supprimer
-          </button>
-          <div className="flex-1" />
-          <button onClick={() => { onClose(); onEdit(); }} className="px-4 py-2 rounded-lg text-[13px] font-bold text-white" style={{ background: '#4CAF4F' }}>
-            Modifier
-          </button>
+        <div className="px-6 py-4 border-t border-[#F2F4F7] flex items-center gap-2 flex-wrap">
+          {client.active === false ? (
+            <>
+              <button onClick={onDeleteDefinitif} className="px-3 py-2 rounded-lg text-[12px] font-semibold text-[#EF4444] border border-[#FECACA] hover:bg-[#FEF2F2] transition-colors">
+                Supprimer définitivement
+              </button>
+              <div className="flex-1" />
+              <button onClick={onReactivate} className="px-4 py-2 rounded-lg text-[13px] font-bold text-white" style={{ background: '#4CAF4F' }}>
+                Réactiver
+              </button>
+            </>
+          ) : (
+            <>
+              <button onClick={() => onDelete()} className="px-4 py-2 rounded-lg text-[12px] font-semibold text-[#B45309] border border-[#FDE68A] hover:bg-[#FFFBEB] transition-colors">
+                Désactiver
+              </button>
+              <div className="flex-1" />
+              <button onClick={() => { onClose(); onEdit(); }} className="px-4 py-2 rounded-lg text-[13px] font-bold text-white" style={{ background: '#4CAF4F' }}>
+                Modifier
+              </button>
+            </>
+          )}
         </div>
       </div>
 
-      {selectedRequest && <RequestPanel item={selectedRequest} onClose={() => setSelectedRequest(null)} />}
+      {selectedRequest && (
+        <RequestPanel
+          item={selectedRequest}
+          onClose={() => setSelectedRequest(null)}
+          onStatusChange={async (_ref, newStatut) => {
+            if (!selectedRequest.id) return;
+            const UI_TO_DB: Record<string, string> = { 'En attente': 'EN_ATTENTE', 'Confirmé': 'VALIDE', 'Livré': 'LIVRE', 'Annulé': 'ANNULE' };
+            const endpoint = selectedRequest.type === 'Devis' ? `/api/quotes/${selectedRequest.id}` : `/api/orders/${selectedRequest.id}`;
+            await fetch(endpoint, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: UI_TO_DB[newStatut] ?? newStatut }) });
+            // Statut final → ferme le détail. Sinon garde ouvert avec le nouveau statut.
+            if (newStatut === 'Livré' || newStatut === 'Annulé') setSelectedRequest(null);
+            else setSelectedRequest((prev) => (prev ? { ...prev, statut: newStatut } : prev));
+            onRefresh?.();
+          }}
+          onConfirmQuoteWithPrice={async (it) => {
+            if (!it.id) return;
+            const prix = it._prix;
+            let proposedPrice = 0;
+            if (prix?.totalOverride !== undefined) proposedPrice = prix.totalOverride;
+            else if (prix?.itemPrices) proposedPrice = (it.items ?? []).reduce((acc, x) => { const p = prix.itemPrices!.find((y) => y.designation === x.designation); return acc + x.quantite * (p?.unitPrice ?? 0); }, 0);
+            await fetch(`/api/quotes/${it.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'VALIDE', proposedPrice }) });
+            setSelectedRequest(null);
+            onRefresh?.();
+          }}
+        />
+      )}
       {showNewOrder && <NewOrderForm client={client} onClose={() => setShowNewOrder(false)} />}
-      {waTemplate && <TemplatePopover item={clientAsItem} mode="wa" onClose={() => setWaTemplate(false)} />}
+      {templateMode && <TemplatePopover item={clientAsItem} mode={templateMode} recipientEmail={client.email} onClose={() => setTemplateMode(null)} />}
     </>
   );
 }
 
-function DeleteClientModal({ client, onDelete, onClose }: { client: ClientRecord; onDelete: () => void; onClose: () => void }) {
+// Modal de DÉSACTIVATION client (motif obligatoire). L'historique n'est jamais perdu.
+function DeleteClientModal({ client, onDeactivate, onClose }: { client: ClientRecord; onDeactivate: (reason: string) => void; onClose: () => void }) {
+  const [reason, setReason] = useState('');
   return (
-    <Modal title="Supprimer le client" onClose={onClose}>
-      <div className="text-center">
-        <div className="w-12 h-12 rounded-full bg-[#FEF2F2] flex items-center justify-center mx-auto mb-4">
-          <svg width={22} height={22} fill="none" viewBox="0 0 24 24"><path d="M12 9v4M12 17h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" stroke="#EF4444" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
+    <Modal title="Désactiver le client" onClose={onClose}>
+      <div>
+        <div className="flex items-start gap-3 mb-4">
+          <div className="w-11 h-11 rounded-xl bg-[#FFF7ED] flex items-center justify-center flex-shrink-0">
+            <svg width={22} height={22} fill="none" viewBox="0 0 24 24"><path d="M18.36 6.64A9 9 0 105.64 19.36 9 9 0 0018.36 6.64zM12 8v4M12 16h.01" stroke="#F59E0B" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          </div>
+          <div>
+            <p className="text-[15px] font-bold text-[#0F172A] leading-snug">Désactiver <span className="text-[#B45309]">{client.entreprise || client.contact}</span></p>
+            <p className="text-[12px] text-[#8A9BB5] mt-1">Le client n'apparaîtra plus dans la liste, mais <b>ses commandes, devis et tout l'historique sont conservés</b>. Un admin pourra le réactiver.</p>
+          </div>
         </div>
-        <p className="text-[14px] font-bold text-[#0F172A] mb-1">Supprimer <span className="text-[#EF4444]">{client.entreprise || client.contact}</span> ?</p>
-        <p className="text-[12px] text-[#8A9BB5] mb-5">La fiche client et tout son historique seront supprimés.</p>
-        <div className="flex gap-3">
+
+        <label className="block text-[12px] font-semibold text-[#374151] mb-1.5">Motif de la désactivation <span className="text-[#EF4444]">*</span></label>
+        <textarea
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          rows={3}
+          autoFocus
+          placeholder="Ex : doublon, client inactif, erreur de saisie…"
+          className="w-full px-3 py-2.5 rounded-xl border border-[#E2E8F0] text-[13px] text-[#0F172A] resize-none focus:outline-none focus:border-[#F59E0B] focus:ring-[3px] focus:ring-[#F59E0B]/15 transition-all"
+        />
+        <p className="text-[11px] text-[#ABBED1] mt-1.5">Les administrateurs seront notifiés avec ce motif.</p>
+
+        <div className="flex gap-3 mt-5">
           <button onClick={onClose} className="flex-1 px-4 py-2.5 rounded-xl border border-[#E2E8F0] text-[13px] font-semibold text-[#374151] hover:bg-[#F8FAFC] transition-colors">Annuler</button>
-          <button onClick={onDelete} className="flex-1 px-4 py-2.5 rounded-xl text-[13px] font-bold text-white bg-[#EF4444] hover:bg-[#DC2626] transition-colors">Supprimer</button>
+          <button
+            onClick={() => reason.trim() && onDeactivate(reason.trim())}
+            disabled={!reason.trim()}
+            className="flex-1 px-4 py-2.5 rounded-xl text-[13px] font-bold text-white transition-colors disabled:opacity-40"
+            style={{ background: '#F59E0B' }}>
+            Désactiver
+          </button>
         </div>
       </div>
     </Modal>
@@ -429,6 +523,7 @@ function dbClientToRecord(c: any): ClientRecord {
   const quotesCount = c._count?.quotes ?? 0;
 
   const orderHist = (c.orders ?? []).map((o: any) => ({
+    id: o.id,
     ref: o.ref ?? o.id.slice(0, 8).toUpperCase(),
     type: 'Commande' as const,
     date: new Date(o.createdAt).toLocaleDateString('fr-FR'),
@@ -438,11 +533,12 @@ function dbClientToRecord(c: any): ClientRecord {
     _ts: new Date(o.createdAt).getTime(),
   }));
   const quoteHist = (c.quotes ?? []).map((q: any) => ({
+    id: q.id,
     ref: q.ref ?? q.id.slice(0, 8).toUpperCase(),
     type: 'Devis' as const,
     date: new Date(q.createdAt).toLocaleDateString('fr-FR'),
     statut: STATUS_DB_TO_UI[q.status] ?? q.status,
-    montant: 'Sur devis',
+    montant: q.proposedPrice ? `${Number(q.proposedPrice).toLocaleString('fr-FR')} DA` : 'Sur devis',
     produits: (q.items ?? []).map((i: any) => `${i.product?.reference ?? '?'} × ${i.quantity}`).join(', ') || '—',
     _ts: new Date(q.createdAt).getTime(),
   }));
@@ -466,6 +562,10 @@ function dbClientToRecord(c: any): ClientRecord {
     commandes: ordersCount,
     devis: quotesCount,
     derniere: lastDate,
+    active: c.active ?? true,
+    deactivatedReason: c.deactivatedReason ?? null,
+    deactivatedByName: c.deactivatedBy?.name ?? null,
+    deactivatedAt: c.deactivatedAt ? new Date(c.deactivatedAt).toLocaleDateString('fr-FR') : null,
     historique,
   };
 }
@@ -550,13 +650,46 @@ export default function ClientsPage() {
     }
   };
 
-  const handleDelete = async (c: ClientRecord) => {
+  // Désactivation (avec motif). L'historique reste, admins notifiés.
+  const handleDeactivate = async (c: ClientRecord, reason: string) => {
     const id = (c as any)._dbId ?? c.id;
-    const res = await fetch(`/api/clients/${id}`, { method: 'DELETE' });
-    if (res.ok) {
-      await fetchClients();
+    const res = await fetch(`/api/clients/${id}`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      alert(err.error ?? 'Désactivation impossible');
+      return;
     }
+    await fetchClients();
     setDeleteClient(null);
+    setSelected(null);
+  };
+
+  // Réactiver un client désactivé
+  const handleReactivate = async (c: ClientRecord) => {
+    const id = (c as any)._dbId ?? c.id;
+    const res = await fetch(`/api/clients/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ active: true }),
+    });
+    if (res.ok) { await fetchClients(); setSelected(null); }
+  };
+
+  // Suppression définitive (admin only)
+  const handleDeleteDefinitif = async (c: ClientRecord) => {
+    if (!window.confirm(`Supprimer DÉFINITIVEMENT ${c.entreprise || c.contact} ? Cette action est irréversible.`)) return;
+    const id = (c as any)._dbId ?? c.id;
+    const res = await fetch(`/api/clients/${id}?definitif=true`, { method: 'DELETE' });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      alert(err.error ?? 'Suppression impossible');
+      return;
+    }
+    await fetchClients();
     setSelected(null);
   };
 
@@ -636,6 +769,9 @@ export default function ClientsPage() {
           onClose={() => setSelected(null)}
           onEdit={() => openEdit(selected)}
           onDelete={() => setDeleteClient(selected)}
+          onReactivate={() => handleReactivate(selected)}
+          onDeleteDefinitif={() => handleDeleteDefinitif(selected)}
+          onRefresh={() => { fetchClients(); setSelected(null); }}
         />
       )}
 
@@ -655,7 +791,7 @@ export default function ClientsPage() {
 
       {/* Modal suppression */}
       {deleteClient && (
-        <DeleteClientModal client={deleteClient} onDelete={() => handleDelete(deleteClient)} onClose={() => setDeleteClient(null)} />
+        <DeleteClientModal client={deleteClient} onDeactivate={(reason) => handleDeactivate(deleteClient, reason)} onClose={() => setDeleteClient(null)} />
       )}
     </div>
   );

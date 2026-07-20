@@ -34,9 +34,14 @@ export async function GET(request: NextRequest) {
   const guard = await requirePermission('voir_clients');
   if (guard.error) return guard.error;
 
+  // Par défaut on masque les clients désactivés ; ?inactifs=true pour les inclure
+  const includeInactifs = request.nextUrl.searchParams.get('inactifs') === 'true';
+
   try {
     const clients = await prisma.client.findMany({
+      where: includeInactifs ? undefined : { active: true },
       include: {
+        deactivatedBy: { select: { name: true } },
         phones: true,
         _count: { select: { orders: true, quotes: true } },
         orders: {

@@ -76,6 +76,12 @@ model Client {
   commune   String?
   address   String?
   photo     String?
+  // Désactivation (au lieu d'une suppression réelle — l'historique reste)
+  active            Boolean   @default(true)
+  deactivatedReason String?
+  deactivatedById   String?
+  deactivatedBy     User?     @relation("ClientDeactivatedBy", fields: [deactivatedById], references: [id])
+  deactivatedAt     DateTime?
   phones    ClientPhone[]
   orders    Order[]
   quotes    Quote[]
@@ -107,6 +113,19 @@ model ClientNote {
   createdAt DateTime @default(now())
 }
 
+// Notes internes sur une commande OU un devis (fil horodaté, visible par tous)
+model RequestNote {
+  id        String   @id @default(cuid())
+  order     Order?   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderId   String?
+  quote     Quote?   @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  quoteId   String?
+  author    User     @relation("RequestNoteAuthor", fields: [authorId], references: [id])
+  authorId  String
+  content   String
+  createdAt DateTime @default(now())
+}
+
 // ─── COMMANDE ────────────────────────────────────────────────────────────────
 model Order {
   id              String         @id @default(cuid())
@@ -127,6 +146,7 @@ model Order {
   assignedToId  String?        // "pris en charge par"
   notifications Notification[]
   auditLogs     AuditLog[]     @relation("AuditOrder")
+  requestNotes  RequestNote[]
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
 }
@@ -175,6 +195,7 @@ model Quote {
   assignedToId     String?        // "pris en charge par"
   notifications    Notification[]
   auditLogs        AuditLog[]     @relation("AuditQuote")
+  requestNotes     RequestNote[]
   createdAt        DateTime       @default(now())
   updatedAt        DateTime       @updatedAt
 }
@@ -277,6 +298,8 @@ model User {
   ordersAssigned  Order[]            @relation("OrderAssignedTo")
   quotesAssigned  Quote[]            @relation("QuoteAssignedTo")
   clientNotes     ClientNote[]       @relation("ClientNoteAuthor")
+  clientsDeactivated Client[]        @relation("ClientDeactivatedBy")
+  requestNotes    RequestNote[]      @relation("RequestNoteAuthor")
   notifications   NotificationRead[]
   auditLogs       AuditLog[]
   createdAt       DateTime           @default(now())

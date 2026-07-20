@@ -3,6 +3,7 @@ import { requirePermission } from '@/lib/permissions';
 import { prisma } from '@/lib/prisma';
 import { createAudit } from '@/lib/audit';
 import { notifyDeletion } from '@/lib/notify-activity';
+import { createNotif } from '@/lib/notifications';
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -62,6 +63,8 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
         ...(body.commune !== undefined && { commune: body.commune }),
         ...(body.address !== undefined && { address: body.address }),
         ...(body.photo !== undefined && { photo: body.photo }),
+        // Réactivation → efface les infos de désactivation
+        ...(body.active === true && { active: true, deactivatedReason: null, deactivatedById: null, deactivatedAt: null }),
       },
       include: { phones: true, _count: { select: { orders: true, quotes: true } } },
     });
@@ -83,32 +86,66 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
   }
 }
 
-// DELETE /api/clients/[id] — supprime le client, les commandes/devis restent (clientId → null)
-export async function DELETE(_request: NextRequest, { params }: Ctx) {
+// DELETE /api/clients/[id] — par défaut DÉSACTIVE le client (l'historique reste).
+//   Body { reason } obligatoire. Les admins reçoivent une notif.
+//   ?definitif=true (ADMIN uniquement) → suppression réelle.
+export async function DELETE(request: NextRequest, { params }: Ctx) {
   const guard = await requirePermission('modifier_clients');
   if (guard.error) return guard.error;
   const session = guard.session;
+  const definitif = request.nextUrl.searchParams.get('definitif') === 'true';
 
   const { id } = await params;
 
   try {
     const target = await prisma.client.findUnique({ where: { id }, select: { name: true, company: true } });
     if (!target) return NextResponse.json({ error: 'Client introuvable' }, { status: 404 });
+    const label = target.company ?? target.name;
 
-    await prisma.client.delete({ where: { id } });
+    // ─── Suppression définitive (ADMIN uniquement) ───
+    if (definitif) {
+      if ((session.user as { role?: string }).role !== 'ADMIN') {
+        return NextResponse.json({ error: 'Seul un admin peut supprimer définitivement un client' }, { status: 403 });
+      }
+      await prisma.client.delete({ where: { id } });
+      createAudit({ userId: session.user.id, action: 'Client supprimé définitivement', entity: 'CLIENT', entityId: id, detail: label });
+      notifyDeletion({
+        actorId: session.user.id!, actorName: session.user.name ?? session.user.email ?? 'Admin',
+        entityType: 'client', label,
+      }).catch(() => {});
+      return NextResponse.json({ success: true, deleted: true });
+    }
 
-    createAudit({ userId: session.user.id, action: 'Client supprimé', entity: 'CLIENT', entityId: id, detail: target.company ? `${target.name} (${target.company})` : target.name });
+    // ─── Désactivation (motif obligatoire) ───
+    let reason = '';
+    try { const body = await request.json(); reason = (body?.reason ?? '').trim(); } catch { /* pas de body */ }
+    if (!reason) return NextResponse.json({ error: 'Le motif de désactivation est obligatoire' }, { status: 400 });
 
-    notifyDeletion({
-      actorId: session.user.id!,
-      actorName: session.user.name ?? session.user.email ?? 'Admin',
-      entityType: 'client',
-      label: target.company ?? target.name,
+    await prisma.client.update({
+      where: { id },
+      data: {
+        active: false,
+        deactivatedReason: reason,
+        deactivatedById: session.user.id,
+        deactivatedAt: new Date(),
+      },
+    });
+
+    createAudit({ userId: session.user.id, action: 'Client désactivé', entity: 'CLIENT', entityId: id, detail: `${label} — ${reason}` });
+
+    // Notif claire aux admins
+    const actorName = session.user.name ?? session.user.email ?? 'Un membre';
+    createNotif({
+      type: 'ANNULATION',
+      title: 'Client désactivé',
+      message: `${actorName} a désactivé le client ${label} — motif : ${reason}`,
+      actorId: session.user.id,
+      adminOnly: true,
     }).catch(() => {});
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, deactivated: true });
   } catch (e) {
     console.error(e);
-    return NextResponse.json({ error: 'Failed to delete client' }, { status: 500 });
+    return NextResponse.json({ error: 'Failed to deactivate client' }, { status: 500 });
   }
 }
