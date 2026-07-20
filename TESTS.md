@@ -6,15 +6,20 @@ employe1@psi.dz	Employé complet
 employe2@psi.dz	Employé limité (lecture seule)
 
 ═══════════════════════════════════════════════════════════
-🟠 PRIORITÉ 9 — Retours entreprise (réunion)  🔨 À FAIRE
+✅ PRIORITÉ 9 — Retours entreprise (réunion)  TERMINÉE (9.1 → 9.9)
 ═══════════════════════════════════════════════════════════
-
-## 9.1 — Emails : simplifier + vrai expéditeur  ✅ FAIT (config Microsoft à finaliser)
-- [x] SUPPRIMER l'email quotidien (récap journalier) → job trigger désactivé
-- [x] Garder UNIQUEMENT le récap HEBDOMADAIRE → cron jeudi 23h59 (`59 23 * * 4`)
-- [x] Vrai email entreprise = **Contact@psi.dz** (expéditeur EMAIL_FROM + affiché partout)
-- [x] Config SMTP passée sur **Outlook / Office 365** (smtp.office365.com:587) — vars SMTP_USER/SMTP_PASS/SMTP_PROVIDER
-- [x] 8.5 — Emails auto à la création d'un compte (bienvenue + récap admins) codés + stylés
+- 9.1 Emails : plus de récap quotidien, récap hebdo jeudi 23h59, expéditeur Contact@psi.dz (Outlook), emails auto création compte ✅
+       ⏳ reste externe : activer SMTP AUTH côté Microsoft (voir bloc ci-dessous)
+- 9.2 Export fiche client PDF + Excel (infos + historique) ✅
+- 9.3 Secteur d'activité par client (dropdown + gestion dashboard + badge) ✅
+- 9.4 Champ métrage (m) facultatif partout (commande/devis/produit/site/Excel) ✅
+- 9.5 Référence libre dans les commandes ✅
+- 9.6 Bouton "+ Nouveau" (ex "+ Nouvelle commande") ✅
+- 9.7 Réf auto par catégorie (préfixe → PTT-001, PTT-002…) ✅
+- 9.8 Nom de produit éditable ✅
+- 9.9 Excel 1 ligne/produit sans cases vides + colonnes wilaya/commune/cat/réf/métrage + export dashboard ✅
+> Migration `p9` : Product.name/metrage, Category.prefix/refCounter, OrderItem/QuoteItem.metrage,
+> Client.sectorId + table Sector, OrderItem.productId/description, table RequestNote.
 
 ═══════════════════════════════════════════════════════════════════════
 📧 À DONNER À L'ADMIN MICROSOFT 365 DE L'ENTREPRISE (à faire par eux)
@@ -51,57 +56,16 @@ DONNÉES DE CONNEXION UTILISÉES PAR L'APP (déjà configurées côté code) :
    de test arrive, c'est bon. (Le code est déjà prêt, rien d'autre à faire côté app.)
 ═══════════════════════════════════════════════════════════════════════
 
-## 9.2 — Export / impression fiche client  ✅ FAIT
-- [x] 2 boutons export dans la fiche client → **PDF** (impression) ET **Excel**
-- [x] Contenu = TOUTE la fiche : infos client (entreprise, contact, tél, mail, wilaya, commune, adresse, secteur, nb cmd/devis, statut) + historique complet (commandes + devis) + total
-- [x] Module dédié src/lib/export-client.ts (même charte que l'export commande)
-
-## 9.3 — Segmentation des clients par secteur d'activité  ✅ FAIT
-- [x] Table `Sector` + `sectorId` sur Client (migration p9) + API /api/sectors (GET/POST/PATCH/DELETE)
-- [x] Un client = UN secteur → dropdown dans le formulaire client (création + édition)
-- [x] Gestion des secteurs : bouton "Secteurs" sur la page Clients → modal créer/supprimer
-- [x] Secteur affiché en badge dans la fiche client (à côté du nom)
-- [x] ❌ Mails promotionnels : ABANDONNÉ (on ne fait pas)
-
-## 9.4 — Champ "longueur / métrage" (facultatif) PARTOUT  ✅ FAIT
-- [x] Champ **longueur en mètres FACULTATIF** ajouté :
-      · lignes de commande/devis (formulaire création) · produits (admin) · produit sur le SITE public
-- [x] Affichage type : `réf · 80 m` dans les lignes et la fiche produit publique
-- [x] Persisté sur OrderItem / QuoteItem / Product (migration p9)
-- [ ] Export Excel : intégré dans **9.9** (réécriture ligne-par-ligne)
-
-## 9.5 — Référence libre dans les COMMANDES (pas que les devis)  ✅ FAIT
-- [x] Le dropdown référence des commandes → option "Référence libre" activée (allowFree pour commande ET devis)
-
-## 9.6 — Bouton "+ Nouvelle commande" → renommer "+ Nouveau"  ✅ FAIT
-- [x] Le bouton de la page Commandes affiche juste "+ Nouveau"
-
-## 9.7 — Numéro auto par référence produit (préfixe = catégorie)  ✅ FAIT
-- [x] Champ **préfixe** sur la catégorie (Category.prefix + refCounter, migration p9)
-      → saisi à la création de catégorie ET modifiable après (édition catégorie)
-- [x] Si la catégorie a un préfixe → chaque produit reçoit un code auto : PTT-001, PTT-002… (incrément atomique refCounter)
-- [x] Si PAS de préfixe → comportement inchangé (réf = dimensions largeur/diamètre)
-- [x] L'édition d'un produit à préfixe ne réécrit PAS son code (garde PTT-001)
-- [x] Badge préfixe affiché à côté du nom de la catégorie
-
-## 9.8 — Nom de produit éditable  ✅ FAIT
-- [x] Champ `name` (facultatif) sur Product + migration (p9_products_sectors_metrage)
-- [x] Champ "Nom du produit" dans le formulaire produit (création + édition) → modifiable
-- [x] API products POST/PATCH acceptent `name`
-> Migration p9 couvre aussi : Product.metrage, Category.prefix/refCounter, OrderItem/QuoteItem.metrage,
-> Client.sectorId + table Sector, OrderItem.productId/description (pour 9.3/9.4/9.5/9.7 à venir).
-
-## 9.9 — Excel : pas de cases vides + colonnes + export dashboard  ✅ FAIT
-- [x] Export commandes/devis réécrit : **UNE ligne par produit**, infos de commande RÉPÉTÉES sur chaque ligne (réf, client, tél, wilaya, commune, date, statut) → aucune cellule vide
-- [x] Colonnes ajoutées : wilaya, commune, catégorie produit, produit, **métrage**, référence, téléphone
-- [x] **Export dashboard** en Excel : bouton "Exporter" sur le tableau de bord → indicateurs clés, aujourd'hui, sources, top produits, top wilayas, évolution 6 mois, employés actifs (src/lib/export-dashboard.ts)
-
-═══════════════════════════════════════════════════════════
-✅ PRIORITÉ 9 TERMINÉE — 9.1 à 9.9 (config Microsoft SMTP à finaliser côté entreprise)
-═══════════════════════════════════════════════════════════
-
 
 TODO LIST — ce qui reste à faire
+
+═══════════════════════════════════════════════════════════
+👥 RÉPARTITION DU RESTE
+───────────────────────────────────────────────────────────
+  MOI  → Dashboard web (P7.4) + Notifs système/push (3bis)
+  LUI  → Site public (P7.1 + P7.2) + Templates (8.6) + reprise produits/catégories (1.4)
+  À DEUX, APRÈS DÉPLOIEMENT → config prod (NEXTAUTH_URL/cookies) + tests SMTP + P7.5 perf
+═══════════════════════════════════════════════════════════
 
 DÉCISIONS ACTÉES (P1) :
 - Devis livré = vente → devis chiffrables, comptent dans le CA (comme les commandes livrées)
@@ -115,81 +79,29 @@ DÉCISIONS ACTÉES (P1) :
 # 🟤 PRIORITÉ 8 — Lien commande ↔ client  🔨 EN COURS
 ═══════════════════════════════════════════════════════════
 
-## 8.1 — Autocomplete client sur le champ Nom (formulaire commande/devis)  ✅ FAIT
-- [x] API clients : mode léger `?light=true` (id, name, company, phone, wilaya, commune, email) accessible avec `voir_commandes`
-- [x] Composant `ClientAutocomplete` : champ "Nom" → taper → liste des clients existants → choisir
-- [x] Choisir un client → pré-remplit entreprise, téléphone, wilaya, commune, email
-- [x] Ne rien choisir + taper = nouveau client (comportement actuel conservé)
-- [x] Appliqué partout : commande + devis, mobile + web (même CreateForm)
+- 8.1 Autocomplete client sur le champ Nom (pré-remplit entreprise/tél/wilaya/commune/mail) ✅
+- 8.2 Ré-assigner une commande/devis à un autre client (permission `reassigner_client`) ✅
+- 8.3 Suppression client = DÉSACTIVATION (motif obligatoire, notif admins, réactiver/supprimer déf.) ✅
+- 8.4 Notes commande/devis = fil horodaté avec auteur ✅
 
-## 8.2 — Ré-assigner une commande/devis à un autre client  ✅ FAIT
-- [x] Détail commande/devis → bouton "Changer de client" (visible si permission, sauf si archivé)
-- [x] Nouvelle permission `reassigner_client` (permissions.ts + users page + seed-prod admins)
-- [x] PATCH orders/quotes accepte `clientId` (gardé par la permission → 403 sinon)
-- [x] Après ré-assignation → refetch, l'historique des 2 clients est à jour
+## 8.5 — Emails automatiques à la création d'un compte user  ✅ CODÉ (à tester quand SMTP actif)
+> Code fait dans 9.1 : 2 emails partent à la création (bienvenue+mdp au user, récap aux admins).
+- [ ] ⏳ À tester une fois SMTP AUTH Microsoft activé
 
-## 8.3 — Suppression client = DÉSACTIVATION (pas de vraie suppression)  ✅ FAIT
-> Un employé ne "supprime" pas vraiment un client : il le DÉSACTIVE. L'historique n'est JAMAIS perdu.
-- [x] Colonnes `active`, `deactivatedReason`, `deactivatedById`, `deactivatedAt` sur Client + migration (client_deactivation)
-- [x] "Supprimer" un client → boîte avec **motif OBLIGATOIRE**
-- [x] Le client passe en **désactivé** → commandes/devis + historique intacts
-- [x] Les **admins reçoivent une notif** : "X a désactivé le client Y — motif : …"
-- [x] Fiche du client désactivé : bandeau orange avec motif + qui/quand
-- [x] Admin peut **réactiver** OU **supprimer définitivement** (confirmation)
-- [x] Clients désactivés masqués par défaut (API ?inactifs=true pour les inclure)
-
-## 8.4 — Notes commande/devis = fil horodaté avec auteur  ✅ FAIT
-- [x] Table `RequestNote` (order/quote + auteur + date) + migration (request_notes)
-- [x] API notes orders + quotes (GET fil, POST ajouter)
-- [x] Panneau détail : fil de notes (chaque note = texte + nom auteur + date), bouton "Notes (n)"
-- [x] Ne pas écraser : on ajoute, l'historique reste
-
-## 8.5 — Emails automatiques à la création d'un compte user  🔨 À FAIRE
-> À la création d'un compte : on remplit l'email du user → 2 emails partent automatiquement.
-- [ ] Formulaire création user : champ **email obligatoire** (déjà là, à confirmer)
-- [ ] Email n°1 → aux **ADMINS** : récap du compte créé (nom, email, rôle, identifiants)
-- [ ] Email n°2 → au **NOUVEL UTILISATEUR** (son email) : message de **bienvenue** + son **mot de passe** pour se connecter + lien vers l'admin
-- [ ] Utiliser le setup email existant (nodemailer / Resient — voir P3) — variable EMAIL_FROM
-- [ ] Gérer le cas email invalide / envoi échoué (le compte est quand même créé)
-
-## 8.6 — Affiner les templates de messages  🔨 À FAIRE
-> Les templates WhatsApp/Email existent mais sont basiques. À revoir : contenu, variables, organisation.
-- [ ] Revoir/enrichir le contenu des templates existants (confirmation, relance, livraison, devis…)
-- [ ] Vérifier toutes les variables : [Nom], [Référence], [Wilaya], [Récapitulatif], [Agent] — cohérentes partout
-- [ ] Gérer les templates depuis l'admin (créer/éditer/supprimer) proprement si pas déjà le cas
-- [ ] Templates adaptés au contexte : niveau client (fiche) vs niveau commande (détail)
+## 8.6 — Affiner les templates de messages  🔨 À FAIRE (reporté par la cliente — pas commencé)
+> 5 templates existent (Confirmation, Devis reçu, Livraison, Relance, Prise de contact) + gestion admin.
+> À revoir plus tard : contenu/ton, ajouter [Récapitulatif] dans confirmation/livraison, templates manquants
+> (devis chiffré, livré/merci, annulation), vérifier variables [Nom]/[Référence]/[Wilaya]/[Récapitulatif]/[Agent].
 
 
 ═══════════════════════════════════════════════════════════
 🔴 PRIORITÉ 1 — Logique métier core  (EN COURS — on traite ça d'abord)
 ═══════════════════════════════════════════════════════════
 
-## 1.1 — Séparer Devis et Commandes  ✅ FAIT
-- [x] Supprimer le bouton "Convertir en commande" partout (UI + route /api/quotes/[id]/convert)
-- [x] Cycle Devis   : En attente → Confirmé → Livré → Annulé (indépendant)
-- [x] Cycle Commande: En attente → Confirmé → Livré → Annulé
-- [x] Devis chiffrable : prix (proposedPrice) saisi via popup au moment de CONFIRMER le devis
-- [x] Stats dashboard : livrées ce mois = commandes LIVRÉES + devis LIVRÉS
-- [x] Nettoyer convertedOrderId : migration DB (colonne supprimée) + code
-  → tests détaillés dans la section « 10. Cycle des devis » ci-dessous
-
-## 1.2 — Champ "Pris en charge par" (assignation)  ✅ FAIT
-- [x] Colonne assignedToId (userId nullable) sur Order ET Quote + migration (add_assigned_to)
-- [x] Nouvelle permission `assign_commandes` (décochable, off par défaut sauf admin)
-- [x] Dropdown dans formulaire création : pré-rempli = utilisateur connecté, modifiable
-- [x] Panneau détail : select assigné (si permission) sinon lecture seule + colonne "Responsable" dans la liste
-- [x] Filtre "assigné à" dans les listes (+ option "Non assigné")
-- [x] Notif à l'assigné quand on lui assigne une demande (seul l'assigné reçoit)
-  → tests détaillés dans la section « 10bis. Assignation » ci-dessous
-
-## 1.3 — Wilayas + Communes  ✅ FAIT
-- [x] Fichier lib/data/wilayas-communes.ts (58 wilayas + communes officielles)
-- [x] Champ Wilaya = select des 58 wilayas (WilayaSelect existant)
-- [x] Champ Commune = CommuneSelect filtré selon la wilaya, trié alpha, + saisie libre
-- [x] Colonne `commune` sur Client + migration (add_client_commune)
-- [x] Appliqué sur : checkout public, devis public, création manuelle admin, ajout/édition client
-- [x] Commune affichée dans la fiche client (à côté de la wilaya)
-  → changer de wilaya réinitialise la commune ; commune absente = saisie libre (Entrée ou « Utiliser … »)
+- 1.1 Séparer Devis et Commandes (cycles indépendants, devis chiffrable au moment de confirmer) ✅
+- 1.2 Champ "Pris en charge par" / assignation (permission `assign_commandes`, notif à l'assigné) ✅
+- 1.3 Wilayas + Communes (58 wilayas, commune filtrée + saisie libre, partout) ✅
+- 1.5 Real-time partout via SSE, sans clignotement (listes, dashboard, fiche client, cloche) ✅
 
 ## 1.4 — Catégories refondues / Produits  ⚠️ À REFAIRE (par le collègue)
 > Cette partie a été codée puis remise À FAIRE : le collègue la reprend de zéro.
@@ -202,73 +114,22 @@ DÉCISIONS ACTÉES (P1) :
 - [ ] Accueil (/) : sélecteur de catégorie → produits sur la même page
 - [ ] Page /products : cards catégories + produits ; product card = réf + dimensions + "Ajouter au panier"
 
-## 1.5 — Real-time PARTOUT (aucun rechargement visible)  ✅ FAIT
-- [x] Fetch en 2 modes : chargement initial (spinner) vs refetch SSE **silencieux** (silent=true) → plus de clignotement
-- [x] Liste commandes/devis (/admin/requests) : refetch silencieux sur SSE + après chaque action
-- [x] Dashboard : stats + camembert recalculés en silencieux sur SSE
-- [x] Fiche client (/admin/clients) : SSE ajouté, historique à jour en direct sans spinner
-- [x] Cloche notifications : incrémentale (déjà OK) + toast ciblé (targetUserId → seul l'assigné voit le toast)
-(Priorité 1 TERMINÉE ✅)
+(Priorité 1 TERMINÉE ✅ — sauf 1.4 ci-dessus, repris par le collègue)
 
 
 # 🟠 PRIORITÉ 2 — Dashboard & Stats
 
-## 2.1 — Nouvelles statistiques dashboard  ✅ FAIT
-- [x] Carte "Commandes ce mois" avec évolution vs mois précédent (% ▲/▼)
-- [x] Carte "Devis en attente" (nombre + montant estimé via proposedPrice)
-- [x] Graphique barres : commandes par wilaya (top 10) — Recharts
-- [x] Graphique ligne : évolution commandes/devis sur 6 mois — Recharts
-- [x] Tableau "Employés actifs" : commandes créées ce mois par employé (barres)
-- [x] Camembert produits + carte Origine conservés
-- [x] ⚡ Recharts chargé en dynamic (ssr:false) → n'alourdit QUE le dashboard, jamais le site public
-- [ ] (reporté) Carte "clients qui ont recommandé / nouveaux clients" — à préciser
+- 2.1 Nouvelles stats dashboard (évolution %, devis en attente, wilayas, 6 mois, employés actifs) ✅
+      reste (reporté) : carte "nouveaux clients / clients qui ont recommandé" — à préciser
 
-## 2.2 — Mobile : accès terrain  🔨 EN COURS
-
-PRINCIPE : PAS de pages dupliquées. Ce sont les MÊMES pages web, rendues responsive.
-Le "mobile" = un layout adapté + un menu d'accueil qui pointe vers ces pages. Zéro maintenance en double.
-
-- [x] Layout admin responsive : sur mobile, sidebar → menu hamburger (☰), contenu pleine largeur
-- [x] Login sur mobile → atterrit sur le **menu d'accueil mobile** (`/admin/mobile`)
-- [x] Menu mobile = 1 bouton rond "+" (nouvelle commande → `/admin/quick-order`) + 2 rectangles (Clients, Commandes)
-      → Notifications retiré (déjà dans la cloche du header)
-- [x] Dashboard + pages non-terrain (produits, contenu, users, historique) → **bloqués sur mobile** (message + retour menu)
-- [x] Clients responsive : cartes compactes + fiche → gros boutons **Appeler / WhatsApp / Mail**
-- [x] Commande rapide (`/admin/quick-order`) : formulaire seul (inline, pas de tableau) → écran "créée"
-- [x] Commandes/devis responsive : titre "Commandes", tableau scrollable, filtres empilés, exports cachés sur mobile
-- [x] Panneau détail commande responsive (pleine largeur, footer qui wrappe)
-- [x] Message de confirmation type facture (template WhatsApp/Email avec [Récapitulatif])
-- [x] Login : message "Identifiant ou mot de passe incorrect" + case "Rester connecté" (session 24h glissante)
-- [x] Config IP auto (next.config.ts détecte les IP locales) → plus de galère au changement de WiFi
-- [x] Fix auth mobile : trustHost, useSecureCookies:false, NEXTAUTH_SECRET généré, NEXTAUTH_URL retiré (dev)
-- [x] 🔴 FIX CLAVIER qui se fermait à chaque frappe : SessionProvider refetchOnWindowFocus=false + quick-order client-only + Wrapper non dynamique
-- [x] Formulaire : téléphone (chiffres + clavier tel + OBLIGATOIRE), qté/prix (clavier numérique)
-- [x] Formulaire : "Pris en charge par" → renommé "Commercial" (partout)
-- [x] Devis : référence en dropdown des réfs existantes + option "Référence libre"
-- [x] Menu mobile : couleurs pro (bouton rond vert + 2 cartes blanches épurées)
-- [x] Fiche client refaite : header (entreprise+lieu / avatar+nom / tél en évidence), 3 boutons contact fins pleine largeur
-- [x] Fiche client : WhatsApp → sélecteur de templates (+ option "Écrire sans template")
-- [x] Cloche notifications : ne déborde plus sur mobile (pleine largeur contenue)
-- [x] Panneau détail : toggle "Site web" réparé + boutons Imprimer/Excel cachés sur mobile
-- [ ] Bouton "Modifier" (montant si non défini) dans le panneau détail — à préciser (le Commercial est déjà éditable)
+## 2.2 — Mobile : accès terrain  ✅ FAIT (2 reliquats)
+> Tout le responsive mobile est fait (layout, menu, clients, commandes, fiche, fix clavier…).
+- [ ] Bouton "Modifier montant" dans le panneau détail — à préciser (le Commercial est déjà éditable)
 - [ ] ⚠️ AU DÉPLOIEMENT : remettre NEXTAUTH_URL (prod) + useSecureCookies:true (HTTPS)
-- [x] ⚠️ Garantie tenue : mêmes composants/pages que le web → aucun code dupliqué
 
 
-# 🟡 PRIORITÉ 3 — Notifications & Emails  ✅ FAIT
-## Revue des notifications in-app
-
-Vérifier que TOUTES ces actions génèrent une notif : nouvelle commande site, nouvelle commande manuelle, changement statut, assignation changée, nouveau devis, nouveau message contact
-Celui qui fait l'action js si il recoit ou pas en vrai 
-Notif quand une commande est assignée à quelqu'un → seul l'assigné reçoit
-Emails automatiques
-
-Setup nodemailer ou Resend (recommandé pour Vercel) — variable EMAIL_FROM dans .env
-Email récap quotidien (envoyé chaque matin à 8h) : liste commandes/devis du jour précédent avec statut
-Email récap hebdomadaire (lundi matin) : bilan semaine — total commandes, total devis, statuts
-Destinataires : tous les admins (configurable)
-Cron job via Vercel Cron (vercel.json) ou service externe (Trigger.dev)
-Template HTML propre avec logo PSI, tableau des commandes, lien vers l'admin
+# 🟡 PRIORITÉ 3 — Notifications in-app & Emails récap  ✅ FAIT
+> Notifs in-app (SSE, cloche, toast ciblé) + emails récap (Trigger.dev) faits.
 
 ## 3bis — Notifications SYSTÈME (vraies notifs sur l'appareil)  🔨 À FAIRE
 > Objectif : de vraies notifs de l'OS (comme WhatsApp/Insta) quand nouvelle commande / assignation / etc.
@@ -297,34 +158,14 @@ DEUX OPTIONS (à décider au moment de coder) :
 
 DÉCISION À PRENDRE : A puis B, ou directement B.
 
-# 🟢 PRIORITÉ 4 — Site public arabe
-## Bouton AR/FR  ✅ FAIT reste traduction auto quand on fais changement du contenu
+# 🟢 PRIORITÉ 4 — Site public arabe  ✅ FAIT (1 reliquat)
+> Bouton AR/FR + RTL + traductions faits.
+- [ ] Traduction auto du contenu quand on le modifie depuis l'admin
 
-Fichiers de traduction lib/i18n/fr.ts et lib/i18n/ar.ts
-Bouton toggle dans le header public (FR | AR)
-State stocké dans localStorage
-Direction RTL automatique quand AR (dir="rtl" sur <html>)
-Traduire : navigation, hero, sections produits, formulaires checkout/devis/contact, messages d'erreur
-Les noms de produits et descriptions restent tels quels (données admin, pas traduts)
-  
-# 🔵 PRIORITÉ 5 — Sécurité
+# 🔵 PRIORITÉ 5 — Sécurité  ✅ FAIT
+> Rate limiting, headers sécu, validation Zod, audit connexions, expiration session, sanitize XSS.
 
-Rate limiting sur les routes API publiques (/api/orders, /api/quotes, /api/contact) — max 10 req/min par IP
-Rate limiting sur /api/auth/login — max 5 tentatives/15min
-Headers sécurité Next.js (next.config.js) : CSP, X-Frame-Options, HSTS
-Validation Zod sur tous les inputs côté serveur (revoir les routes qui n'ont que du JS basique)
-Logs d'audit pour les connexions échouées
-Vérifier que les tokens de session expirent bien (sessionVersion déjà en place — tester)
-Sanitize les champs texte libre (notes, messages contact) contre XSS
-
-
-  # PRIORITÉ 6 — Vérifications exports & factures  ✅ FAIT
-
-Vérifier que le PDF commande contient : référence, date, client complet (wilaya + commune), lignes produits, prix HT, TVA si applicable, total TTC, "pris en charge par", confieer avec radja 
-Excel rapport ventes : ajouter colonnes "Commune", "Assigné à", "Wilaya"
-Excel export tableau : même ajouts
-Tester les filtres combinés (statut + période + recherche + assigné) — vérifier qu'ils se combinent bien
-Vérifier les raccourcis WhatsApp/Email/Appel dans le détail client avec un vrai numéro algérien (+213)
+# 🟤 PRIORITÉ 6 — Vérifications exports & factures  ✅ FAIT
 
 
 # 🟣 PRIORITÉ 7 — Retours (site public + dashboard)  🔨 À FAIRE
@@ -338,21 +179,8 @@ Vérifier les raccourcis WhatsApp/Email/Appel dans le détail client avec un vra
 - [ ] Mettre les **bonnes photos** pour l'accueil et les produits
 - [ ] Revoir **comment les références produits s'affichent** (à redesigner)
 
-## 7.3 — Dashboard mobile  TERMINÉ ✅ 
-- [x] Notifications : panneau **plein écran** sur mobile (avant : débordait) — panneau cloche (TopBar)
-- [x] Panneau cloche : filtre "Tous les users" → renommé "Utilisateurs" + ne charge que les notifs des 2 derniers jours
-- [x] Page Commandes : toggle "Tous/Commandes/Devis" **pleine largeur** sur mobile (compact sur web)
-- [x] Page Commandes : onglets tous de la **même taille** (zone compteur fixe, plus de décalage)
-- [x] Page Commandes : recherche + Statut + Ce mois + Responsable → **tous sur la même ligne** (mobile)
-- [x] Page Commandes : "Tous les responsables" → juste "Responsable"
-- [x] Page Commandes : la page ne **s'élargit plus** en changeant d'onglet (overflow-x-hidden)
-- [x] Page Commandes : scrollbar horizontale du tableau **masquée**
-- [x] Page Clients : bouton "Nouveau client" poussé à droite (plus collé à la recherche)
-- [x] Fiche client : doublon d'en-tête réparé
-- [x] Pages inutiles au terrain BLOQUÉES sur mobile : dashboard, produits, contenu, users, historique, **profil** (message + retour menu)
-- [x] Autocomplete client (champ Nom) + ré-assignation client → marchent aussi sur mobile
-
-→ MOBILE (7.3) TERMINÉ ✅  (reste juste tes retours ponctuels si tu repères un truc en testant)
+## 7.3 — Dashboard mobile  ✅ FAIT
+> Notifs plein écran, page Commandes (filtres 1 ligne, largeurs, scrollbar masquée), fiche client, pages terrain bloquées.
 
 ## 7.4 — Dashboard web
 - [ ] Panneau détail commande : layout "goofy" (trop de gris / boutons à revoir) → nettoyer visuellement
