@@ -58,12 +58,11 @@ DONNÉES DE CONNEXION UTILISÉES PAR L'APP (déjà configurées côté code) :
 
 
 TODO LIST — ce qui reste à faire
-
 ═══════════════════════════════════════════════════════════
 👥 RÉPARTITION DU RESTE
 ───────────────────────────────────────────────────────────
   MOI  → Dashboard web (P7.4) + Notifs système/push (3bis)
-  LUI  → Site public (P7.1 + P7.2) + Templates (8.6) + reprise produits/catégories (1.4)
+  LUI  → Site public (P7.1 + P7.2) + Templates (8.6) + reprise produits/catégories (1.4) + recap quotidien pour les admins 
   À DEUX, APRÈS DÉPLOIEMENT → config prod (NEXTAUTH_URL/cookies) + tests SMTP + P7.5 perf
 ═══════════════════════════════════════════════════════════
 
@@ -169,7 +168,6 @@ DÉCISION À PRENDRE : A puis B, ou directement B.
 
 
 # 🟣 PRIORITÉ 7 — Retours (site public + dashboard)  🔨 À FAIRE
-
 ## 7.1 — Site public : responsive
 - [ ] Grille produits (accueil + `/products`) : passer à **2 produits par ligne** sur mobile
 - [ ] Page détail produit : le titre + l'image sont trop gros sur mobile → rétrécir l'image et la rendre **cliquable pour l'agrandir** (façon zoom Amazon), ou trouver un autre système compact
@@ -183,6 +181,14 @@ DÉCISION À PRENDRE : A puis B, ou directement B.
 > Notifs plein écran, page Commandes (filtres 1 ligne, largeurs, scrollbar masquée), fiche client, pages terrain bloquées.
 
 ## 7.4 — Dashboard web
+- [x] Refonte KPI dashboard (migration `monthly_goals`) :
+      · suppression du graphe "Employés actifs" · plus d'espacement entre les blocs
+      · carte 1 = toggle "Commandes / Devis ce mois" (avec évolution % vs mois précédent sur les deux)
+      · carte 2 = "Ventes ce mois" (DA) + évolution % + admin peut filtrer par commercial (assigné)
+      · objectifs mensuels en DA : bouton "Objectifs" (admin) → global + par employé ; barre de progression + "✓ Atteint" dans la carte Ventes ; l'employé voit SON objectif
+      · bloc "Employés ce mois" (admin) = nb commandes + devis LIVRÉS gérés (pas de CA)
+      · métrage affiché dans Top produits (`réf · 80 m`)
+      · API : /api/goals (GET/PUT admin) + /api/stats enrichi (parCommercial, employesLivres, objectifs, ventes/évolutions)
 - [ ] Panneau détail commande : layout "goofy" (trop de gris / boutons à revoir) → nettoyer visuellement
 - [ ] Page Produits : ok en l'état ; réfléchir si une section "tous les produits" en plus serait utile (à trancher, pas urgent)
 - [ ] Fiche client : réorganiser l'affichage des infos ; envisager un **tableau type "historique"** pour les commandes du client (plus propre que l'actuel)
@@ -301,7 +307,6 @@ Mot de passe pour **tous** : `psi2026`
 5. Bonne connexion → redirige vers le dashboard
 
 ---
-
 ## 🏠 8. Dashboard (`/admin/dashboard`)
 
 1. Le **post-it jaune** : date du jour, stats du jour, "X livrées ce mois" en bas

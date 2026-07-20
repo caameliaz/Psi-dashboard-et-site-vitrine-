@@ -8,6 +8,9 @@ import dynamic from 'next/dynamic';
 import type { Order, Quote } from '@/types';
 import { notifBell } from '@/lib/notif-bell-store';
 import { exportDashboardExcel } from '@/lib/export-dashboard';
+import { useRole } from '@/lib/role-context';
+import { useSession } from 'next-auth/react';
+import { Modal } from '@/components/ui/Modal';
 
 // Graphiques Recharts chargés à la demande (ssr:false) → aucun poids ailleurs
 const WilayaBarChart = dynamic(() => import('@/components/ui/DashboardCharts').then((m) => m.WilayaBarChart), {
@@ -225,15 +228,22 @@ export default function DashboardPage() {
   const [search, setSearch] = useState('');
 
   const [recentRequests, setRecentRequests] = useState<RequestDetail[]>([]);
-  const [stats, setStats]       = useState({ commandes: 0, devis: 0, clients: 0, livrees: 0 });
+  const [stats, setStats]       = useState({ commandes: 0, devisMois: 0, ventesMois: 0, ventesPrevMois: 0, evolutionVentes: 0, evolutionDevis: 0, devis: 0, clients: 0, livrees: 0 });
+  const [moisTab, setMoisTab]   = useState<'commandes' | 'devis'>('commandes');
+  const { isAdmin } = useRole();
+  const { data: session } = useSession();
+  const myId = (session?.user as { id?: string } | undefined)?.id ?? null;
+  const [parCommercial, setParCommercial] = useState<{ id: string; name: string; ventes: number; commandes: number; devis: number }[]>([]);
+  const [employesLivres, setEmployesLivres] = useState<{ name: string; commandes: number; devis: number; total: number }[]>([]);
+  const [objectifs, setObjectifs] = useState<{ global: number; byUser: Record<string, number> }>({ global: 0, byUser: {} });
+  const [selectedCommercial, setSelectedCommercial] = useState<string>(''); // '' = total entreprise
+  const [goalsOpen, setGoalsOpen] = useState(false);
   const [todayStats, setTodayStats] = useState({ commandes: 0, attente: 0, contactes: 0 });
   const [topProduits, setTopProduits] = useState<{ ref: string; qty: number; label: string; color: string }[]>([]);
   const [sourceStats, setSourceStats] = useState({ site: 0, manuel: 0 });
   const [evolution, setEvolution] = useState(0);
-  const [devisEnAttente, setDevisEnAttente] = useState({ count: 0, montant: 0 });
   const [topWilayas, setTopWilayas] = useState<{ wilaya: string; count: number }[]>([]);
   const [serie6Mois, setSerie6Mois] = useState<{ mois: string; commandes: number; devis: number }[]>([]);
-  const [employesActifs, setEmployesActifs] = useState<{ name: string; count: number }[]>([]);
   const [loading, setLoading]   = useState(true);
 
   useEffect(() => {
@@ -260,10 +270,11 @@ export default function DashboardPage() {
       setTodayStats(data.todayStats);
       setSourceStats(data.sourceStats);
       setEvolution(data.evolutionCommandes ?? 0);
-      setDevisEnAttente(data.devisEnAttente ?? { count: 0, montant: 0 });
       setTopWilayas(data.topWilayas ?? []);
       setSerie6Mois(data.serie6Mois ?? []);
-      setEmployesActifs(data.employesActifs ?? []);
+      setParCommercial(data.parCommercial ?? []);
+      setEmployesLivres(data.employesLivres ?? []);
+      setObjectifs(data.objectifs ?? { global: 0, byUser: {} });
       setTopProduits(
         (data.topProduits as { ref: string; qty: number; label: string }[]).map((p, i) => ({
           ...p, color: TOP_COLORS[i] ?? '#8A9BB5',
@@ -333,19 +344,29 @@ export default function DashboardPage() {
             />
           </div>
           <button
-            onClick={() => exportDashboardExcel({ stats, todayStats, sourceStats, evolution, devisEnAttente, topProduits, topWilayas, serie6Mois, employesActifs })}
+            onClick={() => exportDashboardExcel({ stats, todayStats, sourceStats, evolution, topProduits, topWilayas, serie6Mois, parCommercial, employesLivres, objectifs })}
             title="Exporter le tableau de bord en Excel"
             className="hidden md:flex items-center gap-2 px-3.5 py-2.5 rounded-xl border border-[#E2E8F0] bg-white text-[13px] font-semibold text-[#16A34A] hover:bg-[#F8FAFC] transition-colors shadow-sm"
           >
             <svg width={15} height={15} fill="none" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/><path d="M14 2v6h6M9 13l6 6M15 13l-6 6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
             Exporter
           </button>
+          {isAdmin && (
+            <button
+              onClick={() => setGoalsOpen(true)}
+              title="Définir les objectifs du mois"
+              className="hidden md:flex items-center gap-2 px-3.5 py-2.5 rounded-xl border border-[#E2E8F0] bg-white text-[13px] font-semibold text-[#4CAF4F] hover:bg-[#F8FAFC] transition-colors shadow-sm"
+            >
+              <svg width={15} height={15} fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.6"/><circle cx="12" cy="12" r="5" stroke="currentColor" strokeWidth="1.6"/><circle cx="12" cy="12" r="1.4" fill="currentColor"/></svg>
+              Objectifs
+            </button>
+          )}
           <div className="hidden md:block"><BellButton /></div>
         </div>
       </div>
 
       {/* 3 colonnes égales : post-it | camembert | source */}
-      <div className="grid grid-cols-3 gap-5 mb-8" style={{ alignItems: 'stretch' }}>
+      <div className="grid grid-cols-3 gap-6" style={{ alignItems: 'stretch' }}>
 
         {/* Post-it — stats mois + aujourd'hui */}
         <div className="relative pt-8 px-5 pb-5 flex flex-col"
@@ -409,63 +430,127 @@ export default function DashboardPage() {
 
       </div>
 
-      {/* ── Nouvelles stats (P2) ──────────────────────────────────────── */}
-      {/* Ligne : cartes évolution + devis en attente */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      {/* ── Cartes du mois : toggle Commandes/Devis + Ventes ─────────────── */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-8">
+        {/* Carte 1 : toggle Commandes ce mois / Devis ce mois */}
         <div className="bg-white rounded-2xl border border-[#E4EBF5] p-5 shadow-sm">
-          <p className="text-[11px] font-bold text-[#ABBED1] uppercase tracking-widest mb-2">Commandes ce mois</p>
-          <div className="flex items-end gap-3">
-            <span className="text-[32px] font-extrabold text-[#0F172A] leading-none">{stats.commandes}</span>
-            <span className={`flex items-center gap-1 text-[13px] font-bold pb-1 ${evolution >= 0 ? 'text-[#4CAF4F]' : 'text-[#EF4444]'}`}>
-              {evolution >= 0 ? '▲' : '▼'} {Math.abs(evolution)}%
-            </span>
+          <div className="flex items-center gap-1 mb-3 bg-[#F2F4F7] rounded-lg p-0.5 w-fit">
+            <button onClick={() => setMoisTab('commandes')}
+              className={`px-3 py-1.5 rounded-md text-[12px] font-bold transition-colors ${moisTab === 'commandes' ? 'bg-white text-[#0F172A] shadow-sm' : 'text-[#8A9BB5] hover:text-[#374151]'}`}>
+              Commandes ce mois
+            </button>
+            <button onClick={() => setMoisTab('devis')}
+              className={`px-3 py-1.5 rounded-md text-[12px] font-bold transition-colors ${moisTab === 'devis' ? 'bg-white text-[#0F172A] shadow-sm' : 'text-[#8A9BB5] hover:text-[#374151]'}`}>
+              Devis ce mois
+            </button>
           </div>
-          <p className="text-[12px] text-[#8A9BB5] mt-1">vs mois précédent</p>
+          {moisTab === 'commandes' ? (
+            <>
+              <div className="flex items-end gap-3">
+                <span className="text-[32px] font-extrabold text-[#0F172A] leading-none">{stats.commandes}</span>
+                <span className={`flex items-center gap-1 text-[13px] font-bold pb-1 ${evolution >= 0 ? 'text-[#4CAF4F]' : 'text-[#EF4444]'}`}>
+                  {evolution >= 0 ? '▲' : '▼'} {Math.abs(evolution)}%
+                </span>
+              </div>
+              <p className="text-[12px] text-[#8A9BB5] mt-1">vs mois précédent</p>
+            </>
+          ) : (
+            <>
+              <div className="flex items-end gap-3">
+                <span className="text-[32px] font-extrabold text-[#8B5CF6] leading-none">{stats.devisMois}</span>
+                <span className={`flex items-center gap-1 text-[13px] font-bold pb-1 ${stats.evolutionDevis >= 0 ? 'text-[#4CAF4F]' : 'text-[#EF4444]'}`}>
+                  {stats.evolutionDevis >= 0 ? '▲' : '▼'} {Math.abs(stats.evolutionDevis)}%
+                </span>
+              </div>
+              <p className="text-[12px] text-[#8A9BB5] mt-1">devis créés · vs mois précédent</p>
+            </>
+          )}
         </div>
-        <div className="bg-white rounded-2xl border border-[#E4EBF5] p-5 shadow-sm">
-          <p className="text-[11px] font-bold text-[#ABBED1] uppercase tracking-widest mb-2">Devis en attente</p>
-          <div className="flex items-end gap-3">
-            <span className="text-[32px] font-extrabold text-[#8B5CF6] leading-none">{devisEnAttente.count}</span>
-            <span className="text-[13px] font-bold text-[#8A9BB5] pb-1">
-              {devisEnAttente.montant > 0 ? `≈ ${Number(devisEnAttente.montant).toLocaleString('fr-FR')} DA` : '—'}
-            </span>
-          </div>
-          <p className="text-[12px] text-[#8A9BB5] mt-1">montant estimé (prix proposés)</p>
-        </div>
+
+        {/* Carte 2 : Ventes ce mois (avec sélecteur commercial pour admin + objectif) */}
+        {(() => {
+          // Montant + objectif affichés selon la sélection (admin) ou soi-même (employé)
+          const activeId = isAdmin ? selectedCommercial : (myId ?? '');
+          const isTotal = isAdmin && selectedCommercial === '';
+          const ventes = isTotal
+            ? stats.ventesMois
+            : (parCommercial.find((c) => c.id === activeId)?.ventes ?? 0);
+          const objectif = isTotal ? objectifs.global : (activeId ? (objectifs.byUser[activeId] ?? 0) : 0);
+          const pct = objectif > 0 ? Math.min(100, Math.round((ventes / objectif) * 100)) : 0;
+          const atteint = objectif > 0 && ventes >= objectif;
+          return (
+            <div className="bg-white rounded-2xl border border-[#E4EBF5] p-5 shadow-sm">
+              <div className="flex items-center justify-between mb-2 gap-2">
+                <p className="text-[11px] font-bold text-[#ABBED1] uppercase tracking-widest">Ventes ce mois</p>
+                {isAdmin && (
+                  <select value={selectedCommercial} onChange={(e) => setSelectedCommercial(e.target.value)}
+                    className="text-[11px] font-semibold text-[#374151] border border-[#E2E8F0] rounded-lg px-2 py-1 bg-white focus:outline-none focus:ring-2 focus:ring-[#4CAF4F]/30 max-w-[55%]">
+                    <option value="">Toute l&apos;entreprise</option>
+                    {parCommercial.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  </select>
+                )}
+              </div>
+              <div className="flex items-end gap-2">
+                <span className="text-[32px] font-extrabold text-[#4CAF4F] leading-none">{Number(ventes).toLocaleString('fr-FR')}</span>
+                <span className="text-[15px] font-bold text-[#4CAF4F] pb-1">DA</span>
+                {isTotal && (
+                  <span className={`flex items-center gap-1 text-[13px] font-bold pb-1 ml-1 ${stats.evolutionVentes >= 0 ? 'text-[#4CAF4F]' : 'text-[#EF4444]'}`}>
+                    {stats.evolutionVentes >= 0 ? '▲' : '▼'} {Math.abs(stats.evolutionVentes)}%
+                  </span>
+                )}
+              </div>
+              {objectif > 0 ? (
+                <div className="mt-3">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[11px] font-bold text-[#8A9BB5] uppercase tracking-wide">Objectif : {Number(objectif).toLocaleString('fr-FR')} DA</span>
+                    <span className={`text-[11px] font-bold ${atteint ? 'text-[#16A34A]' : 'text-[#8A9BB5]'}`}>
+                      {atteint ? '✓ Atteint' : `${pct}%`}
+                    </span>
+                  </div>
+                  <div className="h-2 rounded-full bg-[#F2F4F7] overflow-hidden">
+                    <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: atteint ? '#16A34A' : '#4CAF4F' }} />
+                  </div>
+                </div>
+              ) : (
+                <p className="text-[12px] text-[#8A9BB5] mt-1">commandes + devis livrés {isTotal ? 'ce mois' : 'gérés'}</p>
+              )}
+            </div>
+          );
+        })()}
       </div>
 
       {/* Ligne : graphiques barres wilaya + courbe 6 mois */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-8">
         <WilayaBarChart data={topWilayas} />
         <TrendLineChart data={serie6Mois} />
       </div>
 
-      {/* Tableau employés actifs */}
-      <div className="bg-white rounded-2xl border border-[#E4EBF5] p-5 shadow-sm">
-        <h3 className="text-[14px] font-bold text-[#0F172A] mb-1">Employés actifs ce mois</h3>
-        <p className="text-[11px] text-[#8A9BB5] mb-4">Commandes créées manuellement</p>
-        {employesActifs.length === 0 ? (
-          <p className="text-[12px] text-[#8A9BB5] py-4 text-center">Aucune commande créée manuellement ce mois</p>
-        ) : (
-          <div className="flex flex-col gap-2">
-            {employesActifs.map((e, i) => {
-              const max = employesActifs[0]?.count || 1;
-              return (
+      {/* Dashboard des employés (admin) : nb commandes + devis LIVRÉS gérés */}
+      {isAdmin && (
+        <div className="bg-white rounded-2xl border border-[#E4EBF5] p-5 shadow-sm mt-8">
+          <h3 className="text-[14px] font-bold text-[#0F172A] mb-1">Employés ce mois</h3>
+          <p className="text-[11px] text-[#8A9BB5] mb-4">Commandes et devis livrés gérés (en tant que commercial)</p>
+          {employesLivres.length === 0 ? (
+            <p className="text-[12px] text-[#8A9BB5] py-4 text-center">Aucune vente livrée ce mois</p>
+          ) : (
+            <div className="flex flex-col gap-2.5">
+              {employesLivres.map((e, i) => (
                 <div key={i} className="flex items-center gap-3">
-                  <span className="text-[13px] font-semibold text-[#374151] w-32 truncate">{e.name}</span>
-                  <div className="flex-1 h-2.5 rounded-full bg-[#F2F4F7] overflow-hidden">
-                    <div className="h-full rounded-full" style={{ width: `${(e.count / max) * 100}%`, background: '#4CAF4F' }} />
+                  <span className="text-[13px] font-semibold text-[#374151] w-40 truncate">{e.name}</span>
+                  <div className="flex items-center gap-2 flex-1">
+                    <span className="text-[11px] font-bold px-2 py-0.5 rounded-md bg-[#F0FDF4] text-[#166534] border border-[#BBF7D0]">{e.commandes} cmd</span>
+                    <span className="text-[11px] font-bold px-2 py-0.5 rounded-md bg-[#F5F3FF] text-[#5B21B6] border border-[#DDD6FE]">{e.devis} devis</span>
                   </div>
-                  <span className="text-[13px] font-bold text-[#0F172A] tabular-nums w-8 text-right">{e.count}</span>
+                  <span className="text-[13px] font-bold text-[#0F172A] tabular-nums w-8 text-right">{e.total}</span>
                 </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Tableau dernières demandes */}
-      <div className="bg-white rounded-2xl border border-[#E2E8F0] overflow-hidden shadow-sm">
+      <div className="bg-white rounded-2xl border border-[#E2E8F0] overflow-hidden shadow-sm mt-8">
         <div className="flex items-center justify-between px-6 py-4 border-b border-[#F2F4F7]">
           <h2 className="text-[15px] font-bold text-[#0F172A]">Dernières demandes</h2>
           <a href="/admin/requests" className="text-[12px] font-semibold text-[#4CAF4F] hover:text-[#388E3C] transition-colors">Voir tout ↗</a>
@@ -554,6 +639,79 @@ export default function DashboardPage() {
           }}
         />
       )}
+
+      {goalsOpen && (
+        <GoalsModal
+          objectifs={objectifs}
+          onClose={() => setGoalsOpen(false)}
+          onSaved={() => { setGoalsOpen(false); fetchData(true); }}
+        />
+      )}
     </div>
+  );
+}
+
+// ── Modale Objectifs (admin) : objectif global + un objectif par employé ──────
+function GoalsModal({ objectifs, onClose, onSaved }: {
+  objectifs: { global: number; byUser: Record<string, number> };
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [global, setGlobal] = useState(objectifs.global ? String(objectifs.global) : '');
+  const [byUser, setByUser] = useState<Record<string, string>>(
+    Object.fromEntries(Object.entries(objectifs.byUser).map(([k, v]) => [k, String(v)]))
+  );
+  const [users, setUsers] = useState<{ id: string; name: string }[]>([]);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    fetch('/api/users?assignable=true').then((r) => r.ok ? r.json() : []).then((data: { id: string; name: string }[]) =>
+      setUsers(data.map((u) => ({ id: u.id, name: u.name })))
+    ).catch(() => {});
+  }, []);
+
+  const save = async () => {
+    if (saving) return;
+    setSaving(true);
+    try {
+      const byUserNum: Record<string, number> = {};
+      Object.entries(byUser).forEach(([k, v]) => { byUserNum[k] = Number(v) || 0; });
+      const res = await fetch('/api/goals', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ global: Number(global) || 0, byUser: byUserNum }),
+      });
+      if (!res.ok) { const e = await res.json().catch(() => ({})); alert(e.error ?? 'Échec'); return; }
+      onSaved();
+    } finally { setSaving(false); }
+  };
+
+  const inp = 'w-full border border-[#E2E8F0] rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:ring-2 focus:ring-[#4CAF4F]/30';
+
+  return (
+    <Modal title="Objectifs du mois (DA)" onClose={onClose}>
+      <div className="space-y-4 max-h-[65vh] overflow-y-auto pr-1">
+        <div>
+          <label className="block text-[12px] font-bold text-[#374151] mb-1.5">Objectif général (entreprise)</label>
+          <input value={global} onChange={(e) => setGlobal(e.target.value.replace(/[^\d]/g, ''))} inputMode="numeric" placeholder="ex: 3000000" className={inp} />
+        </div>
+        <div>
+          <p className="text-[12px] font-bold text-[#374151] mb-2">Objectifs par employé <span className="font-normal text-[#8A9BB5]">(facultatif)</span></p>
+          <div className="flex flex-col gap-2">
+            {users.map((u) => (
+              <div key={u.id} className="flex items-center gap-2">
+                <span className="text-[13px] text-[#374151] w-36 truncate">{u.name}</span>
+                <input value={byUser[u.id] ?? ''} onChange={(e) => setByUser((p) => ({ ...p, [u.id]: e.target.value.replace(/[^\d]/g, '') }))}
+                  inputMode="numeric" placeholder="—" className={inp + ' flex-1'} />
+              </div>
+            ))}
+            {users.length === 0 && <p className="text-[12px] text-[#8A9BB5]">Chargement des employés…</p>}
+          </div>
+        </div>
+        <div className="flex gap-2 pt-1">
+          <button onClick={onClose} className="flex-1 px-4 py-2.5 rounded-lg border border-[#E2E8F0] text-[13px] font-semibold text-[#374151] hover:bg-[#F8FAFC]">Annuler</button>
+          <button onClick={save} disabled={saving} className="flex-1 px-4 py-2.5 rounded-lg text-[13px] font-bold text-white bg-[#4CAF4F] hover:bg-[#43A047] disabled:opacity-60">{saving ? 'Enregistrement…' : 'Enregistrer'}</button>
+        </div>
+      </div>
+    </Modal>
   );
 }

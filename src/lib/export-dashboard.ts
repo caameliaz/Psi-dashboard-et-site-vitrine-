@@ -1,15 +1,16 @@
 import { styleBandRow, styleHeaderRow, styleDataRows, styleSectionTitle } from '@/lib/xlsx-style';
 
 export interface DashboardExportData {
-  stats: { commandes: number; devis: number; clients: number; livrees: number };
+  stats: { commandes: number; devisMois: number; ventesMois: number; clients: number; livrees: number };
   todayStats: { commandes: number; attente: number; contactes: number };
   sourceStats: { site: number; manuel: number };
   evolution: number;
-  devisEnAttente: { count: number; montant: number };
   topProduits: { ref: string; qty: number; label: string }[];
   topWilayas: { wilaya: string; count: number }[];
   serie6Mois: { mois: string; commandes: number; devis: number }[];
-  employesActifs: { name: string; count: number }[];
+  parCommercial: { id: string; name: string; ventes: number; commandes: number; devis: number }[];
+  employesLivres: { name: string; commandes: number; devis: number; total: number }[];
+  objectifs: { global: number; byUser: Record<string, number> };
 }
 
 const NUM_COLS = 4;
@@ -49,13 +50,13 @@ export async function exportDashboardExcel(d: DashboardExportData) {
 
   // Indicateurs clés
   section('INDICATEURS CLÉS', ['Indicateur', 'Valeur'], [
-    ['Commandes (total)', d.stats.commandes],
-    ['Devis (total)', d.stats.devis],
-    ['Clients', d.stats.clients],
-    ['Commandes livrées', d.stats.livrees],
+    ['Commandes ce mois', d.stats.commandes],
+    ['Devis ce mois', d.stats.devisMois],
+    ['Ventes ce mois (DA)', d.stats.ventesMois],
+    ['Objectif du mois (DA)', d.objectifs.global],
+    ['Clients ce mois', d.stats.clients],
+    ['Ventes livrées ce mois (nb)', d.stats.livrees],
     ['Évolution commandes (%)', d.evolution],
-    ['Devis en attente (nb)', d.devisEnAttente.count],
-    ['Devis en attente (montant DA)', d.devisEnAttente.montant],
   ]);
 
   section("AUJOURD'HUI", ['Indicateur', 'Valeur'], [
@@ -81,9 +82,13 @@ export async function exportDashboardExcel(d: DashboardExportData) {
     section('ÉVOLUTION 6 MOIS', ['Mois', 'Commandes', 'Devis'],
       d.serie6Mois.map((m) => [m.mois, m.commandes, m.devis]));
 
-  if (d.employesActifs.length)
-    section('EMPLOYÉS ACTIFS', ['Employé', 'Demandes traitées'],
-      d.employesActifs.map((e) => [e.name, e.count]));
+  if (d.parCommercial.length)
+    section('VENTES PAR COMMERCIAL', ['Commercial', 'Ventes (DA)', 'Commandes', 'Devis'],
+      d.parCommercial.map((c) => [c.name, c.ventes, c.commandes, c.devis]));
+
+  if (d.employesLivres.length)
+    section('EMPLOYÉS — LIVRÉS CE MOIS', ['Employé', 'Commandes', 'Devis', 'Total'],
+      d.employesLivres.map((e) => [e.name, e.commandes, e.devis, e.total]));
 
   const ws = utils.aoa_to_sheet(rows);
   ws['!cols'] = [{ wch: 30 }, { wch: 26 }, { wch: 16 }, { wch: 16 }];

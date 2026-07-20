@@ -329,6 +329,20 @@ enum Role {
   EMPLOYEE
 }
 
+// ─── OBJECTIFS MENSUELS (montant de ventes en DA) ────────────────────────────
+// userId null = objectif GLOBAL de l'entreprise ; sinon objectif d'un commercial.
+// Un seul objectif par (month, userId) grâce à l'index unique.
+model MonthlyGoal {
+  id        String   @id @default(cuid())
+  month     String   // format "YYYY-MM"
+  userId    String?  // null = objectif global entreprise
+  amount    Float    // montant cible en DA
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([month, userId])
+}
+
 // ─── NOTIFICATIONS ───────────────────────────────────────────────────────────
 model Notification {
   id        String             @id @default(cuid())
