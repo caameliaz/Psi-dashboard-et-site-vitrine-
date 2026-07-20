@@ -33,7 +33,7 @@ function MobileBellButton() {
 
 // Pages réservées au desktop (lourdes / peu utiles sur le terrain).
 // Sur mobile, elles affichent un message + retour au menu.
-const DESKTOP_ONLY = ['/admin/dashboard', '/admin/products', '/admin/content', '/admin/users', '/admin/history', '/admin/profile'];
+const DESKTOP_ONLY = ['/admin/dashboard', '/admin/products', '/admin/content', '/admin/templates', '/admin/users', '/admin/history', '/admin/profile'];
 
 // Enveloppe les pages admin : sidebar + contenu, SAUF sur la page de login.
 // Responsive : sur mobile la sidebar devient un drawer ouvert par un hamburger.

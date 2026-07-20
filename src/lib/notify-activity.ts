@@ -1,6 +1,7 @@
 import { createNotif } from './notifications';
 import { pushSSE } from './sse-bus';
 import { prisma } from './prisma';
+import { sendPushToUsers } from './push';
 
 // Notifie UNIQUEMENT l'utilisateur assigné qu'une demande lui a été confiée.
 export async function notifyAssignment({
@@ -42,6 +43,8 @@ export async function notifyAssignment({
     createdAt: notif.createdAt.toISOString(),
     targetUserId: assignedToId,
   }, [assignedToId]);
+  const url = orderId || quoteId ? `/admin/requests?open=${orderId ?? quoteId}` : '/admin/dashboard';
+  sendPushToUsers([assignedToId], { title: notif.title, body: notif.message, url, tag: notif.id }).catch(() => {});
 }
 
 const STATUS_LABELS: Record<string, string> = {

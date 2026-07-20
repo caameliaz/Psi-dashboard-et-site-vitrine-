@@ -31,8 +31,28 @@ const DB_TO_UI: Record<string, string> = {
 };
 
 const PERIODE_LABEL: Record<string, string> = {
+  '7j': '7 derniers jours', '2sem': '2 dernières semaines', '3sem': '3 dernières semaines',
   mois: 'Ce mois', '3mois': '3 derniers mois', '6mois': '6 derniers mois', annee: 'Cette année', tout: 'Tout afficher',
 };
+
+// Date de début d'une période → Date. null = tout charger.
+function periodeStartDate(periode: string): Date | null {
+  const now = new Date();
+  if (periode === '7j')    { const d = new Date(now); d.setDate(d.getDate() - 7);  return d; }
+  if (periode === '2sem')  { const d = new Date(now); d.setDate(d.getDate() - 14); return d; }
+  if (periode === '3sem')  { const d = new Date(now); d.setDate(d.getDate() - 21); return d; }
+  if (periode === 'mois')  { const d = new Date(now); d.setDate(1); d.setHours(0, 0, 0, 0); return d; }
+  if (periode === '3mois') { const d = new Date(now); d.setMonth(d.getMonth() - 3); return d; }
+  if (periode === '6mois') { const d = new Date(now); d.setMonth(d.getMonth() - 6); return d; }
+  if (periode === 'annee') { const d = new Date(now); d.setFullYear(d.getFullYear() - 1); return d; }
+  return null; // 'tout'
+}
+
+// … → ISO pour le paramètre ?from de l'API.
+function periodeToFrom(periode: string): string | null {
+  const d = periodeStartDate(periode);
+  return d ? d.toISOString() : null;
+}
 
 // UI label → DB status
 const UI_TO_DB: Record<string, string> = {
@@ -438,9 +458,12 @@ export default function RequestsPage() {
   const fetchAll = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
     try {
+      // Perf : on ne charge que la période sélectionnée (le serveur filtre par ?from)
+      const from = periodeToFrom(filterPeriode);
+      const qs = from ? `?from=${encodeURIComponent(from)}` : '';
       const [ordRes, quoRes] = await Promise.all([
-        fetch('/api/orders'),
-        fetch('/api/quotes'),
+        fetch(`/api/orders${qs}`),
+        fetch(`/api/quotes${qs}`),
       ]);
       if (ordRes.ok) {
         const data = await ordRes.json();
@@ -453,7 +476,7 @@ export default function RequestsPage() {
     } finally {
       if (!silent) setLoading(false);
     }
-  }, []);
+  }, [filterPeriode]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
   useSSE(useCallback(() => { fetchAll(true); }, [fetchAll]));
@@ -478,14 +501,7 @@ export default function RequestsPage() {
 
   const sorted = sortItems(rawItems);
 
-  const periodeStart = (() => {
-    const now = new Date();
-    if (filterPeriode === 'mois')   { const d = new Date(now); d.setDate(1); d.setHours(0,0,0,0); return d; }
-    if (filterPeriode === '3mois')  { const d = new Date(now); d.setMonth(d.getMonth() - 3); return d; }
-    if (filterPeriode === '6mois')  { const d = new Date(now); d.setMonth(d.getMonth() - 6); return d; }
-    if (filterPeriode === 'annee')  { const d = new Date(now); d.setFullYear(d.getFullYear() - 1); return d; }
-    return null;
-  })();
+  const periodeStart = periodeStartDate(filterPeriode);
 
   const filtered = sorted.filter((r) => {
     const q = search.toLowerCase();
@@ -684,6 +700,9 @@ export default function RequestsPage() {
             value={filterPeriode}
             onChange={setFilterPeriode}
             options={[
+              { value: '7j',    label: '7 derniers jours' },
+              { value: '2sem',  label: '2 dernières semaines' },
+              { value: '3sem',  label: '3 dernières semaines' },
               { value: 'mois',  label: 'Ce mois' },
               { value: '3mois', label: '3 derniers mois' },
               { value: '6mois', label: '6 derniers mois' },

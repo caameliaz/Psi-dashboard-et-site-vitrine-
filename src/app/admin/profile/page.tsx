@@ -1,6 +1,61 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { pushSupported, isPushEnabled, enablePush, disablePush } from '@/lib/push-client';
+
+// Section "Notifications système" — activer/désactiver les push sur cet appareil
+function PushSection() {
+  const [supported, setSupported] = useState(true);
+  const [enabled, setEnabled] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState('');
+
+  useEffect(() => {
+    setSupported(pushSupported());
+    isPushEnabled().then(setEnabled);
+  }, []);
+
+  const toggle = async () => {
+    setBusy(true); setMsg('');
+    try {
+      if (enabled) {
+        await disablePush();
+        setEnabled(false);
+        setMsg('Notifications désactivées sur cet appareil.');
+      } else {
+        const r = await enablePush();
+        if (r === 'ok') { setEnabled(true); setMsg('Notifications activées ! Vous les recevrez même app fermée.'); }
+        else if (r === 'denied') setMsg('Permission refusée. Autorisez les notifications dans les réglages du navigateur.');
+        else if (r === 'unsupported') setMsg('Non disponible sur cet appareil/navigateur (ou en local sans HTTPS).');
+        else setMsg('Échec de l\'activation. Réessayez.');
+      }
+    } finally { setBusy(false); }
+  };
+
+  return (
+    <div className="bg-white rounded-2xl border border-[#E2E8F0] overflow-hidden shadow-sm col-span-2">
+      <div className="px-6 py-4 border-b border-[#F2F4F7] bg-[#F8FAFC]">
+        <h2 className="text-[15px] font-bold text-[#0F172A]">Notifications système</h2>
+      </div>
+      <div className="px-6 py-5">
+        <div className="flex items-center justify-between gap-4 flex-wrap">
+          <div className="min-w-0">
+            <p className="text-[13px] text-[#374151]">Recevez une notification sur cet appareil (même l&apos;app fermée) pour chaque nouvelle commande, devis ou assignation.</p>
+            <p className="text-[11px] text-[#ABBED1] mt-1">Sur iPhone : ajoutez d&apos;abord le site à l&apos;écran d&apos;accueil. Ne marche qu&apos;en HTTPS (site en ligne).</p>
+          </div>
+          <button
+            onClick={toggle}
+            disabled={busy || !supported}
+            className={`px-5 py-2.5 rounded-xl text-[13px] font-bold transition-colors flex-shrink-0 ${enabled ? 'border border-[#E2E8F0] text-[#EF4444] hover:bg-[#FEF2F2]' : 'text-white bg-[#4CAF4F] hover:bg-[#43A047]'} disabled:opacity-60`}>
+            {busy ? '…' : enabled ? 'Désactiver' : 'Activer les notifications'}
+          </button>
+        </div>
+        {!supported && <p className="text-[12px] text-[#F59E0B] font-medium mt-3">Cet appareil/navigateur ne supporte pas les notifications push.</p>}
+        {msg && <p className="text-[12px] text-[#374151] font-medium mt-3">{msg}</p>}
+      </div>
+    </div>
+  );
+}
 
 const mockUser = {
   nom: 'Yacine Rahali',
@@ -155,6 +210,8 @@ export default function ProfilePage() {
             </div>
           </div>
         </Section>
+
+        <PushSection />
 
       </div>
     </div>

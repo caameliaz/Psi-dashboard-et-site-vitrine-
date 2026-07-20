@@ -159,7 +159,7 @@ function NewOrderForm({ client, onClose }: { client: ClientRecord; onClose: () =
   };
 
   return (
-    <div className="fixed inset-0 z-[80] flex items-center justify-center p-6">
+    <div className="fixed inset-0 z-[150] flex items-center justify-center p-6">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
       <div className="relative bg-white rounded-2xl shadow-2xl w-[460px] max-w-[92vw] p-6 z-10">
         <div className="flex items-center justify-between mb-5">

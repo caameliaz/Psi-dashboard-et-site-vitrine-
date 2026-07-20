@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { pushSSE } from '@/lib/sse-bus';
+import { sendPushToUsers } from '@/lib/push';
 
-// Crée une notification persistée pour une liste d'utilisateurs + push SSE (cloche).
+// Crée une notification persistée pour une liste d'utilisateurs + push SSE (cloche) + push système.
 // L'acteur (admin qui définit) est exclu pour ne pas se notifier lui-même.
 async function notifyUsers(userIds: string[], actorId: string | null, title: string, message: string) {
   const targets = [...new Set(userIds)].filter((id) => id && id !== actorId);
@@ -15,6 +16,7 @@ async function notifyUsers(userIds: string[], actorId: string | null, title: str
     id: notif.id, type: notif.type, title: notif.title, message: notif.message,
     createdAt: notif.createdAt.toISOString(),
   }, targets);
+  sendPushToUsers(targets, { title, body: message, url: '/admin/dashboard', tag: notif.id }).catch(() => {});
 }
 
 // Mois courant au format "YYYY-MM"

@@ -7,12 +7,17 @@ import { generateOrderRef } from '@/lib/generate-ref';
 import { pushSSE } from '@/lib/sse-bus';
 import { createAudit } from '@/lib/audit';
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   const guard = await requirePermission('voir_commandes');
   if (guard.error) return guard.error;
 
+  // ?from=<ISO> → ne renvoie que les commandes créées depuis cette date (perf : filtre par période)
+  const fromParam = request.nextUrl.searchParams.get('from');
+  const from = fromParam ? new Date(fromParam) : null;
+
   try {
     const orders = await prisma.order.findMany({
+      where: from && !isNaN(from.getTime()) ? { createdAt: { gte: from } } : undefined,
       include: {
         client: { include: { phones: true } },
         items: { include: { product: { include: { category: true } } } },

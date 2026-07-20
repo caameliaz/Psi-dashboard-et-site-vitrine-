@@ -747,8 +747,8 @@ function ContactDropdown({ title, color, hoverColor, children, options }: {
       </IconBtn>
       {open && (
         <>
-          <div className="fixed inset-0 z-[150]" onClick={() => setOpen(false)} />
-          <div className="absolute bottom-full left-0 mb-2 z-[100] bg-white rounded-xl border border-[#E2E8F0] shadow-xl overflow-hidden py-1"
+          <div className="fixed inset-0 z-[100]" onClick={() => setOpen(false)} />
+          <div className="absolute bottom-full left-0 mb-2 z-[110] bg-white rounded-xl border border-[#E2E8F0] shadow-xl overflow-hidden py-1"
             style={{ minWidth: 200 }}>
             {options.map((opt, i) => (
               <button key={i} onClick={() => { opt.onClick(); setOpen(false); }}

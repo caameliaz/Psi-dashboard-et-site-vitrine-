@@ -320,6 +320,7 @@ model User {
   requestNotes    RequestNote[]      @relation("RequestNoteAuthor")
   notifications   NotificationRead[]
   auditLogs       AuditLog[]
+  pushSubscriptions PushSubscription[]
   createdAt       DateTime           @default(now())
   updatedAt       DateTime           @updatedAt
 }
@@ -327,6 +328,20 @@ model User {
 enum Role {
   ADMIN
   EMPLOYEE
+}
+
+// ─── ABONNEMENTS PUSH (notifications système Web Push) ───────────────────────
+// Un abonnement = un appareil/navigateur d'un utilisateur.
+model PushSubscription {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  createdAt DateTime @default(now())
+
+  @@index([userId])
 }
 
 // ─── OBJECTIFS MENSUELS (montant de ventes en DA) ────────────────────────────

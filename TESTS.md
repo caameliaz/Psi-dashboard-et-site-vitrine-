@@ -1,4 +1,26 @@
 
+Salut, pour que le site puisse envoyer les emails automatiques depuis Contact@psi.dz, il faut activer un réglage sur Microsoft. Peux-tu me dire :
+
+Qui gère les comptes Microsoft / Outlook de l'entreprise ? (toi, quelqu'un de l'équipe, ou Icosnet ?)
+As-tu un accès "administrateur" sur admin.microsoft.com ? (pas juste ta boîte mail — le vrai compte admin du domaine psi.dz)
+Si oui, il y a une seule case à cocher (5 min) :
+admin.microsoft.com → Utilisateurs → Contact@psi.dz → onglet Courrier → Gérer les applications de messagerie → cocher "SMTP authentifié" → Enregistrer.
+
+Si c'est Icosnet qui gère, il suffit de les appeler et leur dire : « activez SMTP AUTH pour Contact@psi.dz ».
+═══════════════════════════════════════════════════════════
+🚀 CHECKLIST DÉPLOIEMENT VERCEL (à faire une fois avant mise en ligne)
+═══════════════════════════════════════════════════════════
+Variables d'environnement à ajouter sur Vercel (Settings → Environment Variables) :
+  - DATABASE_URL (Neon prod) · NEXTAUTH_SECRET · NEXTAUTH_URL (= l'URL prod, https://…)
+  - SMTP_USER=Contact@psi.dz · SMTP_PASS · EMAIL_FROM=Contact@psi.dz · SMTP_PROVIDER=outlook
+  - VAPID_PUBLIC · VAPID_PRIVATE · NEXT_PUBLIC_VAPID_PUBLIC  (notifs push — mêmes valeurs que .env local)
+  - TRIGGER_* si récap hebdo via Trigger.dev
+Code / config :
+  - [x] build applique les migrations auto : "build": "prisma migrate deploy && next build"
+  - [ ] useSecureCookies:true côté auth (HTTPS) — à remettre pour la prod
+  - [ ] activer SMTP AUTH côté Microsoft/Icosnet (voir bloc EMAILS) → sinon emails KO
+Tests post-déploiement (HTTPS requis) : notifs push (PC/Android app fermée, iPhone via écran d'accueil) + envoi email test.
+
 Email	Rôle
 admin1@psi.dz	Admin (tout) — utilise celui-là
 admin2@psi.dz	Admin (2e, pour tester notifs à 2)
@@ -21,194 +43,43 @@ employe2@psi.dz	Employé limité (lecture seule)
 > Migration `p9` : Product.name/metrage, Category.prefix/refCounter, OrderItem/QuoteItem.metrage,
 > Client.sectorId + table Sector, OrderItem.productId/description, table RequestNote.
 
-═══════════════════════════════════════════════════════════════════════
-📧 À DONNER À L'ADMIN MICROSOFT 365 DE L'ENTREPRISE (à faire par eux)
-═══════════════════════════════════════════════════════════════════════
-> PROBLÈME : notre app envoie les emails automatiques (récap hebdo, bienvenue
-> nouveau compte…) DEPUIS Contact@psi.dz. Aujourd'hui Microsoft REFUSE l'envoi
-> (erreur "535 5.7.3 Authentication unsuccessful") car "SMTP AUTH" est désactivé
-> par défaut sur Office 365. Il faut l'activer pour ce compte.
->
-> ⚠️ Il faut être ADMINISTRATEUR du domaine psi.dz dans Microsoft 365.
-
-ÉTAPE 1 — Activer SMTP AUTH pour le compte Contact@psi.dz :
-  1. Aller sur https://admin.microsoft.com (connexion avec un compte ADMIN)
-  2. Utilisateurs → Utilisateurs actifs → cliquer sur "Contact@psi.dz"
-  3. Onglet "Courrier" (Mail) → "Gérer les applications de messagerie"
-  4. Cocher "SMTP authentifié" (Authenticated SMTP) → Enregistrer
-  5. Patienter jusqu'à 1h (délai de prise en compte Microsoft)
-
-ÉTAPE 2 — Si l'option n'y est pas, l'activer au niveau organisation :
-  1. admin.microsoft.com → Paramètres → Paramètres de l'organisation → Services
-  2. Ouvrir "SMTP authentifié" → cocher "Activer" → Enregistrer
-
-ÉTAPE 3 — Si le compte a la double authentification (MFA/2FA) :
-  - Le mot de passe normal NE marchera PAS en SMTP.
-  - Générer un "mot de passe d'application" : account.microsoft.com/security
-    → Options de sécurité avancées → Mots de passe d'application
-  - Nous communiquer ce mot de passe (il remplacera SMTP_PASS dans la config).
-
-DONNÉES DE CONNEXION UTILISÉES PAR L'APP (déjà configurées côté code) :
-  - Serveur SMTP : smtp.office365.com   Port : 587   Sécurité : STARTTLS
-  - Utilisateur : Contact@psi.dz        Mot de passe : (celui du compte / app password)
-
-✅ VÉRIFICATION une fois activé : nous relancerons un test d'envoi → si un email
-   de test arrive, c'est bon. (Le code est déjà prêt, rien d'autre à faire côté app.)
-═══════════════════════════════════════════════════════════════════════
-
-
-TODO LIST — ce qui reste à faire
-═══════════════════════════════════════════════════════════
-👥 RÉPARTITION DU RESTE
-───────────────────────────────────────────────────────────
-  MOI  → Dashboard web (P7.4) + Notifs système/push (3bis)
-  LUI  → Site public (P7.1 + P7.2) + Templates (8.6) + reprise produits/catégories (1.4) + recap quotidien pour les admins 
-  À DEUX, APRÈS DÉPLOIEMENT → config prod (NEXTAUTH_URL/cookies) + tests SMTP + P7.5 perf
-═══════════════════════════════════════════════════════════
-
-DÉCISIONS ACTÉES (P1) :
-- Devis livré = vente → devis chiffrables, comptent dans le CA (comme les commandes livrées)
-- Assignation = permission décochable `assign_commandes`, off par défaut sauf admins
-- Real-time PARTOUT (listes, dashboard, fiche client, cloche) — aucun rechargement visible
-- Commune = select filtré selon la wilaya + saisie libre possible
-- Catégories : page /products dédiée ET filtre in-place sur l'accueil (select cat → produits s'affichent, même page)
+📧 EMAILS — bloqueur externe (code prêt, il manque juste l'activation)
+> Microsoft refuse l'envoi depuis Contact@psi.dz tant que "SMTP AUTH" n'est pas activé (erreur 535).
+> À faire : soit via admin.microsoft.com (compte ADMIN → Utilisateurs → Contact@psi.dz → Courrier → cocher "SMTP authentifié"),
+> soit demander à ICOSNET (qui gère le domaine/mails) d'activer SMTP AUTH sur Contact@psi.dz.
+> Config app déjà OK : smtp.office365.com:587 STARTTLS, user Contact@psi.dz, mdp dans .env. Si MFA → générer un "mot de passe d'application".
 
 
 ═══════════════════════════════════════════════════════════
-# 🟤 PRIORITÉ 8 — Lien commande ↔ client  🔨 EN COURS
+✅ TOUT LE CODE DE MA PART EST TERMINÉ (P1→P9, sauf reliquats ci-dessous)
 ═══════════════════════════════════════════════════════════
 
-- 8.1 Autocomplete client sur le champ Nom (pré-remplit entreprise/tél/wilaya/commune/mail) ✅
-- 8.2 Ré-assigner une commande/devis à un autre client (permission `reassigner_client`) ✅
-- 8.3 Suppression client = DÉSACTIVATION (motif obligatoire, notif admins, réactiver/supprimer déf.) ✅
-- 8.4 Notes commande/devis = fil horodaté avec auteur ✅
-
-## 8.5 — Emails automatiques à la création d'un compte user  ✅ CODÉ (à tester quand SMTP actif)
-> Code fait dans 9.1 : 2 emails partent à la création (bienvenue+mdp au user, récap aux admins).
-- [ ] ⏳ À tester une fois SMTP AUTH Microsoft activé
-
-## 8.6 — Affiner les templates de messages  🔨 À FAIRE (reporté par la cliente — pas commencé)
-> 5 templates existent (Confirmation, Devis reçu, Livraison, Relance, Prise de contact) + gestion admin.
-> À revoir plus tard : contenu/ton, ajouter [Récapitulatif] dans confirmation/livraison, templates manquants
-> (devis chiffré, livré/merci, annulation), vérifier variables [Nom]/[Référence]/[Wilaya]/[Récapitulatif]/[Agent].
-
+═══════════════════════════════════════════════════════════
+🔨 CE QUI RESTE — MON CÔTÉ
+═══════════════════════════════════════════════════════════
+Rien à coder. Reste uniquement des tests/config qui exigent le déploiement (HTTPS) :
+- [ ] 3bis Notifs push : tester en prod (PC + Android app fermée ; iPhone via "ajout écran d'accueil")
+- [ ] 8.5 Emails auto création compte : tester une fois SMTP AUTH activé
+- [ ] (reporté, à préciser si besoin) bouton "Modifier montant" détail commande · carte "nouveaux clients" dashboard · traduction auto AR du contenu
 
 ═══════════════════════════════════════════════════════════
-🔴 PRIORITÉ 1 — Logique métier core  (EN COURS — on traite ça d'abord)
+🔨 CE QUI RESTE — COLLÈGUE (site public)
 ═══════════════════════════════════════════════════════════
+- [ ] 7.1 Responsive public : 2 produits/ligne mobile · image détail produit trop grosse → zoom au clic · largeur filtres notifs
+- [ ] 7.2 Photos de bonne qualité PARTOUT (produits + accueil) · redesign affichage des références
+- [ ] 1.4 Catégories/produits refondus (photo catégorie, cards, filtre in-place accueil + /products) — repris de zéro
+- [ ] récap quotidien email pour les admins
 
-- 1.1 Séparer Devis et Commandes (cycles indépendants, devis chiffrable au moment de confirmer) ✅
-- 1.2 Champ "Pris en charge par" / assignation (permission `assign_commandes`, notif à l'assigné) ✅
-- 1.3 Wilayas + Communes (58 wilayas, commune filtrée + saisie libre, partout) ✅
-- 1.5 Real-time partout via SSE, sans clignotement (listes, dashboard, fiche client, cloche) ✅
-
-## 1.4 — Catégories refondues / Produits  ⚠️ À REFAIRE (par le collègue)
-> Cette partie a été codée puis remise À FAIRE : le collègue la reprend de zéro.
-> Ne pas se fier à l'existant côté produits/catégories —
- à revoir entièrement.
-- [ ] Colonne `photo` sur la table Category (+ migration si repris)
-- [ ] API categories : POST/PATCH acceptent `photo` ; GET renvoie photo + nb produits
-- [ ] Admin → Produits/Catégories : cards catégorie avec upload/retrait photo, ajout/suppression
-- [ ] Composant d'affichage : cards catégorie (photo+nom) → produits de la cat (filtre in-place)
-- [ ] Accueil (/) : sélecteur de catégorie → produits sur la même page
-- [ ] Page /products : cards catégories + produits ; product card = réf + dimensions + "Ajouter au panier"
-
-(Priorité 1 TERMINÉE ✅ — sauf 1.4 ci-dessus, repris par le collègue)
-
-
-# 🟠 PRIORITÉ 2 — Dashboard & Stats
-
-- 2.1 Nouvelles stats dashboard (évolution %, devis en attente, wilayas, 6 mois, employés actifs) ✅
-      reste (reporté) : carte "nouveaux clients / clients qui ont recommandé" — à préciser
-
-## 2.2 — Mobile : accès terrain  ✅ FAIT (2 reliquats)
-> Tout le responsive mobile est fait (layout, menu, clients, commandes, fiche, fix clavier…).
-- [ ] Bouton "Modifier montant" dans le panneau détail — à préciser (le Commercial est déjà éditable)
-- [ ] ⚠️ AU DÉPLOIEMENT : remettre NEXTAUTH_URL (prod) + useSecureCookies:true (HTTPS)
-
-
-# 🟡 PRIORITÉ 3 — Notifications in-app & Emails récap  ✅ FAIT
-> Notifs in-app (SSE, cloche, toast ciblé) + emails récap (Trigger.dev) faits.
-
-## 3bis — Notifications SYSTÈME (vraies notifs sur l'appareil)  🔨 À FAIRE
-> Objectif : de vraies notifs de l'OS (comme WhatsApp/Insta) quand nouvelle commande / assignation / etc.
-> Aujourd'hui : notifs seulement IN-APP (cloche + toast, visibles si l'app est ouverte).
-> ⚠️ Le vrai test se fait EN PROD (HTTPS requis). Redéployer = git push (Vercel auto ~2 min).
-
-DEUX OPTIONS (à décider au moment de coder) :
-
-### Option A — Notification API (simple, app/onglet ouvert)
-- [ ] Demander la permission "Autoriser les notifications" (1 fois)
-- [ ] Sur event SSE (déjà en place) → `new Notification(titre, { body, icon })`
-- [ ] Marche PC + Android quand l'onglet est ouvert (même minimisé)
-- [ ] ❌ Ne marche PAS si le navigateur est fermé
-- [ ] Léger : pas de Service Worker, pas de migration, testable en LOCAL
-
-### Option B — Web Push complet (app fermée)  ← la vraie solution "pro"
-- [ ] Service Worker `public/sw.js`
-- [ ] Lib `web-push` + génération clés VAPID (.env : VAPID_PUBLIC / VAPID_PRIVATE)
-- [ ] Table `PushSubscription` (userId, endpoint, keys) + migration
-- [ ] Route API `/api/push/subscribe` (s'abonner) + `/api/push/unsubscribe`
-- [ ] Bouton "Activer les notifications" dans l'admin (profil ou header)
-- [ ] Brancher l'envoi push là où on fait déjà `createNotif` (notifications.ts / notify-activity.ts)
-- [ ] Notif reçue même app/navigateur FERMÉ (Android + PC direct)
-- [ ] ⚠️ iPhone (Safari) : marche seulement si le site est "ajouté à l'écran d'accueil" (PWA)
-- [ ] ⚠️ HTTPS obligatoire → testable seulement EN PROD (pas localhost)
-
-DÉCISION À PRENDRE : A puis B, ou directement B.
-
-# 🟢 PRIORITÉ 4 — Site public arabe  ✅ FAIT (1 reliquat)
-> Bouton AR/FR + RTL + traductions faits.
-- [ ] Traduction auto du contenu quand on le modifie depuis l'admin
-
-# 🔵 PRIORITÉ 5 — Sécurité  ✅ FAIT
-> Rate limiting, headers sécu, validation Zod, audit connexions, expiration session, sanitize XSS.
-
-# 🟤 PRIORITÉ 6 — Vérifications exports & factures  ✅ FAIT
-
-
-# 🟣 PRIORITÉ 7 — Retours (site public + dashboard)  🔨 À FAIRE
-## 7.1 — Site public : responsive
-- [ ] Grille produits (accueil + `/products`) : passer à **2 produits par ligne** sur mobile
-- [ ] Page détail produit : le titre + l'image sont trop gros sur mobile → rétrécir l'image et la rendre **cliquable pour l'agrandir** (façon zoom Amazon), ou trouver un autre système compact
-- [ ] Filtres des notifs (dashboard) : leur **largeur a rétréci** après les derniers changements → à corriger
-
-## 7.2 — Site public : contenu (hors responsive)
-- [ ] Mettre les **bonnes photos** pour l'accueil et les produits
-- [ ] Revoir **comment les références produits s'affichent** (à redesigner)
-
-## 7.3 — Dashboard mobile  ✅ FAIT
-> Notifs plein écran, page Commandes (filtres 1 ligne, largeurs, scrollbar masquée), fiche client, pages terrain bloquées.
-
-## 7.4 — Dashboard web
-- [x] Refonte KPI dashboard (migration `monthly_goals`) :
-      · suppression du graphe "Employés actifs" · plus d'espacement entre les blocs
-      · carte 1 = toggle "Commandes / Devis ce mois" (avec évolution % vs mois précédent sur les deux)
-      · carte 2 = "Ventes ce mois" (DA) + évolution % + admin peut filtrer par commercial (assigné)
-      · objectifs mensuels en DA : bouton "Objectifs" (admin) → global + par employé ; barre de progression + "✓ Atteint" dans la carte Ventes ; l'employé voit SON objectif
-      · bloc "Employés ce mois" (admin) = nb commandes + devis LIVRÉS gérés (pas de CA)
-      · métrage affiché dans Top produits (`réf · 80 m`)
-      · API : /api/goals (GET/PUT admin) + /api/stats enrichi (parCommercial, employesLivres, objectifs, ventes/évolutions)
-      · objectifs notifiés : obj perso → la personne ("X a défini un objectif de Y DA pour vous") ; obj entreprise → tout le monde
-      · dropdowns stylisés (commercial dashboard + "Pris en charge par" détail commande) : chevron custom, appearance-none
-- [x] Panneau détail commande — retouches :
-      · Notes + Modifier sur une ligne compacte à GAUCHE, sous les boutons de contact ; actions statut (Confirmer/Annuler…) à DROITE, côte à côte
-      · scrollbar du panneau masquée (.no-scrollbar dans globals.css)
-      · "Changer de client" réparé (saisie possible + dropdown autocomplete clients) ; non-admin doit justifier → note interne (non exportée avec la fiche)
-- [ ] Panneau détail commande : reste le nettoyage visuel global (trop de gris) si besoin
-- [ ] Page Produits : ok en l'état ; réfléchir si une section "tous les produits" en plus serait utile (à trancher, pas urgent)
-- [ ] Fiche client : réorganiser l'affichage des infos ; envisager un **tableau type "historique"** pour les commandes du client (plus propre que l'actuel)
-- [ ] Page Historique : revoir comment les infos s'affichent (même traitement que les notifs) + rendre les lignes **cliquables** (clic sur une ligne commande → ouvre le détail de la commande) — pareil pour les notifs
-- [ ] Page Utilisateurs : remplacer l'overlay d'édition par une **édition directe dans le détail** (clic sur un utilisateur → pseudo/email en haut, rôle + permissions en dessous, modifiables sur place) ; le clic sur la **carte** utilisateur (liste) doit juste afficher un aperçu des permissions
-- [ ] **Rôles personnalisés réutilisables** : pouvoir créer un rôle nommé (ex "Chef des ventes") avec un set de permissions, pour ne pas re-cocher les permissions à chaque nouvel utilisateur
-
-## 7.5 — Performance : chargement des données par période (fluidifier le site)
-> AUJOURD'HUI : la page Commandes charge TOUTES les commandes/devis d'un coop (fetch /api/orders + /api/quotes),
-> puis le filtre "Ce mois / 3 mois / Tout" se fait côté CLIENT. OK avec peu de données, lent à grande échelle.
-- [ ] API orders/quotes : accepter un paramètre de période (from/to) → ne renvoyer que la période demandée
-- [ ] Charger seulement ce qui est affiché (ex : "Ce mois" → charge juste le mois) + pagination si besoin
-- [ ] Idem stats dashboard si pertinent
-- [ ] But : fluidifier le site quand la base grossit
+═══════════════════════════════════════════════════════════
+🚀 APRÈS DÉPLOIEMENT — dans l'ordre
+═══════════════════════════════════════════════════════════
+1. Déployer sur Vercel (voir CHECKLIST DÉPLOIEMENT en haut) → obtenir l'URL .vercel.app
+2. Remettre useSecureCookies:true (HTTPS) + NEXTAUTH_URL = URL prod
+3. Tester en prod : notifs push · connexion · commande/devis · exports · envoi email test
+4. À l'entreprise : activer SMTP AUTH (leur admin Microsoft) → tester les mails
+5. Brancher le domaine psi.dz sur l'URL Vercel (config DNS via Icosnet — propagation ~qq heures)
+6. Remplir les vraies données (produits, clients) directement via l'app en ligne
+> Cycle de correction après déploiement : git add -A && git commit -m "..." && git push → Vercel redéploie tout seul (~2 min).
 
 
 # PSI — Guide de tests complet
