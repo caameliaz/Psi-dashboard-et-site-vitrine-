@@ -40,8 +40,10 @@ function Toggle({ active, onToggle }: { active: boolean; onToggle: () => void })
 interface Ref {
   id: string;
   reference: string;
+  name: string;
   width: number;
   length: number;
+  metrage: number | null;
   usage: string;
   price: number;
   active: boolean;
@@ -60,8 +62,10 @@ function dbToRef(p: any): Ref {
   return {
     id: p.id,
     reference: p.reference ?? '—',
+    name: p.name ?? '',
     width: p.width ?? 0,
     length: p.length ?? 0,
+    metrage: p.metrage ?? null,
     usage: p.usage ?? '',
     price: p.price ?? 0,
     active: p.active ?? true,
@@ -72,29 +76,39 @@ function dbToRef(p: any): Ref {
 const inputClass = "w-full px-3 py-2.5 rounded-lg border border-[#E2E8F0] text-sm text-[#0F172A] focus:outline-none focus:border-[#4CAF4F] focus:ring-1 focus:ring-[#4CAF4F] transition-colors bg-[#F8FAFC]";
 
 // ── Modale "Nouvelle référence" — pour la catégorie sélectionnée ────────────
-interface RefForm { width: string; length: string; usage: string; price: string; }
-const emptyRefForm: RefForm = { width: '', length: '', usage: '', price: '' };
+interface RefForm { name: string; width: string; length: string; metrage: string; usage: string; price: string; }
+const emptyRefForm: RefForm = { name: '', width: '', length: '', metrage: '', usage: '', price: '' };
 
 function RefFormFields({ form, setForm }: { form: RefForm; setForm: (f: RefForm) => void }) {
   return (
     <div className="space-y-4">
+      <div>
+        <label className="block text-[12px] font-semibold text-[#374151] mb-1.5">Nom du produit <span className="text-[#ABBED1] font-normal">(facultatif)</span></label>
+        <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="ex: Rouleau thermique standard" className={inputClass} />
+      </div>
       <div className="grid grid-cols-2 gap-3">
         <div>
           <label className="block text-[12px] font-semibold text-[#374151] mb-1.5">Largeur (mm)</label>
           <input value={form.width} onChange={(e) => setForm({ ...form, width: e.target.value })} placeholder="ex: 80" className={inputClass} />
         </div>
         <div>
-          <label className="block text-[12px] font-semibold text-[#374151] mb-1.5">Longueur (m)</label>
+          <label className="block text-[12px] font-semibold text-[#374151] mb-1.5">Diamètre (mm)</label>
           <input value={form.length} onChange={(e) => setForm({ ...form, length: e.target.value })} placeholder="ex: 80" className={inputClass} />
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="block text-[12px] font-semibold text-[#374151] mb-1.5">Métrage (m) <span className="text-[#ABBED1] font-normal">(facultatif)</span></label>
+          <input value={form.metrage} onChange={(e) => setForm({ ...form, metrage: e.target.value.replace(/[^\d.]/g, '') })} inputMode="decimal" placeholder="ex: 80" className={inputClass} />
+        </div>
+        <div>
+          <label className="block text-[12px] font-semibold text-[#374151] mb-1.5">Prix (DA)</label>
+          <input value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} inputMode="numeric" placeholder="ex: 150" className={inputClass} />
         </div>
       </div>
       <div>
         <label className="block text-[12px] font-semibold text-[#374151] mb-1.5">Utilisation</label>
         <input value={form.usage} onChange={(e) => setForm({ ...form, usage: e.target.value })} placeholder="ex: Caisses enregistreuses" className={inputClass} />
-      </div>
-      <div>
-        <label className="block text-[12px] font-semibold text-[#374151] mb-1.5">Prix (DA)</label>
-        <input value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} placeholder="ex: 150" className={inputClass} />
       </div>
     </div>
   );
@@ -189,7 +203,9 @@ function NewCategoryModal({ onClose, onCreated }: { onClose: () => void; onCreat
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           reference: `${r.width.trim()}/${r.length.trim()}`,
+          name: r.name.trim() || null,
           width: Number(r.width), length: Number(r.length),
+          metrage: r.metrage.trim() ? Number(r.metrage) : null,
           usage: r.usage.trim(), price: Number(r.price) || 0, categoryId: cat.id, active: true,
         }),
       })));
@@ -335,7 +351,7 @@ export default function ProductsPage() {
   };
 
   const openEditRef = (r: Ref) => {
-    setEditRefForm({ width: String(r.width), length: String(r.length), usage: r.usage, price: String(r.price) });
+    setEditRefForm({ name: r.name ?? '', width: String(r.width), length: String(r.length), metrage: r.metrage != null ? String(r.metrage) : '', usage: r.usage, price: String(r.price) });
     setEditRef(r);
   };
 
@@ -345,7 +361,9 @@ export default function ProductsPage() {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         reference: `${editRefForm.width.trim()}/${editRefForm.length.trim()}`,
+        name: editRefForm.name.trim() || null,
         width: Number(editRefForm.width), length: Number(editRefForm.length),
+        metrage: editRefForm.metrage.trim() ? Number(editRefForm.metrage) : null,
         usage: editRefForm.usage.trim(), price: Number(editRefForm.price) || 0,
       }),
     });

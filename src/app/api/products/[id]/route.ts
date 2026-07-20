@@ -20,8 +20,10 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
       where: { id },
       data: {
         ...(body.reference !== undefined && { reference: body.reference }),
+        ...(body.name !== undefined && { name: body.name }),
         ...(body.width !== undefined && { width: Number(body.width) }),
         ...(body.length !== undefined && { length: Number(body.length) }),
+        ...(body.metrage !== undefined && { metrage: body.metrage != null ? Number(body.metrage) : null }),
         ...(body.usage !== undefined && { usage: body.usage }),
         ...(body.price !== undefined && { price: Number(body.price) }),
         ...(body.photo !== undefined && { photo: body.photo }),

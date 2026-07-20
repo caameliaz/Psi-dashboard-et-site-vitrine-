@@ -13,17 +13,30 @@ model Category {
   name        String    @unique
   photo       String?
   description String?
+  prefix      String?   // préfixe des références produit auto (ex: PTT, IMP)
+  refCounter  Int       @default(0) // dernier numéro utilisé pour l'auto-incrément
   order       Int       @default(0)
   products    Product[]
   createdAt   DateTime  @default(now())
+}
+
+// ─── SECTEUR D'ACTIVITÉ CLIENT ───────────────────────────────────────────────
+model Sector {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  order     Int      @default(0)
+  clients   Client[]
+  createdAt DateTime @default(now())
 }
 
 // ─── PRODUIT ─────────────────────────────────────────────────────────────────
 model Product {
   id           String               @id @default(cuid())
   reference    String               @unique
+  name         String?              // nom personnalisable du produit (facultatif)
   width        Int                  // largeur en mm
   length       Int                  // longueur en m
+  metrage      Float?               // longueur en mètres (facultatif)
   usage        String
   price        Float
   photo        String?
@@ -76,6 +89,8 @@ model Client {
   commune   String?
   address   String?
   photo     String?
+  sector    Sector?          @relation(fields: [sectorId], references: [id])
+  sectorId  String?          // secteur d'activité (pharmacie, banque…)
   // Désactivation (au lieu d'une suppression réelle — l'historique reste)
   active            Boolean   @default(true)
   deactivatedReason String?
@@ -152,13 +167,15 @@ model Order {
 }
 
 model OrderItem {
-  id        String  @id @default(cuid())
-  order     Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  orderId   String
-  product   Product @relation(fields: [productId], references: [id])
-  productId String
-  quantity  Int
-  unitPrice Float   // snapshot du prix au moment de la commande
+  id          String  @id @default(cuid())
+  order       Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderId     String
+  product     Product? @relation(fields: [productId], references: [id])
+  productId   String?
+  description String?  // réf libre (hors catalogue)
+  metrage     Float?   // longueur en mètres (facultatif)
+  quantity    Int
+  unitPrice   Float   // snapshot du prix au moment de la commande
 }
 
 enum OrderSource {
@@ -209,6 +226,7 @@ model QuoteItem {
   description String?  // si produit hors catalogue ou format spécial
   width       Int?
   length      Int?
+  metrage     Float?   // longueur en mètres (facultatif)
   quantity    Int
 }
 

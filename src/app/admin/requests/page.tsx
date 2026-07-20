@@ -309,11 +309,11 @@ export function CreateForm({ defaultType, onClose, onSave, users, currentUserId,
             <div className="flex flex-col gap-2">
               {lignes.map((ligne, i) => (
                 <div key={i} className="grid gap-2 items-center" style={{ gridTemplateColumns: '1fr 64px 96px 24px' }}>
-                  {/* Ref : dropdown des réfs existantes. Devis → option "Référence libre" en plus */}
+                  {/* Ref : dropdown des réfs existantes + option "Référence libre" (commande ET devis) */}
                   <RefSelect
                     value={ligne.ref}
                     products={products}
-                    allowFree={type === 'Devis'}
+                    allowFree
                     onChange={(ref, isFree) => {
                       if (isFree) {
                         setLigne(i, { ref, productId: null });
@@ -608,8 +608,8 @@ export default function RequestsPage() {
             Exporter
           </button>
           <button onClick={() => setShowCreate(true)}
-            className="px-4 py-2 rounded-xl text-[13px] font-bold border border-[#4CAF4F] text-[#4CAF4F] hover:bg-[#F0FDF4] transition-colors">
-            + Nouvelle commande
+            className="px-4 py-2 rounded-xl text-[13px] font-bold border border-[#4CAF4F] text-[#4CAF4F] hover:bg-[#F0FDF4] transition-colors whitespace-nowrap">
+            + Nouveau
           </button>
         </div>
       </div>

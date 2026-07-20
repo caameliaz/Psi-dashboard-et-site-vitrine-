@@ -5,7 +5,7 @@ import { sendWeeklyRecap } from '@/lib/recaps/sendWeeklyRecap';
 
 export const weeklyRecapTask = schedules.task({
   id: 'weekly-recap',
-  cron: '0 8 * * 1', // le lundi à 8h (fuseau horaire du projet Trigger.dev, à configurer)
+  cron: '59 23 * * 4', // le JEUDI à 23h59 (fuseau horaire du projet Trigger.dev, à configurer)
   run: async () => {
     const result = await sendWeeklyRecap();
     console.log('[trigger] weekly-recap', result);

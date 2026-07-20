@@ -13,7 +13,7 @@ export default function ContactPage() {
   }, []);
 
   const telephone = content['contact_telephone'] ?? '+213770150656';
-  const email     = content['contact_email']     ?? 'contact@psi-algerie.com';
+  const email     = content['contact_email']     ?? 'Contact@psi.dz';
   const adresse   = content['contact_adresse']   ?? 'Centre El Qods, Niveau M1, Chéraga, Alger';
 
   const whatsappNumber = telephone.replace(/\D/g, '').replace(/^0/, '213');

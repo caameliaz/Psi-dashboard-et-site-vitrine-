@@ -41,7 +41,7 @@ export default function ContentPage() {
       });
       setContact({
         adresse:   data['contact_adresse']   ?? 'Centre El Qods, Niveau M1, Chéraga, Alger',
-        email:     data['contact_email']     ?? 'contact@psi-algerie.com',
+        email:     data['contact_email']     ?? 'Contact@psi.dz',
         telephone: data['contact_telephone'] ?? '+213770150656',
         facebook:  data['contact_facebook']  ?? 'https://www.facebook.com/PSI',
         instagram: data['contact_instagram'] ?? 'https://www.instagram.com/psi04_2026',

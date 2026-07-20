@@ -85,7 +85,7 @@ export async function GET() {
     ]);
 
     // Résoudre refs + catégories pour topProduits
-    const productIds = topProduits.map((g) => g.productId);
+    const productIds = topProduits.map((g) => g.productId).filter((id): id is string => id != null);
     const products = await prisma.product.findMany({
       where: { id: { in: productIds } },
       select: { id: true, reference: true, category: { select: { id: true, name: true } } },
@@ -93,8 +93,8 @@ export async function GET() {
     const productMap = Object.fromEntries(products.map((p) => [p.id, p]));
 
     // Construire top par catégorie : meilleur produit par catégorie (max 6 catégories)
-    const topWithMeta = topProduits.map((g) => {
-      const p = productMap[g.productId];
+    const topWithMeta = topProduits.filter((g) => g.productId != null).map((g) => {
+      const p = productMap[g.productId as string];
       return { ref: p?.reference ?? 'Inconnu', qty: g._sum.quantity ?? 0, categoryId: p?.category?.id ?? null, categoryName: p?.category?.name ?? 'Sans catégorie' };
     });
 

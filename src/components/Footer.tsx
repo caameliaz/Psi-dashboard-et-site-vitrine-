@@ -13,7 +13,7 @@ export function Footer() {
   }, []);
 
   const adresse   = content['contact_adresse']   ?? 'Centre El Qods, Niveau M1, Chéraga, Alger';
-  const email     = content['contact_email']     ?? 'contact@psi-algerie.com';
+  const email     = content['contact_email']     ?? 'Contact@psi.dz';
   const facebook  = content['contact_facebook']  ?? 'https://www.facebook.com/PSI';
   const instagram = content['contact_instagram'] ?? 'https://www.instagram.com/psi04_2026';
 

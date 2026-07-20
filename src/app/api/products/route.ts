@@ -46,8 +46,10 @@ export async function POST(request: NextRequest) {
     const product = await prisma.product.create({
       data: {
         reference: body.reference,
+        name: body.name ?? null,
         width: Number(body.width),
         length: Number(body.length),
+        metrage: body.metrage != null ? Number(body.metrage) : null,
         usage: body.usage ?? '',
         price: Number(body.price),
         photo: body.photo ?? null,

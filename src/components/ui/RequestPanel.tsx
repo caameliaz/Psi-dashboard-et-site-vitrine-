@@ -96,7 +96,7 @@ async function exportExcel(item: RequestDetail) {
 
   // ── Bandeau PSI ──────────────────────────────────────────────────────────
   push(pad(['PSI — Paper Solutions Industry']));
-  push(pad(['Centre El Qods, Niveau M1 — Chéraga, Alger | contact@psi-algerie.com']));
+  push(pad(['Centre El Qods, Niveau M1 — Chéraga, Alger | Contact@psi.dz']));
   push(pad([`${item.type} ${item.ref} — Exporté le ${new Date().toLocaleDateString('fr-FR')}`]));
   push(pad([]));
 
@@ -252,7 +252,7 @@ async function printDoc(item: RequestDetail) {
 <div class="header">
   <div>
     ${logoHtml}
-    <div class="brand-addr">Centre El Qods, Niveau M1 — Chéraga, Alger<br/>contact@psi-algerie.com</div>
+    <div class="brand-addr">Centre El Qods, Niveau M1 — Chéraga, Alger<br/>Contact@psi.dz</div>
   </div>
   <div class="doc-meta">
     <div class="doc-type">${item.type}</div>
@@ -867,7 +867,7 @@ export function RequestPanel({ item, onClose, onStatusChange, onConfirmQuoteWith
                     </div>
                   </div>
                   <p className="text-[11px] text-[#ABBED1] mt-1">Centre El Qods, Niveau M1 — Chéraga, Alger</p>
-                  <p className="text-[11px] text-[#ABBED1]">contact@psi-algerie.com</p>
+                  <p className="text-[11px] text-[#ABBED1]">Contact@psi.dz</p>
                 </div>
                 <div className="text-right flex-shrink-0">
                   <p className="text-[18px] md:text-[22px] font-extrabold text-[#0F172A] font-mono leading-none">{item.ref}</p>

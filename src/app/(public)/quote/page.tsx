@@ -10,7 +10,7 @@ import { useTranslation } from '@/lib/i18n';
 
 const WHATSAPP_NUMBER = '213770150656';
 const PHONE = '+213770150656';
-const EMAIL = 'contact@psi-algerie.com';
+const EMAIL = 'Contact@psi.dz';
 
 interface ProdOption { id: string; reference: string; width: number; length: number; }
 interface QuoteLine { dimChoice: string; customDim: string; quantity: string; }

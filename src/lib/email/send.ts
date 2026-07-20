@@ -7,17 +7,37 @@ import nodemailer from 'nodemailer';
 
 let transporter: nodemailer.Transporter | null = null;
 
+// L'entreprise utilise Contact@psi.dz (compte Outlook / Office 365).
+// Config SMTP Outlook par défaut ; bascule sur Gmail si SMTP_PROVIDER=gmail.
+// Variables .env attendues :
+//   SMTP_USER = Contact@psi.dz
+//   SMTP_PASS = <mot de passe / mot de passe d'application>
+//   SMTP_PROVIDER = outlook (défaut) | gmail
+// (les anciennes GMAIL_USER / GMAIL_APP_PASSWORD restent acceptées en repli)
 function getTransporter() {
   if (!transporter) {
-    transporter = nodemailer.createTransport({
-      service: 'gmail',
-      auth: {
-        user: process.env.GMAIL_USER,
-        pass: process.env.GMAIL_APP_PASSWORD,
-      },
-    });
+    const user = process.env.SMTP_USER ?? process.env.GMAIL_USER;
+    const pass = process.env.SMTP_PASS ?? process.env.GMAIL_APP_PASSWORD;
+    const provider = (process.env.SMTP_PROVIDER ?? 'outlook').toLowerCase();
+
+    if (provider === 'gmail') {
+      transporter = nodemailer.createTransport({ service: 'gmail', auth: { user, pass } });
+    } else {
+      // Outlook / Office 365 (SMTP STARTTLS sur le port 587)
+      transporter = nodemailer.createTransport({
+        host: 'smtp.office365.com',
+        port: 587,
+        secure: false,
+        auth: { user, pass },
+        tls: { ciphers: 'TLSv1.2' },
+      });
+    }
   }
   return transporter;
+}
+
+function smtpConfigured() {
+  return Boolean((process.env.SMTP_USER ?? process.env.GMAIL_USER) && (process.env.SMTP_PASS ?? process.env.GMAIL_APP_PASSWORD));
 }
 
 export interface SendEmailAttachment {
@@ -40,16 +60,21 @@ export type SendEmailResult =
   | { success: false; error: string };
 
 export async function sendEmail({ to, subject, html, text, attachments }: SendEmailParams): Promise<SendEmailResult> {
-  if (!process.env.GMAIL_USER || !process.env.GMAIL_APP_PASSWORD) {
-    return { success: false, error: 'Configuration email manquante (GMAIL_USER / GMAIL_APP_PASSWORD)' };
+  if (!smtpConfigured()) {
+    return { success: false, error: 'Configuration email manquante (SMTP_USER / SMTP_PASS)' };
   }
   if (!to || !subject || (!html && !text)) {
     return { success: false, error: 'Champs requis manquants (to, subject, html/text)' };
   }
 
   try {
+    // Expéditeur affiché = adresse officielle de l'entreprise (EMAIL_FROM),
+    // par défaut Contact@psi.dz. Le compte technique qui envoie réellement reste
+    // GMAIL_USER. Idéalement GMAIL_USER = Contact@psi.dz (compte Workspace) pour
+    // que l'envoi parte VRAIMENT de cette adresse sans mention "via".
+    const fromAddress = process.env.EMAIL_FROM ?? process.env.SMTP_USER ?? 'Contact@psi.dz';
     await getTransporter().sendMail({
-      from: `PSI — Paper Solutions Industry <${process.env.GMAIL_USER}>`,
+      from: `PSI — Paper Solutions Industry <${fromAddress}>`,
       to,
       subject,
       html,

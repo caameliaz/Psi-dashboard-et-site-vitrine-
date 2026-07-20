@@ -3,6 +3,9 @@ import { requirePermission } from '@/lib/permissions';
 import { prisma } from '@/lib/prisma';
 import bcrypt from 'bcryptjs';
 import { createAudit } from '@/lib/audit';
+import { sendEmail } from '@/lib/email/send';
+import { logoAttachment } from '@/emails/shared';
+import { renderWelcomeEmail, renderAccountCreatedAdminEmail } from '@/emails/accountCreatedTemplate';
 
 // GET /api/users — liste tous les utilisateurs (permission gerer_utilisateurs)
 // GET /api/users?assignable=true — liste réduite (id + name) des users actifs,
@@ -80,6 +83,34 @@ export async function POST(request: NextRequest) {
     });
 
     createAudit({ userId: session.user.id, action: 'Utilisateur créé', entity: 'UTILISATEUR', entityId: user.id, detail: `${user.name} (${user.email})` });
+
+    // ── Emails automatiques (bienvenue au user + récap aux admins) ──
+    // Non bloquant : si l'envoi échoue, le compte reste créé.
+    (async () => {
+      try {
+        // 1. Bienvenue au nouvel utilisateur (avec son mot de passe en clair)
+        const welcome = renderWelcomeEmail({ name: user.name, email: user.email, password: body.password, role: user.role });
+        await sendEmail({ to: user.email, subject: welcome.subject, html: welcome.html, attachments: [logoAttachment] });
+
+        // 2. Récap aux admins (sauf le créateur pour éviter le doublon)
+        const admins = await prisma.user.findMany({
+          where: { role: 'ADMIN', active: true, NOT: { id: session.user.id } },
+          select: { email: true },
+        });
+        if (admins.length > 0) {
+          const adminMail = renderAccountCreatedAdminEmail({
+            name: user.name, email: user.email, role: user.role,
+            createdBy: session.user.name ?? session.user.email ?? 'Un administrateur',
+          });
+          await Promise.all(admins.map((a) =>
+            sendEmail({ to: a.email, subject: adminMail.subject, html: adminMail.html, attachments: [logoAttachment] })
+          ));
+        }
+      } catch (err) {
+        console.error('[users POST] envoi email échoué:', err);
+      }
+    })();
+
     return NextResponse.json(user, { status: 201 });
   } catch (e) {
     console.error(e);

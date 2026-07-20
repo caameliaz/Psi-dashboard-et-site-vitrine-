@@ -5,19 +5,90 @@ admin2@psi.dz	Admin (2e, pour tester notifs à 2)
 employe1@psi.dz	Employé complet
 employe2@psi.dz	Employé limité (lecture seule)
 
-modifs : 
--impression export fiche client
--mails promotionnels avec selection des clients (types) avec definition du texte 
-- segmentation des clients : 
--rajouter metrage dasn les pseudo factures : largeur/diametre + champ metrage facultatif 
--reference libre dsn commandes aussi 
--nouveau 
--numero autigeneré pour chaqe reference creee 
--nom du prodiit personnasable
--pas e vides dans lexcel 
--wilaya , cat produit , reference 
--export dashboard
+═══════════════════════════════════════════════════════════
+🟠 PRIORITÉ 9 — Retours entreprise (réunion)  🔨 À FAIRE
+═══════════════════════════════════════════════════════════
 
+## 9.1 — Emails : simplifier + vrai expéditeur  ✅ FAIT (config Microsoft à finaliser)
+- [x] SUPPRIMER l'email quotidien (récap journalier) → job trigger désactivé
+- [x] Garder UNIQUEMENT le récap HEBDOMADAIRE → cron jeudi 23h59 (`59 23 * * 4`)
+- [x] Vrai email entreprise = **Contact@psi.dz** (expéditeur EMAIL_FROM + affiché partout)
+- [x] Config SMTP passée sur **Outlook / Office 365** (smtp.office365.com:587) — vars SMTP_USER/SMTP_PASS/SMTP_PROVIDER
+- [x] 8.5 — Emails auto à la création d'un compte (bienvenue + récap admins) codés + stylés
+
+═══════════════════════════════════════════════════════════════════════
+📧 À DONNER À L'ADMIN MICROSOFT 365 DE L'ENTREPRISE (à faire par eux)
+═══════════════════════════════════════════════════════════════════════
+> PROBLÈME : notre app envoie les emails automatiques (récap hebdo, bienvenue
+> nouveau compte…) DEPUIS Contact@psi.dz. Aujourd'hui Microsoft REFUSE l'envoi
+> (erreur "535 5.7.3 Authentication unsuccessful") car "SMTP AUTH" est désactivé
+> par défaut sur Office 365. Il faut l'activer pour ce compte.
+>
+> ⚠️ Il faut être ADMINISTRATEUR du domaine psi.dz dans Microsoft 365.
+
+ÉTAPE 1 — Activer SMTP AUTH pour le compte Contact@psi.dz :
+  1. Aller sur https://admin.microsoft.com (connexion avec un compte ADMIN)
+  2. Utilisateurs → Utilisateurs actifs → cliquer sur "Contact@psi.dz"
+  3. Onglet "Courrier" (Mail) → "Gérer les applications de messagerie"
+  4. Cocher "SMTP authentifié" (Authenticated SMTP) → Enregistrer
+  5. Patienter jusqu'à 1h (délai de prise en compte Microsoft)
+
+ÉTAPE 2 — Si l'option n'y est pas, l'activer au niveau organisation :
+  1. admin.microsoft.com → Paramètres → Paramètres de l'organisation → Services
+  2. Ouvrir "SMTP authentifié" → cocher "Activer" → Enregistrer
+
+ÉTAPE 3 — Si le compte a la double authentification (MFA/2FA) :
+  - Le mot de passe normal NE marchera PAS en SMTP.
+  - Générer un "mot de passe d'application" : account.microsoft.com/security
+    → Options de sécurité avancées → Mots de passe d'application
+  - Nous communiquer ce mot de passe (il remplacera SMTP_PASS dans la config).
+
+DONNÉES DE CONNEXION UTILISÉES PAR L'APP (déjà configurées côté code) :
+  - Serveur SMTP : smtp.office365.com   Port : 587   Sécurité : STARTTLS
+  - Utilisateur : Contact@psi.dz        Mot de passe : (celui du compte / app password)
+
+✅ VÉRIFICATION une fois activé : nous relancerons un test d'envoi → si un email
+   de test arrive, c'est bon. (Le code est déjà prêt, rien d'autre à faire côté app.)
+═══════════════════════════════════════════════════════════════════════
+
+## 9.2 — Export / impression fiche client
+- [ ] Bouton export sur la fiche client → **PDF ET Excel** (les 2 formats)
+- [ ] Contenu = TOUTE la fiche : infos client + historique complet (commandes + devis)
+
+## 9.3 — Segmentation des clients par secteur d'activité
+- [ ] Un client = **UN secteur** (pharmacie, banque, restaurant, commerce…) via un dropdown
+- [ ] Les secteurs sont **gérables depuis le dashboard** (créer/éditer/supprimer, comme les catégories)
+- [ ] Champ secteur dans le formulaire client (création + édition) + affiché dans la fiche
+- [ ] (base pour cibler des clients plus tard, mais SANS les mails promo — voir décision)
+- [ ] ❌ Mails promotionnels : ABANDONNÉ (on ne fait pas)
+
+## 9.4 — Champ "longueur / métrage" (facultatif) PARTOUT
+- [ ] Champ **longueur en mètres FACULTATIF** ajouté partout :
+      · lignes de commande/devis · produits (admin) · produit sur le SITE public · exports Excel
+- [ ] Affichage type : `80 · diam 80 · métrage (facultatif)`
+
+## 9.5 — Référence libre dans les COMMANDES (pas que les devis)  ✅ FAIT
+- [x] Le dropdown référence des commandes → option "Référence libre" activée (allowFree pour commande ET devis)
+
+## 9.6 — Bouton "+ Nouvelle commande" → renommer "+ Nouveau"  ✅ FAIT
+- [x] Le bouton de la page Commandes affiche juste "+ Nouveau"
+
+## 9.7 — Numéro auto par référence produit (préfixe = catégorie)
+- [ ] Chaque catégorie a un **préfixe** (ex: Papier thermique → PTT, Imprimantes → IMP)
+- [ ] À la création d'un produit → code auto-incrémenté : PTT-001, PTT-002… / IMP-001…
+- [ ] Le préfixe change selon la catégorie choisie
+
+## 9.8 — Nom de produit éditable  ✅ FAIT
+- [x] Champ `name` (facultatif) sur Product + migration (p9_products_sectors_metrage)
+- [x] Champ "Nom du produit" dans le formulaire produit (création + édition) → modifiable
+- [x] API products POST/PATCH acceptent `name`
+> Migration p9 couvre aussi : Product.metrage, Category.prefix/refCounter, OrderItem/QuoteItem.metrage,
+> Client.sectorId + table Sector, OrderItem.productId/description (pour 9.3/9.4/9.5/9.7 à venir).
+
+## 9.9 — Excel : pas de cases vides + colonnes + export dashboard
+- [ ] Commande à plusieurs références → **répéter les infos de commande sur CHAQUE ligne** (client, wilaya, date…) au lieu de laisser vide, seule la réf change
+- [ ] Ajouter colonnes : **wilaya, catégorie produit, référence** (+ métrage — voir 9.4)
+- [ ] Pouvoir **exporter le DASHBOARD** (les stats) en Excel
 
 
 TODO LIST — ce qui reste à faire
@@ -31,7 +102,7 @@ DÉCISIONS ACTÉES (P1) :
 
 
 ═══════════════════════════════════════════════════════════
-🟤 PRIORITÉ 8 — Lien commande ↔ client  🔨 EN COURS
+# 🟤 PRIORITÉ 8 — Lien commande ↔ client  🔨 EN COURS
 ═══════════════════════════════════════════════════════════
 
 ## 8.1 — Autocomplete client sur le champ Nom (formulaire commande/devis)  ✅ FAIT
@@ -47,22 +118,21 @@ DÉCISIONS ACTÉES (P1) :
 - [x] PATCH orders/quotes accepte `clientId` (gardé par la permission → 403 sinon)
 - [x] Après ré-assignation → refetch, l'historique des 2 clients est à jour
 
-## 8.3 — Suppression client = DÉSACTIVATION (pas de vraie suppression)  🔨 À FAIRE
+## 8.3 — Suppression client = DÉSACTIVATION (pas de vraie suppression)  ✅ FAIT
 > Un employé ne "supprime" pas vraiment un client : il le DÉSACTIVE. L'historique n'est JAMAIS perdu.
-- [ ] Colonne `active` (+ `deactivatedReason`, `deactivatedBy`, `deactivatedAt`) sur Client + migration
-- [ ] "Supprimer" un client → ouvre une **boîte avec motif OBLIGATOIRE** (pourquoi il le désactive)
-- [ ] Le client passe en **désactivé** (pas supprimé) → ses commandes/devis + historique restent intacts
-- [ ] Les **admins reçoivent une notif claire** : "X a désactivé le client Y — motif : …"
-- [ ] Dans la fiche du client désactivé : bandeau visible avec le **motif** + qui l'a désactivé
-- [ ] Un admin peut **réactiver** OU **supprimer définitivement** (si vraiment besoin), sinon on le laisse désactivé
-- [ ] Les clients désactivés : masqués par défaut de la liste (option "voir désactivés")
+- [x] Colonnes `active`, `deactivatedReason`, `deactivatedById`, `deactivatedAt` sur Client + migration (client_deactivation)
+- [x] "Supprimer" un client → boîte avec **motif OBLIGATOIRE**
+- [x] Le client passe en **désactivé** → commandes/devis + historique intacts
+- [x] Les **admins reçoivent une notif** : "X a désactivé le client Y — motif : …"
+- [x] Fiche du client désactivé : bandeau orange avec motif + qui/quand
+- [x] Admin peut **réactiver** OU **supprimer définitivement** (confirmation)
+- [x] Clients désactivés masqués par défaut (API ?inactifs=true pour les inclure)
 
-## 8.4 — Notes commande/devis = fil horodaté avec auteur  🔨 À FAIRE
-> AUJOURD'HUI : 1 seul champ `notes` (texte unique, écrasé à chaque fois, SANS auteur ni date). À améliorer.
-- [ ] Passer à **plusieurs notes** (fil) : chaque note = texte + **auteur (nom)** + date/heure
-- [ ] S'affiche pour TOUT LE MONDE dans le détail commande/devis, avec le nom de qui l'a écrite
-- [ ] Ne pas écraser : on ajoute une note, l'historique des notes reste
-- [ ] (option) table `RequestNote` ou réutiliser le système de notes clients existant
+## 8.4 — Notes commande/devis = fil horodaté avec auteur  ✅ FAIT
+- [x] Table `RequestNote` (order/quote + auteur + date) + migration (request_notes)
+- [x] API notes orders + quotes (GET fil, POST ajouter)
+- [x] Panneau détail : fil de notes (chaque note = texte + nom auteur + date), bouton "Notes (n)"
+- [x] Ne pas écraser : on ajoute, l'historique reste
 
 ## 8.5 — Emails automatiques à la création d'un compte user  🔨 À FAIRE
 > À la création d'un compte : on remplit l'email du user → 2 emails partent automatiquement.
@@ -698,6 +768,20 @@ Tester en ouvrant l'app sur un **téléphone** (adresse `http://192.168.X.X:3000
 6. **Commandes/devis** → consultables + changement de statut depuis le tel
 7. **Dashboard** (ou produits/contenu/users/historique) sur mobile → message **"Disponible sur ordinateur"**
 8. ⚠️ Vérifier que ce sont bien les **mêmes données** que sur le web (pas une version séparée)
+
+---
+
+## 🟠 Tests — Retours entreprise (P9, À VENIR)
+
+**9.1 Emails :** plus d'email quotidien ; récap **hebdo jeudi 23h59** ; expéditeur/contact = **Contact@psi.dz**
+**9.2 Fiche client :** bouton export → génère un **PDF** et un **Excel** avec infos + historique complet
+**9.3 Secteur :** créer un secteur depuis le dashboard → l'affecter à un client (dropdown) → visible dans la fiche
+**9.4 Métrage :** champ longueur (m) facultatif visible dans commande/devis/produit admin/site public/Excel
+**9.5 Réf libre commande :** dans une commande → dropdown réf → option "Référence libre" → champ texte
+**9.6 Bouton :** page Commandes → le bouton dit "+ Nouveau" (plus "Nouvelle commande")
+**9.7 Réf auto :** créer un produit dans "Papier thermique" → code auto PTT-001, le suivant PTT-002 ; autre catégorie = autre préfixe
+**9.8 Nom produit :** modifier un produit existant → changer son nom → sauvegardé
+**9.9 Excel :** exporter une commande à plusieurs réfs → **chaque ligne a les infos client/wilaya/date** (pas de vide) + colonnes wilaya/catégorie/réf ; export du dashboard en Excel dispo
 
 ---
 

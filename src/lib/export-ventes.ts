@@ -20,7 +20,7 @@ export async function exportVentesExcel(filtresLabel?: string) {
   const push = (r: (string | number)[]) => allRows.push(r);
 
   push(pad(['PSI — Paper Solutions Industry']));
-  push(pad(['Centre El Qods, Niveau M1 — Chéraga, Alger | contact@psi-algerie.com']));
+  push(pad(['Centre El Qods, Niveau M1 — Chéraga, Alger | Contact@psi.dz']));
   push(pad([`Rapport de ventes — Commandes livrées — Exporté le ${dateExport}`]));
   const filtersRowIdx = allRows.length;
   push(pad([filtresLabel ? `Filtres appliqués : ${filtresLabel}` : '']));
