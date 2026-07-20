@@ -387,8 +387,8 @@ export function TemplatePopover({ item, mode, recipientEmail, onClose }: {
 
   return (
     <>
-      <div className="fixed inset-0 z-[80]" onClick={onClose} />
-      <div className="fixed inset-0 z-[90] flex items-center justify-center p-6 pointer-events-none">
+      <div className="fixed inset-0 z-[150]" onClick={onClose} />
+      <div className="fixed inset-0 z-[160] flex items-center justify-center p-6 pointer-events-none">
         <div className="pointer-events-auto bg-white rounded-2xl shadow-2xl border border-[#F2F4F7] overflow-hidden flex flex-col"
           style={{ width: 480, maxWidth: '92vw', maxHeight: '80vh' }}>
 
@@ -490,8 +490,8 @@ function PriceModal({ item, onConfirm, onClose }: {
 
   return (
     <>
-      <div className="fixed inset-0 z-[80] bg-black/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="fixed inset-0 z-[90] flex items-center justify-center p-6 pointer-events-none">
+      <div className="fixed inset-0 z-[150] bg-black/40 backdrop-blur-sm" onClick={onClose} />
+      <div className="fixed inset-0 z-[160] flex items-center justify-center p-6 pointer-events-none">
         <div className="pointer-events-auto bg-white rounded-2xl shadow-2xl p-6 w-[460px] max-w-[94vw]">
           <p className="text-[16px] font-bold text-[#0F172A] mb-1">Confirmer le devis — fixer le prix</p>
           <p className="text-[12px] text-[#8A9BB5] mb-4">{item.ref} — {item.entreprise || item.client}</p>
@@ -604,8 +604,8 @@ function EditOrderModal({ item, onClose, onSaved }: {
 
   return (
     <>
-      <div className="fixed inset-0 z-[80] bg-black/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="fixed inset-0 z-[90] flex items-center justify-center p-6 pointer-events-none">
+      <div className="fixed inset-0 z-[150] bg-black/40 backdrop-blur-sm" onClick={onClose} />
+      <div className="fixed inset-0 z-[160] flex items-center justify-center p-6 pointer-events-none">
         <div className="pointer-events-auto bg-white rounded-2xl shadow-2xl p-6 w-[560px] max-w-[94vw] max-h-[88vh] flex flex-col">
           <p className="text-[16px] font-bold text-[#0F172A] mb-1">Modifier la commande</p>
           <p className="text-[12px] text-[#8A9BB5] mb-4">{item.ref} — {item.entreprise || item.client}</p>
@@ -746,7 +746,7 @@ function ContactDropdown({ title, color, hoverColor, children, options }: {
       </IconBtn>
       {open && (
         <>
-          <div className="fixed inset-0 z-[95]" onClick={() => setOpen(false)} />
+          <div className="fixed inset-0 z-[150]" onClick={() => setOpen(false)} />
           <div className="absolute bottom-full left-0 mb-2 z-[100] bg-white rounded-xl border border-[#E2E8F0] shadow-xl overflow-hidden py-1"
             style={{ minWidth: 200 }}>
             {options.map((opt, i) => (
@@ -772,7 +772,6 @@ export function RequestPanel({ item, onClose, onStatusChange, onConfirmQuoteWith
   const [showPriceModal, setShowPriceModal] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
   const [editingNotes, setEditingNotes] = useState(false);
-  const [notesValue, setNotesValue] = useState('');
 
   // Ré-assigner la demande à un autre client (permission reassigner_client)
   const reassignClient = async (clientId: string) => {
@@ -789,12 +788,28 @@ export function RequestPanel({ item, onClose, onStatusChange, onConfirmQuoteWith
   const isCommande = item.type === 'Commande';
   const isArchived = item.statut === 'Livré' || item.statut === 'Annulé';
 
-  const saveNotes = async () => {
+  // Fil de notes (auteur + date) — table RequestNote
+  const notesBase = isCommande ? `/api/orders/${item.id}/notes` : `/api/quotes/${item.id}/notes`;
+  const [notes, setNotes] = useState<{ id: string; content: string; createdAt: string; author: { name: string } }[]>([]);
+  const [newNote, setNewNote] = useState('');
+  const [savingNote, setSavingNote] = useState(false);
+
+  useEffect(() => {
     if (!item.id) return;
-    const endpoint = isCommande ? `/api/orders/${item.id}` : `/api/quotes/${item.id}`;
-    await fetch(endpoint, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ notes: notesValue }) });
-    setEditingNotes(false);
-    onStatusChange?.(item.ref, item.statut);
+    fetch(notesBase).then((r) => (r.ok ? r.json() : [])).then(setNotes).catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [item.id]);
+
+  const addNote = async () => {
+    const content = newNote.trim();
+    if (!content || !item.id) return;
+    setSavingNote(true);
+    const res = await fetch(notesBase, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ content }) });
+    setSavingNote(false);
+    if (!res.ok) { alert('Impossible d’ajouter la note'); return; }
+    const note = await res.json();
+    setNotes((prev) => [note, ...prev]);
+    setNewNote('');
   };
 
   const phoneDigits = item.telephone.replace(/\s/g, '');
@@ -813,8 +828,8 @@ export function RequestPanel({ item, onClose, onStatusChange, onConfirmQuoteWith
 
   return (
     <>
-      <div className="fixed inset-0 z-[60] bg-black/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="fixed inset-0 z-[70] flex items-center justify-center p-2 md:p-6 pointer-events-none">
+      <div className="fixed inset-0 z-[130] bg-black/40 backdrop-blur-sm" onClick={onClose} />
+      <div className="fixed inset-0 z-[140] flex items-center justify-center p-2 md:p-6 pointer-events-none">
         <div className="pointer-events-auto bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden w-full md:w-[600px] max-w-full md:max-w-[94vw] max-h-[96vh] md:max-h-[92vh]">
 
           {/* ── Header ── */}
@@ -1020,13 +1035,13 @@ export function RequestPanel({ item, onClose, onStatusChange, onConfirmQuoteWith
                 <IconBtn onClick={openMail} title="Envoyer un email" color="#F97316" hoverColor="#F97316">
                   <svg width={13} height={13} fill="none" viewBox="0 0 24 24"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" stroke="currentColor" strokeWidth="1.8"/><path d="M22 6l-10 7L2 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>
                 </IconBtn>
-                <button onClick={() => { setNotesValue(''); setEditingNotes(true); }}
+                <button onClick={() => { setNewNote(''); setEditingNotes(true); }}
                   className="flex items-center gap-1.5 px-3 h-9 rounded-full border text-[11px] font-bold transition-colors"
                   style={{ borderColor: '#ABBED140', color: '#8A9BB5' }}
                   onMouseEnter={(e) => (e.currentTarget.style.background = '#F8FAFC')}
                   onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}>
                   <svg width={13} height={13} fill="none" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>
-                  Notes
+                  Notes{notes.length > 0 ? ` (${notes.length})` : ''}
                 </button>
                 {isCommande && !isArchived && canModifierStatuts && (
                   <button onClick={() => setShowEdit(true)}
@@ -1044,16 +1059,16 @@ export function RequestPanel({ item, onClose, onStatusChange, onConfirmQuoteWith
               <div className="flex flex-col items-end gap-2">
                 {!isArchived && onStatusChange && canModifierStatuts && (
                   <>
-                    {/* Commande en attente → Confirmer */}
+                    {/* Commande en attente → Confirmer (garde le détail ouvert) */}
                     {isCommande && item.statut === 'En attente' && (
-                      <button onClick={() => { onStatusChange(item.ref, 'Confirmé'); onClose(); }}
+                      <button onClick={() => onStatusChange(item.ref, 'Confirmé')}
                         className="px-4 py-2 rounded-lg text-[13px] font-bold border border-[#4CAF4F] text-[#4CAF4F] hover:bg-[#F0FDF4] transition-colors">
                         Confirmer
                       </button>
                     )}
-                    {/* Commande confirmée → Marquer Livré */}
+                    {/* Commande confirmée → Marquer Livré (statut final → ferme) */}
                     {isCommande && item.statut === 'Confirmé' && (
-                      <button onClick={() => { onStatusChange(item.ref, 'Livré'); onClose(); }}
+                      <button onClick={() => onStatusChange(item.ref, 'Livré')}
                         className="px-4 py-2 rounded-lg text-[13px] font-bold border border-[#4CAF4F] text-[#4CAF4F] hover:bg-[#F0FDF4] transition-colors">
                         Marquer Livré
                       </button>
@@ -1065,14 +1080,14 @@ export function RequestPanel({ item, onClose, onStatusChange, onConfirmQuoteWith
                         Confirmer
                       </button>
                     )}
-                    {/* Devis confirmé → Marquer Livré */}
+                    {/* Devis confirmé → Marquer Livré (statut final → ferme) */}
                     {!isCommande && item.statut === 'Confirmé' && (
-                      <button onClick={() => { onStatusChange(item.ref, 'Livré'); onClose(); }}
+                      <button onClick={() => onStatusChange(item.ref, 'Livré')}
                         className="px-4 py-2 rounded-lg text-[13px] font-bold border border-[#4CAF4F] text-[#4CAF4F] hover:bg-[#F0FDF4] transition-colors">
                         Marquer Livré
                       </button>
                     )}
-                    <button onClick={() => { if (window.confirm(`Annuler ${item.type.toLowerCase()} de ${item.entreprise || item.client} ?`)) { onStatusChange(item.ref, 'Annulé'); onClose(); } }}
+                    <button onClick={() => { if (window.confirm(`Annuler ${item.type.toLowerCase()} de ${item.entreprise || item.client} ?`)) onStatusChange(item.ref, 'Annulé'); }}
                       className="px-3 py-1.5 rounded-lg text-[12px] font-semibold border border-[#FECACA] text-[#EF4444] hover:bg-[#FEF2F2] transition-colors">
                       Annuler
                     </button>
@@ -1080,7 +1095,7 @@ export function RequestPanel({ item, onClose, onStatusChange, onConfirmQuoteWith
                 )}
 
                 {item.statut === 'Annulé' && onStatusChange && canModifierStatuts && (
-                  <button onClick={() => { onStatusChange(item.ref, 'En attente'); onClose(); }}
+                  <button onClick={() => onStatusChange(item.ref, 'En attente')}
                     className="px-4 py-2 rounded-lg text-[13px] font-semibold border border-[#ABBED1]/60 text-[#374151] hover:border-[#374151]/40 transition-colors">
                     Restaurer
                   </button>
@@ -1108,16 +1123,43 @@ export function RequestPanel({ item, onClose, onStatusChange, onConfirmQuoteWith
 
       {editingNotes && (
         <>
-          <div className="fixed inset-0 z-[80] bg-black/40 backdrop-blur-sm" onClick={() => setEditingNotes(false)} />
-          <div className="fixed inset-0 z-[90] flex items-center justify-center p-6 pointer-events-none">
-            <div className="pointer-events-auto bg-white rounded-2xl shadow-2xl p-6 w-[440px] max-w-[94vw]">
-              <p className="text-[15px] font-bold text-[#0F172A] mb-1">Notes internes</p>
-              <p className="text-[12px] text-[#8A9BB5] mb-4">{item.ref} — non visible par le client</p>
-              <textarea autoFocus value={notesValue} onChange={e => setNotesValue(e.target.value)} rows={5} placeholder="Remarques internes, conditions particulières…"
-                className="w-full resize-none px-3 py-2.5 rounded-xl border border-[#E2E8F0] text-[13px] text-[#374151] focus:outline-none focus:border-[#4CAF4F] focus:ring-[3px] focus:ring-[#4CAF4F]/15 transition-all mb-4" />
-              <div className="flex gap-3">
-                <button onClick={() => setEditingNotes(false)} className="flex-1 px-4 py-2.5 rounded-xl border border-[#E2E8F0] text-[13px] font-semibold text-[#374151]">Annuler</button>
-                <button onClick={saveNotes} className="flex-1 px-4 py-2.5 rounded-xl text-[13px] font-bold text-white" style={{ background: '#4CAF4F' }}>Enregistrer</button>
+          <div className="fixed inset-0 z-[150] bg-black/40 backdrop-blur-sm" onClick={() => setEditingNotes(false)} />
+          <div className="fixed inset-0 z-[160] flex items-center justify-center p-4 md:p-6 pointer-events-none">
+            <div className="pointer-events-auto bg-white rounded-2xl shadow-2xl w-[460px] max-w-[94vw] max-h-[90vh] flex flex-col overflow-hidden">
+              <div className="px-5 py-4 border-b border-[#F2F4F7]">
+                <p className="text-[15px] font-bold text-[#0F172A]">Notes internes</p>
+                <p className="text-[12px] text-[#8A9BB5] mt-0.5">{item.ref} — non visible par le client</p>
+              </div>
+
+              {/* Ajouter une note */}
+              <div className="px-5 py-4 border-b border-[#F2F4F7]">
+                <textarea autoFocus value={newNote} onChange={e => setNewNote(e.target.value)} rows={2} placeholder="Écrire une note…"
+                  className="w-full resize-none px-3 py-2.5 rounded-xl border border-[#E2E8F0] text-[13px] text-[#374151] focus:outline-none focus:border-[#4CAF4F] focus:ring-[3px] focus:ring-[#4CAF4F]/15 transition-all" />
+                <div className="flex justify-end mt-2">
+                  <button onClick={addNote} disabled={savingNote || !newNote.trim()}
+                    className="px-4 py-2 rounded-xl text-[13px] font-bold text-white disabled:opacity-40 transition-opacity" style={{ background: '#4CAF4F' }}>
+                    {savingNote ? 'Ajout…' : 'Ajouter'}
+                  </button>
+                </div>
+              </div>
+
+              {/* Fil des notes */}
+              <div className="flex-1 overflow-y-auto px-5 py-4 flex flex-col gap-3">
+                {notes.length === 0 ? (
+                  <p className="text-[13px] text-[#ABBED1] text-center py-6">Aucune note pour l’instant.</p>
+                ) : notes.map((n) => (
+                  <div key={n.id} className="rounded-xl border border-[#F2F4F7] px-3.5 py-2.5">
+                    <p className="text-[13px] text-[#374151] leading-snug whitespace-pre-wrap">{n.content}</p>
+                    <p className="text-[11px] text-[#ABBED1] mt-1.5">
+                      <span className="font-semibold text-[#8A9BB5]">{n.author?.name ?? '—'}</span>
+                      {' · '}{new Date(n.createdAt).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                    </p>
+                  </div>
+                ))}
+              </div>
+
+              <div className="px-5 py-3 border-t border-[#F2F4F7]">
+                <button onClick={() => setEditingNotes(false)} className="w-full px-4 py-2.5 rounded-xl border border-[#E2E8F0] text-[13px] font-semibold text-[#374151]">Fermer</button>
               </div>
             </div>
           </div>
@@ -1149,8 +1191,8 @@ export function RequestPanel({ item, onClose, onStatusChange, onConfirmQuoteWith
       {/* Ré-assigner à un autre client */}
       {showReassign && (
         <>
-          <div className="fixed inset-0 z-[95] bg-black/40 backdrop-blur-sm" onClick={() => setShowReassign(false)} />
-          <div className="fixed inset-0 z-[96] flex items-center justify-center p-4 pointer-events-none">
+          <div className="fixed inset-0 z-[150] bg-black/40 backdrop-blur-sm" onClick={() => setShowReassign(false)} />
+          <div className="fixed inset-0 z-[160] flex items-center justify-center p-4 pointer-events-none">
             <div className="pointer-events-auto bg-white rounded-2xl shadow-2xl p-5 w-[420px] max-w-[94vw]">
               <p className="text-[15px] font-bold text-[#0F172A] mb-1">Changer de client</p>
               <p className="text-[12px] text-[#8A9BB5] mb-4">Ré-assigner {item.type.toLowerCase()} {item.ref} à un autre client existant.</p>

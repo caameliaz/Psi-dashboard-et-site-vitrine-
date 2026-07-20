@@ -5,6 +5,18 @@ admin2@psi.dz	Admin (2e, pour tester notifs à 2)
 employe1@psi.dz	Employé complet
 employe2@psi.dz	Employé limité (lecture seule)
 
+modifs : 
+-impression export fiche client
+-mails promotionnels avec selection des clients (types) avec definition du texte 
+- segmentation des clients : 
+-rajouter metrage dasn les pseudo factures : largeur/diametre + champ metrage facultatif 
+-reference libre dsn commandes aussi 
+-nouveau 
+-numero autigeneré pour chaqe reference creee 
+-nom du prodiit personnasable
+-pas e vides dans lexcel 
+-wilaya , cat produit , reference 
+-export dashboard
 
 
 
@@ -34,6 +46,38 @@ DÉCISIONS ACTÉES (P1) :
 - [x] Nouvelle permission `reassigner_client` (permissions.ts + users page + seed-prod admins)
 - [x] PATCH orders/quotes accepte `clientId` (gardé par la permission → 403 sinon)
 - [x] Après ré-assignation → refetch, l'historique des 2 clients est à jour
+
+## 8.3 — Suppression client = DÉSACTIVATION (pas de vraie suppression)  🔨 À FAIRE
+> Un employé ne "supprime" pas vraiment un client : il le DÉSACTIVE. L'historique n'est JAMAIS perdu.
+- [ ] Colonne `active` (+ `deactivatedReason`, `deactivatedBy`, `deactivatedAt`) sur Client + migration
+- [ ] "Supprimer" un client → ouvre une **boîte avec motif OBLIGATOIRE** (pourquoi il le désactive)
+- [ ] Le client passe en **désactivé** (pas supprimé) → ses commandes/devis + historique restent intacts
+- [ ] Les **admins reçoivent une notif claire** : "X a désactivé le client Y — motif : …"
+- [ ] Dans la fiche du client désactivé : bandeau visible avec le **motif** + qui l'a désactivé
+- [ ] Un admin peut **réactiver** OU **supprimer définitivement** (si vraiment besoin), sinon on le laisse désactivé
+- [ ] Les clients désactivés : masqués par défaut de la liste (option "voir désactivés")
+
+## 8.4 — Notes commande/devis = fil horodaté avec auteur  🔨 À FAIRE
+> AUJOURD'HUI : 1 seul champ `notes` (texte unique, écrasé à chaque fois, SANS auteur ni date). À améliorer.
+- [ ] Passer à **plusieurs notes** (fil) : chaque note = texte + **auteur (nom)** + date/heure
+- [ ] S'affiche pour TOUT LE MONDE dans le détail commande/devis, avec le nom de qui l'a écrite
+- [ ] Ne pas écraser : on ajoute une note, l'historique des notes reste
+- [ ] (option) table `RequestNote` ou réutiliser le système de notes clients existant
+
+## 8.5 — Emails automatiques à la création d'un compte user  🔨 À FAIRE
+> À la création d'un compte : on remplit l'email du user → 2 emails partent automatiquement.
+- [ ] Formulaire création user : champ **email obligatoire** (déjà là, à confirmer)
+- [ ] Email n°1 → aux **ADMINS** : récap du compte créé (nom, email, rôle, identifiants)
+- [ ] Email n°2 → au **NOUVEL UTILISATEUR** (son email) : message de **bienvenue** + son **mot de passe** pour se connecter + lien vers l'admin
+- [ ] Utiliser le setup email existant (nodemailer / Resient — voir P3) — variable EMAIL_FROM
+- [ ] Gérer le cas email invalide / envoi échoué (le compte est quand même créé)
+
+## 8.6 — Affiner les templates de messages  🔨 À FAIRE
+> Les templates WhatsApp/Email existent mais sont basiques. À revoir : contenu, variables, organisation.
+- [ ] Revoir/enrichir le contenu des templates existants (confirmation, relance, livraison, devis…)
+- [ ] Vérifier toutes les variables : [Nom], [Référence], [Wilaya], [Récapitulatif], [Agent] — cohérentes partout
+- [ ] Gérer les templates depuis l'admin (créer/éditer/supprimer) proprement si pas déjà le cas
+- [ ] Templates adaptés au contexte : niveau client (fiche) vs niveau commande (détail)
 
 
 ═══════════════════════════════════════════════════════════
@@ -214,7 +258,7 @@ Vérifier les raccourcis WhatsApp/Email/Appel dans le détail client avec un vra
 - [ ] Mettre les **bonnes photos** pour l'accueil et les produits
 - [ ] Revoir **comment les références produits s'affichent** (à redesigner)
 
-## 7.3 — Dashboard mobile  🔨 EN COURS
+## 7.3 — Dashboard mobile  TERMINÉ ✅ 
 - [x] Notifications : panneau **plein écran** sur mobile (avant : débordait) — panneau cloche (TopBar)
 - [x] Panneau cloche : filtre "Tous les users" → renommé "Utilisateurs" + ne charge que les notifs des 2 derniers jours
 - [x] Page Commandes : toggle "Tous/Commandes/Devis" **pleine largeur** sur mobile (compact sur web)
@@ -225,7 +269,10 @@ Vérifier les raccourcis WhatsApp/Email/Appel dans le détail client avec un vra
 - [x] Page Commandes : scrollbar horizontale du tableau **masquée**
 - [x] Page Clients : bouton "Nouveau client" poussé à droite (plus collé à la recherche)
 - [x] Fiche client : doublon d'en-tête réparé
-- [ ] (à voir avec toi) autres écrans mobile à passer en revue : dashboard(bloqué), produits(bloqué), profil, historique, users
+- [x] Pages inutiles au terrain BLOQUÉES sur mobile : dashboard, produits, contenu, users, historique, **profil** (message + retour menu)
+- [x] Autocomplete client (champ Nom) + ré-assignation client → marchent aussi sur mobile
+
+→ MOBILE (7.3) TERMINÉ ✅  (reste juste tes retours ponctuels si tu repères un truc en testant)
 
 ## 7.4 — Dashboard web
 - [ ] Panneau détail commande : layout "goofy" (trop de gris / boutons à revoir) → nettoyer visuellement
@@ -499,6 +546,7 @@ Se connecter avec **`admin1`** (a la permission "assigner") et **`employe2`** (l
 3. Cocher les **permissions** une par une (ou "Tout" / "Aucun")
 4. Créer → écran **"Compte créé"** avec les identifiants **copiables**
 5. ✅ Les autres admins reçoivent une **notification**
+5bis. 📧 (À VENIR — todo 8.5) 2 emails automatiques : aux **admins** (récap du compte) + au **nouvel utilisateur** (bienvenue + son mot de passe pour se connecter)
 6. **Rôles personnalisés** : "+ Ajouter un rôle" → nom + set de permissions réutilisable
 7. **Modifier** un compte (rôle, permissions, activer/désactiver)
 8. **Désactiver** un compte → il ne peut plus se connecter
@@ -621,6 +669,20 @@ Se connecter en **`employe2@psi.dz`** (limité) et comparer avec **`admin1@psi.d
 4. **Utilisateur** ayant créé commandes/notes → "Impossible, désactivez-le plutôt"
 5. Son **propre compte** → refusé
 6. **Client** (même avec messages de contact) → doit marcher
+
+### Désactivation client (À VENIR — todo 8.3)
+7. "Supprimer" un client → une **boîte demande un motif** (obligatoire)
+8. Valider → le client passe **désactivé** (pas supprimé), son historique reste intact
+9. Les **admins** reçoivent une notif "X a désactivé le client Y — motif : …"
+10. Dans la fiche du client désactivé → bandeau avec le **motif** + qui/quand
+11. Un admin peut **réactiver** ou **supprimer définitivement**
+
+---
+
+## 📝 Notes commande/devis (À VENIR — todo 8.4)
+1. Dans le détail d'une commande/devis → ajouter une **note**
+2. La note s'affiche avec le **nom de l'auteur** + date, visible par tout le monde
+3. Ajouter une 2e note → les deux restent (fil, pas d'écrasement)
 
 ---
 

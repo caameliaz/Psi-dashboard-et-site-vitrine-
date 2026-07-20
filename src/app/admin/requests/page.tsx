@@ -489,7 +489,13 @@ export default function RequestsPage() {
     });
     if (!res.ok) console.error('PATCH failed', await res.text());
     await fetchAll(true);
-    setSelected(null);
+    // Statut final (Livré/Annulé) → on ferme le détail. Sinon on le garde ouvert
+    // en mettant à jour son statut (l'utilisateur peut enchaîner les actions).
+    if (newStatut === 'Livré' || newStatut === 'Annulé') {
+      setSelected(null);
+    } else {
+      setSelected((prev) => (prev ? { ...prev, statut: newStatut } : prev));
+    }
   };
 
   // Change l'assignation ("pris en charge par") d'une commande/devis
@@ -631,16 +637,18 @@ export default function RequestsPage() {
         })}
       </div>
 
-      {/* Recherche + 3 filtres — TOUS sur la même ligne (mobile compris) */}
-      <div className="mb-4">
+      {/* Recherche seule sur sa ligne, puis les 3 filtres sur la ligne d'en dessous */}
+      <div className="mb-4 flex flex-col md:flex-row md:items-center gap-2">
+        {/* Recherche — pleine largeur sur sa propre ligne (mobile) */}
+        <div className="relative w-full md:w-[220px] md:flex-shrink-0">
+          <svg className="absolute left-2.5 top-1/2 -translate-y-1/2" width={13} height={13} fill="none">
+            <circle cx="6" cy="6" r="4.5" stroke="#8A9BB5" strokeWidth="1.4"/>
+            <path d="M10 10L13 13" stroke="#8A9BB5" strokeLinecap="round" strokeWidth="1.4"/>
+          </svg>
+          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Rechercher..." className="px-2 py-2 pl-7 w-full rounded-lg border border-[#E2E8F0] text-[13px] text-[#0F172A] bg-white focus:outline-none focus:border-[#4CAF4F] focus:ring-1 focus:ring-[#4CAF4F] transition-colors" />
+        </div>
+        {/* Les 3 filtres — sur une même ligne */}
         <div className="flex items-center gap-2 min-w-0">
-          <div className="relative flex-1 min-w-0">
-            <svg className="absolute left-2.5 top-1/2 -translate-y-1/2" width={13} height={13} fill="none">
-              <circle cx="6" cy="6" r="4.5" stroke="#8A9BB5" strokeWidth="1.4"/>
-              <path d="M10 10L13 13" stroke="#8A9BB5" strokeLinecap="round" strokeWidth="1.4"/>
-            </svg>
-            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Rechercher..." className="px-2 py-2 pl-7 w-full rounded-lg border border-[#E2E8F0] text-[13px] text-[#0F172A] bg-white focus:outline-none focus:border-[#4CAF4F] focus:ring-1 focus:ring-[#4CAF4F] transition-colors" />
-          </div>
           <AdminSelect
             className="flex-1 min-w-0"
             value={filterStatut}
@@ -671,7 +679,7 @@ export default function RequestsPage() {
           />
         </div>
         {(search || filterStatut !== 'all' || filterPeriode !== 'mois' || filterAssigne !== 'all') && (
-          <button onClick={() => { setSearch(''); setFilterStatut('all'); setFilterPeriode('mois'); setFilterAssigne('all'); }} className="mt-2 text-[12px] font-semibold text-[#8A9BB5] hover:text-[#374151]">Effacer les filtres</button>
+          <button onClick={() => { setSearch(''); setFilterStatut('all'); setFilterPeriode('mois'); setFilterAssigne('all'); }} className="text-[12px] font-semibold text-[#8A9BB5] hover:text-[#374151] self-start md:self-auto">Effacer</button>
         )}
       </div>
 
