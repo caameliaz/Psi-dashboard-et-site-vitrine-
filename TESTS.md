@@ -55,12 +55,12 @@ DONNÉES DE CONNEXION UTILISÉES PAR L'APP (déjà configurées côté code) :
 - [ ] Bouton export sur la fiche client → **PDF ET Excel** (les 2 formats)
 - [ ] Contenu = TOUTE la fiche : infos client + historique complet (commandes + devis)
 
-## 9.3 — Segmentation des clients par secteur d'activité
-- [ ] Un client = **UN secteur** (pharmacie, banque, restaurant, commerce…) via un dropdown
-- [ ] Les secteurs sont **gérables depuis le dashboard** (créer/éditer/supprimer, comme les catégories)
-- [ ] Champ secteur dans le formulaire client (création + édition) + affiché dans la fiche
-- [ ] (base pour cibler des clients plus tard, mais SANS les mails promo — voir décision)
-- [ ] ❌ Mails promotionnels : ABANDONNÉ (on ne fait pas)
+## 9.3 — Segmentation des clients par secteur d'activité  ✅ FAIT
+- [x] Table `Sector` + `sectorId` sur Client (migration p9) + API /api/sectors (GET/POST/PATCH/DELETE)
+- [x] Un client = UN secteur → dropdown dans le formulaire client (création + édition)
+- [x] Gestion des secteurs : bouton "Secteurs" sur la page Clients → modal créer/supprimer
+- [x] Secteur affiché en badge dans la fiche client (à côté du nom)
+- [x] ❌ Mails promotionnels : ABANDONNÉ (on ne fait pas)
 
 ## 9.4 — Champ "longueur / métrage" (facultatif) PARTOUT
 - [ ] Champ **longueur en mètres FACULTATIF** ajouté partout :

@@ -9,6 +9,8 @@ interface ClientRecord {
   telephone: string;
   wilaya: string;
   commune?: string;
+  sectorId?: string;
+  sectorName?: string;
   adresse: string;
   email: string;
   photo?: string;
@@ -49,13 +51,14 @@ function avatarColor(id: number | string) {
 }
 
 const emptyClient: Omit<ClientRecord, 'id' | 'commandes' | 'devis' | 'derniere' | 'historique'> = {
-  entreprise: '', contact: '', telephone: '', wilaya: '', adresse: '', email: '',
+  entreprise: '', contact: '', telephone: '', wilaya: '', sectorId: '', adresse: '', email: '',
 };
 
-function ClientForm({ form, setForm, onSubmit, onClose, submitLabel }: {
+function ClientForm({ form, setForm, onSubmit, onClose, submitLabel, sectors }: {
   form: typeof emptyClient;
   setForm: (f: typeof emptyClient) => void;
   onSubmit: () => void;
+  sectors?: { id: string; name: string }[];
   onClose: () => void;
   submitLabel: string;
 }) {
@@ -83,9 +86,18 @@ function ClientForm({ form, setForm, onSubmit, onClose, submitLabel }: {
           <input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="contact@entreprise.dz" className={inputClass} />
         </div>
       </div>
-      <div>
-        <label className={labelClass}>Wilaya</label>
-        <WilayaSelect value={form.wilaya} onChange={(v) => setForm({ ...form, wilaya: v })} />
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className={labelClass}>Wilaya</label>
+          <WilayaSelect value={form.wilaya} onChange={(v) => setForm({ ...form, wilaya: v })} />
+        </div>
+        <div>
+          <label className={labelClass}>Secteur d'activité</label>
+          <select value={form.sectorId ?? ''} onChange={(e) => setForm({ ...form, sectorId: e.target.value })} className={inputClass}>
+            <option value="">— Aucun —</option>
+            {(sectors ?? []).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+          </select>
+        </div>
       </div>
       <div>
         <label className={labelClass}>Adresse</label>
@@ -292,8 +304,13 @@ function ClientSlideIn({ client, onClose, onEdit, onDelete, onReactivate, onDele
                   </div>
                 </div>
 
-                {/* Ligne 2 : nom du client */}
-                <p className="text-[13px] font-semibold text-[#4CAF4F]">{client.contact}</p>
+                {/* Ligne 2 : nom du client + secteur */}
+                <div className="flex items-center gap-2 flex-wrap">
+                  <p className="text-[13px] font-semibold text-[#4CAF4F]">{client.contact}</p>
+                  {client.sectorName && (
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#EFF6FF] text-[#1E40AF] border border-[#BFDBFE]">{client.sectorName}</span>
+                  )}
+                </div>
 
                 {/* Petit espace, puis 2 colonnes : tél/mail à gauche, wilaya/adresse à droite */}
                 <div className="grid grid-cols-2 gap-x-4 gap-y-2 mt-4">
@@ -557,6 +574,8 @@ function dbClientToRecord(c: any): ClientRecord {
     telephone: phone,
     wilaya: c.wilaya ?? '',
     commune: c.commune ?? '',
+    sectorId: c.sectorId ?? c.sector?.id ?? '',
+    sectorName: c.sector?.name ?? '',
     adresse: c.address ?? '',
     email: c.email ?? '',
     commandes: ordersCount,
@@ -580,6 +599,13 @@ export default function ClientsPage() {
   const [showAdd, setShowAdd]   = useState(false);
   const [addForm, setAddForm]   = useState({ ...emptyClient });
   const [editForm, setEditForm] = useState({ ...emptyClient });
+  const [sectors, setSectors]   = useState<{ id: string; name: string }[]>([]);
+  const [showSectors, setShowSectors] = useState(false);
+
+  const fetchSectors = useCallback(async () => {
+    const r = await fetch('/api/sectors');
+    if (r.ok) { const d = await r.json(); setSectors(d.map((s: any) => ({ id: s.id, name: s.name }))); }
+  }, []);
 
   const fetchClients = useCallback(async () => {
     setLoading(true);
@@ -595,6 +621,7 @@ export default function ClientsPage() {
   }, []);
 
   useEffect(() => { fetchClients(); }, [fetchClients]);
+  useEffect(() => { fetchSectors(); }, [fetchSectors]);
 
   const filtered = clients.filter(
     (c) =>
@@ -613,6 +640,7 @@ export default function ClientsPage() {
         company: addForm.entreprise.trim(),
         email: addForm.email.trim() || null,
         wilaya: addForm.wilaya.trim(),
+        sectorId: addForm.sectorId || null,
         address: addForm.adresse.trim() || null,
         phone: addForm.telephone.trim() || null,
       }),
@@ -625,7 +653,7 @@ export default function ClientsPage() {
   };
 
   const openEdit = (c: ClientRecord) => {
-    setEditForm({ entreprise: c.entreprise, contact: c.contact, telephone: c.telephone, wilaya: c.wilaya, adresse: c.adresse, email: c.email });
+    setEditForm({ entreprise: c.entreprise, contact: c.contact, telephone: c.telephone, wilaya: c.wilaya, sectorId: c.sectorId ?? '', adresse: c.adresse, email: c.email });
     setEditClient(c);
   };
 
@@ -640,6 +668,7 @@ export default function ClientsPage() {
         company: editForm.entreprise.trim(),
         email: editForm.email.trim() || null,
         wilaya: editForm.wilaya.trim(),
+        sectorId: editForm.sectorId || null,
         address: editForm.adresse.trim() || null,
         phone: editForm.telephone.trim() || null,
       }),
@@ -712,7 +741,10 @@ export default function ClientsPage() {
             className="pl-9 pr-4 py-2.5 w-full sm:w-[280px] rounded-xl border border-[#E2E8F0] bg-white text-[14px] text-[#263238] placeholder-[#8A9BB5] focus:outline-none focus:border-[#4CAF4F] focus:ring-[3px] focus:ring-[#4CAF4F]/15 transition-all"
           />
         </div>
-        <button onClick={() => { setAddForm({ ...emptyClient }); setShowAdd(true); }} className="flex items-center gap-2 px-4 py-2 rounded-xl text-[13px] font-semibold text-white transition-colors sm:ml-auto whitespace-nowrap" style={{ background: '#4CAF4F' }}>
+        <button onClick={() => setShowSectors(true)} className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-[13px] font-semibold text-[#374151] border border-[#E2E8F0] hover:bg-[#F8FAFC] transition-colors sm:ml-auto whitespace-nowrap">
+          Secteurs
+        </button>
+        <button onClick={() => { setAddForm({ ...emptyClient }); setShowAdd(true); }} className="flex items-center gap-2 px-4 py-2 rounded-xl text-[13px] font-semibold text-white transition-colors whitespace-nowrap" style={{ background: '#4CAF4F' }}>
           + Nouveau client
         </button>
       </div>
@@ -778,14 +810,14 @@ export default function ClientsPage() {
       {/* Modal ajout */}
       {showAdd && (
         <Modal title="Nouveau client" onClose={() => setShowAdd(false)}>
-          <ClientForm form={addForm} setForm={setAddForm} onSubmit={handleAdd} onClose={() => setShowAdd(false)} submitLabel="Ajouter le client" />
+          <ClientForm form={addForm} setForm={setAddForm} onSubmit={handleAdd} onClose={() => setShowAdd(false)} submitLabel="Ajouter le client" sectors={sectors} />
         </Modal>
       )}
 
       {/* Modal édition */}
       {editClient && (
         <Modal title={`Modifier — ${editClient.entreprise || editClient.contact}`} onClose={() => setEditClient(null)}>
-          <ClientForm form={editForm} setForm={setEditForm} onSubmit={handleEdit} onClose={() => setEditClient(null)} submitLabel="Enregistrer" />
+          <ClientForm form={editForm} setForm={setEditForm} onSubmit={handleEdit} onClose={() => setEditClient(null)} submitLabel="Enregistrer" sectors={sectors} />
         </Modal>
       )}
 
@@ -793,6 +825,57 @@ export default function ClientsPage() {
       {deleteClient && (
         <DeleteClientModal client={deleteClient} onDeactivate={(reason) => handleDeactivate(deleteClient, reason)} onClose={() => setDeleteClient(null)} />
       )}
+
+      {/* Modal gestion des secteurs */}
+      {showSectors && (
+        <SectorsModal sectors={sectors} onChange={fetchSectors} onClose={() => setShowSectors(false)} />
+      )}
     </div>
+  );
+}
+
+// Modal de gestion des secteurs d'activité (créer / renommer / supprimer)
+function SectorsModal({ sectors, onChange, onClose }: {
+  sectors: { id: string; name: string }[]; onChange: () => void; onClose: () => void;
+}) {
+  const [newName, setNewName] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const add = async () => {
+    const name = newName.trim();
+    if (!name) return;
+    setSaving(true);
+    const res = await fetch('/api/sectors', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) });
+    setSaving(false);
+    if (!res.ok) { const e = await res.json().catch(() => ({})); alert(e.error ?? 'Erreur'); return; }
+    setNewName(''); onChange();
+  };
+  const remove = async (id: string) => {
+    if (!window.confirm('Supprimer ce secteur ? Les clients rattachés perdront leur secteur.')) return;
+    await fetch(`/api/sectors/${id}`, { method: 'DELETE' });
+    onChange();
+  };
+
+  return (
+    <Modal title="Secteurs d'activité" onClose={onClose}>
+      <div className="space-y-4">
+        <p className="text-[12px] text-[#8A9BB5]">Créez les secteurs (pharmacie, banque, restaurant…) pour classer vos clients.</p>
+        <div className="flex gap-2">
+          <input value={newName} onChange={(e) => setNewName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && add()} placeholder="Nouveau secteur…"
+            className="flex-1 px-3 py-2.5 rounded-xl border border-[#E2E8F0] text-[14px] text-[#263238] focus:outline-none focus:border-[#4CAF4F]" />
+          <button onClick={add} disabled={saving || !newName.trim()} className="px-4 py-2.5 rounded-xl text-[13px] font-bold text-white disabled:opacity-40" style={{ background: '#4CAF4F' }}>Ajouter</button>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {sectors.length === 0 ? (
+            <p className="text-[13px] text-[#ABBED1]">Aucun secteur pour l'instant.</p>
+          ) : sectors.map((s) => (
+            <span key={s.id} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-semibold bg-[#EFF6FF] text-[#1E40AF] border border-[#BFDBFE]">
+              {s.name}
+              <button onClick={() => remove(s.id)} className="text-[#1E40AF] hover:text-[#EF4444] font-bold leading-none">×</button>
+            </span>
+          ))}
+        </div>
+      </div>
+    </Modal>
   );
 }

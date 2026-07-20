@@ -121,8 +121,8 @@ function sortItems(items: RequestDetail[]): RequestDetail[] {
 const ALL_STATUTS_COMMANDE = ['En attente', 'Confirmé', 'Livré', 'Annulé'];
 const ALL_STATUTS_DEVIS    = ['En attente', 'Confirmé', 'Livré', 'Annulé'];
 
-interface Ligne { ref: string; productId: string | null; qte: number; pu: number; }
-const emptyLigne = (): Ligne => ({ ref: '', productId: null, qte: 1, pu: 0 });
+interface Ligne { ref: string; productId: string | null; qte: number; pu: number; metrage: string; }
+const emptyLigne = (): Ligne => ({ ref: '', productId: null, qte: 1, pu: 0, metrage: '' });
 
 // Construit le payload + poste la commande/devis. Réutilisable (page requests + quick-order mobile).
 export async function submitNewRequest(

@@ -61,6 +61,7 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
         ...(body.email !== undefined && { email: body.email }),
         ...(body.wilaya !== undefined && { wilaya: body.wilaya }),
         ...(body.commune !== undefined && { commune: body.commune }),
+        ...(body.sectorId !== undefined && { sectorId: body.sectorId || null }),
         ...(body.address !== undefined && { address: body.address }),
         ...(body.photo !== undefined && { photo: body.photo }),
         // Réactivation → efface les infos de désactivation
