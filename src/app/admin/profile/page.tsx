@@ -57,14 +57,6 @@ function PushSection() {
   );
 }
 
-const mockUser = {
-  nom: 'Yacine Rahali',
-  email: 'yacine@psi.dz',
-  telephone: '+213 770 150 656',
-  role: 'Admin',
-  depuis: 'Janvier 2025',
-};
-
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="bg-white rounded-2xl border border-[#E2E8F0] overflow-hidden shadow-sm">
@@ -77,10 +69,13 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 }
 
 export default function ProfilePage() {
-  const [nom, setNom] = useState(mockUser.nom);
-  const [email, setEmail] = useState(mockUser.email);
-  const [telephone, setTelephone] = useState(mockUser.telephone);
+  const [nom, setNom] = useState('');
+  const [email, setEmail] = useState('');
+  const [telephone, setTelephone] = useState('');
+  const [role, setRole] = useState('');
+  const [depuis, setDepuis] = useState('');
   const [savedInfo, setSavedInfo] = useState(false);
+  const [infoError, setInfoError] = useState('');
 
   const [currentPwd, setCurrentPwd] = useState('');
   const [newPwd, setNewPwd] = useState('');
@@ -91,19 +86,40 @@ export default function ProfilePage() {
   const [showNew, setShowNew] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
 
+  // Charge le vrai utilisateur connecté
+  useEffect(() => {
+    fetch('/api/profile').then((r) => r.ok ? r.json() : null).then((u) => {
+      if (!u) return;
+      setNom(u.name ?? ''); setEmail(u.email ?? ''); setTelephone(u.phone ?? '');
+      setRole(u.role === 'ADMIN' ? 'Admin' : 'Employé');
+      setDepuis(u.createdAt ? new Date(u.createdAt).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' }) : '');
+    }).catch(() => {});
+  }, []);
+
   const inputClass = "w-full px-4 py-2.5 rounded-xl border border-[#E2E8F0] text-[14px] text-[#263238] bg-white focus:outline-none focus:border-[#4CAF4F] focus:ring-[3px] focus:ring-[#4CAF4F]/15 transition-all";
   const labelClass = "block text-[12px] font-semibold text-[#374151] mb-1.5";
 
-  const handleSaveInfo = () => {
+  const handleSaveInfo = async () => {
+    setInfoError('');
+    const res = await fetch('/api/profile', {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: nom, phone: telephone }),
+    });
+    if (!res.ok) { const e = await res.json().catch(() => ({})); setInfoError(e.error ?? 'Échec.'); return; }
     setSavedInfo(true);
     setTimeout(() => setSavedInfo(false), 2500);
   };
 
-  const handleSavePwd = () => {
+  const handleSavePwd = async () => {
     setPwdError('');
     if (!currentPwd) return setPwdError('Entrez votre mot de passe actuel.');
     if (newPwd.length < 6) return setPwdError('Le nouveau mot de passe doit faire au moins 6 caractères.');
     if (newPwd !== confirmPwd) return setPwdError('Les mots de passe ne correspondent pas.');
+    const res = await fetch('/api/profile', {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ currentPassword: currentPwd, newPassword: newPwd }),
+    });
+    if (!res.ok) { const e = await res.json().catch(() => ({})); return setPwdError(e.error ?? 'Échec.'); }
     setCurrentPwd(''); setNewPwd(''); setConfirmPwd('');
     setSavedPwd(true);
     setTimeout(() => setSavedPwd(false), 2500);
@@ -131,14 +147,14 @@ export default function ProfilePage() {
       {/* Avatar + infos rapides */}
       <div className="bg-white rounded-2xl border border-[#E2E8F0] shadow-sm p-6 mb-5 flex items-center gap-6 col-span-2">
         <div className="w-20 h-20 rounded-2xl flex items-center justify-center text-[28px] font-extrabold flex-shrink-0" style={{ background: '#D1FAE5', color: '#166534' }}>
-          YR
+          {(nom || '?').split(' ').map((w) => w[0]).slice(0, 2).join('').toUpperCase()}
         </div>
         <div>
-          <p className="text-[20px] font-bold text-[#0F172A]">{nom}</p>
+          <p className="text-[20px] font-bold text-[#0F172A]">{nom || '…'}</p>
           <p className="text-[13px] text-[#8A9BB5] mt-0.5">{email}</p>
           <div className="flex items-center gap-2 mt-2">
-            <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-[#F3E8FF] text-[#6B21A8]">{mockUser.role}</span>
-            <span className="text-[11px] text-[#ABBED1]">Membre depuis {mockUser.depuis}</span>
+            <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-[#F3E8FF] text-[#6B21A8]">{role}</span>
+            {depuis && <span className="text-[11px] text-[#ABBED1]">Membre depuis {depuis}</span>}
           </div>
         </div>
       </div>
@@ -160,15 +176,16 @@ export default function ProfilePage() {
             </div>
             <div>
               <label className={labelClass}>Email</label>
-              <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className={inputClass} />
+              <input type="email" value={email} disabled className={inputClass + ' bg-[#F8FAFC] text-[#8A9BB5]'} />
             </div>
             <div>
               <label className={labelClass}>Rôle</label>
               <div className="px-4 py-2.5 rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] text-[14px] text-[#8A9BB5] select-none">
-                {mockUser.role} — non modifiable
+                {role} — non modifiable
               </div>
             </div>
             <div className="flex items-center justify-end gap-3 pt-1">
+              {infoError && <span className="text-[13px] font-semibold text-[#EF4444]">{infoError}</span>}
               {savedInfo && <span className="text-[13px] font-semibold text-[#4CAF4F]">Modifications enregistrées</span>}
               <button onClick={handleSaveInfo} className="px-5 py-2.5 rounded-xl text-[13px] font-bold text-white transition-colors" style={{ background: '#4CAF4F' }}>
                 Enregistrer

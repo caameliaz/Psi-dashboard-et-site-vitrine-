@@ -33,6 +33,7 @@ interface User {
   role: 'Admin' | 'Employe';
   statut: 'Actif' | 'Inactif';
   permissions: PermKey[];
+  resetRequested?: boolean;
 }
 
 function dbUserToUser(u: any): User {
@@ -42,6 +43,7 @@ function dbUserToUser(u: any): User {
     email: u.email ?? '—',
     role: u.role === 'ADMIN' ? 'Admin' : 'Employe',
     statut: u.active ? 'Actif' : 'Inactif',
+    resetRequested: !!u.resetRequested,
     permissions: u.role === 'ADMIN'
       ? [...ADMIN_PERMS]
       : (u.permissions?.length ? u.permissions : [...EMPLOYE_PERMS]),
@@ -380,11 +382,12 @@ function CreateUserForm({ onSubmit, onClose, customRoles, onAddCustomRole, onDel
 
 /* ─── Formulaire de modification ─── */
 /* ─── Fiche utilisateur (slide-in) ─── */
-function UserSlideIn({ user, onClose, onDelete, onPermChange, customRoles, onSaveProfile, initialEditing = false }: {
+function UserSlideIn({ user, onClose, onDelete, onPermChange, customRoles, onSaveProfile, onResetPassword, initialEditing = false }: {
   user: User; onClose: () => void; onDelete: () => void;
   onPermChange: (userId: number, perm: PermKey, value: boolean) => void;
   customRoles: CustomRole[];
   onSaveProfile: (user: User, data: { name: string; email: string; role: string; password?: string; permissions: PermKey[] }) => Promise<void>;
+  onResetPassword: (user: User) => Promise<void>;
   initialEditing?: boolean;
 }) {
   const ac = avatarColor(user.role);
@@ -393,6 +396,7 @@ function UserSlideIn({ user, onClose, onDelete, onPermChange, customRoles, onSav
   // Édition inline (même page) : bouton "Modifier" → champs éditables
   const [editing, setEditing] = useState(initialEditing);
   const [saving, setSaving] = useState(false);
+  const [resetting, setResetting] = useState(false);
   const [fNom, setFNom] = useState(user.nom);
   const [fEmail, setFEmail] = useState(user.email);
   const [fRole, setFRole] = useState<string>(user.role); // 'Admin' | 'Employe' | id rôle perso
@@ -498,6 +502,25 @@ function UserSlideIn({ user, onClose, onDelete, onPermChange, customRoles, onSav
               })}
             </div>
             {!isAdmin && <p className="text-[11px] text-[#ABBED1] mt-3">Les modifications sont appliquées immédiatement.</p>}
+          </div>
+
+          {/* Sécurité : réinitialiser le mot de passe */}
+          <div className="h-px bg-[#F2F4F7]" />
+          <div>
+            <p className="text-[12px] font-bold text-[#8A9BB5] uppercase tracking-widest mb-3">Sécurité</p>
+            {user.resetRequested && (
+              <div className="flex items-center gap-2 mb-3 px-3 py-2.5 rounded-xl bg-[#FFF7ED] border border-[#FED7AA]">
+                <svg width={16} height={16} fill="none" viewBox="0 0 24 24" className="flex-shrink-0"><path d="M12 9v4M12 17h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" stroke="#EA580C" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                <span className="text-[12px] font-semibold text-[#9A3412]">Cet utilisateur a demandé une réinitialisation de mot de passe.</span>
+              </div>
+            )}
+            <button
+              onClick={async () => { setResetting(true); try { await onResetPassword(user); } finally { setResetting(false); } }}
+              disabled={resetting}
+              className="w-full px-4 py-2.5 rounded-xl border border-[#E2E8F0] text-[13px] font-semibold text-[#374151] hover:bg-[#F8FAFC] transition-colors disabled:opacity-60">
+              {resetting ? 'Génération…' : '🔑 Réinitialiser le mot de passe'}
+            </button>
+            <p className="text-[11px] text-[#ABBED1] mt-2">Un nouveau mot de passe sera généré et affiché (à transmettre à l&apos;utilisateur).</p>
           </div>
         </div>
 
@@ -634,6 +657,22 @@ export default function UsersPage() {
     }
   };
 
+  // Réinitialise le mot de passe d'un user → génère un nouveau mdp, l'applique, l'affiche (copiable)
+  const handleResetPassword = async (u: User) => {
+    const newPwd = genPassword();
+    const res = await fetch(`/api/users/${u.id}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: newPwd }),
+    });
+    if (res.ok) {
+      await fetchUsers();
+      setProfilUser((prev) => prev && prev.id === u.id ? { ...prev, resetRequested: false } : prev);
+      setNewCreds({ nom: u.nom, email: u.email, password: newPwd });
+    } else {
+      alert('Échec de la réinitialisation.');
+    }
+  };
+
   const handleAddCustomRole = async (role: CustomRole) => {
     const res = await fetch('/api/roles', {
       method: 'POST',
@@ -749,7 +788,12 @@ export default function UsersPage() {
                     <div className="w-14 h-14 rounded-2xl flex items-center justify-center text-[18px] font-extrabold" style={{ background: ac.bg, color: ac.text }}>
                       {initials(u.nom)}
                     </div>
-                    <StatutBadge statut={u.statut} />
+                    <div className="flex items-center gap-1.5">
+                      {u.resetRequested && (
+                        <span title="Mot de passe oublié — réinitialisation demandée" className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-full bg-[#FFF7ED] text-[#9A3412] border border-[#FED7AA]">🔑 Reset</span>
+                      )}
+                      <StatutBadge statut={u.statut} />
+                    </div>
                   </div>
 
                   <p className="text-[15px] font-bold text-[#0F172A] leading-tight group-hover:text-[#4CAF4F] transition-colors">{u.nom}</p>
@@ -787,7 +831,8 @@ export default function UsersPage() {
           onPermChange={handlePermChange}
           customRoles={customRoles}
           initialEditing={profilEditing}
-          onSaveProfile={handleSaveProfile} />
+          onSaveProfile={handleSaveProfile}
+          onResetPassword={handleResetPassword} />
       )}
 
       {showAdd && (

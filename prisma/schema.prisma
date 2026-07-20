@@ -311,6 +311,8 @@ model User {
   photo           String?
   permissions     String[]           @default([])
   sessionVersion  Int                @default(0) // incrémenté pour invalider tous les cookies
+  resetRequested  Boolean            @default(false) // l'utilisateur a demandé une réinit. de mot de passe
+  resetRequestedAt DateTime?
   ordersCreated   Order[]            @relation("OrderCreatedBy")
   quotesCreated   Quote[]            @relation("QuoteCreatedBy")
   ordersAssigned  Order[]            @relation("OrderAssignedTo")

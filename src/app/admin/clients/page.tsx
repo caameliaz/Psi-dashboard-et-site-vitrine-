@@ -621,6 +621,7 @@ export default function ClientsPage() {
   const [editForm, setEditForm] = useState({ ...emptyClient });
   const [sectors, setSectors]   = useState<{ id: string; name: string }[]>([]);
   const [showSectors, setShowSectors] = useState(false);
+  const [showImport, setShowImport] = useState(false);
 
   const fetchSectors = useCallback(async () => {
     const r = await fetch('/api/sectors');
@@ -780,7 +781,11 @@ export default function ClientsPage() {
             className="pl-9 pr-4 py-2.5 w-full sm:w-[280px] rounded-xl border border-[#E2E8F0] bg-white text-[14px] text-[#263238] placeholder-[#8A9BB5] focus:outline-none focus:border-[#4CAF4F] focus:ring-[3px] focus:ring-[#4CAF4F]/15 transition-all"
           />
         </div>
-        <button onClick={() => setShowSectors(true)} className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-[13px] font-semibold text-[#374151] border border-[#E2E8F0] hover:bg-[#F8FAFC] transition-colors sm:ml-auto whitespace-nowrap">
+        <button onClick={() => setShowImport(true)} className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-[13px] font-semibold text-[#374151] border border-[#E2E8F0] hover:bg-[#F8FAFC] transition-colors sm:ml-auto whitespace-nowrap">
+          <svg width={15} height={15} fill="none" viewBox="0 0 24 24"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          Importer Excel
+        </button>
+        <button onClick={() => setShowSectors(true)} className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-[13px] font-semibold text-[#374151] border border-[#E2E8F0] hover:bg-[#F8FAFC] transition-colors whitespace-nowrap">
           Secteurs
         </button>
         <button onClick={() => { setAddForm({ ...emptyClient }); setShowAdd(true); }} className="flex items-center gap-2 px-4 py-2 rounded-xl text-[13px] font-semibold text-white transition-colors whitespace-nowrap" style={{ background: '#4CAF4F' }}>
@@ -869,7 +874,142 @@ export default function ClientsPage() {
       {showSectors && (
         <SectorsModal sectors={sectors} onChange={fetchSectors} onClose={() => setShowSectors(false)} />
       )}
+
+      {showImport && (
+        <ImportClientsModal
+          onClose={() => setShowImport(false)}
+          onDone={() => { setShowImport(false); fetchClients(true); fetchSectors(); }}
+        />
+      )}
     </div>
+  );
+}
+
+// ── Modal import Excel des clients ───────────────────────────────────────────
+// Colonnes reconnues (souples) : Code Client · Client · Catégorie · Commune · Téléphone · Commercial
+// (+ Entreprise · Email · Wilaya si présentes)
+function ImportClientsModal({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
+  const [rows, setRows] = useState<any[]>([]);
+  const [fileName, setFileName] = useState('');
+  const [parsing, setParsing] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [error, setError] = useState('');
+  const [result, setResult] = useState<{ created: number; total: number; errors: string[] } | null>(null);
+
+  // Normalise un en-tête ("Code Client" → "code client")
+  const norm = (s: string) => String(s ?? '').trim().toLowerCase();
+
+  const pick = (obj: any, keys: string[]) => {
+    for (const k of Object.keys(obj)) {
+      if (keys.includes(norm(k))) { const v = obj[k]; return v == null ? '' : String(v).trim(); }
+    }
+    return '';
+  };
+
+  const handleFile = async (file: File) => {
+    setError(''); setResult(null); setParsing(true);
+    try {
+      const XLSX = await import('xlsx');
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(buf, { type: 'array' });
+      const sheet = wb.Sheets[wb.SheetNames[0]];
+      const raw: any[] = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+      const mapped = raw.map((r) => ({
+        code:       pick(r, ['code client', 'code', 'code_client']),
+        client:     pick(r, ['client', 'nom', 'nom client', 'name']),
+        entreprise: pick(r, ['entreprise', 'société', 'societe', 'company']),
+        categorie:  pick(r, ['catégorie', 'categorie', 'secteur', 'category']),
+        commune:    pick(r, ['commune', 'ville']),
+        telephone:  pick(r, ['téléphone', 'telephone', 'tel', 'phone', 'tél']),
+        commercial: pick(r, ['commercial', 'agent', 'responsable']),
+        wilaya:     pick(r, ['wilaya']),
+        email:      pick(r, ['email', 'mail', 'e-mail']),
+      })).filter((r) => r.client); // ignore les lignes sans nom
+      setRows(mapped);
+      setFileName(file.name);
+      if (mapped.length === 0) setError('Aucun client trouvé. Vérifiez que la colonne "Client" existe.');
+    } catch (e) {
+      console.error(e);
+      setError('Impossible de lire ce fichier Excel.');
+    } finally { setParsing(false); }
+  };
+
+  const doImport = async () => {
+    setImporting(true); setError('');
+    try {
+      const res = await fetch('/api/clients/import', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rows }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) { setError(data.error ?? 'Échec de l\'import.'); return; }
+      setResult({ created: data.created ?? 0, total: data.total ?? rows.length, errors: data.errors ?? [] });
+    } finally { setImporting(false); }
+  };
+
+  return (
+    <Modal title="Importer des clients (Excel)" onClose={onClose}>
+      <div className="space-y-4">
+        {!result ? (
+          <>
+            <p className="text-[13px] text-[#8A9BB5] leading-relaxed">
+              Chargez un fichier <b>.xlsx</b>. Colonnes reconnues : <b>Code Client, Client, Catégorie, Commune, Téléphone, Commercial</b> (+ Entreprise, Email, Wilaya si présentes).
+              La colonne <b>Catégorie</b> devient le secteur d&apos;activité (créé automatiquement).
+            </p>
+
+            <label className="flex flex-col items-center justify-center gap-2 border-2 border-dashed border-[#CBD5E1] rounded-xl py-8 cursor-pointer hover:border-[#4CAF4F] hover:bg-[#F8FFF8] transition-colors">
+              <svg width={28} height={28} fill="none" viewBox="0 0 24 24"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2" stroke="#8A9BB5" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              <span className="text-[13px] font-semibold text-[#374151]">{fileName || 'Choisir un fichier Excel'}</span>
+              <input type="file" accept=".xlsx,.xls" className="hidden"
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); e.target.value = ''; }} />
+            </label>
+
+            {parsing && <p className="text-[13px] text-[#8A9BB5] text-center">Lecture du fichier…</p>}
+            {error && <p className="text-[13px] text-[#EF4444] font-medium">{error}</p>}
+
+            {rows.length > 0 && (
+              <div className="rounded-xl border border-[#E2E8F0] overflow-hidden">
+                <div className="px-4 py-2.5 bg-[#F0FDF4] border-b border-[#E2E8F0]">
+                  <p className="text-[13px] font-bold text-[#166534]">{rows.length} client(s) prêt(s) à importer</p>
+                </div>
+                <div className="max-h-[200px] overflow-y-auto">
+                  {rows.slice(0, 30).map((r, i) => (
+                    <div key={i} className="px-4 py-2 border-b border-[#F2F4F7] last:border-b-0 text-[12px]">
+                      <span className="font-semibold text-[#0F172A]">{r.client}</span>
+                      <span className="text-[#8A9BB5]"> · {[r.categorie, r.commune, r.telephone].filter(Boolean).join(' · ') || '—'}</span>
+                    </div>
+                  ))}
+                  {rows.length > 30 && <div className="px-4 py-2 text-[12px] text-[#ABBED1]">… et {rows.length - 30} autres</div>}
+                </div>
+              </div>
+            )}
+
+            <div className="flex gap-3 pt-1">
+              <button onClick={onClose} className="flex-1 px-4 py-2.5 rounded-xl border border-[#E2E8F0] text-[13px] font-semibold text-[#374151] hover:bg-[#F8FAFC] transition-colors">Annuler</button>
+              <button onClick={doImport} disabled={rows.length === 0 || importing}
+                className="flex-1 px-4 py-2.5 rounded-xl text-[13px] font-bold text-white bg-[#4CAF4F] hover:bg-[#43A047] disabled:opacity-60 transition-colors">
+                {importing ? 'Import en cours…' : `Importer ${rows.length || ''}`.trim()}
+              </button>
+            </div>
+          </>
+        ) : (
+          <div className="text-center py-2">
+            <div className="w-12 h-12 rounded-full bg-[#F0FDF4] flex items-center justify-center mx-auto mb-3">
+              <svg width={24} height={24} fill="none" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5" stroke="#16A34A" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            </div>
+            <p className="text-[15px] font-bold text-[#0F172A] mb-1">{result.created} client(s) importé(s)</p>
+            <p className="text-[13px] text-[#8A9BB5]">sur {result.total} ligne(s)</p>
+            {result.errors.length > 0 && (
+              <div className="mt-3 text-left rounded-xl border border-[#FED7AA] bg-[#FFF7ED] p-3 max-h-[120px] overflow-y-auto">
+                <p className="text-[12px] font-bold text-[#9A3412] mb-1">{result.errors.length} ligne(s) ignorée(s) :</p>
+                {result.errors.map((er, i) => <p key={i} className="text-[11px] text-[#9A3412]">{er}</p>)}
+              </div>
+            )}
+            <button onClick={onDone} className="mt-5 w-full px-4 py-2.5 rounded-xl text-[13px] font-bold text-white bg-[#4CAF4F] hover:bg-[#43A047] transition-colors">Terminé</button>
+          </div>
+        )}
+      </div>
+    </Modal>
   );
 }
 

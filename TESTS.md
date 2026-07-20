@@ -1,5 +1,11 @@
 
-Salut, pour que le site puisse envoyer les emails automatiques depuis Contact@psi.dz, il faut activer un réglage sur Microsoft. Peux-tu me dire :
+B	Tester en local la logique métier (guide de tests dans TESTS.md)	Maintenant
+C	Corriger les petits trucs trouvés → recommit	Au fil des tests
+D	Créer compte Vercel + déployer	Quand B/C sont ok
+E	Tester en prod (push, emails, cookies)	Après D
+F	Entreprise : emails + domaine + import clients	Demain
+
+## Salut, pour que le site puisse envoyer les emails automatiques depuis Contact@psi.dz, il faut activer un réglage sur Microsoft. Peux-tu me dire :
 
 Qui gère les comptes Microsoft / Outlook de l'entreprise ? (toi, quelqu'un de l'équipe, ou Icosnet ?)
 As-tu un accès "administrateur" sur admin.microsoft.com ? (pas juste ta boîte mail — le vrai compte admin du domaine psi.dz)
@@ -8,8 +14,8 @@ admin.microsoft.com → Utilisateurs → Contact@psi.dz → onglet Courrier → 
 
 Si c'est Icosnet qui gère, il suffit de les appeler et leur dire : « activez SMTP AUTH pour Contact@psi.dz ».
 ═══════════════════════════════════════════════════════════
-🚀 CHECKLIST DÉPLOIEMENT VERCEL (à faire une fois avant mise en ligne)
-═══════════════════════════════════════════════════════════
+# 🚀 CHECKLIST DÉPLOIEMENT VERCEL (à faire une fois avant mise en ligne)
+
 Variables d'environnement à ajouter sur Vercel (Settings → Environment Variables) :
   - DATABASE_URL (Neon prod) · NEXTAUTH_SECRET · NEXTAUTH_URL (= l'URL prod, https://…)
   - SMTP_USER=Contact@psi.dz · SMTP_PASS · EMAIL_FROM=Contact@psi.dz · SMTP_PROVIDER=outlook
@@ -20,6 +26,9 @@ Code / config :
   - [ ] useSecureCookies:true côté auth (HTTPS) — à remettre pour la prod
   - [ ] activer SMTP AUTH côté Microsoft/Icosnet (voir bloc EMAILS) → sinon emails KO
 Tests post-déploiement (HTTPS requis) : notifs push (PC/Android app fermée, iPhone via écran d'accueil) + envoi email test.
+
+
+
 
 Email	Rôle
 admin1@psi.dz	Admin (tout) — utilise celui-là
@@ -87,35 +96,7 @@ Rien à coder. Reste uniquement des tests/config qui exigent le déploiement (HT
 Guide pour tester **toute l'application** avant de livrer. On suit les sections dans l'ordre, workflow par workflow.
 Ce qui est neuf ou corrigé récemment est signalé par ⚠️ / **(nouveau)**.
 
----
 
-## 🚀 1. Démarrer l'app
-
-```bash
-# Terminal 1 — le serveur
-npm run dev
-# → note la ligne  Network: http://192.168.X.X:3000  (pour tester depuis un téléphone)
-
-# Terminal 2 — garder la base réveillée
-node keep-alive.mjs
-```
-
-⚠️ Lance le **keep-alive AVANT ta démo** et laisse la fenêtre ouverte → la base ne s'endort jamais pendant la présentation.
-
-Le **site public** est sur `/` — le **back-office** sur `/admin`.
-
----
-
-## 🔑 2. Les comptes (seed de production)
-
-Mot de passe pour **tous** : `psi2026`
-
-| Compte | Rôle | Ce qu'il peut faire |
-|---|---|---|
-| `admin1@psi.dz` | Admin | **Tout** (toutes les permissions) |
-| `admin2@psi.dz` | Admin | **Tout** (2ᵉ admin pour tester les notifications) |
-| `employe1@psi.dz` | Employé complet | Voir + modifier commandes, clients, produits |
-| `employe2@psi.dz` | Employé limité | **Lecture seule** (voir commandes / clients / produits) |
 
 > Base de prod = **sans** clients/commandes/devis (à créer via l'app).
 > Base de démo (`seed.ts`) = comptes différents (`admin@psi.dz` / `password`, `amira@psi.dz`…) avec données d'exemple.
