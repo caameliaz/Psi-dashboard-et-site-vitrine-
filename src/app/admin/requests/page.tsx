@@ -52,6 +52,7 @@ function orderToDetail(o: any): RequestDetail {
       categorie: i.product?.category?.name ?? '',
       quantite: i.quantity ?? 0,
       prixUnitaire: i.unitPrice ?? 0,
+      metrage: i.metrage ?? null,
     };
   });
   const produits = items.map((i: any) => `${i.designation} × ${i.quantite}`).join(', ') || '—';
@@ -89,6 +90,7 @@ function quoteToDetail(q: any): RequestDetail {
       categorie: i.product?.category?.name ?? '',
       quantite: i.quantity ?? 0,
       prixUnitaire: i.unitPrice ?? 0,
+      metrage: i.metrage ?? null,
     };
   });
   const produits = items.map((i: any) => `${i.designation} × ${i.quantite}`).join(', ') || '—';

@@ -51,9 +51,10 @@ DONNÉES DE CONNEXION UTILISÉES PAR L'APP (déjà configurées côté code) :
    de test arrive, c'est bon. (Le code est déjà prêt, rien d'autre à faire côté app.)
 ═══════════════════════════════════════════════════════════════════════
 
-## 9.2 — Export / impression fiche client
-- [ ] Bouton export sur la fiche client → **PDF ET Excel** (les 2 formats)
-- [ ] Contenu = TOUTE la fiche : infos client + historique complet (commandes + devis)
+## 9.2 — Export / impression fiche client  ✅ FAIT
+- [x] 2 boutons export dans la fiche client → **PDF** (impression) ET **Excel**
+- [x] Contenu = TOUTE la fiche : infos client (entreprise, contact, tél, mail, wilaya, commune, adresse, secteur, nb cmd/devis, statut) + historique complet (commandes + devis) + total
+- [x] Module dédié src/lib/export-client.ts (même charte que l'export commande)
 
 ## 9.3 — Segmentation des clients par secteur d'activité  ✅ FAIT
 - [x] Table `Sector` + `sectorId` sur Client (migration p9) + API /api/sectors (GET/POST/PATCH/DELETE)
@@ -90,10 +91,14 @@ DONNÉES DE CONNEXION UTILISÉES PAR L'APP (déjà configurées côté code) :
 > Migration p9 couvre aussi : Product.metrage, Category.prefix/refCounter, OrderItem/QuoteItem.metrage,
 > Client.sectorId + table Sector, OrderItem.productId/description (pour 9.3/9.4/9.5/9.7 à venir).
 
-## 9.9 — Excel : pas de cases vides + colonnes + export dashboard
-- [ ] Commande à plusieurs références → **répéter les infos de commande sur CHAQUE ligne** (client, wilaya, date…) au lieu de laisser vide, seule la réf change
-- [ ] Ajouter colonnes : **wilaya, catégorie produit, référence** (+ métrage — voir 9.4)
-- [ ] Pouvoir **exporter le DASHBOARD** (les stats) en Excel
+## 9.9 — Excel : pas de cases vides + colonnes + export dashboard  ✅ FAIT
+- [x] Export commandes/devis réécrit : **UNE ligne par produit**, infos de commande RÉPÉTÉES sur chaque ligne (réf, client, tél, wilaya, commune, date, statut) → aucune cellule vide
+- [x] Colonnes ajoutées : wilaya, commune, catégorie produit, produit, **métrage**, référence, téléphone
+- [x] **Export dashboard** en Excel : bouton "Exporter" sur le tableau de bord → indicateurs clés, aujourd'hui, sources, top produits, top wilayas, évolution 6 mois, employés actifs (src/lib/export-dashboard.ts)
+
+═══════════════════════════════════════════════════════════
+✅ PRIORITÉ 9 TERMINÉE — 9.1 à 9.9 (config Microsoft SMTP à finaliser côté entreprise)
+═══════════════════════════════════════════════════════════
 
 
 TODO LIST — ce qui reste à faire

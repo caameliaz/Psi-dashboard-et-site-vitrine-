@@ -7,6 +7,7 @@ import { useSSE } from '@/lib/use-sse';
 import dynamic from 'next/dynamic';
 import type { Order, Quote } from '@/types';
 import { notifBell } from '@/lib/notif-bell-store';
+import { exportDashboardExcel } from '@/lib/export-dashboard';
 
 // Graphiques Recharts chargés à la demande (ssr:false) → aucun poids ailleurs
 const WilayaBarChart = dynamic(() => import('@/components/ui/DashboardCharts').then((m) => m.WilayaBarChart), {
@@ -331,6 +332,14 @@ export default function DashboardPage() {
               style={{ width: 220 }}
             />
           </div>
+          <button
+            onClick={() => exportDashboardExcel({ stats, todayStats, sourceStats, evolution, devisEnAttente, topProduits, topWilayas, serie6Mois, employesActifs })}
+            title="Exporter le tableau de bord en Excel"
+            className="hidden md:flex items-center gap-2 px-3.5 py-2.5 rounded-xl border border-[#E2E8F0] bg-white text-[13px] font-semibold text-[#16A34A] hover:bg-[#F8FAFC] transition-colors shadow-sm"
+          >
+            <svg width={15} height={15} fill="none" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/><path d="M14 2v6h6M9 13l6 6M15 13l-6 6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            Exporter
+          </button>
           <div className="hidden md:block"><BellButton /></div>
         </div>
       </div>

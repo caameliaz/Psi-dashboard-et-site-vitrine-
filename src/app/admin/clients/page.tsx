@@ -36,6 +36,7 @@ import { initials } from '@/lib/utils';
 import { RequestPanel, TemplatePopover, type RequestDetail } from '@/components/ui/RequestPanel';
 import { Modal } from '@/components/ui/Modal';
 import { WilayaSelect } from '@/components/ui/WilayaSelect';
+import { exportClientExcel, printClientDoc, type ClientExportData } from '@/lib/export-client';
 
 function avatarColor(id: number | string) {
   const n = typeof id === 'string' ? id.charCodeAt(0) + id.charCodeAt(1) : id;
@@ -239,6 +240,14 @@ function ClientSlideIn({ client, onClose, onEdit, onDelete, onReactivate, onDele
     reader.readAsDataURL(file);
   };
 
+  const clientExport: ClientExportData = {
+    entreprise: client.entreprise, contact: client.contact, telephone: client.telephone,
+    wilaya: client.wilaya, commune: client.commune, sectorName: client.sectorName,
+    adresse: client.adresse, email: client.email, commandes: client.commandes, devis: client.devis,
+    active: client.active, deactivatedReason: client.deactivatedReason,
+    historique: client.historique.map((h) => ({ ref: h.ref, type: h.type, date: h.date, statut: h.statut, montant: h.montant, produits: h.produits })),
+  };
+
   const waHref = `https://wa.me/${client.telephone.replace(/\s/g, '').replace('+', '')}`;
   const callHref = `tel:${client.telephone.replace(/\s/g, '')}`;
   const emailHref = client.email ? `mailto:${client.email}` : null;
@@ -301,6 +310,14 @@ function ClientSlideIn({ client, onClose, onEdit, onDelete, onReactivate, onDele
                         <svg width={14} height={14} fill="none" viewBox="0 0 24 24"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" stroke="currentColor" strokeWidth="1.6"/><path d="M22 6l-10 7L2 6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
                       </button>
                     )}
+                    <button onClick={() => printClientDoc(clientExport)} title="Exporter en PDF"
+                      className="w-8 h-8 flex items-center justify-center rounded-lg border border-[#E2E8F0] text-[#374151] hover:bg-[#F8FAFC] transition-colors">
+                      <svg width={14} height={14} fill="none" viewBox="0 0 24 24"><path d="M6 9V2h12v7M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2M6 14h12v8H6z" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                    </button>
+                    <button onClick={() => exportClientExcel(clientExport)} title="Exporter en Excel"
+                      className="w-8 h-8 flex items-center justify-center rounded-lg border border-[#E2E8F0] text-[#16A34A] hover:bg-[#F8FAFC] transition-colors">
+                      <svg width={14} height={14} fill="none" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/><path d="M14 2v6h6M9 13l6 6M15 13l-6 6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                    </button>
                   </div>
                 </div>
 

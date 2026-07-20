@@ -39,6 +39,7 @@ export interface RequestItem {
   categorie?: string;
   quantite: number;
   prixUnitaire: number;
+  metrage?: number | null;
 }
 
 export interface RequestDetail {
