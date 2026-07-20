@@ -458,6 +458,15 @@ export default function RequestsPage() {
   useEffect(() => { fetchAll(); }, [fetchAll]);
   useSSE(useCallback(() => { fetchAll(true); }, [fetchAll]));
 
+  // Ouverture directe d'un détail via ?open=<id> (depuis l'historique / une notif)
+  useEffect(() => {
+    const openId = new URLSearchParams(window.location.search).get('open');
+    if (!openId) return;
+    const found = [...orders, ...quotes].find((r) => r.id === openId);
+    if (found) setSelected(found);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orders, quotes]);
+
   // Liste des utilisateurs actifs (pour l'assignation "pris en charge par")
   useEffect(() => {
     fetch('/api/users?assignable=true').then(r => r.ok ? r.json() : []).then(setUsers).catch(() => {});

@@ -37,6 +37,7 @@ import { RequestPanel, TemplatePopover, type RequestDetail } from '@/components/
 import { Modal } from '@/components/ui/Modal';
 import { WilayaSelect } from '@/components/ui/WilayaSelect';
 import { exportClientExcel, printClientDoc, type ClientExportData } from '@/lib/export-client';
+import { useSSE } from '@/lib/use-sse';
 
 function avatarColor(id: number | string) {
   const n = typeof id === 'string' ? id.charCodeAt(0) + id.charCodeAt(1) : id;
@@ -626,21 +627,40 @@ export default function ClientsPage() {
     if (r.ok) { const d = await r.json(); setSectors(d.map((s: any) => ({ id: s.id, name: s.name }))); }
   }, []);
 
-  const fetchClients = useCallback(async () => {
-    setLoading(true);
+  const fetchClients = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const res = await fetch('/api/clients');
       if (res.ok) {
         const data = await res.json();
-        setClients(data.map(dbClientToRecord));
+        const records = data.map(dbClientToRecord);
+        setClients(records);
+        // Garde la fiche ouverte à jour en temps réel (historique, compteurs…)
+        setSelected((prev) => prev ? (records.find((r: ClientRecord) => r._dbId === prev._dbId) ?? prev) : prev);
       }
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, []);
 
   useEffect(() => { fetchClients(); }, [fetchClients]);
   useEffect(() => { fetchSectors(); }, [fetchSectors]);
+  // Temps réel : rafraîchit la liste + l'historique client en silence sur événement SSE
+  useSSE(useCallback(() => { fetchClients(true); }, [fetchClients]));
+
+  // Ouverture directe d'une fiche via ?open=<clientId> (depuis l'historique / une notif)
+  // — inclut les clients désactivés (?inactifs=true) pour voir la justif.
+  useEffect(() => {
+    const openId = new URLSearchParams(window.location.search).get('open');
+    if (!openId) return;
+    fetch('/api/clients?inactifs=true')
+      .then((r) => (r.ok ? r.json() : []))
+      .then((data: any[]) => {
+        const found = data.find((c) => c.id === openId);
+        if (found) setSelected(dbClientToRecord(found));
+      })
+      .catch(() => {});
+  }, []);
 
   const filtered = clients.filter(
     (c) =>
@@ -665,7 +685,7 @@ export default function ClientsPage() {
       }),
     });
     if (res.ok) {
-      await fetchClients();
+      await fetchClients(true);
       setAddForm({ ...emptyClient });
       setShowAdd(false);
     }
@@ -693,7 +713,7 @@ export default function ClientsPage() {
       }),
     });
     if (res.ok) {
-      await fetchClients();
+      await fetchClients(true);
       setEditClient(null);
     }
   };
@@ -711,7 +731,7 @@ export default function ClientsPage() {
       alert(err.error ?? 'Désactivation impossible');
       return;
     }
-    await fetchClients();
+    await fetchClients(true);
     setDeleteClient(null);
     setSelected(null);
   };
@@ -724,7 +744,7 @@ export default function ClientsPage() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ active: true }),
     });
-    if (res.ok) { await fetchClients(); setSelected(null); }
+    if (res.ok) { await fetchClients(true); setSelected(null); }
   };
 
   // Suppression définitive (admin only)
@@ -737,7 +757,7 @@ export default function ClientsPage() {
       alert(err.error ?? 'Suppression impossible');
       return;
     }
-    await fetchClients();
+    await fetchClients(true);
     setSelected(null);
   };
 

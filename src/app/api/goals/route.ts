@@ -9,7 +9,7 @@ async function notifyUsers(userIds: string[], actorId: string | null, title: str
   const targets = [...new Set(userIds)].filter((id) => id && id !== actorId);
   if (targets.length === 0) return;
   const notif = await prisma.notification.create({
-    data: { type: 'ACTION_AUTRE', title, message, reads: { create: targets.map((userId) => ({ userId, read: false })) } },
+    data: { type: 'ACTION_AUTRE', title, message, link: '/admin/dashboard', reads: { create: targets.map((userId) => ({ userId, read: false })) } },
   });
   pushSSE('activity', {
     id: notif.id, type: notif.type, title: notif.title, message: notif.message,

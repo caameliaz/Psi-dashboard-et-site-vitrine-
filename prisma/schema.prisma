@@ -351,6 +351,8 @@ model Notification {
   message   String
   orderId   String?
   quoteId   String?
+  clientId  String?            // pour deep-link vers la fiche client (ex: client désactivé)
+  link      String?            // lien libre (ex: '/admin/dashboard' pour les objectifs)
   order     Order?             @relation(fields: [orderId], references: [id], onDelete: SetNull)
   quote     Quote?             @relation(fields: [quoteId], references: [id], onDelete: SetNull)
   reads     NotificationRead[]

@@ -142,6 +142,7 @@ export async function DELETE(request: NextRequest, { params }: Ctx) {
       message: `${actorName} a désactivé le client ${label} — motif : ${reason}`,
       actorId: session.user.id,
       adminOnly: true,
+      clientId: id,
     }).catch(() => {});
 
     return NextResponse.json({ success: true, deactivated: true });

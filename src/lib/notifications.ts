@@ -10,6 +10,8 @@ export async function createNotif({
   actorId,
   orderId,
   quoteId,
+  clientId,
+  link,
   assignedToId,
   adminOnly,
   actorOnly,
@@ -21,6 +23,8 @@ export async function createNotif({
   actorId?: string | null;
   orderId?: string;
   quoteId?: string;
+  clientId?: string;
+  link?: string;
   assignedToId?: string | null;
   adminOnly?: boolean;
   actorOnly?: boolean;
@@ -91,6 +95,8 @@ export async function createNotif({
       message,
       orderId: orderId ?? null,
       quoteId: quoteId ?? null,
+      clientId: clientId ?? null,
+      link: link ?? null,
       reads: {
         create: uniqueIds.map((u) => ({ userId: u.id, read: false })),
       },

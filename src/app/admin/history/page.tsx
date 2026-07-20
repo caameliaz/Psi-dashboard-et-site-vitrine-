@@ -1,10 +1,51 @@
 ﻿'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { initials } from '@/lib/utils';
 import { StatusPill } from '@/components/ui/StatusPill';
 import { RequestPanel, type RequestDetail } from '@/components/ui/RequestPanel';
 import { AdminSelect } from '@/components/ui/AdminSelect';
+import { useSSE } from '@/lib/use-sse';
+
+const DB_TO_UI: Record<string, string> = { EN_ATTENTE: 'En attente', CONTACTE: 'En attente', VALIDE: 'Confirmé', LIVRE: 'Livré', ANNULE: 'Annulé' };
+
+// Mappe une commande/devis (API) → RequestDetail pour le panneau
+function toRequestDetail(o: any, type: 'Commande' | 'Devis'): RequestDetail {
+  const phone = o.client?.phones?.find((p: any) => p.primary)?.number ?? o.client?.phones?.[0]?.number ?? '';
+  const items = (o.items ?? []).map((i: any) => {
+    const base = i.product?.reference ?? i.description ?? '?';
+    return {
+      designation: i.metrage != null ? `${base} · ${i.metrage} m` : base,
+      categorie: i.product?.category?.name ?? '',
+      quantite: i.quantity ?? 0,
+      prixUnitaire: i.unitPrice ?? 0,
+      metrage: i.metrage ?? null,
+    };
+  });
+  const total = items.reduce((a: number, i: any) => a + i.quantite * i.prixUnitaire, 0);
+  return {
+    id: o.id,
+    ref: o.ref ?? o.id.slice(0, 8).toUpperCase(),
+    type,
+    source: o.source ?? 'SITE',
+    client: o.client?.name ?? o.clientName ?? '—',
+    entreprise: o.client?.company ?? o.clientCompany ?? '—',
+    telephone: phone,
+    wilaya: o.client?.wilaya ?? o.clientWilaya ?? '',
+    commune: o.client?.commune ?? '',
+    adresse: o.client?.address ?? '',
+    email: o.client?.email ?? '',
+    produits: items.map((i: any) => `${i.designation} × ${i.quantite}`).join(', ') || '—',
+    items,
+    montant: type === 'Devis'
+      ? (o.proposedPrice ? `${Number(o.proposedPrice).toLocaleString('fr-FR')} DA` : 'Sur devis')
+      : (total > 0 ? `${total.toLocaleString('fr-FR')} DA` : '—'),
+    statut: DB_TO_UI[o.status] ?? o.status,
+    date: new Date(o.createdAt).toLocaleDateString('fr-FR'),
+    heure: new Date(o.createdAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
+  };
+}
 
 type ActionType = 'commande' | 'devis' | 'produit' | 'client' | 'utilisateur' | 'contenu';
 
@@ -17,7 +58,9 @@ interface HistoryEntry {
   detail: string;
   date: string;
   heure: string;
-  request?: RequestDetail;
+  orderId?: string | null;
+  quoteId?: string | null;
+  clientId?: string | null; // entityId quand entity = CLIENT
 }
 
 function dbActionType(entity: string): ActionType {
@@ -41,6 +84,9 @@ function dbLogToEntry(log: any): HistoryEntry {
     detail: log.detail ?? log.entityId ?? '',
     date: dt.toLocaleDateString('fr-FR'),
     heure: dt.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
+    orderId: log.orderId ?? null,
+    quoteId: log.quoteId ?? null,
+    clientId: (log.entity ?? '').toUpperCase() === 'CLIENT' ? (log.entityId ?? null) : null,
   };
 }
 
@@ -60,9 +106,23 @@ export default function HistoryPage() {
   const [filterType, setFilterType] = useState<ActionType | 'all'>('all');
   const [filterUser, setFilterUser] = useState('all');
   const [selected, setSelected] = useState<RequestDetail | null>(null);
+  const router = useRouter();
 
-  const fetchHistory = useCallback(async () => {
-    setLoading(true);
+  // Clic sur une ligne : commande/devis → ouvre le détail ; client → fiche client
+  const openEntry = async (h: HistoryEntry) => {
+    if (h.orderId) {
+      const res = await fetch(`/api/orders/${h.orderId}`);
+      if (res.ok) setSelected(toRequestDetail(await res.json(), 'Commande'));
+    } else if (h.quoteId) {
+      const res = await fetch(`/api/quotes/${h.quoteId}`);
+      if (res.ok) setSelected(toRequestDetail(await res.json(), 'Devis'));
+    } else if (h.clientId) {
+      router.push(`/admin/clients?open=${h.clientId}`);
+    }
+  };
+
+  const fetchHistory = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const res = await fetch('/api/audit?limit=100');
       if (res.ok) {
@@ -70,11 +130,13 @@ export default function HistoryPage() {
         setHistory((data.logs ?? data).map(dbLogToEntry));
       }
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, []);
 
   useEffect(() => { fetchHistory(); }, [fetchHistory]);
+  // Temps réel : nouvelle action → apparaît sans refresh ni spinner
+  useSSE(useCallback(() => { fetchHistory(true); }, [fetchHistory]));
 
   const users = Array.from(new Set(history.map((h) => h.user)));
 
@@ -142,11 +204,11 @@ export default function HistoryPage() {
               {entries.map((h, i) => {
                 const tc = typeConfig[h.type];
                 const isAdmin = h.userRole === 'Admin';
-                const clickable = !!h.request;
+                const clickable = !!(h.orderId || h.quoteId || h.clientId);
                 return (
                   <div
                     key={h.id}
-                    onClick={() => h.request && setSelected(h.request)}
+                    onClick={() => clickable && openEntry(h)}
                     className={`flex items-start gap-4 px-5 py-4 transition-colors ${i > 0 ? 'border-t border-[#F2F4F7]' : ''} ${clickable ? 'hover:bg-[#F8FFF8] cursor-pointer' : ''}`}
                   >
                     {/* Avatar user */}
@@ -169,7 +231,7 @@ export default function HistoryPage() {
                         <p className="text-[12px] font-semibold text-[#374151]">{h.user}</p>
                         <span className="text-[#E2E8F0]">·</span>
                         <p className="text-[12px] text-[#8A9BB5]">{h.userRole === 'Admin' ? 'Admin' : 'Employé'}</p>
-                        {clickable && <span className="ml-auto text-[11px] text-[#4CAF4F] font-semibold">Voir détail →</span>}
+                        {clickable && <span className="ml-auto text-[11px] text-[#4CAF4F] font-semibold">{h.clientId ? 'Voir la fiche →' : 'Voir détail →'}</span>}
                       </div>
                     </div>
                   </div>
