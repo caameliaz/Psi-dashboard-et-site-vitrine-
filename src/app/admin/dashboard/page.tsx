@@ -483,11 +483,14 @@ export default function DashboardPage() {
               <div className="flex items-center justify-between mb-2 gap-2">
                 <p className="text-[11px] font-bold text-[#ABBED1] uppercase tracking-widest">Ventes ce mois</p>
                 {isAdmin && (
-                  <select value={selectedCommercial} onChange={(e) => setSelectedCommercial(e.target.value)}
-                    className="text-[11px] font-semibold text-[#374151] border border-[#E2E8F0] rounded-lg px-2 py-1 bg-white focus:outline-none focus:ring-2 focus:ring-[#4CAF4F]/30 max-w-[55%]">
-                    <option value="">Toute l&apos;entreprise</option>
-                    {parCommercial.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                  </select>
+                  <div className="relative max-w-[58%]">
+                    <select value={selectedCommercial} onChange={(e) => setSelectedCommercial(e.target.value)}
+                      className="w-full appearance-none text-[11px] font-bold text-[#374151] border border-[#E2E8F0] rounded-lg pl-2.5 pr-7 py-1.5 bg-white cursor-pointer focus:outline-none focus:border-[#4CAF4F] focus:ring-2 focus:ring-[#4CAF4F]/25 transition-all">
+                      <option value="">Toute l&apos;entreprise</option>
+                      {parCommercial.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                    </select>
+                    <svg className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-[#8A9BB5]" width={12} height={12} viewBox="0 0 24 24" fill="none"><path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                  </div>
                 )}
               </div>
               <div className="flex items-end gap-2">

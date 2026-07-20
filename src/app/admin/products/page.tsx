@@ -600,8 +600,14 @@ export default function ProductsPage() {
                   {filteredRefs.map((r, i) => (
                     <div key={r.id} className={`flex items-center gap-3 px-4 py-3 ${i > 0 ? 'border-t border-[#E2E8F0]' : ''}`} style={{ opacity: r.active ? 1 : 0.55 }}>
                       <div className="flex-1 min-w-0">
-                        <p className="text-[13px] font-bold text-[#0F172A]">{r.width}mm × {r.length}m</p>
-                        <p className="text-[12px] text-[#8A9BB5] truncate">{r.usage || '—'}</p>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          {/* Code référence (auto PTT-001 si préfixe, sinon dimensions) */}
+                          <span className="text-[11px] font-bold px-2 py-0.5 rounded-md bg-[#EEF2FF] text-[#4F46E5] tabular-nums">{r.reference}</span>
+                          <p className="text-[13px] font-bold text-[#0F172A] truncate">{r.name || `${r.width}mm × ${r.length}m`}</p>
+                        </div>
+                        <p className="text-[12px] text-[#8A9BB5] truncate mt-0.5">
+                          {r.width}mm × {r.length}m{r.metrage != null ? ` · ${r.metrage} m` : ''}{r.usage ? ` — ${r.usage}` : ''}
+                        </p>
                       </div>
                       <p className="text-[13px] font-semibold text-[#374151] flex-shrink-0 tabular-nums">{r.price.toLocaleString('fr-FR')} DA</p>
                       {canEdit && <Toggle active={r.active} onToggle={() => toggleRef(r)} />}

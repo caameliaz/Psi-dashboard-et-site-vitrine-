@@ -77,7 +77,8 @@ export async function POST(request: NextRequest) {
       include: { category: true, customFields: { include: { definition: true } } },
     });
 
-    createAudit({ userId: session?.user?.id, action: 'Produit créé', entity: 'PRODUIT', entityId: product.id, detail: product.reference });
+    const prodLabel = product.name ? `${product.name} (${product.reference})` : product.reference;
+    createAudit({ userId: session?.user?.id, action: 'Produit créé', entity: 'PRODUIT', entityId: product.id, detail: prodLabel });
     return NextResponse.json(product, { status: 201 });
   } catch (e) {
     console.error(e);

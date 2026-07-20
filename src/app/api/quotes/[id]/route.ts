@@ -75,7 +75,8 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
     });
 
     const action = body.status !== undefined ? `Statut devis : ${statusLabel(body.status)}` : 'Devis modifié';
-    createAudit({ userId: session.user.id, action, entity: 'DEVIS', entityId: id, quoteId: id });
+    const quoteLabel = quote.clientCompany || quote.clientName || quote.client?.name || '';
+    createAudit({ userId: session.user.id, action, entity: 'DEVIS', entityId: id, detail: quoteLabel ? `${quote.ref} — ${quoteLabel}` : (quote.ref ?? id), quoteId: id });
 
     if (body.status !== undefined) {
       notifyStatusChange({

@@ -103,7 +103,8 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
     });
 
     const action = body.status !== undefined ? `Statut commande : ${statusLabel(body.status)}` : 'Commande modifiée';
-    createAudit({ userId: session.user.id, action, entity: 'COMMANDE', entityId: id, orderId: id });
+    const orderLabel = order.clientCompany || order.clientName || order.client?.name || '';
+    createAudit({ userId: session.user.id, action, entity: 'COMMANDE', entityId: id, detail: orderLabel ? `${order.ref} — ${orderLabel}` : order.ref, orderId: id });
 
     if (body.status !== undefined) {
       notifyStatusChange({

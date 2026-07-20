@@ -189,7 +189,13 @@ DÉCISION À PRENDRE : A puis B, ou directement B.
       · bloc "Employés ce mois" (admin) = nb commandes + devis LIVRÉS gérés (pas de CA)
       · métrage affiché dans Top produits (`réf · 80 m`)
       · API : /api/goals (GET/PUT admin) + /api/stats enrichi (parCommercial, employesLivres, objectifs, ventes/évolutions)
-- [ ] Panneau détail commande : layout "goofy" (trop de gris / boutons à revoir) → nettoyer visuellement
+      · objectifs notifiés : obj perso → la personne ("X a défini un objectif de Y DA pour vous") ; obj entreprise → tout le monde
+      · dropdowns stylisés (commercial dashboard + "Pris en charge par" détail commande) : chevron custom, appearance-none
+- [x] Panneau détail commande — retouches :
+      · Notes + Modifier sur une ligne compacte à GAUCHE, sous les boutons de contact ; actions statut (Confirmer/Annuler…) à DROITE, côte à côte
+      · scrollbar du panneau masquée (.no-scrollbar dans globals.css)
+      · "Changer de client" réparé (saisie possible + dropdown autocomplete clients) ; non-admin doit justifier → note interne (non exportée avec la fiche)
+- [ ] Panneau détail commande : reste le nettoyage visuel global (trop de gris) si besoin
 - [ ] Page Produits : ok en l'état ; réfléchir si une section "tous les produits" en plus serait utile (à trancher, pas urgent)
 - [ ] Fiche client : réorganiser l'affichage des infos ; envisager un **tableau type "historique"** pour les commandes du client (plus propre que l'actuel)
 - [ ] Page Historique : revoir comment les infos s'affichent (même traitement que les notifs) + rendre les lignes **cliquables** (clic sur une ligne commande → ouvre le détail de la commande) — pareil pour les notifs

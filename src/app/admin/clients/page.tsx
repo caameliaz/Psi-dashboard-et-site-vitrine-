@@ -260,9 +260,20 @@ function ClientSlideIn({ client, onClose, onEdit, onDelete, onReactivate, onDele
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-[#F2F4F7]">
           <p className="text-[13px] font-semibold text-[#8A9BB5]">Fiche client</p>
-          <button onClick={onClose} className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-[#F2F4F7] text-[#ABBED1] hover:text-[#374151] transition-colors">
-            <svg width={14} height={14} viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"/></svg>
-          </button>
+          <div className="flex items-center gap-1.5">
+            <button onClick={() => printClientDoc(clientExport)} title="Exporter en PDF"
+              className="w-8 h-8 flex items-center justify-center rounded-lg border border-[#E2E8F0] text-[#374151] hover:bg-[#F8FAFC] transition-colors">
+              <svg width={14} height={14} fill="none" viewBox="0 0 24 24"><path d="M6 9V2h12v7M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2M6 14h12v8H6z" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            </button>
+            <button onClick={() => exportClientExcel(clientExport)} title="Exporter en Excel"
+              className="w-8 h-8 flex items-center justify-center rounded-lg border border-[#E2E8F0] text-[#16A34A] hover:bg-[#F8FAFC] transition-colors">
+              <svg width={14} height={14} fill="none" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/><path d="M14 2v6h6M9 13l6 6M15 13l-6 6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            </button>
+            <div className="w-px h-5 bg-[#E2E8F0] mx-0.5" />
+            <button onClick={onClose} className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-[#F2F4F7] text-[#ABBED1] hover:text-[#374151] transition-colors">
+              <svg width={14} height={14} viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"/></svg>
+            </button>
+          </div>
         </div>
 
         <div className="flex-1 overflow-y-auto">
@@ -310,14 +321,6 @@ function ClientSlideIn({ client, onClose, onEdit, onDelete, onReactivate, onDele
                         <svg width={14} height={14} fill="none" viewBox="0 0 24 24"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" stroke="currentColor" strokeWidth="1.6"/><path d="M22 6l-10 7L2 6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
                       </button>
                     )}
-                    <button onClick={() => printClientDoc(clientExport)} title="Exporter en PDF"
-                      className="w-8 h-8 flex items-center justify-center rounded-lg border border-[#E2E8F0] text-[#374151] hover:bg-[#F8FAFC] transition-colors">
-                      <svg width={14} height={14} fill="none" viewBox="0 0 24 24"><path d="M6 9V2h12v7M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2M6 14h12v8H6z" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                    </button>
-                    <button onClick={() => exportClientExcel(clientExport)} title="Exporter en Excel"
-                      className="w-8 h-8 flex items-center justify-center rounded-lg border border-[#E2E8F0] text-[#16A34A] hover:bg-[#F8FAFC] transition-colors">
-                      <svg width={14} height={14} fill="none" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/><path d="M14 2v6h6M9 13l6 6M15 13l-6 6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                    </button>
                   </div>
                 </div>
 
@@ -382,10 +385,10 @@ function ClientSlideIn({ client, onClose, onEdit, onDelete, onReactivate, onDele
           <div className="px-6 py-5">
             <div className="flex items-center justify-between mb-4">
               <p className="text-[11px] font-bold text-[#ABBED1] uppercase tracking-widest">Historique</p>
-              <button onClick={() => setShowNewOrder(true)}
-                className="px-3 py-1.5 rounded-lg text-[12px] font-bold text-white"
+              <button onClick={() => setShowNewOrder(true)} title="Nouvelle commande / devis"
+                className="w-8 h-8 flex items-center justify-center rounded-lg text-white text-[18px] font-bold leading-none"
                 style={{ background: '#4CAF4F' }}>
-                Nouvelle commande
+                +
               </button>
             </div>
 
@@ -404,31 +407,30 @@ function ClientSlideIn({ client, onClose, onEdit, onDelete, onReactivate, onDele
                   : { bg: '#F5F3FF', color: '#6D28D9', border: '#DDD6FE', label: 'Devis' };
                 return (
                   <button key={h.ref} onClick={() => setSelectedRequest(detail)}
-                    className="w-full text-left rounded-xl border border-[#E2E8F0] hover:border-[#4CAF4F] hover:bg-[#F8FFF8] transition-all px-4 py-3.5">
-                    <div className="flex items-center justify-between gap-2 mb-1.5">
-                      <span
-                        className="text-[9px] font-bold tracking-wide px-1.5 py-px rounded"
-                        style={{ background: typeCfg.bg, color: typeCfg.color, border: `1px solid ${typeCfg.border}` }}
-                      >
-                        {typeCfg.label}
-                      </span>
-                      <p className="text-[11px] text-[#ABBED1]">{h.date}</p>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <div className="flex-1 min-w-0">
-                        <p className="text-[12px] font-bold font-mono text-[#374151]">{h.ref}</p>
-                        <p className="text-[12px] text-[#8A9BB5] truncate mt-0.5">{h.produits}</p>
+                    className="w-full text-left rounded-lg border border-[#E2E8F0] hover:border-[#4CAF4F] hover:bg-[#F8FFF8] transition-all px-3 py-2.5 flex items-center gap-2.5">
+                    {/* Pastille type */}
+                    <span className="w-1.5 h-8 rounded-full flex-shrink-0" style={{ background: typeCfg.color }} />
+                    {/* Réf + produits */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[12px] font-bold font-mono text-[#374151]">{h.ref}</span>
+                        <span className="text-[9px] font-bold px-1 py-px rounded" style={{ background: typeCfg.bg, color: typeCfg.color }}>{typeCfg.label}</span>
                       </div>
-                      <div className="flex-shrink-0 flex items-center gap-2">
-                        <p className="text-[13px] font-bold text-[#0F172A]">{h.montant}</p>
+                      <p className="text-[11px] text-[#8A9BB5] truncate mt-0.5">{h.produits}</p>
+                    </div>
+                    {/* Montant + statut + date */}
+                    <div className="flex-shrink-0 flex flex-col items-end gap-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[13px] font-bold text-[#0F172A]">{h.montant}</span>
                         <StatusPill status={h.statut} />
                       </div>
+                      <span className="text-[10px] text-[#ABBED1]">{h.date}</span>
                     </div>
                   </button>
                 );
               })}
               {client.historique.length === 0 && (
-                <p className="text-[13px] text-[#8A9BB5] text-center py-8">Aucune commande</p>
+                <p className="text-[13px] text-[#8A9BB5] text-center py-8">Aucune commande ni devis</p>
               )}
             </div>
           </div>

@@ -765,21 +765,34 @@ function ContactDropdown({ title, color, hoverColor, children, options }: {
 }
 
 export function RequestPanel({ item, onClose, onStatusChange, onConfirmQuoteWithPrice, users, onAssign }: RequestPanelProps) {
-  const { can } = useRole();
+  const { can, isAdmin } = useRole();
   const canModifierStatuts = can('modifier_statuts');
   const canAssign = can('assign_commandes');
   const canReassign = can('reassigner_client');
   const [showReassign, setShowReassign] = useState(false);
+  const [reassignSearch, setReassignSearch] = useState('');
+  const [reassignPicked, setReassignPicked] = useState<{ id: string; name: string } | null>(null);
+  const [reassignReason, setReassignReason] = useState('');
   const [showPriceModal, setShowPriceModal] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
   const [editingNotes, setEditingNotes] = useState(false);
 
+  const openReassign = () => { setReassignSearch(''); setReassignPicked(null); setReassignReason(''); setShowReassign(true); };
+
   // Ré-assigner la demande à un autre client (permission reassigner_client)
-  const reassignClient = async (clientId: string) => {
+  // Les non-admins doivent justifier → la raison est enregistrée en note interne.
+  const reassignClient = async (clientId: string, reason: string) => {
     if (!item.id) return;
     const endpoint = item.type === 'Devis' ? `/api/quotes/${item.id}` : `/api/orders/${item.id}`;
     const res = await fetch(endpoint, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ clientId }) });
     if (!res.ok) { alert('Ré-assignation impossible'); return; }
+    // Justification (non-admin) → note interne
+    if (reason.trim()) {
+      await fetch(notesBase, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: `[Changement de client] ${reason.trim()}` }),
+      }).catch(() => {});
+    }
     setShowReassign(false);
     onStatusChange?.(item.ref, item.statut); // déclenche un refetch parent
     onClose();
@@ -854,7 +867,7 @@ export function RequestPanel({ item, onClose, onStatusChange, onConfirmQuoteWith
           </div>
 
           {/* ── Corps scrollable ── */}
-          <div className="flex-1 overflow-y-auto">
+          <div className="flex-1 overflow-y-auto no-scrollbar">
             <div className="px-4 md:px-8 py-6 flex flex-col gap-6">
 
               {/* En-tête style facture */}
@@ -895,7 +908,7 @@ export function RequestPanel({ item, onClose, onStatusChange, onConfirmQuoteWith
                 <div className="flex items-center justify-between mb-3">
                   <p className="text-[11px] font-bold text-[#0F172A] uppercase tracking-wide">Client</p>
                   {canReassign && !isArchived && (
-                    <button onClick={() => setShowReassign(true)}
+                    <button onClick={openReassign}
                       className="text-[11px] font-semibold text-[#8B5CF6] hover:underline">
                       Changer de client
                     </button>
@@ -949,13 +962,16 @@ export function RequestPanel({ item, onClose, onStatusChange, onConfirmQuoteWith
               <div>
                 <p className="text-[11px] font-bold text-[#0F172A] uppercase tracking-wide mb-2">Pris en charge par</p>
                 {canAssign && onAssign && users ? (
-                  <select
-                    value={item.assignedToId ?? ''}
-                    onChange={(e) => item.id && onAssign(item.id, item.type, e.target.value || null)}
-                    className="w-full px-3 py-2.5 rounded-xl border border-[#E2E8F0] text-[13px] text-[#374151] focus:outline-none focus:border-[#4CAF4F] focus:ring-[3px] focus:ring-[#4CAF4F]/15 transition-all bg-white">
-                    <option value="">— Non assigné —</option>
-                    {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
-                  </select>
+                  <div className="relative">
+                    <select
+                      value={item.assignedToId ?? ''}
+                      onChange={(e) => item.id && onAssign(item.id, item.type, e.target.value || null)}
+                      className="w-full appearance-none pl-3 pr-9 py-2.5 rounded-xl border border-[#E2E8F0] text-[13px] font-medium text-[#374151] focus:outline-none focus:border-[#4CAF4F] focus:ring-[3px] focus:ring-[#4CAF4F]/15 transition-all bg-white cursor-pointer">
+                      <option value="">— Non assigné —</option>
+                      {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+                    </select>
+                    <svg className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-[#8A9BB5]" width={14} height={14} viewBox="0 0 24 24" fill="none"><path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                  </div>
                 ) : (
                   <div className="rounded-xl border-2 border-[#E2E8F0] px-4 py-3">
                     <p className="text-[13px] font-semibold text-[#374151]">{item.assignedToName ?? '— Non assigné —'}</p>
@@ -996,9 +1012,9 @@ export function RequestPanel({ item, onClose, onStatusChange, onConfirmQuoteWith
 
           {/* ── Footer ── */}
           <div className="flex-shrink-0 border-t border-[#F2F4F7] px-4 md:px-6 py-4 bg-[#FAFCFF]">
-            <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div className="flex flex-col gap-3">
 
-              {/* Gauche : icônes rondes contact + export */}
+              {/* Ligne 1 : icônes rondes contact + export */}
               <div className="flex items-center gap-2 flex-wrap">
                 {/* Appeler : choix du canal (téléphone, WhatsApp, Viber) */}
                 <ContactDropdown title="Appeler" color="#3B82F6" hoverColor="#3B82F6" options={[
@@ -1036,6 +1052,11 @@ export function RequestPanel({ item, onClose, onStatusChange, onConfirmQuoteWith
                 <IconBtn onClick={openMail} title="Envoyer un email" color="#F97316" hoverColor="#F97316">
                   <svg width={13} height={13} fill="none" viewBox="0 0 24 24"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" stroke="currentColor" strokeWidth="1.8"/><path d="M22 6l-10 7L2 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>
                 </IconBtn>
+              </div>
+
+              {/* Ligne 2 : Notes+Modifier à gauche, actions statut à droite */}
+              <div className="flex items-start justify-between gap-3 flex-wrap">
+              <div className="flex items-center gap-2">
                 <button onClick={() => { setNewNote(''); setEditingNotes(true); }}
                   className="flex items-center gap-1.5 px-3 h-9 rounded-full border text-[11px] font-bold transition-colors"
                   style={{ borderColor: '#ABBED140', color: '#8A9BB5' }}
@@ -1056,8 +1077,8 @@ export function RequestPanel({ item, onClose, onStatusChange, onConfirmQuoteWith
                 )}
               </div>
 
-              {/* Droite : actions statut */}
-              <div className="flex flex-col items-end gap-2">
+              {/* Droite : actions statut (côte à côte) */}
+              <div className="flex flex-row items-center gap-2 flex-wrap justify-end">
                 {!isArchived && onStatusChange && canModifierStatuts && (
                   <>
                     {/* Commande en attente → Confirmer (garde le détail ouvert) */}
@@ -1101,6 +1122,7 @@ export function RequestPanel({ item, onClose, onStatusChange, onConfirmQuoteWith
                     Restaurer
                   </button>
                 )}
+              </div>
               </div>
 
             </div>
@@ -1197,14 +1219,44 @@ export function RequestPanel({ item, onClose, onStatusChange, onConfirmQuoteWith
             <div className="pointer-events-auto bg-white rounded-2xl shadow-2xl p-5 w-[420px] max-w-[94vw]">
               <p className="text-[15px] font-bold text-[#0F172A] mb-1">Changer de client</p>
               <p className="text-[12px] text-[#8A9BB5] mb-4">Ré-assigner {item.type.toLowerCase()} {item.ref} à un autre client existant.</p>
-              <ClientAutocomplete
-                value=""
-                onChange={() => {}}
-                placeholder="Rechercher un client…"
-                inputClass="w-full px-3 py-2.5 rounded-xl border border-[#E2E8F0] text-[13px] text-[#0F172A] focus:outline-none focus:border-[#4CAF4F]"
-                onPick={(c) => reassignClient(c.id)}
-              />
-              <button onClick={() => setShowReassign(false)} className="mt-4 w-full px-4 py-2.5 rounded-xl border border-[#E2E8F0] text-[13px] font-semibold text-[#374151]">Annuler</button>
+
+              <label className="block text-[11px] font-bold text-[#374151] uppercase tracking-wide mb-1.5">Nouveau client</label>
+              {reassignPicked ? (
+                <div className="flex items-center justify-between gap-2 px-3 py-2.5 rounded-xl border-2 border-[#4CAF4F] bg-[#F0FDF4]">
+                  <span className="text-[13px] font-semibold text-[#0F172A] truncate">{reassignPicked.name}</span>
+                  <button onClick={() => { setReassignPicked(null); setReassignSearch(''); }}
+                    className="text-[11px] font-bold text-[#8A9BB5] hover:text-[#EF4444] flex-shrink-0">Changer</button>
+                </div>
+              ) : (
+                <ClientAutocomplete
+                  value={reassignSearch}
+                  onChange={setReassignSearch}
+                  placeholder="Rechercher un client…"
+                  inputClass="w-full px-3 py-2.5 rounded-xl border border-[#E2E8F0] text-[13px] text-[#0F172A] focus:outline-none focus:border-[#4CAF4F]"
+                  onPick={(c) => { setReassignPicked({ id: c.id, name: c.name }); setReassignSearch(c.name); }}
+                />
+              )}
+
+              {/* Justification obligatoire pour les non-admins (enregistrée en note interne) */}
+              {!isAdmin && (
+                <div className="mt-3">
+                  <label className="block text-[11px] font-bold text-[#374151] uppercase tracking-wide mb-1.5">Motif du changement <span className="text-[#EF4444]">*</span></label>
+                  <textarea value={reassignReason} onChange={(e) => setReassignReason(e.target.value)} rows={2}
+                    placeholder="Pourquoi changez-vous le client ?"
+                    className="w-full px-3 py-2 rounded-xl border border-[#E2E8F0] text-[13px] text-[#0F172A] focus:outline-none focus:border-[#4CAF4F] resize-none" />
+                  <p className="text-[10px] text-[#ABBED1] mt-1">Enregistré comme note interne (non exporté avec la fiche client).</p>
+                </div>
+              )}
+
+              <div className="flex gap-2 mt-4">
+                <button onClick={() => setShowReassign(false)} className="flex-1 px-4 py-2.5 rounded-xl border border-[#E2E8F0] text-[13px] font-semibold text-[#374151] hover:bg-[#F8FAFC]">Annuler</button>
+                <button
+                  onClick={() => reassignPicked && reassignClient(reassignPicked.id, reassignReason)}
+                  disabled={!reassignPicked || (!isAdmin && !reassignReason.trim())}
+                  className="flex-1 px-4 py-2.5 rounded-xl text-[13px] font-bold text-white bg-[#8B5CF6] hover:bg-[#7C3AED] disabled:opacity-50 disabled:cursor-not-allowed">
+                  Confirmer
+                </button>
+              </div>
             </div>
           </div>
         </>
