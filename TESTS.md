@@ -198,7 +198,7 @@ Ce qui est neuf ou corrigé récemment est signalé par ⚠️ / **(nouveau)**.
 
 ## 👥 11. Clients (`/admin/clients`)
 
-6. **+ Nouveau client** → wilaya + commune (select filtré + saisie libre) → apparaît dans la liste ; la fiche montre « Commune, Wilaya »
+
 7. **Plusieurs téléphones** par client, chacun avec un label (Principal / Secrétaire / Mobile…)
 8. **Notes internes** sur le client
 9. **Nouvelle commande** depuis la fiche → client pré-rempli, apparaît dans /requests ET l'historique client
