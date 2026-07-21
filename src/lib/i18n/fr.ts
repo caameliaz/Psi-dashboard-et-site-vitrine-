@@ -116,6 +116,8 @@ export const fr = {
     email_label: 'Email',
     email_ph: 'votre@email.com',
     section_products: 'Produits souhaités',
+    category_label: 'Catégorie',
+    category_default: 'Toutes catégories',
     dim_label: 'Dimensions',
     dim_default: '— Choisir —',
     dim_other: 'Autre (préciser)',

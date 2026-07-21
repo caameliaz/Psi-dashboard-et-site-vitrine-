@@ -118,6 +118,8 @@ export const ar: Translations = {
     email_label: 'البريد الإلكتروني',
     email_ph: 'بريدك@الإلكتروني.com',
     section_products: 'المنتجات المطلوبة',
+    category_label: 'الفئة',
+    category_default: 'كل الفئات',
     dim_label: 'الأبعاد',
     dim_default: '— اختر —',
     dim_other: 'أخرى (تحديد)',

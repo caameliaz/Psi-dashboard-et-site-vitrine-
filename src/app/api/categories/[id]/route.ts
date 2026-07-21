@@ -40,15 +40,21 @@ export async function DELETE(_request: NextRequest, { params }: Ctx) {
   const { id } = await params;
 
   try {
-    const count = await prisma.product.count({ where: { categoryId: id } });
-    if (count > 0) {
+    const activeCount = await prisma.product.count({ where: { categoryId: id, active: true } });
+    if (activeCount > 0) {
       return NextResponse.json(
-        { error: `Impossible de supprimer : ${count} produit(s) sont dans cette catégorie` },
+        { error: `Impossible de supprimer : ${activeCount} produit(s) actif(s) sont dans cette catégorie` },
         { status: 409 }
       );
     }
 
-    await prisma.category.delete({ where: { id } });
+    // Les produits désactivés restants ne bloquent plus la suppression — ils sont
+    // supprimés avec la catégorie (les commandes/devis passés les référencent encore
+    // via une relation optionnelle, donc leur historique n'est pas affecté).
+    await prisma.$transaction([
+      prisma.product.deleteMany({ where: { categoryId: id, active: false } }),
+      prisma.category.delete({ where: { id } }),
+    ]);
     return NextResponse.json({ success: true });
   } catch (e) {
     console.error(e);

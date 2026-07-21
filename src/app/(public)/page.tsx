@@ -6,6 +6,21 @@ import { CategoryBrowser } from '@/components/CategoryBrowser';
 import { QuoteCTA } from '@/components/QuoteCTA';
 import { useTranslation } from '@/lib/i18n';
 
+// Met "papier thermique" en vert dans le titre du hero, que ce soit le texte
+// par défaut ou un titre personnalisé saisi depuis l'admin.
+function renderHeroTitle(text: string) {
+  const m = text.match(/papier thermique/i);
+  if (!m) return text;
+  const i = m.index!;
+  return (
+    <>
+      {text.slice(0, i)}
+      <span className="text-[#4CAF4F]">{text.slice(i, i + m[0].length)}</span>
+      {text.slice(i + m[0].length)}
+    </>
+  );
+}
+
 export default function Home() {
   const { t } = useTranslation();
   const [content, setContent] = useState<Record<string, string>>({});
@@ -14,7 +29,7 @@ export default function Home() {
     fetch('/api/content').then(r => r.ok ? r.json() : {}).then(setContent).catch(() => {});
   }, []);
 
-  const heroTitreCustom = content['hero_titre'];
+  const heroTitre = content['hero_titre'] || `${t('hero.title_pre')}${t('hero.title_highlight')}${t('hero.title_post')}`;
   const aboutTexte      = content['about_texte'] ?? '';
 
   return (
@@ -34,13 +49,13 @@ export default function Home() {
           <div className="max-w-[620px] flex flex-col gap-6">
             <div className="flex flex-col gap-2">
               <h1 className="text-[28px] md:text-[38px] font-extrabold text-white leading-tight tracking-tight">
-                {heroTitreCustom ?? <>{t('hero.title_pre')}<span className="text-[#4CAF4F]">{t('hero.title_highlight')}</span>{t('hero.title_post')}</>}
+                {renderHeroTitle(heroTitre)}
               </h1>
             </div>
 
             <div className="flex flex-row flex-wrap gap-4 mt-4">
               <Link
-                href="/quote"
+                href="/cart"
                 className="flex items-center gap-2 bg-[#4CAF4F] text-white text-[14px] font-semibold px-6 py-3 rounded-lg shadow-[0px_4px_14px_rgba(76,175,79,0.5)] hover:bg-[#43A047] transition-all"
               >
                 {t('hero.cta_order')}
