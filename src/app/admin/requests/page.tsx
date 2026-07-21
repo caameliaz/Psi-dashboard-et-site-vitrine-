@@ -82,8 +82,8 @@ function orderToDetail(o: any): RequestDetail {
     ref: o.ref ?? o.id.slice(0, 8).toUpperCase(),
     type: 'Commande',
     source: o.source ?? 'SITE',
-    client: o.client?.name ?? '—',
-    entreprise: o.client?.company ?? '—',
+    client: o.clientName || o.client?.name || '—',
+    entreprise: o.clientCompany || o.client?.company || '—',
     telephone: phone,
     wilaya: o.client?.wilaya ?? '',
     commune: o.client?.commune ?? '',
@@ -119,8 +119,8 @@ function quoteToDetail(q: any): RequestDetail {
     ref: q.ref ?? q.id.slice(0, 8).toUpperCase(),
     type: 'Devis',
     source: q.source ?? 'SITE',
-    client: q.client?.name ?? '—',
-    entreprise: q.client?.company ?? '—',
+    client: q.clientName || q.client?.name || '—',
+    entreprise: q.clientCompany || q.client?.company || '—',
     telephone: phone,
     wilaya: q.client?.wilaya ?? '',
     commune: q.client?.commune ?? '',
@@ -162,8 +162,8 @@ function sortItems(items: RequestDetail[]): RequestDetail[] {
 const ALL_STATUTS_COMMANDE = ['En attente', 'Confirmé', 'Livré', 'Annulé'];
 const ALL_STATUTS_DEVIS    = ['En attente', 'Confirmé', 'Livré', 'Annulé'];
 
-interface Ligne { ref: string; productId: string | null; qte: number; pu: number; metrage: string; }
-const emptyLigne = (): Ligne => ({ ref: '', productId: null, qte: 1, pu: 0, metrage: '' });
+interface Ligne { categoryId: string; ref: string; productId: string | null; qte: number; pu: number; metrage: string; }
+const emptyLigne = (): Ligne => ({ categoryId: '', ref: '', productId: null, qte: 1, pu: 0, metrage: '' });
 
 // Construit le payload + poste la commande/devis. Réutilisable (page requests + quick-order mobile).
 export async function submitNewRequest(
@@ -218,11 +218,15 @@ export function CreateForm({ defaultType, onClose, onSave, users, currentUserId,
   const [tva, setTva] = useState(false);
   const [saving, setSaving] = useState(false);
   const [assignedToId, setAssignedToId] = useState<string>(currentUserId ?? '');
-  const [products, setProducts] = useState<{ id: string; reference: string; price: number }[]>([]);
+  const [products, setProducts] = useState<{ id: string; reference: string; price: number; categoryId: string }[]>([]);
+  const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
 
   useEffect(() => {
     fetch('/api/products?all=true').then(r => r.json()).then((data: any[]) => {
-      setProducts(data.map(p => ({ id: p.id, reference: p.reference, price: p.price ?? 0 })));
+      setProducts(data.map(p => ({ id: p.id, reference: p.reference, price: p.price ?? 0, categoryId: p.categoryId ?? p.category?.id ?? '' })));
+    }).catch(() => {});
+    fetch('/api/categories').then(r => r.ok ? r.json() : []).then((data: any[]) => {
+      setCategories(data.map((c) => ({ id: c.id, name: c.name })));
     }).catch(() => {});
   }, []);
 
@@ -340,7 +344,8 @@ export function CreateForm({ defaultType, onClose, onSave, users, currentUserId,
             </div>
 
             {/* En-têtes colonnes */}
-            <div className="grid gap-2 mb-1" style={{ gridTemplateColumns: '1fr 72px 64px 96px 24px' }}>
+            <div className="grid gap-2 mb-1" style={{ gridTemplateColumns: '1fr 1fr 72px 64px 96px 24px' }}>
+              <span className="text-[10px] font-bold text-[#ABBED1] uppercase tracking-wide">Catégorie</span>
               <span className="text-[10px] font-bold text-[#ABBED1] uppercase tracking-wide">Référence</span>
               <span className="text-[10px] font-bold text-[#ABBED1] uppercase tracking-wide">Métrage (m)</span>
               <span className="text-[10px] font-bold text-[#ABBED1] uppercase tracking-wide">Qté</span>
@@ -349,12 +354,22 @@ export function CreateForm({ defaultType, onClose, onSave, users, currentUserId,
             </div>
 
             <div className="flex flex-col gap-2">
-              {lignes.map((ligne, i) => (
-                <div key={i} className="grid gap-2 items-center" style={{ gridTemplateColumns: '1fr 72px 64px 96px 24px' }}>
+              {lignes.map((ligne, i) => {
+                const ligneProducts = ligne.categoryId ? products.filter(p => p.categoryId === ligne.categoryId) : products;
+                return (
+                <div key={i} className="grid gap-2 items-center" style={{ gridTemplateColumns: '1fr 1fr 72px 64px 96px 24px' }}>
+                  {/* Catégorie : filtre les réfs proposées à droite */}
+                  <select value={ligne.categoryId} onChange={e => setLigne(i, { categoryId: e.target.value, ref: '', productId: null })} className={ic}>
+                    <option value="">Toutes catégories</option>
+                    {categories.map((c) => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                  </select>
+
                   {/* Ref : dropdown des réfs existantes + option "Référence libre" (commande ET devis) */}
                   <RefSelect
                     value={ligne.ref}
-                    products={products}
+                    products={ligneProducts}
                     allowFree
                     onChange={(ref, isFree) => {
                       if (isFree) {
@@ -390,7 +405,7 @@ export function CreateForm({ defaultType, onClose, onSave, users, currentUserId,
                     </button>
                   ) : <span />}
                 </div>
-              ))}
+              );})}
             </div>
 
             <button onClick={() => setLignes(prev => [...prev, emptyLigne()])}

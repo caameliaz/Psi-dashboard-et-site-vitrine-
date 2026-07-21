@@ -10,6 +10,7 @@ import { type Cat, type Prod } from '@/lib/hardcodedCatalog';
 // Grille de catégories : chaque card affiche une image, un nom
 // et un carrousel de références (produits de la catégorie) qu'on parcourt à la flèche.
 export function CategoryBrowser({ limit }: { limit?: number }) {
+  const { t } = useTranslation();
   const [cats, setCats] = useState<Cat[]>([]);
   const [products, setProducts] = useState<Prod[]>([]);
 
@@ -23,14 +24,25 @@ export function CategoryBrowser({ limit }: { limit?: number }) {
   const visibleCats = limit ? cats.slice(0, limit) : cats;
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 md:gap-6">
-      {visibleCats.map((cat) => (
-        <CategoryCard
-          key={cat.id}
-          category={cat}
-          products={products.filter(p => p.category?.id === cat.id && p.width > 0 && p.length > 0)}
-        />
-      ))}
+    <div className="flex flex-col gap-8">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 md:gap-6">
+        {visibleCats.map((cat) => (
+          <CategoryCard
+            key={cat.id}
+            category={cat}
+            products={products.filter(p => p.category?.id === cat.id && p.width > 0 && p.length > 0)}
+          />
+        ))}
+      </div>
+
+      {limit && cats.length > limit && (
+        <Link
+          href="/products"
+          className="self-center border-2 border-[#4CAF4F] text-[#4CAF4F] text-[14px] font-semibold px-7 py-3 rounded-full hover:bg-[#4CAF4F] hover:text-white transition-all"
+        >
+          {t('products_section.cta')}
+        </Link>
+      )}
     </div>
   );
 }
@@ -56,7 +68,7 @@ function CategoryCard({ category, products }: { category: Cat; products: Prod[] 
   return (
     <div className="flex flex-col gap-3">
       {/* Image catégorie — garde son propre container */}
-      <Link href={`/products/${category.id}`} className="bg-[#F5F7FA] rounded-2xl shadow-[0_4px_24px_rgba(171,190,209,0.35)] hover:shadow-[0_8px_32px_rgba(171,190,209,0.5)] transition-shadow w-[85%] mx-auto h-72 md:h-80 flex items-center justify-center overflow-hidden">
+      <Link href={`/products/${category.id}`} className="bg-[#F5F7FA] rounded-2xl shadow-[0_4px_24px_rgba(171,190,209,0.35)] hover:shadow-[0_8px_32px_rgba(171,190,209,0.5)] transition-shadow w-[95%] mx-auto h-72 md:h-80 flex items-center justify-center overflow-hidden">
         {category.photo ? (
           <img src={category.photo} alt={category.name} className="w-full h-full object-cover" />
         ) : (
@@ -68,7 +80,7 @@ function CategoryCard({ category, products }: { category: Cat; products: Prod[] 
       </Link>
 
       {/* Titre + refs + bouton, alignés avec la largeur de la photo */}
-      <div className="w-[85%] mx-auto flex flex-col gap-3">
+      <div className="w-[95%] mx-auto flex flex-col gap-3">
         <Link href={`/products/${category.id}`}>
           <h3 className="text-[15px] md:text-[16px] font-bold text-[#263238] leading-tight hover:text-[#4CAF4F] transition-colors">{category.name}</h3>
         </Link>

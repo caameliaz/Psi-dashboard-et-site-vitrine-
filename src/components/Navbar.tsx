@@ -163,7 +163,7 @@ export function Navbar() {
 
           {/* CTA */}
           <Link href="/quote" className="bg-[#4CAF4F] text-white text-[15px] font-semibold px-7 py-2.5 rounded-lg flex items-center gap-2 hover:bg-[#43A047] shadow-[0_4px_14px_rgba(76,175,79,0.4)] hover:shadow-[0_6px_20px_rgba(76,175,79,0.5)] transition-all shrink-0">
-            {t('nav.order')}
+            {t('hero.cta_quote')}
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
               <path d="M3 8h10M9 4l4 4-4 4" stroke="white" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
@@ -227,7 +227,7 @@ export function Navbar() {
             </button>
           ))}
           <Link href="/quote" onClick={() => setOpen(false)} className="mt-2 w-full bg-[#4CAF4F] text-white text-[16px] font-semibold px-6 py-3.5 rounded-xl text-center shadow-[0_4px_14px_rgba(76,175,79,0.4)]">
-            {t('nav.order')} →
+            {t('hero.cta_quote')} →
           </Link>
         </div>
       )}

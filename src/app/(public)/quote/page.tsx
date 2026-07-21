@@ -12,9 +12,10 @@ const WHATSAPP_NUMBER = '213770150656';
 const PHONE = '+213770150656';
 const EMAIL = 'Contact@psi.dz';
 
-interface ProdOption { id: string; reference: string; width: number; length: number; }
-interface QuoteLine { dimChoice: string; customDim: string; quantity: string; metrage: string; }
-const emptyLine = (): QuoteLine => ({ dimChoice: '', customDim: '', quantity: '', metrage: '' });
+interface CatOption { id: string; name: string; }
+interface ProdOption { id: string; reference: string; width: number; length: number; category?: CatOption | null; }
+interface QuoteLine { categoryId: string; dimChoice: string; customDim: string; quantity: string; metrage: string; }
+const emptyLine = (): QuoteLine => ({ categoryId: '', dimChoice: '', customDim: '', quantity: '', metrage: '' });
 
 export default function QuotePage() {
   const { t } = useTranslation();
@@ -30,6 +31,7 @@ export default function QuotePage() {
     message: '',
   });
   const [products, setProducts] = useState<ProdOption[]>([]);
+  const [categories, setCategories] = useState<CatOption[]>([]);
   const [lines, setLines] = useState<QuoteLine[]>([emptyLine()]);
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
@@ -38,12 +40,15 @@ export default function QuotePage() {
   const WHATSAPP_MSG = encodeURIComponent(t('common.whatsapp_msg'));
 
   useEffect(() => {
+    fetch('/api/categories').then(r => r.ok ? r.json() : []).then((data: any[]) =>
+      setCategories(data.map((c) => ({ id: c.id, name: c.name })))
+    ).catch(() => {});
     fetch('/api/products').then(r => r.json()).then((data: ProdOption[]) => {
       setProducts(data);
       if (cartItems.length > 0) {
         const fromCart = cartItems.map((ci) => {
           const prod = data.find(p => p.reference === ci.reference);
-          return { dimChoice: prod?.id ?? '', customDim: '', quantity: String(ci.quantity), metrage: '' };
+          return { categoryId: prod?.category?.id ?? '', dimChoice: prod?.id ?? '', customDim: '', quantity: String(ci.quantity), metrage: '' };
         });
         setLines(fromCart.length > 0 ? fromCart : [emptyLine()]);
       }
@@ -68,6 +73,11 @@ export default function QuotePage() {
         if (l.dimChoice) {
           const prod = products.find(p => p.id === l.dimChoice);
           if (prod) return { productId: prod.id, width: prod.width, length: prod.length, quantity: qty, metrage };
+        }
+        // Catégorie choisie mais pas de référence précise → ligne "libre" avec le nom de la catégorie
+        if (l.categoryId) {
+          const cat = categories.find(c => c.id === l.categoryId);
+          if (cat) return { description: cat.name, quantity: qty, metrage };
         }
         return null;
       }).filter((x): x is NonNullable<typeof x> => x !== null);
@@ -198,19 +208,32 @@ export default function QuotePage() {
                 <h2 className="text-[18px] font-bold text-[#263238] mb-5">{t('quote.section_products')}</h2>
 
                 <div className="flex flex-col gap-4">
-                  {lines.map((line, i) => (
+                  {lines.map((line, i) => {
+                    const lineProducts = line.categoryId ? products.filter(p => p.category?.id === line.categoryId) : products;
+                    return (
                     <div key={i} className="rounded-xl border border-[#F0F4F8] p-4 bg-[#FAFCFF]">
-                      <div className="grid grid-cols-1 sm:grid-cols-[1fr_110px_110px_auto] gap-3 items-end">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
+                        <div>
+                          <label className={labelClass}>{t('quote.category_label')}</label>
+                          <select value={line.categoryId} onChange={(e) => setLine(i, { categoryId: e.target.value, dimChoice: '' })} className={inputClass}>
+                            <option value="">{t('quote.category_default')}</option>
+                            {categories.map((c) => (
+                              <option key={c.id} value={c.id}>{c.name}</option>
+                            ))}
+                          </select>
+                        </div>
                         <div>
                           <label className={labelClass}>{t('quote.dim_label')}</label>
                           <select value={line.dimChoice} onChange={(e) => setLine(i, { dimChoice: e.target.value })} className={inputClass}>
                             <option value="">{t('quote.dim_default')}</option>
-                            {products.map((p) => (
+                            {lineProducts.map((p) => (
                               <option key={p.id} value={p.id}>{p.reference}</option>
                             ))}
                             <option value="autre">{t('quote.dim_other')}</option>
                           </select>
                         </div>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-[110px_110px_auto] gap-3 items-end">
                         <div>
                           <label className={labelClass}>{t('quote.metrage_short')}</label>
                           <input type="number" min="0" step="any" inputMode="decimal" value={line.metrage}
@@ -235,7 +258,7 @@ export default function QuotePage() {
                         </div>
                       )}
                     </div>
-                  ))}
+                  );})}
                 </div>
 
                 <button type="button" onClick={() => setLines(prev => [...prev, emptyLine()])}

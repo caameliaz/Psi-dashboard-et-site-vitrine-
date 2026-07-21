@@ -96,9 +96,11 @@ export async function POST(request: NextRequest) {
       data: {
         ref,
         clientId: client.id,
-        clientName: client.name,
-        clientCompany: client.company ?? null,
-        clientWilaya: client.wilaya ?? null,
+        // Snapshot de ce qui a été saisi POUR CETTE commande (pas la fiche client
+        // potentiellement dédupliquée sur un autre nom via le téléphone/l'entreprise).
+        clientName: clientName || client.name,
+        clientCompany: clientCompany || client.company || null,
+        clientWilaya: body.client?.wilaya || client.wilaya || null,
         source: source as any,
         createdById: session?.user?.id ?? null,
         // Assignation : valeur fournie, sinon le créateur (utilisateur connecté)

@@ -36,6 +36,9 @@ import { initials } from '@/lib/utils';
 import { RequestPanel, TemplatePopover, type RequestDetail } from '@/components/ui/RequestPanel';
 import { Modal } from '@/components/ui/Modal';
 import { WilayaSelect } from '@/components/ui/WilayaSelect';
+import { CommuneSelect } from '@/components/ui/CommuneSelect';
+import { RefSelect } from '@/components/ui/RefSelect';
+import { submitNewRequest } from '@/app/admin/requests/page';
 import { exportClientExcel, printClientDoc, type ClientExportData } from '@/lib/export-client';
 import { useSSE } from '@/lib/use-sse';
 
@@ -113,55 +116,65 @@ function ClientForm({ form, setForm, onSubmit, onClose, submitLabel, sectors }: 
   );
 }
 
-function NewOrderForm({ client, onClose }: { client: ClientRecord; onClose: () => void }) {
+interface NewOrderLigne { categoryId: string; ref: string; productId: string | null; qte: number; pu: number; }
+const emptyNewOrderLigne = (): NewOrderLigne => ({ categoryId: '', ref: '', productId: null, qte: 1, pu: 0 });
+
+function NewOrderForm({ client, onClose, onCreated }: { client: ClientRecord; onClose: () => void; onCreated?: () => void }) {
   const inputClass = "w-full px-3 py-2.5 rounded-xl border border-[#E2E8F0] text-[14px] text-[#263238] focus:outline-none focus:border-[#4CAF4F] focus:ring-[3px] focus:ring-[#4CAF4F]/15 transition-all bg-white";
   const labelClass = "block text-[12px] font-semibold text-[#374151] mb-1.5";
-  const [produits, setProduits] = useState('');
-  const [montant, setMontant] = useState('');
   const [type, setType] = useState<'Commande' | 'Devis'>('Commande');
+  const [wilaya, setWilaya] = useState(client.wilaya ?? '');
+  const [commune, setCommune] = useState(client.commune ?? '');
+  const [lignes, setLignes] = useState<NewOrderLigne[]>([emptyNewOrderLigne()]);
+  const [products, setProducts] = useState<{ id: string; reference: string; price: number; categoryId: string }[]>([]);
+  const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    fetch('/api/products').then(r => r.ok ? r.json() : []).then((data: any[]) =>
+      setProducts(data.map(p => ({ id: p.id, reference: p.reference, price: p.price ?? 0, categoryId: p.categoryId ?? p.category?.id ?? '' })))
+    ).catch(() => {});
+    fetch('/api/categories').then(r => r.ok ? r.json() : []).then((data: any[]) =>
+      setCategories(data.map((c) => ({ id: c.id, name: c.name })))
+    ).catch(() => {});
+  }, []);
+
+  const setLigne = (i: number, patch: Partial<NewOrderLigne>) =>
+    setLignes(prev => prev.map((l, idx) => idx === i ? { ...l, ...patch } : l));
+
+  const selectRef = (i: number, ref: string) => {
+    const p = products.find(p => p.reference === ref);
+    setLigne(i, { ref, productId: p?.id ?? null, pu: p?.price ?? 0 });
+  };
 
   const handleSubmit = async () => {
-    if (!produits.trim()) return;
+    if (lignes.every(l => !l.ref)) return;
     setSaving(true);
-    const dbId = (client as any)._dbId ?? client.id;
-    const endpoint = type === 'Commande' ? '/api/orders' : '/api/quotes';
-    const body = type === 'Commande'
-      ? {
-          source: 'ADMIN',
-          client: {
-            name: client.contact,
-            company: client.entreprise,
-            phone: client.telephone,
-            wilaya: client.wilaya,
-            email: client.email,
-          },
-          items: [],
-        }
-      : {
-          source: 'ADMIN',
-          clientId: dbId,
-          name: client.contact,
-          company: client.entreprise,
-          phone: client.telephone,
-          wilaya: client.wilaya,
-          email: client.email,
-          message: produits,
-          items: [],
-        };
-    await fetch(endpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
+    setError('');
+    const result = await submitNewRequest({
+      type,
+      client: client.contact,
+      _entreprise: client.entreprise,
+      _telephone: client.telephone,
+      _email: client.email,
+      _wilaya: wilaya,
+      _commune: commune,
+      _lignes: lignes,
+    } as any);
     setSaving(false);
+    if (!result.ok) {
+      setError(result.error ?? 'Erreur lors de la création');
+      return;
+    }
+    onCreated?.();
     onClose();
   };
 
   return (
     <div className="fixed inset-0 z-[150] flex items-center justify-center p-6">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-white rounded-2xl shadow-2xl w-[460px] max-w-[92vw] p-6 z-10">
+      <div className="relative bg-white rounded-2xl shadow-2xl w-[520px] max-w-[92vw] p-6 z-10 max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between mb-5">
           <div>
             <h3 className="text-[16px] font-bold text-[#0F172A]">Nouvelle {type === 'Commande' ? 'commande' : 'demande de devis'}</h3>
@@ -184,21 +197,73 @@ function NewOrderForm({ client, onClose }: { client: ClientRecord; onClose: () =
           ))}
         </div>
 
-        <div className="space-y-3">
+        {/* Wilaya / commune — modifiables ici (saisie libre si la commune n'existe pas dans la recherche) */}
+        <div className="grid grid-cols-2 gap-3 mb-4">
           <div>
-            <label className={labelClass}>Produits / Spécifications</label>
-            <textarea value={produits} onChange={(e) => setProduits(e.target.value)}
-              placeholder="ex: 80/80 × 50 rouleaux, 57/40 × 30 rouleaux"
-              rows={3}
-              className={inputClass + ' resize-none'} />
+            <label className={labelClass}>Wilaya</label>
+            <WilayaSelect value={wilaya} onChange={(v) => { setWilaya(v); setCommune(''); }} />
           </div>
           <div>
-            <label className={labelClass}>Montant {type === 'Devis' ? '(estimé, optionnel)' : ''}</label>
-            <input value={montant} onChange={(e) => setMontant(e.target.value)}
-              placeholder={type === 'Devis' ? 'Sur devis' : 'ex: 45 000 DA'}
-              className={inputClass} />
+            <label className={labelClass}>Commune</label>
+            <CommuneSelect wilaya={wilaya} value={commune} onChange={setCommune} />
           </div>
         </div>
+
+        {/* Lignes produits — sélection dans le catalogue (filtrée par catégorie) ou référence libre */}
+        <div>
+          <div className="grid gap-2 mb-1" style={{ gridTemplateColumns: '1fr 1fr 64px 96px 24px' }}>
+            <span className="text-[10px] font-bold text-[#ABBED1] uppercase tracking-wide">Catégorie</span>
+            <span className="text-[10px] font-bold text-[#ABBED1] uppercase tracking-wide">Référence</span>
+            <span className="text-[10px] font-bold text-[#ABBED1] uppercase tracking-wide">Qté</span>
+            <span className="text-[10px] font-bold text-[#ABBED1] uppercase tracking-wide">Prix unit. DA</span>
+            <span />
+          </div>
+          <div className="flex flex-col gap-2">
+            {lignes.map((ligne, i) => {
+              const ligneProducts = ligne.categoryId ? products.filter(p => p.categoryId === ligne.categoryId) : products;
+              return (
+              <div key={i} className="grid gap-2 items-center" style={{ gridTemplateColumns: '1fr 1fr 64px 96px 24px' }}>
+                <select value={ligne.categoryId} onChange={e => setLigne(i, { categoryId: e.target.value, ref: '', productId: null })} className={inputClass + ' px-2'}>
+                  <option value="">Toutes catégories</option>
+                  {categories.map((c) => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+                <RefSelect
+                  value={ligne.ref}
+                  products={ligneProducts}
+                  allowFree
+                  onChange={(ref, isFree) => {
+                    if (isFree) setLigne(i, { ref, productId: null });
+                    else selectRef(i, ref);
+                  }}
+                />
+                <input type="number" inputMode="numeric" min={1} value={ligne.qte}
+                  onChange={e => setLigne(i, { qte: Math.max(1, Number(e.target.value)) })}
+                  className={inputClass + ' text-center px-2'} />
+                <input type="number" inputMode="numeric" min={0} value={ligne.pu || ''}
+                  onChange={e => setLigne(i, { pu: Number(e.target.value) })}
+                  placeholder="0"
+                  className={inputClass + ' text-right px-2'} />
+                {lignes.length > 1 ? (
+                  <button onClick={() => setLignes(prev => prev.filter((_, idx) => idx !== i))}
+                    className="w-6 h-6 flex items-center justify-center rounded-lg text-[#ABBED1] hover:text-[#EF4444] hover:bg-[#FEF2F2] transition-colors">
+                    <svg width={12} height={12} viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"/></svg>
+                  </button>
+                ) : <span />}
+              </div>
+              );})}
+          </div>
+          <button onClick={() => setLignes(prev => [...prev, emptyNewOrderLigne()])}
+            className="mt-2 flex items-center gap-1.5 text-[12px] font-bold text-[#4CAF4F] hover:text-[#388E3C] transition-colors">
+            <svg width={14} height={14} viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"/></svg>
+            Ajouter une ligne
+          </button>
+        </div>
+
+        {error && (
+          <p className="mt-4 text-[12px] text-red-600 bg-red-50 border border-red-200 rounded-xl px-3 py-2">{error}</p>
+        )}
 
         <div className="flex gap-3 mt-5">
           <button onClick={onClose} className="flex-1 px-4 py-2.5 rounded-xl border border-[#E2E8F0] text-[13px] font-semibold text-[#374151] hover:bg-[#F8FAFC] transition-colors">
@@ -489,7 +554,7 @@ function ClientSlideIn({ client, onClose, onEdit, onDelete, onReactivate, onDele
           }}
         />
       )}
-      {showNewOrder && <NewOrderForm client={client} onClose={() => setShowNewOrder(false)} />}
+      {showNewOrder && <NewOrderForm client={client} onClose={() => setShowNewOrder(false)} onCreated={onRefresh} />}
       {templateMode && <TemplatePopover item={clientAsItem} mode={templateMode} recipientEmail={client.email} onClose={() => setTemplateMode(null)} />}
     </>
   );

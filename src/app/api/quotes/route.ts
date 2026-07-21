@@ -83,6 +83,11 @@ export async function POST(request: NextRequest) {
       data: {
         ref,
         clientId: client.id,
+        // Snapshot de ce qui a été saisi POUR CE devis (pas la fiche client
+        // potentiellement dédupliquée sur un autre nom via le téléphone/l'entreprise).
+        clientName: clientName || client.name,
+        clientCompany: clientCompany || client.company || null,
+        clientWilaya: body.wilaya || client.wilaya || null,
         message: body.message ?? '',
         source: body.source ?? 'SITE',
         createdById: session?.user?.id ?? null,
