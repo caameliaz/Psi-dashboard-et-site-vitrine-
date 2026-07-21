@@ -51,8 +51,10 @@ Variables d'environnement à ajouter sur Vercel (Settings → Environment Variab
   - TRIGGER_* si récap hebdo via Trigger.dev
 Code / config :
   - [x] build applique les migrations auto : "build": "prisma migrate deploy && next build"
-  - [ ] useSecureCookies:true côté auth (HTTPS) — à remettre pour la prod
+  - [x] cookies Secure AUTO en prod (useSecureCookies = NODE_ENV==='production') — plus rien à faire
+  - [x] headers de sécurité (HSTS/X-Frame/nosniff) + rate limiting (login + routes publiques) en place
   - [ ] activer SMTP AUTH côté Microsoft/Icosnet (voir bloc EMAILS) → sinon emails KO
+  - [ ] mettre un NEXTAUTH_SECRET fort/unique sur Vercel (pas celui de dev)
 Tests post-déploiement (HTTPS requis) : notifs push (PC/Android app fermée, iPhone via écran d'accueil) + envoi email test.
 
 
@@ -111,7 +113,7 @@ Rien à coder. Reste uniquement des tests/config qui exigent le déploiement (HT
 🚀 APRÈS DÉPLOIEMENT — dans l'ordre
 ═══════════════════════════════════════════════════════════
 1. Déployer sur Vercel (voir CHECKLIST DÉPLOIEMENT en haut) → obtenir l'URL .vercel.app
-2. Remettre useSecureCookies:true (HTTPS) + NEXTAUTH_URL = URL prod
+2. Mettre NEXTAUTH_URL = URL prod (cookies Secure déjà auto en prod)
 3. Tester en prod : notifs push · connexion · commande/devis · exports · envoi email test
 4. À l'entreprise : activer SMTP AUTH (leur admin Microsoft) → tester les mails
 5. Brancher le domaine psi.dz sur l'URL Vercel (config DNS via Icosnet — propagation ~qq heures)
@@ -184,22 +186,8 @@ Ce qui est neuf ou corrigé récemment est signalé par ⚠️ / **(nouveau)**.
 
 # ══════════════ BACK-OFFICE ══════════════
 
-## 🔐 7. Connexion (`/admin/login`)
 
-1. Page login **sans la barre latérale** (sidebar)
-2. Carte de connexion **grande et centrée**, logo, fond dégradé vert
-3. Mauvais identifiants → message d'erreur clair
-4. Compte **désactivé** → connexion refusée
-5. Bonne connexion → redirige vers le dashboard
-
----
 ## 🏠 8. Dashboard (`/admin/dashboard`)
-
-1. Le **post-it jaune** : date du jour, stats du jour, "X livrées ce mois" en bas
-2. Le **camembert** : répartition des produits, légende à droite
-3. Survol d'un morceau du camembert → **petite carte blanche** qui suit la souris (produit + % + quantité)
-4. Carte **Origine** : répartition Site web / Manuel
-5. Tableau du bas : dernières demandes → clic sur une ligne = détail
 6. ⚡ Faire une commande depuis le site → le dashboard se met à jour **tout seul** (SSE temps réel, sans rafraîchir)
 7. ⚡ **Aucun clignotement** (nouveau) : la mise à jour temps réel ne fait **pas** réapparaître les "Chargement…" — les chiffres se mettent à jour en douceur
 
