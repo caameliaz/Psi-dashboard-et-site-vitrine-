@@ -84,14 +84,18 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const dbUser = await prisma.user.findUnique({ where: { id: user.id } });
         token.sessionVersion = dbUser?.sessionVersion ?? 0;
       } else {
-        // À chaque requête : vérifier que sessionVersion n'a pas changé + rafraîchir permissions
+        // À chaque requête : vérifier que sessionVersion n'a pas changé
+        // + rafraîchir rôle ET permissions depuis la base.
+        // ⚠️ Le rôle DOIT être rafraîchi : sinon un admin rétrogradé en employé
+        // garderait tous les droits (ADMIN = toutes permissions) jusqu'à sa reconnexion.
         const dbUser = await prisma.user.findUnique({
           where: { id: token.sub! },
-          select: { sessionVersion: true, active: true, permissions: true },
+          select: { sessionVersion: true, active: true, permissions: true, role: true },
         });
         if (!dbUser || !dbUser.active || dbUser.sessionVersion !== token.sessionVersion) {
           return null;
         }
+        token.role = dbUser.role as Role;
         token.permissions = dbUser.permissions ?? [];
       }
       return token;

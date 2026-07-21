@@ -7,6 +7,7 @@ import { generateQuoteRef } from '@/lib/generate-ref';
 import { pushSSE } from '@/lib/sse-bus';
 import { createAudit } from '@/lib/audit';
 import { rateLimit } from '@/lib/rate-limit';
+import { validateEmail, validatePhone, validateText, firstError } from '@/lib/validation';
 
 export async function GET(request: NextRequest) {
   const guard = await requirePermission('voir_commandes');
@@ -44,6 +45,14 @@ export async function POST(request: NextRequest) {
     const primaryPhone: string = body.phone ?? '';
     const clientName: string = body.name ?? '';
     const clientCompany: string = body.company ?? '';
+
+    // Validation serveur (le client peut contourner la validation du navigateur)
+    const vErr = firstError([
+      validateText(clientName, 'Nom du client'),
+      validatePhone(primaryPhone),
+      validateEmail(body.email ?? ''),
+    ]);
+    if (vErr) return NextResponse.json({ error: vErr }, { status: 400 });
 
     // 1. Cherche par téléphone
     let client = primaryPhone

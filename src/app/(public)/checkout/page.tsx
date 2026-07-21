@@ -8,6 +8,7 @@ import { inputClass, labelClass } from '@/lib/utils';
 import { WilayaSelect } from '@/components/ui/WilayaSelect';
 import { CommuneSelect } from '@/components/ui/CommuneSelect';
 import { useTranslation } from '@/lib/i18n';
+import { validateEmail, validatePhone, firstError } from '@/lib/validation';
 
 export default function CheckoutPage() {
   const { t } = useTranslation();
@@ -36,6 +37,13 @@ export default function CheckoutPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    // Vérifie le format des coordonnées avant d'envoyer
+    const vErr = firstError([
+      validatePhone(formData.phone, true),
+      validateEmail(formData.email),
+    ]);
+    if (vErr) { setSubmitError(vErr); return; }
+
     setLoading(true);
     setSubmitError('');
     try {

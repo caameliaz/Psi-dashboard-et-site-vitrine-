@@ -616,7 +616,7 @@ function ProductsPageInner() {
                   <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Rechercher..."
                     className="px-3 py-1.5 rounded-lg border border-[#E2E8F0] text-[12px] text-[#0F172A] focus:outline-none focus:border-[#4CAF4F] w-[140px]" />
                   <select value={filterActif} onChange={(e) => setFilterActif(e.target.value as typeof filterActif)}
-                    className="px-2 py-1.5 rounded-lg border border-[#E2E8F0] text-[12px] text-[#374151] focus:outline-none">
+                    className="appearance-none pl-2.5 pr-7 py-1.5 rounded-lg border border-[#E2E8F0] text-[12px] text-[#374151] bg-white cursor-pointer focus:outline-none focus:border-[#4CAF4F] bg-[url('data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2212%22 height=%2212%22 fill=%22none%22><path d=%22M3 4.5l3 3 3-3%22 stroke=%22%23ABBED1%22 stroke-width=%221.5%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22/></svg>')] bg-no-repeat bg-[right_0.5rem_center]">
                     <option value="all">Tous</option>
                     <option value="actif">Actifs</option>
                     <option value="inactif">Inactifs</option>

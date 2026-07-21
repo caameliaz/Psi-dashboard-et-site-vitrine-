@@ -303,41 +303,10 @@ Avec 2 fenêtres ouvertes (ex. `admin1` sur une liste, `admin2` qui agit) :
 4. La **cloche** s'incrémente en direct, le toast apparaît sans recharger la page
 5. ⚠️ Vérifier qu'à aucun moment une vue ne "flashe" un état de chargement pendant une mise à jour temps réel
 
----
-
-
-
-## 🎫 19. Permissions employé (bien tester)
-
-Se connecter en **`employe2@psi.dz`** (limité) et comparer avec **`admin1@psi.dz`** :
-
-1. **Sidebar** → l'employé limité voit **moins de menus** (pas Produits en édition / Contenu / Utilisateurs)
-2. **Produits** → l'employé sans "modifier produits" ne voit **pas** Nouveau/Modifier/Supprimer
-3. **Commande** → l'employé sans "modifier statuts" ne voit **pas** Confirmer/Livrer/Annuler/Modifier
-4. **Assignation** (nouveau) → l'employé sans "assigner les commandes" voit le Responsable en **lecture seule**
-5. **Contenu** / **Utilisateurs** → invisibles pour l'employé limité
-6. L'**admin** voit et peut **TOUT**
-
-👉 Comparaison clé : `employe2` (limité) doit clairement pouvoir faire **moins** que `admin1`.
-
----
-
-## 🔒 20. Sécurité (corrigé récemment)
-
-1. En **Employé**, essayer de modifier/supprimer un produit → **403**
-2. En **Employé**, essayer de supprimer un utilisateur → **403**
-3. **Non connecté**, appeler `/api/orders` → **401**
-4. **Non connecté**, créer/supprimer une catégorie → **refusé** ⚠️ *(avant : ouvert à tous — corrigé)*
-5. **Test API direct** : même en connaissant l'URL, l'employé est bloqué (403) sur une action interdite
-6. Modifier les permissions d'un user → tous ses cookies de session sont invalidés (`sessionVersion`)
-
----
 
 ## 🗑️ 21. Suppressions — vérifier les messages (important)
 
-1. Produit **non utilisé** → suppression marche
-2. Produit **déjà dans des commandes** → "Impossible : produit utilisé, désactivez-le plutôt"
-3. **Catégorie** contenant des produits → "Impossible : X produits dans cette catégorie"
+oui
 4. **Utilisateur** ayant créé commandes/notes → "Impossible, désactivez-le plutôt"
 5. Son **propre compte** → refusé
 6. **Client** (même avec messages de contact) → doit marcher

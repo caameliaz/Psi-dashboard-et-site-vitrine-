@@ -13,6 +13,7 @@ import { exportVentesExcel } from '@/lib/export-ventes';
 import { useSSE } from '@/lib/use-sse';
 import { useSession } from 'next-auth/react';
 import { RequirePerm } from '@/components/RequirePerm';
+import { validateEmail, validatePhone, validateQuantity, validatePositiveNumber, normalizeEmail, normalizePhone, firstError } from '@/lib/validation';
 
 const ARCHIVED = ['Livré', 'Annulé'];
 
@@ -173,18 +174,28 @@ export async function submitNewRequest(
   const isCmd = item.type === 'Commande';
   const endpoint = isCmd ? '/api/orders' : '/api/quotes';
   const lignes = item._lignes ?? [];
+
+  // ── Validation des saisies avant envoi (email, téléphone, quantités) ──
+  const lignesRemplies = lignes.filter((l: any) => l.ref);
+  const vErr = firstError([
+    validateEmail(item._email ?? ''),
+    validatePhone(item._telephone ?? ''),
+    ...lignesRemplies.map((l: any) => validateQuantity(l.qte)),
+    ...lignesRemplies.map((l: any) => validatePositiveNumber(l.metrage ?? '', 'Métrage')),
+  ]);
+  if (vErr) return { ok: false, type: isCmd ? 'Commande' : 'Devis', error: vErr };
   const body = isCmd
     ? {
         client: {
-          name: item.client, company: item._entreprise || undefined, phone: item._telephone || undefined,
-          email: item._email || undefined, wilaya: item._wilaya || 'Non spécifié', commune: item._commune || undefined,
+          name: item.client, company: item._entreprise || undefined, phone: item._telephone ? normalizePhone(item._telephone) : undefined,
+          email: item._email ? normalizeEmail(item._email) : undefined, wilaya: item._wilaya || 'Non spécifié', commune: item._commune || undefined,
         },
         items: lignes.filter((l: any) => l.ref).map((l: any) => ({ productId: l.productId ?? undefined, description: l.productId ? undefined : l.ref, quantity: l.qte, unitPrice: l.pu, metrage: l.metrage ? Number(l.metrage) : undefined })),
         assignedToId: item._assignedToId ?? undefined, source: 'AUTRE',
       }
     : {
-        name: item.client, company: item._entreprise || undefined, phone: item._telephone || undefined,
-        email: item._email || undefined, wilaya: item._wilaya || 'Non spécifié', commune: item._commune || undefined, message: '',
+        name: item.client, company: item._entreprise || undefined, phone: item._telephone ? normalizePhone(item._telephone) : undefined,
+        email: item._email ? normalizeEmail(item._email) : undefined, wilaya: item._wilaya || 'Non spécifié', commune: item._commune || undefined, message: '',
         items: lignes.filter((l: any) => l.ref).map((l: any) => ({ productId: l.productId ?? undefined, description: l.productId ? undefined : l.ref, quantity: l.qte, metrage: l.metrage ? Number(l.metrage) : undefined })),
         assignedToId: item._assignedToId ?? undefined, source: 'AUTRE',
       };
@@ -366,12 +377,15 @@ export function CreateForm({ defaultType, onClose, onSave, users, currentUserId,
                 return (
                 <div key={i} className="grid gap-2 items-center" style={{ gridTemplateColumns: '1fr 1fr 72px 64px 96px 24px' }}>
                   {/* Catégorie : filtre les réfs proposées à droite */}
-                  <select value={ligne.categoryId} onChange={e => setLigne(i, { categoryId: e.target.value, ref: '', productId: null })} className={ic}>
-                    <option value="">Toutes catégories</option>
-                    {categories.map((c) => (
-                      <option key={c.id} value={c.id}>{c.name}</option>
-                    ))}
-                  </select>
+                  <AdminSelect
+                    className="w-full"
+                    value={ligne.categoryId}
+                    onChange={(v) => setLigne(i, { categoryId: v, ref: '', productId: null })}
+                    options={[
+                      { value: '', label: 'Toutes catégories' },
+                      ...categories.map((c) => ({ value: c.id, label: c.name })),
+                    ]}
+                  />
 
                   {/* Ref : dropdown des réfs existantes + option "Référence libre" (commande ET devis) */}
                   <RefSelect

@@ -14,6 +14,8 @@ interface AdminSelectProps {
 export function AdminSelect({ value, onChange, options, className = '' }: AdminSelectProps) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  // Quand l'appelant impose w-full (grille serrée), on ne force pas la largeur mini.
+  const fullWidth = className.includes('w-full');
 
   const selected = options.find((o) => o.value === value);
 
@@ -30,7 +32,9 @@ export function AdminSelect({ value, onChange, options, className = '' }: AdminS
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className={`flex items-center justify-between gap-1 px-2.5 md:px-4 py-2.5 rounded-xl border bg-white text-[13px] md:text-[14px] text-[#263238] transition-all outline-none w-full sm:w-auto sm:min-w-[150px] ${
+        className={`flex items-center justify-between gap-1 px-2.5 md:px-4 py-2.5 rounded-xl border bg-white text-[13px] md:text-[14px] text-[#263238] transition-all outline-none w-full ${
+          fullWidth ? '' : 'sm:w-auto sm:min-w-[150px]'
+        } ${
           open
             ? 'border-[#4CAF4F] ring-[3px] ring-[#4CAF4F]/15'
             : 'border-[#E2E8F0] hover:border-[#ABBED1]'

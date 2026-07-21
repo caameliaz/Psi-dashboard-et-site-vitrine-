@@ -40,6 +40,8 @@ import { exportClientExcel, printClientDoc, type ClientExportData } from '@/lib/
 import { useSSE } from '@/lib/use-sse';
 import { RequirePerm } from '@/components/RequirePerm';
 import { useRole } from '@/lib/role-context';
+import { AdminSelect } from '@/components/ui/AdminSelect';
+import { validateEmail, validatePhone, validateText, normalizeEmail, normalizePhone, firstError } from '@/lib/validation';
 
 function avatarColor(id: number | string) {
   const n = typeof id === 'string' ? id.charCodeAt(0) + id.charCodeAt(1) : id;
@@ -97,10 +99,15 @@ function ClientForm({ form, setForm, onSubmit, onClose, submitLabel, sectors }: 
         </div>
         <div>
           <label className={labelClass}>Secteur d'activité</label>
-          <select value={form.sectorId ?? ''} onChange={(e) => setForm({ ...form, sectorId: e.target.value })} className={inputClass}>
-            <option value="">— Aucun —</option>
-            {(sectors ?? []).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-          </select>
+          <AdminSelect
+            className="w-full"
+            value={form.sectorId ?? ''}
+            onChange={(v) => setForm({ ...form, sectorId: v })}
+            options={[
+              { value: '', label: '— Aucun —' },
+              ...(sectors ?? []).map((s) => ({ value: s.id, label: s.name })),
+            ]}
+          />
         </div>
       </div>
       <div>
@@ -700,23 +707,36 @@ function ClientsPageInner() {
     });
 
   const handleAdd = async () => {
-    if (!addForm.contact.trim()) return;
+    // Validation des saisies (email, téléphone, nom) avant envoi
+    const err = firstError([
+      validateText(addForm.contact, 'Nom du contact'),
+      validateEmail(addForm.email),
+      validatePhone(addForm.telephone),
+    ]);
+    if (err) { alert(err); return; }
+
     // Avertit si l'entreprise existe déjà (doublon) — mais laisse créer si confirmé
     const ent = addForm.entreprise.trim().toLowerCase();
     if (ent && clients.some((c) => (c.entreprise || '').trim().toLowerCase() === ent)) {
       if (!window.confirm(`Une entreprise « ${addForm.entreprise.trim()} » est déjà cliente. Créer quand même un nouveau client ?`)) return;
     }
+    // Avertit si le téléphone est déjà utilisé par un autre client
+    const tel = normalizePhone(addForm.telephone);
+    if (tel && clients.some((c) => normalizePhone(c.telephone || '') === tel)) {
+      if (!window.confirm(`Le numéro ${addForm.telephone.trim()} est déjà enregistré pour un autre client. Continuer ?`)) return;
+    }
+
     const res = await fetch('/api/clients', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         name: addForm.contact.trim(),
         company: addForm.entreprise.trim(),
-        email: addForm.email.trim() || null,
+        email: addForm.email.trim() ? normalizeEmail(addForm.email) : null,
         wilaya: addForm.wilaya.trim(),
         sectorId: addForm.sectorId || null,
         address: addForm.adresse.trim() || null,
-        phone: addForm.telephone.trim() || null,
+        phone: tel || null,
       }),
     });
     if (res.ok) {
@@ -733,6 +753,13 @@ function ClientsPageInner() {
 
   const handleEdit = async () => {
     if (!editClient) return;
+    const err = firstError([
+      validateText(editForm.contact, 'Nom du contact'),
+      validateEmail(editForm.email),
+      validatePhone(editForm.telephone),
+    ]);
+    if (err) { alert(err); return; }
+
     const id = (editClient as any)._dbId ?? editClient.id;
     const res = await fetch(`/api/clients/${id}`, {
       method: 'PATCH',
@@ -740,11 +767,11 @@ function ClientsPageInner() {
       body: JSON.stringify({
         name: editForm.contact.trim(),
         company: editForm.entreprise.trim(),
-        email: editForm.email.trim() || null,
+        email: editForm.email.trim() ? normalizeEmail(editForm.email) : null,
         wilaya: editForm.wilaya.trim(),
         sectorId: editForm.sectorId || null,
         address: editForm.adresse.trim() || null,
-        phone: editForm.telephone.trim() || null,
+        phone: normalizePhone(editForm.telephone) || null,
       }),
     });
     if (res.ok) {

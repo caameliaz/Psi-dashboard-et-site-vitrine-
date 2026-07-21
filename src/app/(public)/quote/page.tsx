@@ -7,6 +7,7 @@ import { WilayaSelect } from '@/components/ui/WilayaSelect';
 import { CommuneSelect } from '@/components/ui/CommuneSelect';
 import { useCartStore } from '@/store/cartStore';
 import { useTranslation } from '@/lib/i18n';
+import { validateEmail, validatePhone, firstError } from '@/lib/validation';
 
 const WHATSAPP_NUMBER = '213770150656';
 const PHONE = '+213770150656';
@@ -61,6 +62,13 @@ export default function QuotePage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    // Vérifie le format des coordonnées avant d'envoyer
+    const vErr = firstError([
+      validatePhone(formData.phone, true),
+      validateEmail(formData.email),
+    ]);
+    if (vErr) { setSubmitError(vErr); return; }
+
     setLoading(true);
     setSubmitError('');
     try {
