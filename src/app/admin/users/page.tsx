@@ -33,6 +33,7 @@ interface User {
   role: 'Admin' | 'Employe';
   statut: 'Actif' | 'Inactif';
   permissions: PermKey[];
+  resetRequested?: boolean;
 }
 
 function dbUserToUser(u: any): User {
@@ -42,13 +43,13 @@ function dbUserToUser(u: any): User {
     email: u.email ?? '—',
     role: u.role === 'ADMIN' ? 'Admin' : 'Employe',
     statut: u.active ? 'Actif' : 'Inactif',
+    resetRequested: !!u.resetRequested,
     permissions: u.role === 'ADMIN'
       ? [...ADMIN_PERMS]
       : (u.permissions?.length ? u.permissions : [...EMPLOYE_PERMS]),
   };
 }
 
-const emptyForm = { nom: '', email: '', role: 'Employe' as string, motdepasse: '', permissions: [] as PermKey[] };
 
 function genPassword() {
   const chars = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789@#!';
@@ -380,112 +381,54 @@ function CreateUserForm({ onSubmit, onClose, customRoles, onAddCustomRole, onDel
 }
 
 /* ─── Formulaire de modification ─── */
-function EditUserForm({ form, setForm, onSubmit, onClose, customRoles, onDeleteRole }: {
-  form: typeof emptyForm; setForm: (f: typeof emptyForm) => void; onSubmit: () => void; onClose: () => void;
-  customRoles: CustomRole[];
-  onDeleteRole: (id: string) => void;
-}) {
-  const inputClass = "w-full px-3 py-2.5 rounded-xl border border-[#E2E8F0] text-sm text-[#0F172A] focus:outline-none focus:border-[#4CAF4F] focus:ring-[3px] focus:ring-[#4CAF4F]/15 transition-all bg-white";
-
-  const allRoles = [
-    { id: 'Admin',   label: 'Admin',   custom: false, colors: { bg: '#F3E8FF', border: '#7C3AED', text: '#6B21A8' } },
-    { id: 'Employe', label: 'Employé', custom: false, colors: { bg: '#F0FDF4', border: '#4CAF4F', text: '#166534' } },
-    ...customRoles.map((cr) => ({ id: cr.id, label: cr.nom, custom: true, colors: { bg: '#EFF6FF', border: '#3B82F6', text: '#1D4ED8' } })),
-  ];
-
-  const selectRole = (id: string) => {
-    if (id === 'Admin') {
-      setForm({ ...form, role: 'Admin', permissions: [...ADMIN_PERMS] });
-    } else if (id === 'Employe') {
-      setForm({ ...form, role: 'Employe', permissions: [...EMPLOYE_PERMS] });
-    } else {
-      const cr = customRoles.find((r) => r.id === id);
-      setForm({ ...form, role: id, permissions: cr ? [...cr.permissions] : [] });
-    }
-  };
-
-  const isAdmin = form.role === 'Admin';
-  const isCustom = form.role !== 'Admin' && form.role !== 'Employe';
-  const showPerms = !isAdmin && (form.role === 'Employe' || isCustom);
-
-  return (
-    <div className="space-y-4">
-      <div>
-        <label className="block text-[12px] font-semibold text-[#374151] mb-1.5">Nom complet</label>
-        <input value={form.nom} onChange={(e) => setForm({ ...form, nom: e.target.value })} placeholder="Prénom Nom" className={inputClass} />
-      </div>
-      <div>
-        <label className="block text-[12px] font-semibold text-[#374151] mb-1.5">Email</label>
-        <input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="email@psi.dz" className={inputClass} />
-      </div>
-      <div>
-        <label className="block text-[12px] font-semibold text-[#374151] mb-1.5">Rôle</label>
-        <div className="flex flex-wrap gap-2">
-          {allRoles.map((r) => {
-            const active = form.role === r.id;
-            return (
-              <div key={r.id} className="relative inline-flex">
-                <button onClick={() => selectRole(r.id)}
-                  className={`py-2 rounded-xl text-[13px] font-semibold border-2 transition-all ${r.custom ? 'pl-3 pr-7' : 'px-3'}`}
-                  style={active ? { background: r.colors.bg, borderColor: r.colors.border, color: r.colors.text } : { background: '#F8FAFC', borderColor: '#E2E8F0', color: '#8A9BB5' }}>
-                  {r.label}
-                </button>
-                {r.custom && (
-                  <button
-                    onClick={(e) => { e.stopPropagation(); onDeleteRole(r.id); }}
-                    className="absolute right-1.5 top-1/2 -translate-y-1/2 w-4 h-4 flex items-center justify-center rounded-full hover:bg-black/10 text-[11px] font-bold leading-none opacity-60 hover:opacity-100 transition-opacity"
-                  >×</button>
-                )}
-              </div>
-            );
-          })}
-        </div>
-
-        <div style={{ maxHeight: showPerms ? '300px' : '0', opacity: showPerms ? 1 : 0, overflow: 'hidden', transition: 'max-height 0.28s ease, opacity 0.2s ease', marginTop: showPerms ? '10px' : '0' }}>
-          <div className="rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] p-3">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-[11px] font-bold text-[#8A9BB5] uppercase tracking-widest">Autorisations</span>
-              <div className="flex gap-2">
-                <button onClick={() => setForm({ ...form, permissions: [...ADMIN_PERMS] })} className="text-[10px] font-semibold text-[#4CAF4F] hover:underline">Tout</button>
-                <span className="text-[#E2E8F0]">·</span>
-                <button onClick={() => setForm({ ...form, permissions: [] })} className="text-[10px] font-semibold text-[#8A9BB5] hover:underline">Aucun</button>
-              </div>
-            </div>
-            <div className="grid grid-cols-3 gap-1.5">
-              {ALL_PERMISSIONS.map((perm) => {
-                const checked = (form.permissions ?? []).includes(perm.key);
-                return (
-                  <button key={perm.key}
-                    onClick={() => setForm({ ...form, permissions: checked ? form.permissions.filter((p) => p !== perm.key) : [...(form.permissions ?? []), perm.key] })}
-                    className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-[11px] font-medium text-left transition-all"
-                    style={{ background: checked ? '#F0FDF4' : 'white', border: `1.5px solid ${checked ? '#4CAF4F' : '#E2E8F0'}`, color: checked ? '#166534' : '#6B7280' }}>
-                    <div className="w-3 h-3 rounded flex-shrink-0 border flex items-center justify-center"
-                      style={{ background: checked ? '#4CAF4F' : 'white', borderColor: checked ? '#4CAF4F' : '#D1D5DB' }}>
-                      {checked && <svg width={7} height={7} viewBox="0 0 10 10" fill="none"><path d="M2 5L4 7.5L8 2.5" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>}
-                    </div>
-                    {perm.short}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      </div>
-      <div className="flex gap-3 pt-2">
-        <button onClick={onClose} className="flex-1 px-4 py-2.5 rounded-xl border border-[#E2E8F0] text-[13px] font-semibold text-[#374151] hover:bg-[#F8FAFC] transition-colors">Annuler</button>
-        <button onClick={onSubmit} className="flex-1 px-4 py-2.5 rounded-xl text-[13px] font-bold text-white" style={{ background: '#4CAF4F' }}>Enregistrer</button>
-      </div>
-    </div>
-  );
-}
-
 /* ─── Fiche utilisateur (slide-in) ─── */
-function UserSlideIn({ user, onClose, onEdit, onDelete, onPermChange }: {
-  user: User; onClose: () => void; onEdit: () => void; onDelete: () => void;
+function UserSlideIn({ user, onClose, onDelete, onPermChange, customRoles, onSaveProfile, onResetPassword, initialEditing = false }: {
+  user: User; onClose: () => void; onDelete: () => void;
   onPermChange: (userId: number, perm: PermKey, value: boolean) => void;
+  customRoles: CustomRole[];
+  onSaveProfile: (user: User, data: { name: string; email: string; role: string; password?: string; permissions: PermKey[] }) => Promise<void>;
+  onResetPassword: (user: User) => Promise<void>;
+  initialEditing?: boolean;
 }) {
   const ac = avatarColor(user.role);
   const isAdmin = user.role === 'Admin';
+
+  // Édition inline (même page) : bouton "Modifier" → champs éditables
+  const [editing, setEditing] = useState(initialEditing);
+  const [saving, setSaving] = useState(false);
+  const [resetting, setResetting] = useState(false);
+  const [fNom, setFNom] = useState(user.nom);
+  const [fEmail, setFEmail] = useState(user.email);
+  const [fRole, setFRole] = useState<string>(user.role); // 'Admin' | 'Employe' | id rôle perso
+  const [fPwd, setFPwd] = useState('');
+
+  const inputCls = "w-full px-3 py-2 rounded-lg border border-[#E2E8F0] text-[14px] text-[#0F172A] focus:outline-none focus:border-[#4CAF4F] focus:ring-[3px] focus:ring-[#4CAF4F]/15 transition-all bg-white";
+
+  const startEdit = () => { setFNom(user.nom); setFEmail(user.email); setFRole(user.role); setFPwd(''); setEditing(true); };
+
+  const roleOptions = [
+    { id: 'Admin', label: 'Admin' },
+    { id: 'Employe', label: 'Employé' },
+    ...customRoles.map((cr) => ({ id: cr.id, label: cr.nom })),
+  ];
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      // Détermine les permissions selon le rôle choisi
+      let role = fRole;
+      let permissions: PermKey[];
+      if (fRole === 'Admin') { permissions = [...ADMIN_PERMS]; }
+      else if (fRole === 'Employe') { permissions = user.role === 'Employe' ? [...user.permissions] : [...EMPLOYE_PERMS]; }
+      else {
+        const cr = customRoles.find((r) => r.id === fRole);
+        permissions = cr ? [...cr.permissions] : [...user.permissions];
+        role = 'Employe'; // un rôle perso = un employé avec un set de permissions
+      }
+      await onSaveProfile(user, { name: fNom, email: fEmail, role, password: fPwd || undefined, permissions });
+      setEditing(false);
+    } finally { setSaving(false); }
+  };
 
   return (
     <>
@@ -493,7 +436,7 @@ function UserSlideIn({ user, onClose, onEdit, onDelete, onPermChange }: {
       <div className="fixed right-0 top-0 h-full bg-white z-50 shadow-2xl flex flex-col overflow-hidden" style={{ width: '42vw', minWidth: 440 }}>
 
         <div className="flex items-center justify-between px-6 py-4 border-b border-[#E2E8F0] bg-[#F8FAFC]">
-          <h2 className="text-[17px] font-bold text-[#0F172A]">Profil utilisateur</h2>
+          <h2 className="text-[17px] font-bold text-[#0F172A]">{editing ? 'Modifier l’utilisateur' : 'Profil utilisateur'}</h2>
           <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-[#E2E8F0] text-[#8A9BB5] transition-colors">
             <svg width={16} height={16} viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
           </button>
@@ -501,15 +444,33 @@ function UserSlideIn({ user, onClose, onEdit, onDelete, onPermChange }: {
 
         <div className="flex-1 overflow-y-auto px-6 py-6 flex flex-col gap-6">
           <div className="flex items-center gap-5">
-            <div className="w-16 h-16 rounded-2xl flex items-center justify-center text-[22px] font-extrabold flex-shrink-0" style={{ background: ac.bg, color: ac.text }}>{initials(user.nom)}</div>
-            <div>
-              <p className="text-[18px] font-bold text-[#0F172A]">{user.nom}</p>
-              <p className="text-[13px] text-[#8A9BB5] mt-0.5">{user.email}</p>
-              <div className="flex items-center gap-2 mt-2">
-                <RoleBadge role={user.role} />
-                <StatutBadge statut={user.statut} />
+            <div className="w-16 h-16 rounded-2xl flex items-center justify-center text-[22px] font-extrabold flex-shrink-0" style={{ background: ac.bg, color: ac.text }}>{initials(editing ? fNom : user.nom)}</div>
+            {editing ? (
+              <div className="flex-1 flex flex-col gap-2">
+                <input value={fNom} onChange={(e) => setFNom(e.target.value)} placeholder="Prénom Nom" className={inputCls} />
+                <input type="email" value={fEmail} onChange={(e) => setFEmail(e.target.value)} placeholder="email@psi.dz" className={inputCls} />
+                <div className="flex items-center gap-2">
+                  <span className="text-[12px] font-semibold text-[#8A9BB5] w-12">Rôle</span>
+                  <div className="relative flex-1">
+                    <select value={fRole} onChange={(e) => setFRole(e.target.value)}
+                      className={inputCls + ' appearance-none pr-8 cursor-pointer'}>
+                      {roleOptions.map((r) => <option key={r.id} value={r.id}>{r.label}</option>)}
+                    </select>
+                    <svg className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-[#8A9BB5]" width={13} height={13} viewBox="0 0 24 24" fill="none"><path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                  </div>
+                </div>
+                <input value={fPwd} onChange={(e) => setFPwd(e.target.value)} placeholder="Nouveau mot de passe (laisser vide pour garder)" className={inputCls + ' font-mono text-[12px]'} />
               </div>
-            </div>
+            ) : (
+              <div>
+                <p className="text-[18px] font-bold text-[#0F172A]">{user.nom}</p>
+                <p className="text-[13px] text-[#8A9BB5] mt-0.5">{user.email}</p>
+                <div className="flex items-center gap-2 mt-2">
+                  <RoleBadge role={user.role} />
+                  <StatutBadge statut={user.statut} />
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="h-px bg-[#F2F4F7]" />
@@ -542,11 +503,39 @@ function UserSlideIn({ user, onClose, onEdit, onDelete, onPermChange }: {
             </div>
             {!isAdmin && <p className="text-[11px] text-[#ABBED1] mt-3">Les modifications sont appliquées immédiatement.</p>}
           </div>
+
+          {/* Sécurité : réinitialiser le mot de passe */}
+          <div className="h-px bg-[#F2F4F7]" />
+          <div>
+            <p className="text-[12px] font-bold text-[#8A9BB5] uppercase tracking-widest mb-3">Sécurité</p>
+            {user.resetRequested && (
+              <div className="flex items-center gap-2 mb-3 px-3 py-2.5 rounded-xl bg-[#FFF7ED] border border-[#FED7AA]">
+                <svg width={16} height={16} fill="none" viewBox="0 0 24 24" className="flex-shrink-0"><path d="M12 9v4M12 17h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" stroke="#EA580C" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                <span className="text-[12px] font-semibold text-[#9A3412]">Cet utilisateur a demandé une réinitialisation de mot de passe.</span>
+              </div>
+            )}
+            <button
+              onClick={async () => { setResetting(true); try { await onResetPassword(user); } finally { setResetting(false); } }}
+              disabled={resetting}
+              className="w-full px-4 py-2.5 rounded-xl border border-[#E2E8F0] text-[13px] font-semibold text-[#374151] hover:bg-[#F8FAFC] transition-colors disabled:opacity-60">
+              {resetting ? 'Génération…' : '🔑 Réinitialiser le mot de passe'}
+            </button>
+            <p className="text-[11px] text-[#ABBED1] mt-2">Un nouveau mot de passe sera généré et affiché (à transmettre à l&apos;utilisateur).</p>
+          </div>
         </div>
 
         <div className="px-6 py-4 border-t border-[#E2E8F0] bg-[#F8FAFC] flex gap-3">
-          <button onClick={() => { onClose(); onEdit(); }} className="flex-1 px-4 py-2.5 rounded-xl border border-[#E2E8F0] text-[13px] font-semibold text-[#374151] hover:bg-white transition-colors">Modifier</button>
-          <button onClick={() => { onClose(); onDelete(); }} className="px-4 py-2.5 rounded-xl text-[13px] font-semibold text-[#EF4444] border border-[#FECACA] hover:bg-[#FEF2F2] transition-colors">Supprimer</button>
+          {editing ? (
+            <>
+              <button onClick={() => setEditing(false)} disabled={saving} className="flex-1 px-4 py-2.5 rounded-xl border border-[#E2E8F0] text-[13px] font-semibold text-[#374151] hover:bg-white transition-colors">Annuler</button>
+              <button onClick={save} disabled={saving || !fNom.trim() || !fEmail.trim()} className="flex-1 px-4 py-2.5 rounded-xl text-[13px] font-bold text-white bg-[#4CAF4F] hover:bg-[#43A047] disabled:opacity-60 transition-colors">{saving ? 'Enregistrement…' : 'Enregistrer'}</button>
+            </>
+          ) : (
+            <>
+              <button onClick={startEdit} className="flex-1 px-4 py-2.5 rounded-xl border border-[#E2E8F0] text-[13px] font-semibold text-[#374151] hover:bg-white transition-colors">Modifier</button>
+              <button onClick={() => { onClose(); onDelete(); }} className="px-4 py-2.5 rounded-xl text-[13px] font-semibold text-[#EF4444] border border-[#FECACA] hover:bg-[#FEF2F2] transition-colors">Supprimer</button>
+            </>
+          )}
         </div>
       </div>
     </>
@@ -598,10 +587,9 @@ export default function UsersPage() {
   const [search, setSearch]         = useState('');
   const [filterRole, setFilterRole] = useState('all');
   const [showAdd, setShowAdd]       = useState(false);
-  const [editUser, setEditUser]     = useState<User | null>(null);
   const [deleteUser, setDeleteUser] = useState<User | null>(null);
   const [profilUser, setProfilUser] = useState<User | null>(null);
-  const [editForm, setEditForm]     = useState(emptyForm);
+  const [profilEditing, setProfilEditing] = useState(false);
   const [newCreds, setNewCreds]     = useState<{ nom: string; email: string; password: string } | null>(null);
   const [customRoles, setCustomRoles] = useState<CustomRole[]>([]);
 
@@ -669,6 +657,22 @@ export default function UsersPage() {
     }
   };
 
+  // Réinitialise le mot de passe d'un user → génère un nouveau mdp, l'applique, l'affiche (copiable)
+  const handleResetPassword = async (u: User) => {
+    const newPwd = genPassword();
+    const res = await fetch(`/api/users/${u.id}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: newPwd }),
+    });
+    if (res.ok) {
+      await fetchUsers();
+      setProfilUser((prev) => prev && prev.id === u.id ? { ...prev, resetRequested: false } : prev);
+      setNewCreds({ nom: u.nom, email: u.email, password: newPwd });
+    } else {
+      alert('Échec de la réinitialisation.');
+    }
+  };
+
   const handleAddCustomRole = async (role: CustomRole) => {
     const res = await fetch('/api/roles', {
       method: 'POST',
@@ -686,27 +690,23 @@ export default function UsersPage() {
     setCustomRoles((prev) => prev.filter((r) => r.id !== id));
   };
 
-  const openEdit = (u: User) => {
-    setEditForm({ nom: u.nom, email: u.email, role: u.role, motdepasse: '', permissions: [...u.permissions] });
-    setEditUser(u);
-  };
-
-  const handleEdit = async () => {
-    if (!editUser) return;
-    const isCustom = editForm.role !== 'Admin' && editForm.role !== 'Employe';
-    await fetch(`/api/users/${editUser.id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+  // Édition inline depuis le panneau profil (reste sur la même page)
+  const handleSaveProfile = async (u: User, data: { name: string; email: string; role: string; password?: string; permissions: PermKey[] }) => {
+    const roleDb = data.role === 'Admin' ? 'ADMIN' : 'EMPLOYEE';
+    await fetch(`/api/users/${u.id}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        name: editForm.nom,
-        email: editForm.email,
-        role: editForm.role === 'Admin' ? 'ADMIN' : 'EMPLOYEE',
-        ...(editForm.motdepasse ? { password: editForm.motdepasse } : {}),
-        ...(isCustom || editForm.role === 'Employe' ? { permissions: editForm.permissions } : {}),
+        name: data.name, email: data.email, role: roleDb,
+        ...(data.password ? { password: data.password } : {}),
+        ...(roleDb === 'EMPLOYEE' ? { permissions: data.permissions } : {}),
       }),
     });
     await fetchUsers();
-    setEditUser(null);
+    // Met à jour le panneau ouvert avec les nouvelles valeurs
+    const uiRole = roleDb === 'ADMIN' ? 'Admin' : 'Employe';
+    setProfilUser((prev) => prev && prev.id === u.id
+      ? { ...prev, nom: data.name, email: data.email, role: uiRole, permissions: roleDb === 'ADMIN' ? [...ADMIN_PERMS] : data.permissions }
+      : prev);
   };
 
   const handleDeactivate = async () => {
@@ -788,7 +788,12 @@ export default function UsersPage() {
                     <div className="w-14 h-14 rounded-2xl flex items-center justify-center text-[18px] font-extrabold" style={{ background: ac.bg, color: ac.text }}>
                       {initials(u.nom)}
                     </div>
-                    <StatutBadge statut={u.statut} />
+                    <div className="flex items-center gap-1.5">
+                      {u.resetRequested && (
+                        <span title="Mot de passe oublié — réinitialisation demandée" className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-full bg-[#FFF7ED] text-[#9A3412] border border-[#FED7AA]">🔑 Reset</span>
+                      )}
+                      <StatutBadge statut={u.statut} />
+                    </div>
                   </div>
 
                   <p className="text-[15px] font-bold text-[#0F172A] leading-tight group-hover:text-[#4CAF4F] transition-colors">{u.nom}</p>
@@ -804,7 +809,7 @@ export default function UsersPage() {
                   </div>
 
                   <div className="flex gap-2 mt-4" onClick={(e) => e.stopPropagation()}>
-                    <button onClick={() => openEdit(u)}
+                    <button onClick={() => { setProfilEditing(true); setProfilUser(u); }}
                       className="flex-1 py-1.5 rounded-lg border border-[#E2E8F0] text-[11px] font-semibold text-[#374151] hover:bg-[#F8FAFC] transition-colors">
                       Modifier
                     </button>
@@ -821,9 +826,13 @@ export default function UsersPage() {
       )}
 
       {profilUser && (
-        <UserSlideIn user={profilUser} onClose={() => setProfilUser(null)}
-          onEdit={() => openEdit(profilUser)} onDelete={() => setDeleteUser(profilUser)}
-          onPermChange={handlePermChange} />
+        <UserSlideIn user={profilUser} onClose={() => { setProfilUser(null); setProfilEditing(false); }}
+          onDelete={() => setDeleteUser(profilUser)}
+          onPermChange={handlePermChange}
+          customRoles={customRoles}
+          initialEditing={profilEditing}
+          onSaveProfile={handleSaveProfile}
+          onResetPassword={handleResetPassword} />
       )}
 
       {showAdd && (
@@ -835,12 +844,6 @@ export default function UsersPage() {
             onAddCustomRole={handleAddCustomRole}
             onDeleteRole={handleDeleteCustomRole}
           />
-        </Modal>
-      )}
-
-      {editUser && (
-        <Modal title="Modifier l'utilisateur" onClose={() => setEditUser(null)}>
-          <EditUserForm form={editForm} setForm={setEditForm} onSubmit={handleEdit} onClose={() => setEditUser(null)} customRoles={customRoles} onDeleteRole={handleDeleteCustomRole} />
         </Modal>
       )}
 

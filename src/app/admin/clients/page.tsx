@@ -9,6 +9,8 @@ interface ClientRecord {
   telephone: string;
   wilaya: string;
   commune?: string;
+  sectorId?: string;
+  sectorName?: string;
   adresse: string;
   email: string;
   photo?: string;
@@ -34,6 +36,8 @@ import { initials } from '@/lib/utils';
 import { RequestPanel, TemplatePopover, type RequestDetail } from '@/components/ui/RequestPanel';
 import { Modal } from '@/components/ui/Modal';
 import { WilayaSelect } from '@/components/ui/WilayaSelect';
+import { exportClientExcel, printClientDoc, type ClientExportData } from '@/lib/export-client';
+import { useSSE } from '@/lib/use-sse';
 
 function avatarColor(id: number | string) {
   const n = typeof id === 'string' ? id.charCodeAt(0) + id.charCodeAt(1) : id;
@@ -49,13 +53,14 @@ function avatarColor(id: number | string) {
 }
 
 const emptyClient: Omit<ClientRecord, 'id' | 'commandes' | 'devis' | 'derniere' | 'historique'> = {
-  entreprise: '', contact: '', telephone: '', wilaya: '', adresse: '', email: '',
+  entreprise: '', contact: '', telephone: '', wilaya: '', sectorId: '', adresse: '', email: '',
 };
 
-function ClientForm({ form, setForm, onSubmit, onClose, submitLabel }: {
+function ClientForm({ form, setForm, onSubmit, onClose, submitLabel, sectors }: {
   form: typeof emptyClient;
   setForm: (f: typeof emptyClient) => void;
   onSubmit: () => void;
+  sectors?: { id: string; name: string }[];
   onClose: () => void;
   submitLabel: string;
 }) {
@@ -83,9 +88,18 @@ function ClientForm({ form, setForm, onSubmit, onClose, submitLabel }: {
           <input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="contact@entreprise.dz" className={inputClass} />
         </div>
       </div>
-      <div>
-        <label className={labelClass}>Wilaya</label>
-        <WilayaSelect value={form.wilaya} onChange={(v) => setForm({ ...form, wilaya: v })} />
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className={labelClass}>Wilaya</label>
+          <WilayaSelect value={form.wilaya} onChange={(v) => setForm({ ...form, wilaya: v })} />
+        </div>
+        <div>
+          <label className={labelClass}>Secteur d'activité</label>
+          <select value={form.sectorId ?? ''} onChange={(e) => setForm({ ...form, sectorId: e.target.value })} className={inputClass}>
+            <option value="">— Aucun —</option>
+            {(sectors ?? []).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+          </select>
+        </div>
       </div>
       <div>
         <label className={labelClass}>Adresse</label>
@@ -145,7 +159,7 @@ function NewOrderForm({ client, onClose }: { client: ClientRecord; onClose: () =
   };
 
   return (
-    <div className="fixed inset-0 z-[80] flex items-center justify-center p-6">
+    <div className="fixed inset-0 z-[150] flex items-center justify-center p-6">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
       <div className="relative bg-white rounded-2xl shadow-2xl w-[460px] max-w-[92vw] p-6 z-10">
         <div className="flex items-center justify-between mb-5">
@@ -227,6 +241,14 @@ function ClientSlideIn({ client, onClose, onEdit, onDelete, onReactivate, onDele
     reader.readAsDataURL(file);
   };
 
+  const clientExport: ClientExportData = {
+    entreprise: client.entreprise, contact: client.contact, telephone: client.telephone,
+    wilaya: client.wilaya, commune: client.commune, sectorName: client.sectorName,
+    adresse: client.adresse, email: client.email, commandes: client.commandes, devis: client.devis,
+    active: client.active, deactivatedReason: client.deactivatedReason,
+    historique: client.historique.map((h) => ({ ref: h.ref, type: h.type, date: h.date, statut: h.statut, montant: h.montant, produits: h.produits })),
+  };
+
   const waHref = `https://wa.me/${client.telephone.replace(/\s/g, '').replace('+', '')}`;
   const callHref = `tel:${client.telephone.replace(/\s/g, '')}`;
   const emailHref = client.email ? `mailto:${client.email}` : null;
@@ -239,9 +261,20 @@ function ClientSlideIn({ client, onClose, onEdit, onDelete, onReactivate, onDele
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-[#F2F4F7]">
           <p className="text-[13px] font-semibold text-[#8A9BB5]">Fiche client</p>
-          <button onClick={onClose} className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-[#F2F4F7] text-[#ABBED1] hover:text-[#374151] transition-colors">
-            <svg width={14} height={14} viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"/></svg>
-          </button>
+          <div className="flex items-center gap-1.5">
+            <button onClick={() => printClientDoc(clientExport)} title="Exporter en PDF"
+              className="w-8 h-8 flex items-center justify-center rounded-lg border border-[#E2E8F0] text-[#374151] hover:bg-[#F8FAFC] transition-colors">
+              <svg width={14} height={14} fill="none" viewBox="0 0 24 24"><path d="M6 9V2h12v7M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2M6 14h12v8H6z" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            </button>
+            <button onClick={() => exportClientExcel(clientExport)} title="Exporter en Excel"
+              className="w-8 h-8 flex items-center justify-center rounded-lg border border-[#E2E8F0] text-[#16A34A] hover:bg-[#F8FAFC] transition-colors">
+              <svg width={14} height={14} fill="none" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/><path d="M14 2v6h6M9 13l6 6M15 13l-6 6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            </button>
+            <div className="w-px h-5 bg-[#E2E8F0] mx-0.5" />
+            <button onClick={onClose} className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-[#F2F4F7] text-[#ABBED1] hover:text-[#374151] transition-colors">
+              <svg width={14} height={14} viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"/></svg>
+            </button>
+          </div>
         </div>
 
         <div className="flex-1 overflow-y-auto">
@@ -292,8 +325,13 @@ function ClientSlideIn({ client, onClose, onEdit, onDelete, onReactivate, onDele
                   </div>
                 </div>
 
-                {/* Ligne 2 : nom du client */}
-                <p className="text-[13px] font-semibold text-[#4CAF4F]">{client.contact}</p>
+                {/* Ligne 2 : nom du client + secteur */}
+                <div className="flex items-center gap-2 flex-wrap">
+                  <p className="text-[13px] font-semibold text-[#4CAF4F]">{client.contact}</p>
+                  {client.sectorName && (
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#EFF6FF] text-[#1E40AF] border border-[#BFDBFE]">{client.sectorName}</span>
+                  )}
+                </div>
 
                 {/* Petit espace, puis 2 colonnes : tél/mail à gauche, wilaya/adresse à droite */}
                 <div className="grid grid-cols-2 gap-x-4 gap-y-2 mt-4">
@@ -348,10 +386,10 @@ function ClientSlideIn({ client, onClose, onEdit, onDelete, onReactivate, onDele
           <div className="px-6 py-5">
             <div className="flex items-center justify-between mb-4">
               <p className="text-[11px] font-bold text-[#ABBED1] uppercase tracking-widest">Historique</p>
-              <button onClick={() => setShowNewOrder(true)}
-                className="px-3 py-1.5 rounded-lg text-[12px] font-bold text-white"
+              <button onClick={() => setShowNewOrder(true)} title="Nouvelle commande / devis"
+                className="w-8 h-8 flex items-center justify-center rounded-lg text-white text-[18px] font-bold leading-none"
                 style={{ background: '#4CAF4F' }}>
-                Nouvelle commande
+                +
               </button>
             </div>
 
@@ -370,31 +408,30 @@ function ClientSlideIn({ client, onClose, onEdit, onDelete, onReactivate, onDele
                   : { bg: '#F5F3FF', color: '#6D28D9', border: '#DDD6FE', label: 'Devis' };
                 return (
                   <button key={h.ref} onClick={() => setSelectedRequest(detail)}
-                    className="w-full text-left rounded-xl border border-[#E2E8F0] hover:border-[#4CAF4F] hover:bg-[#F8FFF8] transition-all px-4 py-3.5">
-                    <div className="flex items-center justify-between gap-2 mb-1.5">
-                      <span
-                        className="text-[9px] font-bold tracking-wide px-1.5 py-px rounded"
-                        style={{ background: typeCfg.bg, color: typeCfg.color, border: `1px solid ${typeCfg.border}` }}
-                      >
-                        {typeCfg.label}
-                      </span>
-                      <p className="text-[11px] text-[#ABBED1]">{h.date}</p>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <div className="flex-1 min-w-0">
-                        <p className="text-[12px] font-bold font-mono text-[#374151]">{h.ref}</p>
-                        <p className="text-[12px] text-[#8A9BB5] truncate mt-0.5">{h.produits}</p>
+                    className="w-full text-left rounded-lg border border-[#E2E8F0] hover:border-[#4CAF4F] hover:bg-[#F8FFF8] transition-all px-3 py-2.5 flex items-center gap-2.5">
+                    {/* Pastille type */}
+                    <span className="w-1.5 h-8 rounded-full flex-shrink-0" style={{ background: typeCfg.color }} />
+                    {/* Réf + produits */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[12px] font-bold font-mono text-[#374151]">{h.ref}</span>
+                        <span className="text-[9px] font-bold px-1 py-px rounded" style={{ background: typeCfg.bg, color: typeCfg.color }}>{typeCfg.label}</span>
                       </div>
-                      <div className="flex-shrink-0 flex items-center gap-2">
-                        <p className="text-[13px] font-bold text-[#0F172A]">{h.montant}</p>
+                      <p className="text-[11px] text-[#8A9BB5] truncate mt-0.5">{h.produits}</p>
+                    </div>
+                    {/* Montant + statut + date */}
+                    <div className="flex-shrink-0 flex flex-col items-end gap-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[13px] font-bold text-[#0F172A]">{h.montant}</span>
                         <StatusPill status={h.statut} />
                       </div>
+                      <span className="text-[10px] text-[#ABBED1]">{h.date}</span>
                     </div>
                   </button>
                 );
               })}
               {client.historique.length === 0 && (
-                <p className="text-[13px] text-[#8A9BB5] text-center py-8">Aucune commande</p>
+                <p className="text-[13px] text-[#8A9BB5] text-center py-8">Aucune commande ni devis</p>
               )}
             </div>
           </div>
@@ -557,6 +594,8 @@ function dbClientToRecord(c: any): ClientRecord {
     telephone: phone,
     wilaya: c.wilaya ?? '',
     commune: c.commune ?? '',
+    sectorId: c.sectorId ?? c.sector?.id ?? '',
+    sectorName: c.sector?.name ?? '',
     adresse: c.address ?? '',
     email: c.email ?? '',
     commandes: ordersCount,
@@ -580,21 +619,54 @@ export default function ClientsPage() {
   const [showAdd, setShowAdd]   = useState(false);
   const [addForm, setAddForm]   = useState({ ...emptyClient });
   const [editForm, setEditForm] = useState({ ...emptyClient });
+  const [sectors, setSectors]   = useState<{ id: string; name: string }[]>([]);
+  const [showSectors, setShowSectors] = useState(false);
+  const [showImport, setShowImport] = useState(false);
 
-  const fetchClients = useCallback(async () => {
-    setLoading(true);
+  const fetchSectors = useCallback(async () => {
+    const r = await fetch('/api/sectors');
+    if (r.ok) { const d = await r.json(); setSectors(d.map((s: any) => ({ id: s.id, name: s.name }))); }
+  }, []);
+
+  const fetchClients = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const res = await fetch('/api/clients');
       if (res.ok) {
         const data = await res.json();
-        setClients(data.map(dbClientToRecord));
+        const records = data.map(dbClientToRecord);
+        setClients(records);
+        // Garde la fiche ouverte à jour en temps réel (historique, compteurs…)
+        setSelected((prev) => prev ? (records.find((r: ClientRecord) => r._dbId === prev._dbId) ?? prev) : prev);
       }
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, []);
 
   useEffect(() => { fetchClients(); }, [fetchClients]);
+  useEffect(() => { fetchSectors(); }, [fetchSectors]);
+  // Temps réel : rafraîchit la liste + l'historique client en silence sur événement SSE
+  useSSE(useCallback(() => { fetchClients(true); }, [fetchClients]));
+  // Filet de sécurité : rafraîchit toutes les 15s en silence
+  useEffect(() => {
+    const id = setInterval(() => fetchClients(true), 15000);
+    return () => clearInterval(id);
+  }, [fetchClients]);
+
+  // Ouverture directe d'une fiche via ?open=<clientId> (depuis l'historique / une notif)
+  // — inclut les clients désactivés (?inactifs=true) pour voir la justif.
+  useEffect(() => {
+    const openId = new URLSearchParams(window.location.search).get('open');
+    if (!openId) return;
+    fetch('/api/clients?inactifs=true')
+      .then((r) => (r.ok ? r.json() : []))
+      .then((data: any[]) => {
+        const found = data.find((c) => c.id === openId);
+        if (found) setSelected(dbClientToRecord(found));
+      })
+      .catch(() => {});
+  }, []);
 
   const filtered = clients.filter(
     (c) =>
@@ -613,19 +685,20 @@ export default function ClientsPage() {
         company: addForm.entreprise.trim(),
         email: addForm.email.trim() || null,
         wilaya: addForm.wilaya.trim(),
+        sectorId: addForm.sectorId || null,
         address: addForm.adresse.trim() || null,
         phone: addForm.telephone.trim() || null,
       }),
     });
     if (res.ok) {
-      await fetchClients();
+      await fetchClients(true);
       setAddForm({ ...emptyClient });
       setShowAdd(false);
     }
   };
 
   const openEdit = (c: ClientRecord) => {
-    setEditForm({ entreprise: c.entreprise, contact: c.contact, telephone: c.telephone, wilaya: c.wilaya, adresse: c.adresse, email: c.email });
+    setEditForm({ entreprise: c.entreprise, contact: c.contact, telephone: c.telephone, wilaya: c.wilaya, sectorId: c.sectorId ?? '', adresse: c.adresse, email: c.email });
     setEditClient(c);
   };
 
@@ -640,12 +713,13 @@ export default function ClientsPage() {
         company: editForm.entreprise.trim(),
         email: editForm.email.trim() || null,
         wilaya: editForm.wilaya.trim(),
+        sectorId: editForm.sectorId || null,
         address: editForm.adresse.trim() || null,
         phone: editForm.telephone.trim() || null,
       }),
     });
     if (res.ok) {
-      await fetchClients();
+      await fetchClients(true);
       setEditClient(null);
     }
   };
@@ -663,7 +737,7 @@ export default function ClientsPage() {
       alert(err.error ?? 'Désactivation impossible');
       return;
     }
-    await fetchClients();
+    await fetchClients(true);
     setDeleteClient(null);
     setSelected(null);
   };
@@ -676,7 +750,7 @@ export default function ClientsPage() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ active: true }),
     });
-    if (res.ok) { await fetchClients(); setSelected(null); }
+    if (res.ok) { await fetchClients(true); setSelected(null); }
   };
 
   // Suppression définitive (admin only)
@@ -689,7 +763,7 @@ export default function ClientsPage() {
       alert(err.error ?? 'Suppression impossible');
       return;
     }
-    await fetchClients();
+    await fetchClients(true);
     setSelected(null);
   };
 
@@ -712,7 +786,14 @@ export default function ClientsPage() {
             className="pl-9 pr-4 py-2.5 w-full sm:w-[280px] rounded-xl border border-[#E2E8F0] bg-white text-[14px] text-[#263238] placeholder-[#8A9BB5] focus:outline-none focus:border-[#4CAF4F] focus:ring-[3px] focus:ring-[#4CAF4F]/15 transition-all"
           />
         </div>
-        <button onClick={() => { setAddForm({ ...emptyClient }); setShowAdd(true); }} className="flex items-center gap-2 px-4 py-2 rounded-xl text-[13px] font-semibold text-white transition-colors sm:ml-auto whitespace-nowrap" style={{ background: '#4CAF4F' }}>
+        <button onClick={() => setShowImport(true)} className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-[13px] font-semibold text-[#374151] border border-[#E2E8F0] hover:bg-[#F8FAFC] transition-colors sm:ml-auto whitespace-nowrap">
+          <svg width={15} height={15} fill="none" viewBox="0 0 24 24"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          Importer Excel
+        </button>
+        <button onClick={() => setShowSectors(true)} className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-[13px] font-semibold text-[#374151] border border-[#E2E8F0] hover:bg-[#F8FAFC] transition-colors whitespace-nowrap">
+          Secteurs
+        </button>
+        <button onClick={() => { setAddForm({ ...emptyClient }); setShowAdd(true); }} className="flex items-center gap-2 px-4 py-2 rounded-xl text-[13px] font-semibold text-white transition-colors whitespace-nowrap" style={{ background: '#4CAF4F' }}>
           + Nouveau client
         </button>
       </div>
@@ -778,14 +859,14 @@ export default function ClientsPage() {
       {/* Modal ajout */}
       {showAdd && (
         <Modal title="Nouveau client" onClose={() => setShowAdd(false)}>
-          <ClientForm form={addForm} setForm={setAddForm} onSubmit={handleAdd} onClose={() => setShowAdd(false)} submitLabel="Ajouter le client" />
+          <ClientForm form={addForm} setForm={setAddForm} onSubmit={handleAdd} onClose={() => setShowAdd(false)} submitLabel="Ajouter le client" sectors={sectors} />
         </Modal>
       )}
 
       {/* Modal édition */}
       {editClient && (
         <Modal title={`Modifier — ${editClient.entreprise || editClient.contact}`} onClose={() => setEditClient(null)}>
-          <ClientForm form={editForm} setForm={setEditForm} onSubmit={handleEdit} onClose={() => setEditClient(null)} submitLabel="Enregistrer" />
+          <ClientForm form={editForm} setForm={setEditForm} onSubmit={handleEdit} onClose={() => setEditClient(null)} submitLabel="Enregistrer" sectors={sectors} />
         </Modal>
       )}
 
@@ -793,6 +874,192 @@ export default function ClientsPage() {
       {deleteClient && (
         <DeleteClientModal client={deleteClient} onDeactivate={(reason) => handleDeactivate(deleteClient, reason)} onClose={() => setDeleteClient(null)} />
       )}
+
+      {/* Modal gestion des secteurs */}
+      {showSectors && (
+        <SectorsModal sectors={sectors} onChange={fetchSectors} onClose={() => setShowSectors(false)} />
+      )}
+
+      {showImport && (
+        <ImportClientsModal
+          onClose={() => setShowImport(false)}
+          onDone={() => { setShowImport(false); fetchClients(true); fetchSectors(); }}
+        />
+      )}
     </div>
+  );
+}
+
+// ── Modal import Excel des clients ───────────────────────────────────────────
+// Colonnes reconnues (souples) : Code Client · Client · Catégorie · Commune · Téléphone · Commercial
+// (+ Entreprise · Email · Wilaya si présentes)
+function ImportClientsModal({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
+  const [rows, setRows] = useState<any[]>([]);
+  const [fileName, setFileName] = useState('');
+  const [parsing, setParsing] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [error, setError] = useState('');
+  const [result, setResult] = useState<{ created: number; total: number; errors: string[] } | null>(null);
+
+  // Normalise un en-tête ("Code Client" → "code client")
+  const norm = (s: string) => String(s ?? '').trim().toLowerCase();
+
+  const pick = (obj: any, keys: string[]) => {
+    for (const k of Object.keys(obj)) {
+      if (keys.includes(norm(k))) { const v = obj[k]; return v == null ? '' : String(v).trim(); }
+    }
+    return '';
+  };
+
+  const handleFile = async (file: File) => {
+    setError(''); setResult(null); setParsing(true);
+    try {
+      const XLSX = await import('xlsx');
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(buf, { type: 'array' });
+      const sheet = wb.Sheets[wb.SheetNames[0]];
+      const raw: any[] = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+      const mapped = raw.map((r) => ({
+        code:       pick(r, ['code client', 'code', 'code_client']),
+        client:     pick(r, ['client', 'nom', 'nom client', 'name']),
+        entreprise: pick(r, ['entreprise', 'société', 'societe', 'company']),
+        categorie:  pick(r, ['catégorie', 'categorie', 'secteur', 'category']),
+        commune:    pick(r, ['commune', 'ville']),
+        telephone:  pick(r, ['téléphone', 'telephone', 'tel', 'phone', 'tél']),
+        commercial: pick(r, ['commercial', 'agent', 'responsable']),
+        wilaya:     pick(r, ['wilaya']),
+        email:      pick(r, ['email', 'mail', 'e-mail']),
+      })).filter((r) => r.client); // ignore les lignes sans nom
+      setRows(mapped);
+      setFileName(file.name);
+      if (mapped.length === 0) setError('Aucun client trouvé. Vérifiez que la colonne "Client" existe.');
+    } catch (e) {
+      console.error(e);
+      setError('Impossible de lire ce fichier Excel.');
+    } finally { setParsing(false); }
+  };
+
+  const doImport = async () => {
+    setImporting(true); setError('');
+    try {
+      const res = await fetch('/api/clients/import', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rows }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) { setError(data.error ?? 'Échec de l\'import.'); return; }
+      setResult({ created: data.created ?? 0, total: data.total ?? rows.length, errors: data.errors ?? [] });
+    } finally { setImporting(false); }
+  };
+
+  return (
+    <Modal title="Importer des clients (Excel)" onClose={onClose}>
+      <div className="space-y-4">
+        {!result ? (
+          <>
+            <p className="text-[13px] text-[#8A9BB5] leading-relaxed">
+              Chargez un fichier <b>.xlsx</b>. Colonnes reconnues : <b>Code Client, Client, Catégorie, Commune, Téléphone, Commercial</b> (+ Entreprise, Email, Wilaya si présentes).
+              La colonne <b>Catégorie</b> devient le secteur d&apos;activité (créé automatiquement).
+            </p>
+
+            <label className="flex flex-col items-center justify-center gap-2 border-2 border-dashed border-[#CBD5E1] rounded-xl py-8 cursor-pointer hover:border-[#4CAF4F] hover:bg-[#F8FFF8] transition-colors">
+              <svg width={28} height={28} fill="none" viewBox="0 0 24 24"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2" stroke="#8A9BB5" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              <span className="text-[13px] font-semibold text-[#374151]">{fileName || 'Choisir un fichier Excel'}</span>
+              <input type="file" accept=".xlsx,.xls" className="hidden"
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); e.target.value = ''; }} />
+            </label>
+
+            {parsing && <p className="text-[13px] text-[#8A9BB5] text-center">Lecture du fichier…</p>}
+            {error && <p className="text-[13px] text-[#EF4444] font-medium">{error}</p>}
+
+            {rows.length > 0 && (
+              <div className="rounded-xl border border-[#E2E8F0] overflow-hidden">
+                <div className="px-4 py-2.5 bg-[#F0FDF4] border-b border-[#E2E8F0]">
+                  <p className="text-[13px] font-bold text-[#166534]">{rows.length} client(s) prêt(s) à importer</p>
+                </div>
+                <div className="max-h-[200px] overflow-y-auto">
+                  {rows.slice(0, 30).map((r, i) => (
+                    <div key={i} className="px-4 py-2 border-b border-[#F2F4F7] last:border-b-0 text-[12px]">
+                      <span className="font-semibold text-[#0F172A]">{r.client}</span>
+                      <span className="text-[#8A9BB5]"> · {[r.categorie, r.commune, r.telephone].filter(Boolean).join(' · ') || '—'}</span>
+                    </div>
+                  ))}
+                  {rows.length > 30 && <div className="px-4 py-2 text-[12px] text-[#ABBED1]">… et {rows.length - 30} autres</div>}
+                </div>
+              </div>
+            )}
+
+            <div className="flex gap-3 pt-1">
+              <button onClick={onClose} className="flex-1 px-4 py-2.5 rounded-xl border border-[#E2E8F0] text-[13px] font-semibold text-[#374151] hover:bg-[#F8FAFC] transition-colors">Annuler</button>
+              <button onClick={doImport} disabled={rows.length === 0 || importing}
+                className="flex-1 px-4 py-2.5 rounded-xl text-[13px] font-bold text-white bg-[#4CAF4F] hover:bg-[#43A047] disabled:opacity-60 transition-colors">
+                {importing ? 'Import en cours…' : `Importer ${rows.length || ''}`.trim()}
+              </button>
+            </div>
+          </>
+        ) : (
+          <div className="text-center py-2">
+            <div className="w-12 h-12 rounded-full bg-[#F0FDF4] flex items-center justify-center mx-auto mb-3">
+              <svg width={24} height={24} fill="none" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5" stroke="#16A34A" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            </div>
+            <p className="text-[15px] font-bold text-[#0F172A] mb-1">{result.created} client(s) importé(s)</p>
+            <p className="text-[13px] text-[#8A9BB5]">sur {result.total} ligne(s)</p>
+            {result.errors.length > 0 && (
+              <div className="mt-3 text-left rounded-xl border border-[#FED7AA] bg-[#FFF7ED] p-3 max-h-[120px] overflow-y-auto">
+                <p className="text-[12px] font-bold text-[#9A3412] mb-1">{result.errors.length} ligne(s) ignorée(s) :</p>
+                {result.errors.map((er, i) => <p key={i} className="text-[11px] text-[#9A3412]">{er}</p>)}
+              </div>
+            )}
+            <button onClick={onDone} className="mt-5 w-full px-4 py-2.5 rounded-xl text-[13px] font-bold text-white bg-[#4CAF4F] hover:bg-[#43A047] transition-colors">Terminé</button>
+          </div>
+        )}
+      </div>
+    </Modal>
+  );
+}
+
+// Modal de gestion des secteurs d'activité (créer / renommer / supprimer)
+function SectorsModal({ sectors, onChange, onClose }: {
+  sectors: { id: string; name: string }[]; onChange: () => void; onClose: () => void;
+}) {
+  const [newName, setNewName] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const add = async () => {
+    const name = newName.trim();
+    if (!name) return;
+    setSaving(true);
+    const res = await fetch('/api/sectors', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) });
+    setSaving(false);
+    if (!res.ok) { const e = await res.json().catch(() => ({})); alert(e.error ?? 'Erreur'); return; }
+    setNewName(''); onChange();
+  };
+  const remove = async (id: string) => {
+    if (!window.confirm('Supprimer ce secteur ? Les clients rattachés perdront leur secteur.')) return;
+    await fetch(`/api/sectors/${id}`, { method: 'DELETE' });
+    onChange();
+  };
+
+  return (
+    <Modal title="Secteurs d'activité" onClose={onClose}>
+      <div className="space-y-4">
+        <p className="text-[12px] text-[#8A9BB5]">Créez les secteurs (pharmacie, banque, restaurant…) pour classer vos clients.</p>
+        <div className="flex gap-2">
+          <input value={newName} onChange={(e) => setNewName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && add()} placeholder="Nouveau secteur…"
+            className="flex-1 px-3 py-2.5 rounded-xl border border-[#E2E8F0] text-[14px] text-[#263238] focus:outline-none focus:border-[#4CAF4F]" />
+          <button onClick={add} disabled={saving || !newName.trim()} className="px-4 py-2.5 rounded-xl text-[13px] font-bold text-white disabled:opacity-40" style={{ background: '#4CAF4F' }}>Ajouter</button>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {sectors.length === 0 ? (
+            <p className="text-[13px] text-[#ABBED1]">Aucun secteur pour l'instant.</p>
+          ) : sectors.map((s) => (
+            <span key={s.id} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-semibold bg-[#EFF6FF] text-[#1E40AF] border border-[#BFDBFE]">
+              {s.name}
+              <button onClick={() => remove(s.id)} className="text-[#1E40AF] hover:text-[#EF4444] font-bold leading-none">×</button>
+            </span>
+          ))}
+        </div>
+      </div>
+    </Modal>
   );
 }

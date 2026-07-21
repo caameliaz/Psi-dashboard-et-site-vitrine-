@@ -40,3 +40,7 @@
 
   a { text-decoration: none; color: inherit; }
 }
+
+/* Scrollbar masquée (contenu toujours scrollable) — utilisée dans les panneaux détail */
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }

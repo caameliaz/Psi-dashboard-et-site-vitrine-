@@ -38,6 +38,11 @@ function IconUserPlus({ color = '#717171' }) {
     <svg width={18} height={18} fill="none"><circle cx="7" cy="5.5" r="3.25" stroke={color} strokeWidth="1.5"/><path d="M0.75 15.5C0.75 12.6 3.52 10.25 7 10.25C10.48 10.25 13.25 12.6 13.25 15.5" stroke={color} strokeLinecap="round" strokeWidth="1.5"/><path d="M15.5 9V15M12.5 12H18.5" stroke={color} strokeLinecap="round" strokeWidth="1.5"/></svg>
   );
 }
+function IconChat({ color = '#717171' }) {
+  return (
+    <svg width={18} height={18} fill="none" viewBox="0 0 20 20"><path d="M2 4.5A1.5 1.5 0 013.5 3h13A1.5 1.5 0 0118 4.5v8a1.5 1.5 0 01-1.5 1.5H7l-4 3.5V14H3.5A1.5 1.5 0 012 12.5v-8z" stroke={color} strokeWidth="1.5" strokeLinejoin="round"/><path d="M6 7.5h8M6 10.5h5" stroke={color} strokeWidth="1.5" strokeLinecap="round"/></svg>
+  );
+}
 function IconHistory({ color = '#717171' }) {
   return (
     <svg width={18} height={18} fill="none"><circle cx="9" cy="9" r="7.25" stroke={color} strokeWidth="1.5"/><path d="M9 5.5V9.5L11.5 12" stroke={color} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/><path d="M3 3L1 1M3 9H1" stroke={color} strokeWidth="1.5" strokeLinecap="round"/></svg>
@@ -63,6 +68,7 @@ const navItems: { href: string; label: string; Icon: typeof IconHome; perm: Perm
   { href: '/admin/clients',   label: 'Clients',      Icon: IconUsers,    perm: 'voir_clients' },
   { href: '/admin/history',   label: 'Historique',   Icon: IconHistory,  perm: 'voir_historique' },
   { href: '/admin/content',   label: 'Contenu',      Icon: IconEdit,     perm: 'modifier_contenu' },
+  { href: '/admin/templates', label: 'Messages',     Icon: IconChat,     perm: 'modifier_contenu' },
   { href: '/admin/users',     label: 'Utilisateurs', Icon: IconUserPlus, perm: 'gerer_utilisateurs' },
 ];
 

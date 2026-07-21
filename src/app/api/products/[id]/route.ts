@@ -36,7 +36,8 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
     const action = body.active !== undefined && !body.reference
       ? `Produit ${body.active ? 'activé' : 'désactivé'}`
       : 'Produit modifié';
-    createAudit({ userId: session?.user?.id, action, entity: 'PRODUIT', entityId: id, detail: product.reference });
+    const prodLabel = product.name ? `${product.name} (${product.reference})` : product.reference;
+    createAudit({ userId: session?.user?.id, action, entity: 'PRODUIT', entityId: id, detail: prodLabel });
     return NextResponse.json(product);
   } catch (e) {
     console.error(e);
@@ -53,7 +54,7 @@ export async function DELETE(_request: NextRequest, { params }: Ctx) {
   const { id } = await params;
 
   try {
-    const product = await prisma.product.findUnique({ where: { id }, select: { reference: true } });
+    const product = await prisma.product.findUnique({ where: { id }, select: { reference: true, name: true } });
     if (!product) return NextResponse.json({ error: 'Produit introuvable' }, { status: 404 });
 
     // Blocage si le produit est utilisé dans des commandes/devis (préserve l'historique)
@@ -69,7 +70,8 @@ export async function DELETE(_request: NextRequest, { params }: Ctx) {
     }
 
     await prisma.product.delete({ where: { id } });
-    createAudit({ userId: session?.user?.id, action: 'Produit supprimé', entity: 'PRODUIT', entityId: id, detail: product.reference });
+    const prodLabel = product.name ? `${product.name} (${product.reference})` : product.reference;
+    createAudit({ userId: session?.user?.id, action: 'Produit supprimé', entity: 'PRODUIT', entityId: id, detail: prodLabel });
     return NextResponse.json({ success: true });
   } catch (e) {
     console.error(e);

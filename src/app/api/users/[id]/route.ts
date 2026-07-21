@@ -25,7 +25,12 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
     if (body.phone !== undefined) data.phone = body.phone;
     if (body.photo !== undefined) data.photo = body.photo;
     if (body.permissions !== undefined) data.permissions = body.permissions;
-    if (body.password !== undefined) data.password = await bcrypt.hash(body.password, 10);
+    if (body.password !== undefined) {
+      data.password = await bcrypt.hash(body.password, 10);
+      // Réinitialiser le mot de passe efface la demande "mot de passe oublié"
+      data.resetRequested = false;
+      data.resetRequestedAt = null;
+    }
 
     const user = await prisma.user.update({
       where: { id },

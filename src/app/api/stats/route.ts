@@ -17,8 +17,12 @@ export async function GET() {
     const [
       commandesMois,
       commandesPrevMois,
-      livreesMois,
-      devisLivresMois,
+      devisMois,
+      devisPrevMois,
+      ordersLivrees,
+      quotesLivres,
+      prevOrderItems,
+      prevQuotesAgg,
       clientsMois,
       devisEnCours,
       devisEnAttenteAgg,
@@ -32,14 +36,29 @@ export async function GET() {
       ordersByWilaya,
       ordersFor6Months,
       quotesFor6Months,
-      ordersByEmploye,
       recentOrders,
       recentQuotes,
     ] = await Promise.all([
       prisma.order.count({ where: { createdAt: { gte: startOfMonth } } }),
       prisma.order.count({ where: { createdAt: { gte: startOfPrevMonth, lt: startOfMonth } } }),
-      prisma.order.count({ where: { status: 'LIVRE', createdAt: { gte: startOfMonth } } }),
-      prisma.quote.count({ where: { status: 'LIVRE', createdAt: { gte: startOfMonth } } }),
+      prisma.quote.count({ where: { createdAt: { gte: startOfMonth } } }),
+      prisma.quote.count({ where: { createdAt: { gte: startOfPrevMonth, lt: startOfMonth } } }),
+      // Commandes LIVRÉES ce mois (montant via items + assigné) — pour ventes + par commercial + employés
+      prisma.order.findMany({
+        where: { status: 'LIVRE', createdAt: { gte: startOfMonth } },
+        select: { assignedToId: true, items: { select: { quantity: true, unitPrice: true } } },
+      }),
+      // Devis LIVRÉS ce mois (proposedPrice + assigné)
+      prisma.quote.findMany({
+        where: { status: 'LIVRE', createdAt: { gte: startOfMonth } },
+        select: { assignedToId: true, proposedPrice: true },
+      }),
+      // Commandes + devis livrés le MOIS PRÉCÉDENT (montant global, pour l'évolution des ventes)
+      prisma.orderItem.findMany({
+        where: { order: { status: 'LIVRE', createdAt: { gte: startOfPrevMonth, lt: startOfMonth } } },
+        select: { quantity: true, unitPrice: true },
+      }),
+      prisma.quote.aggregate({ _sum: { proposedPrice: true }, where: { status: 'LIVRE', createdAt: { gte: startOfPrevMonth, lt: startOfMonth } } }),
       prisma.client.count({ where: { createdAt: { gte: startOfMonth } } }),
       prisma.quote.count({ where: { status: { in: ['EN_ATTENTE', 'CONTACTE'] } } }),
       prisma.quote.aggregate({ _sum: { proposedPrice: true }, where: { status: { in: ['EN_ATTENTE', 'CONTACTE'] } } }),
@@ -60,8 +79,6 @@ export async function GET() {
       // Commandes des 6 derniers mois (pour la courbe)
       prisma.order.findMany({ where: { createdAt: { gte: start6MonthsAgo } }, select: { createdAt: true } }),
       prisma.quote.findMany({ where: { createdAt: { gte: start6MonthsAgo } }, select: { createdAt: true } }),
-      // Commandes créées ce mois par employé
-      prisma.order.groupBy({ by: ['createdById'], _count: { id: true }, where: { createdAt: { gte: startOfMonth }, createdById: { not: null } } }),
       prisma.order.findMany({
         take: 5,
         orderBy: { createdAt: 'desc' },
@@ -88,14 +105,20 @@ export async function GET() {
     const productIds = topProduits.map((g) => g.productId).filter((id): id is string => id != null);
     const products = await prisma.product.findMany({
       where: { id: { in: productIds } },
-      select: { id: true, reference: true, category: { select: { id: true, name: true } } },
+      select: { id: true, reference: true, metrage: true, category: { select: { id: true, name: true } } },
     });
     const productMap = Object.fromEntries(products.map((p) => [p.id, p]));
 
     // Construire top par catégorie : meilleur produit par catégorie (max 6 catégories)
     const topWithMeta = topProduits.filter((g) => g.productId != null).map((g) => {
       const p = productMap[g.productId as string];
-      return { ref: p?.reference ?? 'Inconnu', qty: g._sum.quantity ?? 0, categoryId: p?.category?.id ?? null, categoryName: p?.category?.name ?? 'Sans catégorie' };
+      const ref = p?.reference ?? 'Inconnu';
+      return {
+        ref: p?.metrage != null ? `${ref} · ${p.metrage} m` : ref,
+        qty: g._sum.quantity ?? 0,
+        categoryId: p?.category?.id ?? null,
+        categoryName: p?.category?.name ?? 'Sans catégorie',
+      };
     });
 
     const categories = [...new Set(topWithMeta.map((t) => t.categoryId))];
@@ -150,23 +173,75 @@ export async function GET() {
       });
     }
 
-    // Employés actifs ce mois : résout les noms
-    const empIds = ordersByEmploye.map((g) => g.createdById as string);
-    const emps = empIds.length
-      ? await prisma.user.findMany({ where: { id: { in: empIds } }, select: { id: true, name: true } })
+    // ── Ventes livrées ce mois : total + ventilation par commercial (assigné) ──
+    const orderAmount = (items: { quantity: number | null; unitPrice: number | null }[]) =>
+      items.reduce((acc, it) => acc + (it.quantity ?? 0) * (it.unitPrice ?? 0), 0);
+
+    // Accumulateur par commercial : { montant, nbCommandes, nbDevis }
+    const perCommercial: Record<string, { amount: number; orders: number; quotes: number }> = {};
+    const bump = (uid: string | null, amount: number, kind: 'order' | 'quote') => {
+      const key = uid ?? '__none__';
+      if (!perCommercial[key]) perCommercial[key] = { amount: 0, orders: 0, quotes: 0 };
+      perCommercial[key].amount += amount;
+      if (kind === 'order') perCommercial[key].orders++; else perCommercial[key].quotes++;
+    };
+
+    let ventesMois = 0;
+    ordersLivrees.forEach((o) => { const a = orderAmount(o.items); ventesMois += a; bump(o.assignedToId, a, 'order'); });
+    quotesLivres.forEach((q) => { const a = q.proposedPrice ?? 0; ventesMois += a; bump(q.assignedToId, a, 'quote'); });
+
+    const livreesMois = ordersLivrees.length;
+    const devisLivresMois = quotesLivres.length;
+
+    // Ventes mois précédent (pour l'évolution %)
+    const ventesPrevMois = orderAmount(prevOrderItems) + (prevQuotesAgg._sum.proposedPrice ?? 0);
+    const evolutionVentes = ventesPrevMois === 0
+      ? (ventesMois > 0 ? 100 : 0)
+      : Math.round(((ventesMois - ventesPrevMois) / ventesPrevMois) * 100);
+    const evolutionDevis = devisPrevMois === 0
+      ? (devisMois > 0 ? 100 : 0)
+      : Math.round(((devisMois - devisPrevMois) / devisPrevMois) * 100);
+
+    // Résoudre les noms des commerciaux ayant des ventes livrées
+    const commercialIds = Object.keys(perCommercial).filter((k) => k !== '__none__');
+    const commerciaux = commercialIds.length
+      ? await prisma.user.findMany({ where: { id: { in: commercialIds } }, select: { id: true, name: true } })
       : [];
-    const empMap = Object.fromEntries(emps.map((u) => [u.id, u.name]));
-    const employesActifs = ordersByEmploye
-      .map((g) => ({ name: empMap[g.createdById as string] ?? 'Inconnu', count: g._count.id }))
-      .sort((a, b) => b.count - a.count);
+    const nameMap = Object.fromEntries(commerciaux.map((u) => [u.id, u.name]));
+
+    // parCommercial : montant par user (pour la carte Ventes filtrable par admin)
+    const parCommercial = Object.entries(perCommercial)
+      .filter(([id]) => id !== '__none__')
+      .map(([id, v]) => ({ id, name: nameMap[id] ?? 'Inconnu', ventes: v.amount, commandes: v.orders, devis: v.quotes }))
+      .sort((a, b) => b.ventes - a.ventes);
+
+    // Dashboard employés : nb de commandes + devis LIVRÉS gérés (pas de CA)
+    const employesLivres = parCommercial
+      .map((c) => ({ name: c.name, commandes: c.commandes, devis: c.devis, total: c.commandes + c.devis }))
+      .sort((a, b) => b.total - a.total);
+
+    // Objectifs du mois courant (global + par user)
+    const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const goals = await prisma.monthlyGoal.findMany({ where: { month: monthKey } });
+    const goalGlobal = goals.find((g) => g.userId == null)?.amount ?? 0;
+    const goalsByUser: Record<string, number> = {};
+    goals.forEach((g) => { if (g.userId) goalsByUser[g.userId] = g.amount; });
 
     return NextResponse.json({
       stats: {
         commandes: commandesMois,
+        devisMois,                              // devis créés ce mois
+        ventesMois,                             // montant des ventes livrées ce mois (total entreprise)
+        ventesPrevMois,
+        evolutionVentes,                        // % ventes vs mois précédent
+        evolutionDevis,                         // % devis vs mois précédent
         livrees: livreesMois + devisLivresMois, // devis livré = vente (compté comme livraison)
         clients: clientsMois,
         devis: devisEnCours,
       },
+      parCommercial,                            // [{ id, name, ventes, commandes, devis }] — filtre admin
+      employesLivres,                           // [{ name, commandes, devis, total }] — dashboard employés
+      objectifs: { global: goalGlobal, byUser: goalsByUser },
       todayStats: {
         commandes: commandesAujourdhui,
         attente: attenteCommandes + attenteDevis,
@@ -178,7 +253,6 @@ export async function GET() {
       devisEnAttente: { count: attenteDevis, montant: devisEnAttenteAgg._sum.proposedPrice ?? 0 },
       topWilayas,                // [{ wilaya, count }]
       serie6Mois: serie,         // [{ mois, commandes, devis }]
-      employesActifs,            // [{ name, count }]
       topProduits: topProduitsFinal,
       sourceStats: sourceCounts,
       recentOrders,

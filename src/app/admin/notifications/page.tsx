@@ -1,6 +1,8 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
+import { useSSE } from '@/lib/use-sse';
 
 type NotifType = 'SITE_COMMANDE' | 'SITE_DEVIS' | 'ACTION_AUTRE' | 'ACTION_PERSO' | 'ANNULATION';
 
@@ -11,6 +13,19 @@ interface Notif {
   message: string;
   createdAt: string;
   read: boolean;
+  orderId?: string | null;
+  quoteId?: string | null;
+  clientId?: string | null;
+  link?: string | null;
+}
+
+// Cible de navigation d'une notif (null = non cliquable)
+function notifTarget(n: { orderId?: string | null; quoteId?: string | null; clientId?: string | null; link?: string | null }): string | null {
+  if (n.orderId) return `/admin/requests?open=${n.orderId}`;
+  if (n.quoteId) return `/admin/requests?open=${n.quoteId}`;
+  if (n.clientId) return `/admin/clients?open=${n.clientId}`;
+  if (n.link) return n.link;
+  return null;
 }
 
 function relativeTime(dateStr: string): string {
@@ -52,9 +67,10 @@ export default function NotificationsPage() {
   const [notifs, setNotifs]   = useState<Notif[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter]   = useState('all');
+  const router = useRouter();
 
-  const fetchNotifs = useCallback(async () => {
-    setLoading(true);
+  const fetchNotifs = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const res = await fetch('/api/notifications');
       if (res.ok) {
@@ -66,14 +82,20 @@ export default function NotificationsPage() {
           message:   n.message ?? '',
           createdAt: n.createdAt,
           read:      n.read ?? false,
+          orderId:   n.orderId ?? null,
+          quoteId:   n.quoteId ?? null,
+          clientId:  n.clientId ?? null,
+          link:      n.link ?? null,
         })));
       }
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, []);
 
   useEffect(() => { fetchNotifs(); }, [fetchNotifs]);
+  // Temps réel : nouvelle notif → apparaît sans refresh ni spinner
+  useSSE(useCallback(() => { fetchNotifs(true); }, [fetchNotifs]));
 
   const markRead = async (id: string) => {
     setNotifs((p) => p.map((n) => n.id === id ? { ...n, read: true } : n));
@@ -140,14 +162,15 @@ export default function NotificationsPage() {
         <div className="space-y-2">
           {filtered.map((n) => {
             const cfg = TYPE_CONFIG[n.type] ?? TYPE_CONFIG.ACTION_AUTRE;
+            const target = notifTarget(n);
             return (
               <div key={n.id}
-                onClick={() => !n.read && markRead(n.id)}
+                onClick={() => { if (!n.read) markRead(n.id); if (target) router.push(target); }}
                 className="rounded-xl border p-4 transition-all"
                 style={{
                   background: n.read ? '#fff' : cfg.bg,
                   borderColor: n.read ? '#E2E8F0' : cfg.border,
-                  cursor: n.read ? 'default' : 'pointer',
+                  cursor: (target || !n.read) ? 'pointer' : 'default',
                 }}
               >
                 <div className="flex items-start gap-3">

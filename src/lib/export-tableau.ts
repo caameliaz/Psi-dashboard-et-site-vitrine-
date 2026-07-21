@@ -1,8 +1,14 @@
 import type { RequestDetail } from '@/components/ui/RequestPanel';
 import { styleBandRow, styleHeaderRow, styleDataRows, styleSectionTitle, styleFiltersLine, styleTotalHighlight } from '@/lib/xlsx-style';
 
-const NUM_COLS = 9;
+// Export "tableau" : UNE LIGNE PAR PRODUIT.
+// Les infos de la commande/devis (réf, client, wilaya, date…) sont RÉPÉTÉES sur
+// chaque ligne produit → aucune cellule vide, l'Excel reste filtrable/triable.
+const NUM_COLS = 13;
 const pad = (r: (string | number)[]) => { while (r.length < NUM_COLS) r.push(''); return r; };
+
+const montantToNum = (s: string) =>
+  Number(String(s).replace(/\s/g, '').replace('DA', '').replace('TTC', '').replace(',', '.')) || 0;
 
 export async function exportTableauExcel(
   items: RequestDetail[],
@@ -24,31 +30,44 @@ export async function exportTableauExcel(
   push(pad([filtresLabel ? `Filtres appliqués : ${filtresLabel}` : '']));
   push(pad([]));
 
-  // ── Tableau détail ───────────────────────────────────────────────────────
+  // ── Tableau détail : 1 ligne par produit ──────────────────────────────────
   const headerRowIdx = allRows.length;
-  push(['Référence', 'Type', 'Date', 'Client', 'Entreprise', 'Wilaya', 'Statut', 'Produits', 'Montant HT']);
+  push([
+    'Référence', 'Type', 'Date', 'Client', 'Entreprise', 'Téléphone', 'Wilaya', 'Commune',
+    'Statut', 'Catégorie', 'Produit', 'Métrage (m)', 'Qté',
+  ]);
   const dataStart = allRows.length;
+
+  let totalGlobal = 0;
   items.forEach((r) => {
-    const montantNum = Number(r.montant.replace(/\s/g, '').replace('DA', '').replace('TTC', '').replace(',', '.')) || 0;
-    push([r.ref, r.type, r.date + (r.heure ? ` ${r.heure}` : ''), r.client, r.entreprise, r.wilaya || '—', r.statut, r.produits, montantNum]);
+    const dateStr = r.date + (r.heure ? ` ${r.heure}` : '');
+    totalGlobal += montantToNum(r.montant);
+    const lignes = (r.items && r.items.length > 0)
+      ? r.items
+      : [{ designation: r.produits, categorie: '—', quantite: 0, prixUnitaire: 0, metrage: null }];
+    lignes.forEach((l) => {
+      // Toutes les infos de la commande répétées → pas de cellule vide
+      push([
+        r.ref, r.type, dateStr, r.client, r.entreprise || '—', r.telephone || '—',
+        r.wilaya || '—', r.commune || '—', r.statut,
+        l.categorie || '—', l.designation || '—',
+        l.metrage != null ? l.metrage : '—',
+        l.quantite || 0,
+      ]);
+    });
   });
   const dataEnd = allRows.length - 1;
   push(pad([]));
 
-  // ── Totaux par statut : compte + montant ──────────────────────────────────
-  const totalGlobal = items.reduce((acc, r) => {
-    const n = Number(r.montant.replace(/\s/g, '').replace('DA', '').replace('TTC', '').replace(',', '.')) || 0;
-    return acc + n;
-  }, 0);
+  // ── Récapitulatif par statut ──────────────────────────────────────────────
   const parStatut = items.reduce<Record<string, { count: number; montant: number }>>((acc, r) => {
-    const n = Number(r.montant.replace(/\s/g, '').replace('DA', '').replace('TTC', '').replace(',', '.')) || 0;
+    const n = montantToNum(r.montant);
     if (!acc[r.statut]) acc[r.statut] = { count: 0, montant: 0 };
     acc[r.statut].count += 1;
     acc[r.statut].montant += n;
     return acc;
   }, {});
 
-  // ── Tableau récapitulatif : Indicateur | Valeur (nombre) | Prix (DA) ───────
   push(pad(['RÉCAPITULATIF']));
   const summaryHeaderIdx = allRows.length;
   push(pad(['Indicateur', 'Valeur', 'Prix (DA)']));
@@ -60,36 +79,37 @@ export async function exportTableauExcel(
 
   const ws = utils.aoa_to_sheet(allRows);
 
-  // ── Largeurs colonnes (élargies pour que les champs longs soient visibles) ─
   ws['!cols'] = [
-    { wch: 18 }, // Ref
-    { wch: 12 }, // Type
-    { wch: 18 }, // Date
-    { wch: 28 }, // Client
-    { wch: 30 }, // Entreprise
-    { wch: 18 }, // Wilaya
-    { wch: 14 }, // Statut
-    { wch: 45 }, // Produits
-    { wch: 16 }, // Montant
+    { wch: 16 }, // Ref
+    { wch: 11 }, // Type
+    { wch: 16 }, // Date
+    { wch: 24 }, // Client
+    { wch: 26 }, // Entreprise
+    { wch: 16 }, // Téléphone
+    { wch: 16 }, // Wilaya
+    { wch: 16 }, // Commune
+    { wch: 13 }, // Statut
+    { wch: 18 }, // Catégorie
+    { wch: 30 }, // Produit
+    { wch: 12 }, // Métrage
+    { wch: 8 },  // Qté
   ];
 
-  // ── Fusion en-têtes PSI + titres de section (sinon une cellule vide juste
-  // après bloque le débordement du texte et le coupe) ─────────────────────────
+  const lastCol = NUM_COLS - 1;
   ws['!merges'] = [
-    { s: { r: 0, c: 0 }, e: { r: 0, c: 8 } },
-    { s: { r: 1, c: 0 }, e: { r: 1, c: 8 } },
-    { s: { r: 2, c: 0 }, e: { r: 2, c: 8 } },
-    { s: { r: filtersRowIdx, c: 0 }, e: { r: filtersRowIdx, c: 8 } },
-    { s: { r: summaryHeaderIdx - 1, c: 0 }, e: { r: summaryHeaderIdx - 1, c: 8 } },
+    { s: { r: 0, c: 0 }, e: { r: 0, c: lastCol } },
+    { s: { r: 1, c: 0 }, e: { r: 1, c: lastCol } },
+    { s: { r: 2, c: 0 }, e: { r: 2, c: lastCol } },
+    { s: { r: filtersRowIdx, c: 0 }, e: { r: filtersRowIdx, c: lastCol } },
+    { s: { r: summaryHeaderIdx - 1, c: 0 }, e: { r: summaryHeaderIdx - 1, c: lastCol } },
   ];
 
-  // ── Styles : bandeau, en-têtes colorés, grilles de bordures ────────────────
   styleBandRow(ws, 0, NUM_COLS, 13);
   styleBandRow(ws, 1, NUM_COLS);
   styleBandRow(ws, 2, NUM_COLS);
   if (filtresLabel) styleFiltersLine(ws, filtersRowIdx, 0);
   styleHeaderRow(ws, headerRowIdx, NUM_COLS);
-  if (items.length > 0) styleDataRows(ws, dataStart, dataEnd, NUM_COLS);
+  if (dataEnd >= dataStart) styleDataRows(ws, dataStart, dataEnd, NUM_COLS);
 
   styleSectionTitle(ws, summaryHeaderIdx - 1, 0);
   styleHeaderRow(ws, summaryHeaderIdx, 3);

@@ -311,6 +311,8 @@ model User {
   photo           String?
   permissions     String[]           @default([])
   sessionVersion  Int                @default(0) // incrémenté pour invalider tous les cookies
+  resetRequested  Boolean            @default(false) // l'utilisateur a demandé une réinit. de mot de passe
+  resetRequestedAt DateTime?
   ordersCreated   Order[]            @relation("OrderCreatedBy")
   quotesCreated   Quote[]            @relation("QuoteCreatedBy")
   ordersAssigned  Order[]            @relation("OrderAssignedTo")
@@ -320,6 +322,7 @@ model User {
   requestNotes    RequestNote[]      @relation("RequestNoteAuthor")
   notifications   NotificationRead[]
   auditLogs       AuditLog[]
+  pushSubscriptions PushSubscription[]
   createdAt       DateTime           @default(now())
   updatedAt       DateTime           @updatedAt
 }
@@ -327,6 +330,34 @@ model User {
 enum Role {
   ADMIN
   EMPLOYEE
+}
+
+// ─── ABONNEMENTS PUSH (notifications système Web Push) ───────────────────────
+// Un abonnement = un appareil/navigateur d'un utilisateur.
+model PushSubscription {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+// ─── OBJECTIFS MENSUELS (montant de ventes en DA) ────────────────────────────
+// userId null = objectif GLOBAL de l'entreprise ; sinon objectif d'un commercial.
+// Un seul objectif par (month, userId) grâce à l'index unique.
+model MonthlyGoal {
+  id        String   @id @default(cuid())
+  month     String   // format "YYYY-MM"
+  userId    String?  // null = objectif global entreprise
+  amount    Float    // montant cible en DA
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([month, userId])
 }
 
 // ─── NOTIFICATIONS ───────────────────────────────────────────────────────────
@@ -337,6 +368,8 @@ model Notification {
   message   String
   orderId   String?
   quoteId   String?
+  clientId  String?            // pour deep-link vers la fiche client (ex: client désactivé)
+  link      String?            // lien libre (ex: '/admin/dashboard' pour les objectifs)
   order     Order?             @relation(fields: [orderId], references: [id], onDelete: SetNull)
   quote     Quote?             @relation(fields: [quoteId], references: [id], onDelete: SetNull)
   reads     NotificationRead[]

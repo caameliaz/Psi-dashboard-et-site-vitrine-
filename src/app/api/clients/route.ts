@@ -42,6 +42,7 @@ export async function GET(request: NextRequest) {
       where: includeInactifs ? undefined : { active: true },
       include: {
         deactivatedBy: { select: { name: true } },
+        sector: { select: { id: true, name: true } },
         phones: true,
         _count: { select: { orders: true, quotes: true } },
         orders: {
@@ -87,6 +88,7 @@ export async function POST(request: NextRequest) {
         email: body.email ?? null,
         wilaya: body.wilaya ?? null,
         commune: body.commune ?? null,
+        sectorId: body.sectorId || null,
         address: body.address ?? null,
         ...(body.phone ? {
           phones: { create: [{ number: body.phone, label: 'Principal', primary: true }] },

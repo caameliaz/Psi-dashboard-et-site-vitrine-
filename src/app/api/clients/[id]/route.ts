@@ -61,6 +61,7 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
         ...(body.email !== undefined && { email: body.email }),
         ...(body.wilaya !== undefined && { wilaya: body.wilaya }),
         ...(body.commune !== undefined && { commune: body.commune }),
+        ...(body.sectorId !== undefined && { sectorId: body.sectorId || null }),
         ...(body.address !== undefined && { address: body.address }),
         ...(body.photo !== undefined && { photo: body.photo }),
         // Réactivation → efface les infos de désactivation
@@ -141,6 +142,7 @@ export async function DELETE(request: NextRequest, { params }: Ctx) {
       message: `${actorName} a désactivé le client ${label} — motif : ${reason}`,
       actorId: session.user.id,
       adminOnly: true,
+      clientId: id,
     }).catch(() => {});
 
     return NextResponse.json({ success: true, deactivated: true });

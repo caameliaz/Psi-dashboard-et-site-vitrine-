@@ -6,7 +6,34 @@ import Link from 'next/link';
 import { useCartStore } from '@/store/cartStore';
 import { useTranslation } from '@/lib/i18n';
 import { QuoteCTA } from '@/components/QuoteCTA';
+import { FormatPreview } from '@/components/FormatPreview';
 import { type Cat, type Prod, getFallbackDescription } from '@/lib/hardcodedCatalog';
+
+// Icônes des fiches techniques (Largeur / Diamètre / Mandrin / Papier / Grammage / Couleur)
+function specIcon(label: string) {
+  const l = label.toLowerCase();
+  if (l.includes('largeur')) return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M3 12h18M3 12l4-4M3 12l4 4M21 12l-4-4M21 12l-4 4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
+  );
+  if (l.includes('diamètre') || l.includes('diametre')) return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M5 19L19 5M5 19l3-1M5 19l1-3M19 5l-3 1M19 5l-1 3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
+  );
+  if (l.includes('mandrin')) return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.8"/><circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="1.8"/></svg>
+  );
+  if (l.includes('papier')) return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M6 2h9l5 5v13a2 2 0 01-2 2H6a2 2 0 01-2-2V4a2 2 0 012-2z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round"/><path d="M15 2v5h5" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round"/></svg>
+  );
+  if (l.includes('grammage') || l.includes('poids')) return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="7" r="3" stroke="currentColor" strokeWidth="1.8"/><path d="M8.5 9.5L5 21h14l-3.5-11.5" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round"/></svg>
+  );
+  if (l.includes('couleur')) return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="8" stroke="currentColor" strokeWidth="1.8"/><circle cx="12" cy="12" r="3" fill="currentColor"/></svg>
+  );
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="8" stroke="currentColor" strokeWidth="1.8"/></svg>
+  );
+}
 
 export default function ProductDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -40,14 +67,145 @@ export default function ProductDetailPage() {
   }
 
   const description = category.description || getFallbackDescription(category.name, lang) || '';
+
+  // Fiche technique : Largeur (toujours dispo) + champs personnalisés du produit (Diamètre, Mandrin, Papier, Grammage, Couleur…)
+  const specRows = current
+    ? [
+        { key: 'largeur', label: t('product_detail.spec_width'), value: `${current.width} mm` },
+        ...(current.customFields ?? []).map((cf) => ({ key: cf.definition.label, label: cf.definition.label, value: cf.value })),
+      ]
+    : [];
   const total = current ? current.price * qty : 0;
+
+  const refsBlock = items.length > 0 && (
+    <div className="flex flex-col gap-3 mt-2">
+      <h2 className="text-[15px] font-bold text-[#263238]">{t('product_detail.available_refs')}</h2>
+      <div className="grid grid-cols-3 lg:grid-cols-4 gap-1.5">
+        {items.map((p, i) => {
+          const active = i === index;
+          const dimColor = active ? '#4CAF4F' : '#9AA5B1';
+          return (
+            <button
+              key={p.id}
+              onClick={() => { setIndex(i); setQty(1); }}
+              className="flex flex-col items-center gap-1.5"
+            >
+              <div
+                className={`inline-flex border rounded-xl p-4 items-center justify-center transition-all ${
+                  active
+                    ? 'border-[#4CAF4F] bg-[#F0FDF4] shadow-[0_4px_12px_rgba(76,175,79,0.2)]'
+                    : 'border-[#E0E0E0] hover:border-[#4CAF4F]/50'
+                }`}
+              >
+                <FormatPreview width={p.width} length={p.length} color={dimColor} scale={1.3} />
+              </div>
+
+              {/* Utilisation de cette référence (remplace la légende dimensions) */}
+              <p className="text-[11px] text-[#717171] text-center leading-4 line-clamp-2 min-h-[32px]">{p.usage}</p>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+
+  const specsBlock = specRows.length > 0 && (
+    <div className="flex flex-col gap-3 mt-2">
+      <h2 className="text-[15px] font-bold text-[#263238]">{t('product_detail.specs_title')}</h2>
+      <div className="grid grid-cols-2 gap-x-6 gap-y-3.5 rounded-xl border border-[#E0E0E0] p-4">
+        {specRows.map((row) => (
+          <div key={row.key} className="flex items-center gap-2.5 min-w-0">
+            <div className="w-7 h-7 rounded-full border border-[#4CAF4F]/30 flex items-center justify-center flex-shrink-0 text-[#4CAF4F]">
+              {specIcon(row.label)}
+            </div>
+            <div className="flex flex-col leading-tight min-w-0">
+              <span className="text-[10px] font-bold text-[#8A9BB5] uppercase tracking-wide truncate">{row.label}</span>
+              <span className="text-[13px] font-semibold text-[#263238] truncate">{row.value}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
+  const addButton = current && (
+    <button
+      onClick={() => addItem({ productId: current.id, quantity: qty, reference: current.reference, unitPrice: current.price })}
+      className="w-full flex items-center justify-center gap-2 bg-[#4CAF4F] text-white text-[13px] sm:text-[15px] font-bold py-3.5 rounded-xl hover:bg-[#43A047] shadow-[0_4px_14px_rgba(76,175,79,0.4)] transition-all"
+    >
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" className="flex-shrink-0">
+        <path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+        <path d="M16 10a4 4 0 01-8 0" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+      </svg>
+      <span className="truncate">{t('common.add_to_cart')}</span>
+    </button>
+  );
+
+  const summaryBlock = current && (
+    <div className="bg-white border border-[#E0E0E0] rounded-2xl shadow-[0_4px_24px_rgba(171,190,209,0.35)] p-6 flex flex-col gap-4">
+      <div className="flex items-center justify-between text-[14px]">
+        <span className="text-[#717171]">{t('product_detail.ref_label')}</span>
+        <span className="font-semibold text-[#263238]">{current.width}mm × {current.length}m</span>
+      </div>
+      {current.metrage != null && (
+        <div className="flex items-center justify-between text-[14px]">
+          <span className="text-[#717171]">{t('product_detail.metrage_label')}</span>
+          <span className="font-semibold text-[#263238]">{current.metrage} m</span>
+        </div>
+      )}
+      <div className="flex items-center justify-between text-[14px]">
+        <span className="text-[#717171]">{t('product_detail.unit_price_label')}</span>
+        <span className="font-semibold text-[#263238]">{current.price.toFixed(2)} DA</span>
+      </div>
+      <div className="flex items-center justify-between text-[14px]">
+        <span className="text-[#717171]">{t('quote.qty_label')}</span>
+        <div className="flex items-center gap-2 bg-[#F5F7FA] border border-[#E0E0E0] rounded-lg">
+          <button
+            onClick={() => setQty((q) => Math.max(1, q - 1))}
+            aria-label={t('product_detail.decrease_qty_aria')}
+            className="w-8 h-8 flex items-center justify-center text-[#717171] hover:text-[#263238]"
+          >
+            −
+          </button>
+          <span className="w-6 text-center text-[14px] font-semibold text-[#263238]">{qty}</span>
+          <button
+            onClick={() => setQty((q) => q + 1)}
+            aria-label={t('product_detail.increase_qty_aria')}
+            className="w-8 h-8 flex items-center justify-center text-[#717171] hover:text-[#263238]"
+          >
+            +
+          </button>
+        </div>
+      </div>
+
+      <div className="border-t border-[#E0E0E0] pt-4 flex items-center justify-between">
+        <span className="text-[15px] font-bold text-[#4CAF4F]">{t('cart.total')}</span>
+        <span className="text-[20px] font-extrabold text-[#4CAF4F]">{total.toFixed(2)} DA</span>
+      </div>
+
+      {addButton}
+    </div>
+  );
+
+  const photoBlock = (heightClass: string) => (
+    <div className={`bg-[#F5F7FA] rounded-2xl overflow-hidden ${heightClass} flex items-center justify-center`}>
+      {category.photo ? (
+        <img src={category.photo} alt={category.name} className="w-full h-full object-cover" />
+      ) : (
+        <div className="relative w-20 h-20">
+          <div className="absolute inset-0 rounded-full bg-[#E8F5E9] border-2 border-[#4CAF4F]" />
+          <div className="absolute inset-[30%] rounded-full bg-[#4CAF4F]" />
+        </div>
+      )}
+    </div>
+  );
 
   return (
     <div className="bg-white min-h-screen">
       <div className="max-w-[1280px] mx-auto px-6 md:px-12 py-10 flex flex-col gap-8">
 
-        {/* Fil d'Ariane */}
-        <div className="flex items-center gap-2 text-[14px]">
+        {/* Fil d'Ariane — masqué sur mobile */}
+        <div className="hidden md:flex items-center gap-2 text-[14px]">
           <Link href="/products" className="text-[#4CAF4F] font-semibold hover:underline">
             {t('nav.products')}
           </Link>
@@ -55,109 +213,49 @@ export default function ProductDetailPage() {
           <span className="text-[#717171]">{category.name}</span>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 lg:gap-16">
+        {/* ── Mobile : titre → description → photo → refs → total/panier → détails ── */}
+        <div className="flex lg:hidden flex-col gap-5">
+          <h1 className="text-[24px] font-extrabold text-[#263238] leading-tight">
+            {category.name}
+          </h1>
+          {description && (
+            <p className="text-[13px] text-[#4D4D4D] leading-relaxed">
+              {description}
+            </p>
+          )}
 
-          {/* ── Colonne gauche : description + références ── */}
+          {photoBlock('h-[220px]')}
+
+          {refsBlock}
+          {summaryBlock}
+          {specsBlock}
+        </div>
+
+        {/* ── Desktop : grid 2 colonnes ── */}
+        <div className="hidden lg:grid grid-cols-2 gap-16">
+
+          {/* Colonne gauche : description + références */}
           <div className="flex flex-col gap-5">
             <span className="text-[13px] font-bold text-[#4CAF4F] uppercase tracking-wide">
               {t('product_detail.fast_delivery')}
             </span>
-            <h1 className="text-[34px] md:text-[42px] font-extrabold text-[#263238] leading-tight">
+            <h1 className="text-[42px] font-extrabold text-[#263238] leading-tight">
               {category.name}
             </h1>
             {description && (
-              <p className="text-[15px] md:text-[16px] text-[#4D4D4D] leading-relaxed">
+              <p className="text-[16px] text-[#4D4D4D] leading-relaxed">
                 {description}
               </p>
             )}
 
-            {items.length > 0 && (
-              <div className="flex flex-col gap-3 mt-2">
-                <h2 className="text-[15px] font-bold text-[#263238]">{t('product_detail.available_refs')}</h2>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                  {items.map((p, i) => (
-                    <button
-                      key={p.id}
-                      onClick={() => { setIndex(i); setQty(1); }}
-                      className={`text-left border rounded-xl p-3 transition-all ${
-                        i === index
-                          ? 'border-[#4CAF4F] bg-[#F0FDF4] shadow-[0_4px_12px_rgba(76,175,79,0.2)]'
-                          : 'border-[#E0E0E0] hover:border-[#4CAF4F]/50'
-                      }`}
-                    >
-                      <p className="text-[14px] font-bold text-[#263238] leading-5">
-                        {p.width}mm × {p.length}m
-                      </p>
-                      <p className="text-[12px] text-[#717171] leading-4 mt-1">{p.usage}</p>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
+            {refsBlock}
+            {specsBlock}
           </div>
 
-          {/* ── Colonne droite : photo de la catégorie + récap ── */}
+          {/* Colonne droite : photo de la catégorie + récap */}
           <div className="flex flex-col gap-5">
-            <div className="bg-[#F5F7FA] rounded-2xl overflow-hidden h-[320px] md:h-[380px] flex items-center justify-center">
-              {category.photo ? (
-                <img src={category.photo} alt={category.name} className="w-full h-full object-cover" />
-              ) : (
-                <div className="relative w-20 h-20">
-                  <div className="absolute inset-0 rounded-full bg-[#E8F5E9] border-2 border-[#4CAF4F]" />
-                  <div className="absolute inset-[30%] rounded-full bg-[#4CAF4F]" />
-                </div>
-              )}
-            </div>
-
-            {/* Carte récapitulatif */}
-            {current && (
-              <div className="bg-white border border-[#E0E0E0] rounded-2xl shadow-[0_4px_24px_rgba(171,190,209,0.35)] p-6 flex flex-col gap-4">
-                <div className="flex items-center justify-between text-[14px]">
-                  <span className="text-[#717171]">{t('product_detail.ref_label')}</span>
-                  <span className="font-semibold text-[#263238]">{current.width}mm × {current.length}m</span>
-                </div>
-                <div className="flex items-center justify-between text-[14px]">
-                  <span className="text-[#717171]">{t('product_detail.unit_price_label')}</span>
-                  <span className="font-semibold text-[#263238]">{current.price.toFixed(2)} DA</span>
-                </div>
-                <div className="flex items-center justify-between text-[14px]">
-                  <span className="text-[#717171]">{t('quote.qty_label')}</span>
-                  <div className="flex items-center gap-2 bg-[#F5F7FA] border border-[#E0E0E0] rounded-lg">
-                    <button
-                      onClick={() => setQty((q) => Math.max(1, q - 1))}
-                      aria-label={t('product_detail.decrease_qty_aria')}
-                      className="w-8 h-8 flex items-center justify-center text-[#717171] hover:text-[#263238]"
-                    >
-                      −
-                    </button>
-                    <span className="w-6 text-center text-[14px] font-semibold text-[#263238]">{qty}</span>
-                    <button
-                      onClick={() => setQty((q) => q + 1)}
-                      aria-label={t('product_detail.increase_qty_aria')}
-                      className="w-8 h-8 flex items-center justify-center text-[#717171] hover:text-[#263238]"
-                    >
-                      +
-                    </button>
-                  </div>
-                </div>
-
-                <div className="border-t border-[#E0E0E0] pt-4 flex items-center justify-between">
-                  <span className="text-[15px] font-bold text-[#4CAF4F]">{t('cart.total')}</span>
-                  <span className="text-[20px] font-extrabold text-[#4CAF4F]">{total.toFixed(2)} DA</span>
-                </div>
-
-                <button
-                  onClick={() => addItem({ productId: current.id, quantity: qty, reference: current.reference, unitPrice: current.price })}
-                  className="w-full flex items-center justify-center gap-2 bg-[#4CAF4F] text-white text-[15px] font-bold py-3.5 rounded-xl hover:bg-[#43A047] shadow-[0_4px_14px_rgba(76,175,79,0.4)] transition-all"
-                >
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-                    <path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                    <path d="M16 10a4 4 0 01-8 0" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                  {t('common.add_to_cart')}
-                </button>
-              </div>
-            )}
+            {photoBlock('h-[380px]')}
+            {summaryBlock}
           </div>
         </div>
 

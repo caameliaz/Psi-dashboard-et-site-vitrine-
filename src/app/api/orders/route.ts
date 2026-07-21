@@ -6,13 +6,19 @@ import { createNotif } from '@/lib/notifications';
 import { generateOrderRef } from '@/lib/generate-ref';
 import { pushSSE } from '@/lib/sse-bus';
 import { createAudit } from '@/lib/audit';
+import { rateLimit } from '@/lib/rate-limit';
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   const guard = await requirePermission('voir_commandes');
   if (guard.error) return guard.error;
 
+  // ?from=<ISO> → ne renvoie que les commandes créées depuis cette date (perf : filtre par période)
+  const fromParam = request.nextUrl.searchParams.get('from');
+  const from = fromParam ? new Date(fromParam) : null;
+
   try {
     const orders = await prisma.order.findMany({
+      where: from && !isNaN(from.getTime()) ? { createdAt: { gte: from } } : undefined,
       include: {
         client: { include: { phones: true } },
         items: { include: { product: { include: { category: true } } } },
@@ -29,6 +35,8 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
+  const limited = rateLimit(request, 'orders', 10, 60_000); // 10 commandes / min / IP
+  if (limited) return limited;
   try {
     const body = await request.json();
     const session = await auth();
@@ -76,8 +84,8 @@ export async function POST(request: NextRequest) {
 
     const ref = await generateOrderRef(client.wilaya);
     const validItems = (body.items ?? []).filter(
-      (i: { productId?: string | null; quantity?: number }) =>
-        i.productId && i.productId !== '' && (i.quantity ?? 0) > 0
+      (i: { productId?: string | null; description?: string; quantity?: number }) =>
+        ((i.productId && i.productId !== '') || (i.description && i.description.trim() !== '')) && (i.quantity ?? 0) > 0
     );
 
     if (validItems.length === 0) {
@@ -96,10 +104,12 @@ export async function POST(request: NextRequest) {
         // Assignation : valeur fournie, sinon le créateur (utilisateur connecté)
         assignedToId: body.assignedToId ?? session?.user?.id ?? null,
         items: {
-          create: validItems.map((item: { productId: string; quantity: number; unitPrice: number }) => ({
-            productId: item.productId,
+          create: validItems.map((item: { productId?: string | null; description?: string; quantity: number; unitPrice: number; metrage?: number }) => ({
+            productId: item.productId || null,
+            description: item.productId ? null : (item.description ?? null),
             quantity: item.quantity,
             unitPrice: item.unitPrice ?? 0,
+            metrage: item.metrage ?? null,
           })),
         },
       },
@@ -109,13 +119,14 @@ export async function POST(request: NextRequest) {
     const isAdmin = body.source !== 'SITE';
     const actorName = session?.user?.name ?? session?.user?.email ?? 'Agent';
     const clientLabel = client.company ?? client.name;
+    // Commande du SITE = client externe → actorId null pour que TOUT LE MONDE reçoive la notif.
     const { notif, userIds } = await createNotif({
       type: isAdmin ? 'ACTION_AUTRE' : 'SITE_COMMANDE',
       title: isAdmin ? 'Nouvelle commande · Manuel' : 'Nouvelle commande · Site web',
       message: isAdmin
         ? `${actorName} a créé une commande pour ${clientLabel} (${order.ref ?? ''})`
         : `${clientLabel} a lancé une commande (${order.ref ?? ''})`,
-      actorId: session?.user?.id ?? null,
+      actorId: isAdmin ? (session?.user?.id ?? null) : null,
       orderId: order.id,
       selfToastMessage: isAdmin ? 'Vous avez créé une commande' : undefined,
     });

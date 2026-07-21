@@ -1,6 +1,7 @@
 import { createNotif } from './notifications';
 import { pushSSE } from './sse-bus';
 import { prisma } from './prisma';
+import { sendPushToUsers } from './push';
 
 // Notifie UNIQUEMENT l'utilisateur assigné qu'une demande lui a été confiée.
 export async function notifyAssignment({
@@ -23,11 +24,12 @@ export async function notifyAssignment({
   quoteId?: string;
 }) {
   if (!assignedToId || assignedToId === actorId) return;
+  const titre = entityType === 'commande' ? 'Commande assignée' : 'Devis assigné';
   const notif = await prisma.notification.create({
     data: {
       type: 'ACTION_AUTRE',
-      title: 'Demande assignée',
-      message: `${actorName} vous a confié ${entityType} ${ref} — ${clientLabel}`,
+      title: titre,
+      message: `${actorName} a assigné ${entityType === 'commande' ? 'la commande' : 'le devis'} ${ref} — ${clientLabel}`,
       orderId: orderId ?? null,
       quoteId: quoteId ?? null,
       reads: { create: [{ userId: assignedToId, read: false }] },
@@ -41,6 +43,8 @@ export async function notifyAssignment({
     createdAt: notif.createdAt.toISOString(),
     targetUserId: assignedToId,
   }, [assignedToId]);
+  const url = orderId || quoteId ? `/admin/requests?open=${orderId ?? quoteId}` : '/admin/dashboard';
+  sendPushToUsers([assignedToId], { title: notif.title, body: notif.message, url, tag: notif.id }).catch(() => {});
 }
 
 const STATUS_LABELS: Record<string, string> = {
@@ -86,40 +90,6 @@ export async function notifyStatusChange({
     selfToastMessage: isAnnulation
       ? `Vous avez annulé ${entityLabel}`
       : `Vous avez mis à jour ${entityLabel} → ${label}`,
-  });
-
-  pushSSE('activity', {
-    id: notif.id,
-    type: notif.type,
-    title: notif.title,
-    message: notif.message,
-    createdAt: notif.createdAt.toISOString(),
-  }, userIds);
-}
-
-export async function notifyConversion({
-  actorId,
-  actorName,
-  clientLabel,
-  quoteRef,
-  orderId,
-  quoteId,
-}: {
-  actorId: string;
-  actorName: string;
-  clientLabel: string;
-  quoteRef: string;
-  orderId?: string;
-  quoteId?: string;
-}) {
-  const { notif, userIds } = await createNotif({
-    type: 'ACTION_AUTRE',
-    title: 'Devis converti en commande',
-    message: `${actorName} a converti le devis de ${clientLabel} (${quoteRef}) en commande`,
-    actorId,
-    orderId,
-    quoteId,
-    selfToastMessage: 'Vous avez converti le devis en commande',
   });
 
   pushSSE('activity', {

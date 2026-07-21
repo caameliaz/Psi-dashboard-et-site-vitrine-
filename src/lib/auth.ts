@@ -4,13 +4,32 @@ import bcrypt from 'bcryptjs';
 import { prisma } from './prisma';
 import type { Role } from '@/types';
 
+// ── Anti brute-force login (en mémoire, par email) ───────────────────────────
+// 5 tentatives échouées → blocage 15 min. Réinitialisé à la 1ère connexion réussie.
+const LOGIN_MAX = 5;
+const LOGIN_WINDOW = 15 * 60 * 1000;
+const loginFails = new Map<string, number[]>();
+function loginBlocked(email: string): boolean {
+  const now = Date.now();
+  const arr = (loginFails.get(email) ?? []).filter((t) => now - t < LOGIN_WINDOW);
+  loginFails.set(email, arr);
+  return arr.length >= LOGIN_MAX;
+}
+function recordLoginFail(email: string) {
+  const now = Date.now();
+  const arr = (loginFails.get(email) ?? []).filter((t) => now - t < LOGIN_WINDOW);
+  arr.push(now);
+  loginFails.set(email, arr);
+}
+function loginSuccess(email: string) { loginFails.delete(email); }
+
 export const { handlers, auth, signIn, signOut } = NextAuth({
   // Fait confiance à l'hôte de la requête (localhost OU IP réseau du tel)
   // → indispensable pour se connecter depuis un mobile sur le même WiFi.
   trustHost: true,
-  // Cookies non-secure : sur mobile on est en HTTP (pas HTTPS), sinon le cookie
-  // de session serait marqué Secure et rejeté → boucle sur login.
-  useSecureCookies: false,
+  // Cookies Secure automatiquement en PROD (HTTPS) et non-secure en DEV (HTTP mobile/WiFi).
+  // → en prod les cookies de session sont protégés ; en dev on peut se connecter en HTTP.
+  useSecureCookies: process.env.NODE_ENV === 'production',
   providers: [
     Credentials({
       name: 'credentials',
@@ -22,18 +41,25 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) return null;
 
+        const email = String(credentials.email).toLowerCase();
+
+        // ── Anti brute-force : max 5 tentatives ÉCHOUÉES / 15 min par email ──
+        if (loginBlocked(email)) return null;
+
         const user = await prisma.user.findUnique({
           where: { email: credentials.email as string }
         });
 
-        if (!user || !user.active) return null;
+        if (!user || !user.active) { recordLoginFail(email); return null; }
 
         const passwordMatch = await bcrypt.compare(
           credentials.password as string,
           user.password
         );
 
-        if (!passwordMatch) return null;
+        if (!passwordMatch) { recordLoginFail(email); return null; }
+
+        loginSuccess(email); // reset le compteur en cas de succès
 
         return {
           id: user.id,

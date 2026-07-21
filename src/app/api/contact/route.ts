@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { auth } from '@/lib/auth';
+import { rateLimit } from '@/lib/rate-limit';
 
 // GET /api/contact — liste tous les messages de contact (admin + employé)
 export async function GET() {
@@ -21,6 +22,8 @@ export async function GET() {
 
 // POST /api/contact — envoyer un message de contact (public)
 export async function POST(request: NextRequest) {
+  const limited = rateLimit(request, 'contact', 5, 60_000); // 5 messages / min / IP
+  if (limited) return limited;
   try {
     const body = await request.json();
 

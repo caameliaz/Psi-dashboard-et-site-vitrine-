@@ -1,6 +1,5 @@
 import { Navbar } from '@/components/Navbar';
 import { Footer } from '@/components/Footer';
-import { CartSummary } from '@/components/CartSummary';
 import { LangProvider } from '@/lib/i18n';
 
 const WHATSAPP_NUMBER = '213770150656';
@@ -17,7 +16,6 @@ export default function PublicLayout({
       <div className="flex flex-col min-h-screen">
         <Navbar />
         <main className="flex-1">{children}</main>
-        <CartSummary />
         <Footer />
 
         {/* Bouton WhatsApp flottant */}

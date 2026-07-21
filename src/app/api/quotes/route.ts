@@ -6,13 +6,19 @@ import { createNotif } from '@/lib/notifications';
 import { generateQuoteRef } from '@/lib/generate-ref';
 import { pushSSE } from '@/lib/sse-bus';
 import { createAudit } from '@/lib/audit';
+import { rateLimit } from '@/lib/rate-limit';
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   const guard = await requirePermission('voir_commandes');
   if (guard.error) return guard.error;
 
+  // ?from=<ISO> → ne renvoie que les devis créés depuis cette date (perf : filtre par période)
+  const fromParam = request.nextUrl.searchParams.get('from');
+  const from = fromParam ? new Date(fromParam) : null;
+
   try {
     const quotes = await prisma.quote.findMany({
+      where: from && !isNaN(from.getTime()) ? { createdAt: { gte: from } } : undefined,
       include: {
         client: { include: { phones: true } },
         items: { include: { product: { include: { category: true } } } },
@@ -29,6 +35,8 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
+  const limited = rateLimit(request, 'quotes', 10, 60_000); // 10 devis / min / IP
+  if (limited) return limited;
   try {
     const body = await request.json();
     const session = await auth();
@@ -86,12 +94,14 @@ export async function POST(request: NextRequest) {
             description?: string;
             width?: number;
             length?: number;
+            metrage?: number;
             quantity: number;
           }) => ({
             productId: item.productId ?? null,
             description: item.description ?? null,
             width: item.width ?? null,
             length: item.length ?? null,
+            metrage: item.metrage ?? null,
             quantity: item.quantity,
           })),
         },
@@ -102,13 +112,15 @@ export async function POST(request: NextRequest) {
     const isAdmin = body.source !== 'SITE';
     const actorName = session?.user?.name ?? session?.user?.email ?? 'Agent';
     const clientLabel = client.company ?? client.name;
+    // Devis du SITE = client externe → actorId null pour que TOUT LE MONDE reçoive la notif
+    // (même si un admin est connecté dans un autre onglet du même navigateur).
     const { notif, userIds } = await createNotif({
       type: isAdmin ? 'ACTION_AUTRE' : 'SITE_DEVIS',
       title: isAdmin ? 'Nouveau devis · Manuel' : 'Nouveau devis · Site web',
       message: isAdmin
         ? `${actorName} a créé un devis pour ${clientLabel} (${quote.ref ?? ''})`
         : `${clientLabel} a lancé un devis (${quote.ref ?? ''})`,
-      actorId: session?.user?.id ?? null,
+      actorId: isAdmin ? (session?.user?.id ?? null) : null,
       quoteId: quote.id,
       selfToastMessage: isAdmin ? 'Vous avez créé un devis' : undefined,
     });

@@ -14,6 +14,23 @@ export default function LoginPage() {
   const [remember, setRemember] = useState(true);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  // Mode "mot de passe oublié"
+  const [forgot, setForgot] = useState(false);
+  const [forgotSent, setForgotSent] = useState(false);
+  const [forgotLoading, setForgotLoading] = useState(false);
+
+  const handleForgot = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email.trim()) { setError('Entrez votre email.'); return; }
+    setError(''); setForgotLoading(true);
+    try {
+      await fetch('/api/password-reset', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      });
+      setForgotSent(true);
+    } finally { setForgotLoading(false); }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -60,6 +77,7 @@ export default function LoginPage() {
           <p className="text-[13px] text-[#8A9BB5] mt-1">Espace administration</p>
         </div>
 
+        {!forgot ? (
         <form onSubmit={handleSubmit} className="space-y-5">
           <div>
             <label className="block text-[13px] font-semibold text-[#101828] mb-2">Email</label>
@@ -109,7 +127,38 @@ export default function LoginPage() {
           >
             {loading ? 'Connexion…' : 'Se connecter'}
           </button>
+
+          <button type="button" onClick={() => { setForgot(true); setError(''); setForgotSent(false); }}
+            className="block w-full text-center text-[12px] font-semibold text-[#4CAF4F] hover:underline">
+            Mot de passe oublié ?
+          </button>
         </form>
+        ) : forgotSent ? (
+          <div className="text-center space-y-4">
+            <div className="w-12 h-12 rounded-full bg-[#F0FDF4] flex items-center justify-center mx-auto">
+              <svg width={24} height={24} fill="none" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5" stroke="#16A34A" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            </div>
+            <p className="text-[14px] font-bold text-[#0F172A]">Demande envoyée</p>
+            <p className="text-[13px] text-[#8A9BB5] leading-relaxed">Un administrateur va réinitialiser votre mot de passe et vous transmettra le nouveau. Merci de patienter.</p>
+            <button onClick={() => { setForgot(false); setForgotSent(false); }} className="w-full py-3 rounded-xl text-[14px] font-bold text-white" style={{ background: '#4CAF4F' }}>Retour à la connexion</button>
+          </div>
+        ) : (
+          <form onSubmit={handleForgot} className="space-y-5">
+            <p className="text-[13px] text-[#8A9BB5] leading-relaxed">Entrez votre email. Un administrateur recevra votre demande et vous transmettra un nouveau mot de passe.</p>
+            <div>
+              <label className="block text-[13px] font-semibold text-[#101828] mb-2">Email</label>
+              <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="votre@email.dz" required
+                className="w-full px-4 py-3 rounded-xl border border-[#E4EBF5] text-[14px] focus:outline-none focus:border-[#4CAF4F] focus:ring-[3px] focus:ring-[#4CAF4F]/15 transition-all" />
+            </div>
+            {error && <p className="text-[13px] text-[#EF4444] bg-[#FEF2F2] rounded-xl px-4 py-3 border border-[#FECACA]">{error}</p>}
+            <button type="submit" disabled={forgotLoading} className="w-full py-3 rounded-xl text-[15px] font-bold text-white transition-colors disabled:opacity-60 hover:bg-[#43A047]" style={{ background: '#4CAF4F' }}>
+              {forgotLoading ? 'Envoi…' : 'Envoyer la demande'}
+            </button>
+            <button type="button" onClick={() => { setForgot(false); setError(''); }} className="block w-full text-center text-[12px] font-semibold text-[#8A9BB5] hover:underline">
+              Retour à la connexion
+            </button>
+          </form>
+        )}
 
         <p className="text-center text-[11px] text-[#ABBED1] mt-6">
           PSI — Paper Solutions Industry

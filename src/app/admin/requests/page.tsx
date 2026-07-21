@@ -31,8 +31,28 @@ const DB_TO_UI: Record<string, string> = {
 };
 
 const PERIODE_LABEL: Record<string, string> = {
+  '7j': '7 derniers jours', '2sem': '2 dernières semaines', '3sem': '3 dernières semaines',
   mois: 'Ce mois', '3mois': '3 derniers mois', '6mois': '6 derniers mois', annee: 'Cette année', tout: 'Tout afficher',
 };
+
+// Date de début d'une période → Date. null = tout charger.
+function periodeStartDate(periode: string): Date | null {
+  const now = new Date();
+  if (periode === '7j')    { const d = new Date(now); d.setDate(d.getDate() - 7);  return d; }
+  if (periode === '2sem')  { const d = new Date(now); d.setDate(d.getDate() - 14); return d; }
+  if (periode === '3sem')  { const d = new Date(now); d.setDate(d.getDate() - 21); return d; }
+  if (periode === 'mois')  { const d = new Date(now); d.setDate(1); d.setHours(0, 0, 0, 0); return d; }
+  if (periode === '3mois') { const d = new Date(now); d.setMonth(d.getMonth() - 3); return d; }
+  if (periode === '6mois') { const d = new Date(now); d.setMonth(d.getMonth() - 6); return d; }
+  if (periode === 'annee') { const d = new Date(now); d.setFullYear(d.getFullYear() - 1); return d; }
+  return null; // 'tout'
+}
+
+// … → ISO pour le paramètre ?from de l'API.
+function periodeToFrom(periode: string): string | null {
+  const d = periodeStartDate(periode);
+  return d ? d.toISOString() : null;
+}
 
 // UI label → DB status
 const UI_TO_DB: Record<string, string> = {
@@ -45,12 +65,16 @@ const UI_TO_DB: Record<string, string> = {
 function orderToDetail(o: any): RequestDetail {
   const phone = o.client?.phones?.find((p: any) => p.primary)?.number ?? o.client?.phones?.[0]?.number ?? '';
   const rawItems = o.items ?? [];
-  const items = rawItems.map((i: any) => ({
-    designation: i.product?.reference ?? i.product?.ref ?? '?',
-    categorie: i.product?.category?.name ?? '',
-    quantite: i.quantity ?? 0,
-    prixUnitaire: i.unitPrice ?? 0,
-  }));
+  const items = rawItems.map((i: any) => {
+    const baseName = i.product?.reference ?? i.product?.ref ?? i.description ?? '?';
+    return {
+      designation: i.metrage != null ? `${baseName} · ${i.metrage} m` : baseName,
+      categorie: i.product?.category?.name ?? '',
+      quantite: i.quantity ?? 0,
+      prixUnitaire: i.unitPrice ?? 0,
+      metrage: i.metrage ?? null,
+    };
+  });
   const produits = items.map((i: any) => `${i.designation} × ${i.quantite}`).join(', ') || '—';
   const total = items.reduce((acc: number, i: any) => acc + i.quantite * i.prixUnitaire, 0);
   return {
@@ -79,12 +103,16 @@ function orderToDetail(o: any): RequestDetail {
 function quoteToDetail(q: any): RequestDetail {
   const phone = q.client?.phones?.find((p: any) => p.primary)?.number ?? q.client?.phones?.[0]?.number ?? '';
   const rawItems = q.items ?? [];
-  const items = rawItems.map((i: any) => ({
-    designation: i.product?.reference ?? i.product?.ref ?? i.description ?? '?',
-    categorie: i.product?.category?.name ?? '',
-    quantite: i.quantity ?? 0,
-    prixUnitaire: i.unitPrice ?? 0,
-  }));
+  const items = rawItems.map((i: any) => {
+    const baseName = i.product?.reference ?? i.product?.ref ?? i.description ?? '?';
+    return {
+      designation: i.metrage != null ? `${baseName} · ${i.metrage} m` : baseName,
+      categorie: i.product?.category?.name ?? '',
+      quantite: i.quantity ?? 0,
+      prixUnitaire: i.unitPrice ?? 0,
+      metrage: i.metrage ?? null,
+    };
+  });
   const produits = items.map((i: any) => `${i.designation} × ${i.quantite}`).join(', ') || '—';
   return {
     id: q.id,
@@ -110,19 +138,32 @@ function quoteToDetail(q: any): RequestDetail {
   };
 }
 
+// Ordre logique des statuts : En attente (à traiter) en haut → Confirmé → Livré → Annulé en bas
+const STATUT_ORDER: Record<string, number> = { 'En attente': 0, 'Confirmé': 1, 'Livré': 2, 'Annulé': 3 };
+
+// Clé de date (JJ/MM/AAAA + heure) → nombre comparable (récent = grand)
+function dateKey(it: RequestDetail): number {
+  const [d, m, y] = (it.date ?? '').split('/').map(Number);
+  const [hh, mm] = (it.heure ?? '00:00').split(':').map(Number);
+  return new Date(y || 0, (m || 1) - 1, d || 1, hh || 0, mm || 0).getTime();
+}
+
 function sortItems(items: RequestDetail[]): RequestDetail[] {
   return [...items].sort((a, b) => {
-    const aA = ARCHIVED.includes(a.statut) ? 1 : 0;
-    const bA = ARCHIVED.includes(b.statut) ? 1 : 0;
-    return aA - bA;
+    // 1) par statut (En attente → Confirmé → Livré → Annulé)
+    const sa = STATUT_ORDER[a.statut] ?? 99;
+    const sb = STATUT_ORDER[b.statut] ?? 99;
+    if (sa !== sb) return sa - sb;
+    // 2) dans le même statut : le plus récent en premier
+    return dateKey(b) - dateKey(a);
   });
 }
 
 const ALL_STATUTS_COMMANDE = ['En attente', 'Confirmé', 'Livré', 'Annulé'];
 const ALL_STATUTS_DEVIS    = ['En attente', 'Confirmé', 'Livré', 'Annulé'];
 
-interface Ligne { ref: string; productId: string | null; qte: number; pu: number; }
-const emptyLigne = (): Ligne => ({ ref: '', productId: null, qte: 1, pu: 0 });
+interface Ligne { ref: string; productId: string | null; qte: number; pu: number; metrage: string; }
+const emptyLigne = (): Ligne => ({ ref: '', productId: null, qte: 1, pu: 0, metrage: '' });
 
 // Construit le payload + poste la commande/devis. Réutilisable (page requests + quick-order mobile).
 export async function submitNewRequest(
@@ -137,13 +178,13 @@ export async function submitNewRequest(
           name: item.client, company: item._entreprise || undefined, phone: item._telephone || undefined,
           email: item._email || undefined, wilaya: item._wilaya || 'Non spécifié', commune: item._commune || undefined,
         },
-        items: lignes.filter((l: any) => l.ref).map((l: any) => ({ productId: l.productId ?? undefined, quantity: l.qte, unitPrice: l.pu })),
+        items: lignes.filter((l: any) => l.ref).map((l: any) => ({ productId: l.productId ?? undefined, description: l.productId ? undefined : l.ref, quantity: l.qte, unitPrice: l.pu, metrage: l.metrage ? Number(l.metrage) : undefined })),
         assignedToId: item._assignedToId ?? undefined, source: 'AUTRE',
       }
     : {
         name: item.client, company: item._entreprise || undefined, phone: item._telephone || undefined,
         email: item._email || undefined, wilaya: item._wilaya || 'Non spécifié', commune: item._commune || undefined, message: '',
-        items: lignes.filter((l: any) => l.ref).map((l: any) => ({ productId: l.productId ?? undefined, description: l.productId ? undefined : l.ref, quantity: l.qte })),
+        items: lignes.filter((l: any) => l.ref).map((l: any) => ({ productId: l.productId ?? undefined, description: l.productId ? undefined : l.ref, quantity: l.qte, metrage: l.metrage ? Number(l.metrage) : undefined })),
         assignedToId: item._assignedToId ?? undefined, source: 'AUTRE',
       };
   const res = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
@@ -299,8 +340,9 @@ export function CreateForm({ defaultType, onClose, onSave, users, currentUserId,
             </div>
 
             {/* En-têtes colonnes */}
-            <div className="grid gap-2 mb-1" style={{ gridTemplateColumns: '1fr 64px 96px 24px' }}>
+            <div className="grid gap-2 mb-1" style={{ gridTemplateColumns: '1fr 72px 64px 96px 24px' }}>
               <span className="text-[10px] font-bold text-[#ABBED1] uppercase tracking-wide">Référence</span>
+              <span className="text-[10px] font-bold text-[#ABBED1] uppercase tracking-wide">Métrage (m)</span>
               <span className="text-[10px] font-bold text-[#ABBED1] uppercase tracking-wide">Qté</span>
               <span className="text-[10px] font-bold text-[#ABBED1] uppercase tracking-wide">Prix unit. DA</span>
               <span />
@@ -308,7 +350,7 @@ export function CreateForm({ defaultType, onClose, onSave, users, currentUserId,
 
             <div className="flex flex-col gap-2">
               {lignes.map((ligne, i) => (
-                <div key={i} className="grid gap-2 items-center" style={{ gridTemplateColumns: '1fr 64px 96px 24px' }}>
+                <div key={i} className="grid gap-2 items-center" style={{ gridTemplateColumns: '1fr 72px 64px 96px 24px' }}>
                   {/* Ref : dropdown des réfs existantes + option "Référence libre" (commande ET devis) */}
                   <RefSelect
                     value={ligne.ref}
@@ -322,6 +364,12 @@ export function CreateForm({ defaultType, onClose, onSave, users, currentUserId,
                       }
                     }}
                   />
+
+                  {/* Métrage (facultatif) */}
+                  <input type="number" inputMode="decimal" min={0} step="any" value={ligne.metrage}
+                    onChange={e => setLigne(i, { metrage: e.target.value })}
+                    placeholder="—"
+                    className={ic + ' text-center'} />
 
                   {/* Quantité */}
                   <input type="number" inputMode="numeric" min={1} value={ligne.qte}
@@ -423,9 +471,12 @@ export default function RequestsPage() {
   const fetchAll = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
     try {
+      // Perf : on ne charge que la période sélectionnée (le serveur filtre par ?from)
+      const from = periodeToFrom(filterPeriode);
+      const qs = from ? `?from=${encodeURIComponent(from)}` : '';
       const [ordRes, quoRes] = await Promise.all([
-        fetch('/api/orders'),
-        fetch('/api/quotes'),
+        fetch(`/api/orders${qs}`),
+        fetch(`/api/quotes${qs}`),
       ]);
       if (ordRes.ok) {
         const data = await ordRes.json();
@@ -438,10 +489,24 @@ export default function RequestsPage() {
     } finally {
       if (!silent) setLoading(false);
     }
-  }, []);
+  }, [filterPeriode]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
   useSSE(useCallback(() => { fetchAll(true); }, [fetchAll]));
+  // Filet de sécurité : rafraîchit la liste toutes les 15s en silence (nouveaux devis/commandes du site)
+  useEffect(() => {
+    const id = setInterval(() => fetchAll(true), 15000);
+    return () => clearInterval(id);
+  }, [fetchAll]);
+
+  // Ouverture directe d'un détail via ?open=<id> (depuis l'historique / une notif)
+  useEffect(() => {
+    const openId = new URLSearchParams(window.location.search).get('open');
+    if (!openId) return;
+    const found = [...orders, ...quotes].find((r) => r.id === openId);
+    if (found) setSelected(found);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orders, quotes]);
 
   // Liste des utilisateurs actifs (pour l'assignation "pris en charge par")
   useEffect(() => {
@@ -454,14 +519,7 @@ export default function RequestsPage() {
 
   const sorted = sortItems(rawItems);
 
-  const periodeStart = (() => {
-    const now = new Date();
-    if (filterPeriode === 'mois')   { const d = new Date(now); d.setDate(1); d.setHours(0,0,0,0); return d; }
-    if (filterPeriode === '3mois')  { const d = new Date(now); d.setMonth(d.getMonth() - 3); return d; }
-    if (filterPeriode === '6mois')  { const d = new Date(now); d.setMonth(d.getMonth() - 6); return d; }
-    if (filterPeriode === 'annee')  { const d = new Date(now); d.setFullYear(d.getFullYear() - 1); return d; }
-    return null;
-  })();
+  const periodeStart = periodeStartDate(filterPeriode);
 
   const filtered = sorted.filter((r) => {
     const q = search.toLowerCase();
@@ -660,6 +718,9 @@ export default function RequestsPage() {
             value={filterPeriode}
             onChange={setFilterPeriode}
             options={[
+              { value: '7j',    label: '7 derniers jours' },
+              { value: '2sem',  label: '2 dernières semaines' },
+              { value: '3sem',  label: '3 dernières semaines' },
               { value: 'mois',  label: 'Ce mois' },
               { value: '3mois', label: '3 derniers mois' },
               { value: '6mois', label: '6 derniers mois' },

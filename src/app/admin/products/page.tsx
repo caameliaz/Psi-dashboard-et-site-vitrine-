@@ -53,6 +53,7 @@ interface Ref {
 interface Cat {
   id: string;
   name: string;
+  prefix: string | null;
   photo: string | null;
   description: string | null;
   count: number;
@@ -162,8 +163,8 @@ function DeleteModal({ label, onDeactivate, onDelete, onClose }: {
 }
 
 // ── Modale "Nouveau produit" — crée une catégorie + ses références ─────────
-interface NewCatForm { name: string; photo: string; description: string; refs: RefForm[]; }
-const emptyNewCatForm: NewCatForm = { name: '', photo: '', description: '', refs: [{ ...emptyRefForm }] };
+interface NewCatForm { name: string; prefix: string; photo: string; description: string; refs: RefForm[]; }
+const emptyNewCatForm: NewCatForm = { name: '', prefix: '', photo: '', description: '', refs: [{ ...emptyRefForm }] };
 
 function NewCategoryModal({ onClose, onCreated }: { onClose: () => void; onCreated: (catId: string) => void }) {
   const [form, setForm] = useState<NewCatForm>(emptyNewCatForm);
@@ -189,7 +190,7 @@ function NewCategoryModal({ onClose, onCreated }: { onClose: () => void; onCreat
     try {
       const catRes = await fetch('/api/categories', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: form.name.trim(), photo: form.photo || null, description: form.description.trim() || null }),
+        body: JSON.stringify({ name: form.name.trim(), prefix: form.prefix.trim() || null, photo: form.photo || null, description: form.description.trim() || null }),
       });
       if (!catRes.ok) {
         const err = await catRes.json().catch(() => ({}));
@@ -202,7 +203,8 @@ function NewCategoryModal({ onClose, onCreated }: { onClose: () => void; onCreat
       const refResults = await Promise.all(validRefs.map((r) => fetch('/api/products', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          reference: `${r.width.trim()}/${r.length.trim()}`,
+          // Préfixe défini → réf auto-générée côté API (PTT-001…). Sinon = dimensions.
+          reference: form.prefix.trim() ? undefined : `${r.width.trim()}/${r.length.trim()}`,
           name: r.name.trim() || null,
           width: Number(r.width), length: Number(r.length),
           metrage: r.metrage.trim() ? Number(r.metrage) : null,
@@ -247,6 +249,12 @@ function NewCategoryModal({ onClose, onCreated }: { onClose: () => void; onCreat
         <div>
           <label className="block text-[12px] font-semibold text-[#374151] mb-1.5">Nom de la catégorie</label>
           <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="ex: Papier thermique standard" className={inputClass} />
+        </div>
+
+        <div>
+          <label className="block text-[12px] font-semibold text-[#374151] mb-1.5">Préfixe des références <span className="text-[#ABBED1] font-normal">(facultatif)</span></label>
+          <input value={form.prefix} onChange={(e) => setForm({ ...form, prefix: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '') })} placeholder="ex: PTT" maxLength={6} className={inputClass} />
+          <p className="text-[11px] text-[#8A9BB5] mt-1">Si défini, chaque référence reçoit un code auto : {form.prefix.trim() ? `${form.prefix.trim()}-001, ${form.prefix.trim()}-002…` : 'PTT-001, PTT-002…'}</p>
         </div>
 
         <div>
@@ -305,13 +313,14 @@ export default function ProductsPage() {
 
   const [editingDesc, setEditingDesc] = useState(false);
   const [descDraft, setDescDraft] = useState('');
+  const [prefixDraft, setPrefixDraft] = useState('');
   const catPhotoRef = useRef<HTMLInputElement>(null);
 
   const fetchCategories = useCallback(async () => {
     const res = await fetch('/api/categories');
     if (res.ok) {
       const data = await res.json();
-      const list: Cat[] = data.map((c: any) => ({ id: c.id, name: c.name, photo: c.photo ?? null, description: c.description ?? null, count: c._count?.products ?? 0 }));
+      const list: Cat[] = data.map((c: any) => ({ id: c.id, name: c.name, prefix: c.prefix ?? null, photo: c.photo ?? null, description: c.description ?? null, count: c._count?.products ?? 0 }));
       setCatList(list);
       setSelectedCatId((cur) => cur && list.some((c) => c.id === cur) ? cur : (list[0]?.id ?? null));
     }
@@ -360,7 +369,8 @@ export default function ProductsPage() {
     const res = await fetch(`/api/products/${editRef.id}`, {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        reference: `${editRefForm.width.trim()}/${editRefForm.length.trim()}`,
+        // Catégorie avec préfixe → on ne touche PAS au code auto (PTT-001). Sinon réf = dimensions.
+        ...(selectedCat?.prefix ? {} : { reference: `${editRefForm.width.trim()}/${editRefForm.length.trim()}` }),
         name: editRefForm.name.trim() || null,
         width: Number(editRefForm.width), length: Number(editRefForm.length),
         metrage: editRefForm.metrage.trim() ? Number(editRefForm.metrage) : null,
@@ -381,8 +391,11 @@ export default function ProductsPage() {
     const res = await fetch('/api/products', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        reference: `${newRefForm.width.trim()}/${newRefForm.length.trim()}`,
+        // Préfixe défini → réf auto-générée côté API. Sinon = dimensions.
+        reference: selectedCat?.prefix ? undefined : `${newRefForm.width.trim()}/${newRefForm.length.trim()}`,
+        name: newRefForm.name.trim() || null,
         width: Number(newRefForm.width), length: Number(newRefForm.length),
+        metrage: newRefForm.metrage.trim() ? Number(newRefForm.metrage) : null,
         usage: newRefForm.usage.trim(), price: Number(newRefForm.price) || 0, categoryId: selectedCatId, active: true,
       }),
     });
@@ -420,12 +433,12 @@ export default function ProductsPage() {
     setDeleteRef(null);
   };
 
-  const startEditDesc = () => { setDescDraft(selectedCat?.description ?? ''); setEditingDesc(true); };
+  const startEditDesc = () => { setDescDraft(selectedCat?.description ?? ''); setPrefixDraft(selectedCat?.prefix ?? ''); setEditingDesc(true); };
   const saveDesc = async () => {
     if (!selectedCatId) return;
     const res = await fetch(`/api/categories/${selectedCatId}`, {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ description: descDraft.trim() || null }),
+      body: JSON.stringify({ description: descDraft.trim() || null, prefix: prefixDraft.trim() || null }),
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
@@ -536,7 +549,12 @@ export default function ProductsPage() {
           <div className="flex flex-col gap-5">
             <div className="rounded-2xl border border-[#E2E8F0] p-5 bg-white">
               <div className="flex items-center justify-between mb-2">
-                <h2 className="text-[16px] font-bold text-[#0F172A]">{selectedCat.name}</h2>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-[16px] font-bold text-[#0F172A]">{selectedCat.name}</h2>
+                  {selectedCat.prefix && (
+                    <span className="px-2 py-0.5 rounded-md bg-[#EEF2FF] text-[#4F46E5] text-[11px] font-bold tracking-wide">{selectedCat.prefix}</span>
+                  )}
+                </div>
                 {canEdit && !editingDesc && (
                   <button onClick={startEditDesc} className="flex items-center gap-1 text-[12px] font-bold text-[#4CAF4F] hover:text-[#388E3C]">
                     <IconPencil /> Modifier
@@ -545,6 +563,10 @@ export default function ProductsPage() {
               </div>
               {editingDesc ? (
                 <div className="flex flex-col gap-2">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-[#374151] mb-1">Préfixe des références <span className="text-[#ABBED1] font-normal">(facultatif — ex: PTT)</span></label>
+                    <input value={prefixDraft} onChange={(e) => setPrefixDraft(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))} maxLength={6} placeholder="ex: PTT" className={inputClass} />
+                  </div>
                   <textarea value={descDraft} onChange={(e) => setDescDraft(e.target.value)} rows={4} className={inputClass + ' resize-none'} />
                   <div className="flex gap-2">
                     <button onClick={() => setEditingDesc(false)} className="flex-1 px-3 py-2 rounded-lg border border-[#E2E8F0] text-[12px] font-semibold text-[#374151] hover:bg-[#F8FAFC]">Annuler</button>
@@ -578,8 +600,14 @@ export default function ProductsPage() {
                   {filteredRefs.map((r, i) => (
                     <div key={r.id} className={`flex items-center gap-3 px-4 py-3 ${i > 0 ? 'border-t border-[#E2E8F0]' : ''}`} style={{ opacity: r.active ? 1 : 0.55 }}>
                       <div className="flex-1 min-w-0">
-                        <p className="text-[13px] font-bold text-[#0F172A]">{r.width}mm × {r.length}m</p>
-                        <p className="text-[12px] text-[#8A9BB5] truncate">{r.usage || '—'}</p>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          {/* Code référence (auto PTT-001 si préfixe, sinon dimensions) */}
+                          <span className="text-[11px] font-bold px-2 py-0.5 rounded-md bg-[#EEF2FF] text-[#4F46E5] tabular-nums">{r.reference}</span>
+                          <p className="text-[13px] font-bold text-[#0F172A] truncate">{r.name || `${r.width}mm × ${r.length}m`}</p>
+                        </div>
+                        <p className="text-[12px] text-[#8A9BB5] truncate mt-0.5">
+                          {r.width}mm × {r.length}m{r.metrage != null ? ` · ${r.metrage} m` : ''}{r.usage ? ` — ${r.usage}` : ''}
+                        </p>
                       </div>
                       <p className="text-[13px] font-semibold text-[#374151] flex-shrink-0 tabular-nums">{r.price.toLocaleString('fr-FR')} DA</p>
                       {canEdit && <Toggle active={r.active} onToggle={() => toggleRef(r)} />}

@@ -37,6 +37,7 @@ export async function GET(request: NextRequest) {
       select: {
         id: true, name: true, email: true, role: true,
         active: true, phone: true, photo: true, permissions: true, createdAt: true,
+        resetRequested: true,
       },
       orderBy: { createdAt: 'desc' },
     });

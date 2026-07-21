@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { useSSEContext } from '@/lib/sse-context';
 import { AdminSelect } from '@/components/ui/AdminSelect';
@@ -16,6 +17,19 @@ interface Notif {
   message: string;
   createdAt: string;
   read: boolean;
+  orderId?: string | null;
+  quoteId?: string | null;
+  clientId?: string | null;
+  link?: string | null;
+}
+
+// Cible de navigation d'une notif (null = non cliquable)
+function notifTarget(n: Notif): string | null {
+  if (n.orderId) return `/admin/requests?open=${n.orderId}`;
+  if (n.quoteId) return `/admin/requests?open=${n.quoteId}`;
+  if (n.clientId) return `/admin/clients?open=${n.clientId}`;
+  if (n.link) return n.link;
+  return null;
 }
 
 interface Toast {
@@ -62,6 +76,10 @@ function mapDbNotif(n: any): Notif {
     message: n.message ?? '',
     createdAt: n.createdAt,
     read: n.read ?? false,
+    orderId: n.orderId ?? null,
+    quoteId: n.quoteId ?? null,
+    clientId: n.clientId ?? null,
+    link: n.link ?? null,
   };
 }
 
@@ -135,7 +153,7 @@ function extractActor(msg: string): string | null {
 }
 
 /* ── Carte notification ── */
-function NotifCard({ n, onRead }: { n: Notif; onRead: (id: string) => void }) {
+function NotifCard({ n, onRead, onOpen }: { n: Notif; onRead: (id: string) => void; onOpen: (n: Notif) => void }) {
   const cat = getCategory(n);
   const cfg = CAT_CONFIG[cat];
   return (
@@ -145,7 +163,7 @@ function NotifCard({ n, onRead }: { n: Notif; onRead: (id: string) => void }) {
         borderColor:     n.read ? '#E2E8F0' : '#93C5FD',
         backgroundColor: '#ffffff',
       }}
-      onClick={() => !n.read && onRead(n.id)}
+      onClick={() => { if (!n.read) onRead(n.id); onOpen(n); }}
     >
       <div className="flex items-center justify-between gap-2 mb-1.5">
         <p className="text-[12px] font-bold text-[#0F172A] leading-snug truncate flex-1">{n.title}</p>
@@ -180,7 +198,14 @@ export function TopBar() {
   const notifIds = useRef(new Set<string>());
 
   const { subscribe } = useSSEContext();
+  const router = useRouter();
   const unread = notifs.filter((n) => !n.read).length;
+
+  // Clic sur une notif → navigue vers sa cible (commande/devis/fiche client/dashboard) + ferme le panneau
+  const openNotif = (n: Notif) => {
+    const target = notifTarget(n);
+    if (target) { setOpen(false); router.push(target); }
+  };
 
   const actors = useMemo(() => {
     const set = new Set<string>();
@@ -222,44 +247,54 @@ export function TopBar() {
     });
   }, [notifs, filterType, filterUser]);
 
-  const fetchNotifs = useCallback(async () => {
+  // Rafraîchit les notifs. Si showToast=true, affiche un toast pour chaque NOUVELLE notif.
+  // firstLoad=true : premier chargement → on enregistre les ids sans toaster (évite un flood au démarrage).
+  const refreshNotifs = useCallback(async (showToast: boolean, firstLoad = false) => {
     try {
       const res = await fetch('/api/notifications');
       if (!res.ok) return;
       const data = await res.json();
-      const mapped = data.map(mapDbNotif);
-      mapped.forEach((n: Notif) => notifIds.current.add(n.id));
-      setNotifs(mapped);
-    } catch { /* silently ignore */ }
-  }, []);
-
-  useEffect(() => {
-    return subscribe(async (payload) => {
-      // Toast simple pour l'acteur lui-même : jamais persisté, jamais dans la sidebar,
-      // pas de refetch de /api/notifications.
-      if (payload.event === 'self-toast') {
-        const n = payload.notif;
-        if (n) setToasts((prev) => [...prev, { id: n.id, type: n.type as NotifType, title: n.title, message: n.message }]);
-        return;
-      }
-      try {
-        const res = await fetch('/api/notifications');
-        if (!res.ok) return;
-        const data = await res.json();
-        const mapped: Notif[] = data.map(mapDbNotif);
-        // Toast uniquement pour les notifs vraiment reçues par cet utilisateur
+      const mapped: Notif[] = data.map(mapDbNotif);
+      if (firstLoad) {
+        mapped.forEach((n) => notifIds.current.add(n.id));
+      } else if (showToast) {
         mapped
           .filter((n) => !notifIds.current.has(n.id))
           .forEach((n) => {
             notifIds.current.add(n.id);
             setToasts((prev) => [...prev, { id: n.id, type: n.type, title: n.title, message: n.message }]);
           });
-        setNotifs(mapped);
-      } catch { /* silently ignore */ }
-    });
-  }, [subscribe]);
+      } else {
+        mapped.forEach((n) => notifIds.current.add(n.id));
+      }
+      setNotifs(mapped);
+    } catch { /* silently ignore */ }
+  }, []);
 
-  useEffect(() => { fetchNotifs(); }, [fetchNotifs]);
+  const fetchNotifs = useCallback(() => refreshNotifs(false), [refreshNotifs]);
+
+  // Temps réel instantané via SSE (quand il fonctionne)
+  useEffect(() => {
+    return subscribe(async (payload) => {
+      // Toast simple pour l'acteur lui-même : jamais persisté, pas de refetch.
+      if (payload.event === 'self-toast') {
+        const n = payload.notif;
+        if (n) setToasts((prev) => [...prev, { id: n.id, type: n.type as NotifType, title: n.title, message: n.message }]);
+        return;
+      }
+      refreshNotifs(true); // fetch + toast des nouvelles
+    });
+  }, [subscribe, refreshNotifs]);
+
+  // Premier chargement (sans toaster l'existant)
+  useEffect(() => { refreshNotifs(false, true); }, [refreshNotifs]);
+
+  // Filet de sécurité : polling toutes les 15s → garantit la réception des notifs
+  // (ex: nouvelle commande/devis depuis le SITE) même si le SSE ne pousse pas (prod serverless).
+  useEffect(() => {
+    const id = setInterval(() => refreshNotifs(true), 15000);
+    return () => clearInterval(id);
+  }, [refreshNotifs]);
 
   // Exposer le count et le toggle au store (pour Sidebar)
   useEffect(() => { notifBell.setCount(unread); }, [unread]);
@@ -359,7 +394,7 @@ export function TopBar() {
           {filtered.length === 0 ? (
             <p className="text-center text-[13px] text-[#ABBED1] py-16">Aucune notification</p>
           ) : (
-            filtered.map((n) => <NotifCard key={n.id} n={n} onRead={markRead} />)
+            filtered.map((n) => <NotifCard key={n.id} n={n} onRead={markRead} onOpen={openNotif} />)
           )}
         </div>
 

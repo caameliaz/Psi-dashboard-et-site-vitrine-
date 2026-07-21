@@ -13,8 +13,8 @@ const PHONE = '+213770150656';
 const EMAIL = 'Contact@psi.dz';
 
 interface ProdOption { id: string; reference: string; width: number; length: number; }
-interface QuoteLine { dimChoice: string; customDim: string; quantity: string; }
-const emptyLine = (): QuoteLine => ({ dimChoice: '', customDim: '', quantity: '' });
+interface QuoteLine { dimChoice: string; customDim: string; quantity: string; metrage: string; }
+const emptyLine = (): QuoteLine => ({ dimChoice: '', customDim: '', quantity: '', metrage: '' });
 
 export default function QuotePage() {
   const { t } = useTranslation();
@@ -43,7 +43,7 @@ export default function QuotePage() {
       if (cartItems.length > 0) {
         const fromCart = cartItems.map((ci) => {
           const prod = data.find(p => p.reference === ci.reference);
-          return { dimChoice: prod?.id ?? '', customDim: '', quantity: String(ci.quantity) };
+          return { dimChoice: prod?.id ?? '', customDim: '', quantity: String(ci.quantity), metrage: '' };
         });
         setLines(fromCart.length > 0 ? fromCart : [emptyLine()]);
       }
@@ -61,12 +61,13 @@ export default function QuotePage() {
     try {
       const items = lines.map((l) => {
         const qty = l.quantity ? Number(l.quantity) : 1;
+        const metrage = l.metrage ? Number(l.metrage) : undefined; // longueur en mètres (facultatif)
         if (l.dimChoice === 'autre') {
-          return { description: l.customDim.trim() || t('common.custom_dim'), quantity: qty };
+          return { description: l.customDim.trim() || t('common.custom_dim'), quantity: qty, metrage };
         }
         if (l.dimChoice) {
           const prod = products.find(p => p.id === l.dimChoice);
-          if (prod) return { productId: prod.id, width: prod.width, length: prod.length, quantity: qty };
+          if (prod) return { productId: prod.id, width: prod.width, length: prod.length, quantity: qty, metrage };
         }
         return null;
       }).filter((x): x is NonNullable<typeof x> => x !== null);
@@ -93,6 +94,9 @@ export default function QuotePage() {
       }
       clearCart();
       setSubmitted(true);
+    } catch {
+      // Erreur réseau (serveur injoignable) → message propre au lieu d'un crash
+      setSubmitError(t('quote.error'));
     } finally {
       setLoading(false);
     }
@@ -196,7 +200,7 @@ export default function QuotePage() {
                 <div className="flex flex-col gap-4">
                   {lines.map((line, i) => (
                     <div key={i} className="rounded-xl border border-[#F0F4F8] p-4 bg-[#FAFCFF]">
-                      <div className="grid grid-cols-1 sm:grid-cols-[1fr_120px_auto] gap-3 items-end">
+                      <div className="grid grid-cols-1 sm:grid-cols-[1fr_110px_110px_auto] gap-3 items-end">
                         <div>
                           <label className={labelClass}>{t('quote.dim_label')}</label>
                           <select value={line.dimChoice} onChange={(e) => setLine(i, { dimChoice: e.target.value })} className={inputClass}>
@@ -206,6 +210,12 @@ export default function QuotePage() {
                             ))}
                             <option value="autre">{t('quote.dim_other')}</option>
                           </select>
+                        </div>
+                        <div>
+                          <label className={labelClass}>{t('quote.metrage_short')}</label>
+                          <input type="number" min="0" step="any" inputMode="decimal" value={line.metrage}
+                            onChange={(e) => setLine(i, { metrage: e.target.value })}
+                            placeholder={t('quote.metrage_ph')} className={inputClass} />
                         </div>
                         <div>
                           <label className={labelClass}>{t('quote.qty_label')}</label>
@@ -236,14 +246,13 @@ export default function QuotePage() {
               </div>
 
               <div>
-                <label className={labelClass}>{t('quote.message_label')}</label>
+                <label className={labelClass}>{t('quote.message_label')} <span className="text-[#ABBED1] font-normal">({t('quote.optional')})</span></label>
                 <textarea
                   name="message"
                   value={formData.message}
                   onChange={handleChange}
                   placeholder={t('quote.message_ph')}
                   rows={4}
-                  required
                   className={inputClass + ' resize-none'}
                 />
               </div>

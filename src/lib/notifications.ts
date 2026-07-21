@@ -1,5 +1,6 @@
 import { prisma } from './prisma';
 import { pushSSE } from './sse-bus';
+import { sendPushToUsers } from './push';
 
 type NotifType = 'SITE_COMMANDE' | 'SITE_DEVIS' | 'ACTION_PERSO' | 'ACTION_AUTRE' | 'ANNULATION';
 
@@ -10,6 +11,8 @@ export async function createNotif({
   actorId,
   orderId,
   quoteId,
+  clientId,
+  link,
   assignedToId,
   adminOnly,
   actorOnly,
@@ -21,6 +24,8 @@ export async function createNotif({
   actorId?: string | null;
   orderId?: string;
   quoteId?: string;
+  clientId?: string;
+  link?: string;
   assignedToId?: string | null;
   adminOnly?: boolean;
   actorOnly?: boolean;
@@ -91,6 +96,8 @@ export async function createNotif({
       message,
       orderId: orderId ?? null,
       quoteId: quoteId ?? null,
+      clientId: clientId ?? null,
+      link: link ?? null,
       reads: {
         create: uniqueIds.map((u) => ({ userId: u.id, read: false })),
       },
@@ -106,6 +113,13 @@ export async function createNotif({
       createdAt: notif.createdAt.toISOString(),
     }, [actorId]);
   }
+
+  // Notification système (Web Push) aux mêmes destinataires — non bloquant
+  const pushUrl = orderId || quoteId ? `/admin/requests?open=${orderId ?? quoteId}`
+    : clientId ? `/admin/clients?open=${clientId}`
+    : link ?? '/admin/dashboard';
+  sendPushToUsers(uniqueIds.map((u) => u.id), { title, body: message, url: pushUrl, tag: notif.id })
+    .catch(() => {});
 
   return { notif, userIds: uniqueIds.map((u) => u.id) };
 }
