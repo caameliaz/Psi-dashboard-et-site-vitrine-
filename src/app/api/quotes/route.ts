@@ -112,13 +112,15 @@ export async function POST(request: NextRequest) {
     const isAdmin = body.source !== 'SITE';
     const actorName = session?.user?.name ?? session?.user?.email ?? 'Agent';
     const clientLabel = client.company ?? client.name;
+    // Devis du SITE = client externe → actorId null pour que TOUT LE MONDE reçoive la notif
+    // (même si un admin est connecté dans un autre onglet du même navigateur).
     const { notif, userIds } = await createNotif({
       type: isAdmin ? 'ACTION_AUTRE' : 'SITE_DEVIS',
       title: isAdmin ? 'Nouveau devis · Manuel' : 'Nouveau devis · Site web',
       message: isAdmin
         ? `${actorName} a créé un devis pour ${clientLabel} (${quote.ref ?? ''})`
         : `${clientLabel} a lancé un devis (${quote.ref ?? ''})`,
-      actorId: session?.user?.id ?? null,
+      actorId: isAdmin ? (session?.user?.id ?? null) : null,
       quoteId: quote.id,
       selfToastMessage: isAdmin ? 'Vous avez créé un devis' : undefined,
     });

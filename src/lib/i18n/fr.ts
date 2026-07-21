@@ -124,6 +124,7 @@ export const fr = {
     metrage_label: 'Métrage (m) — facultatif',
     metrage_short: 'Métrage (m)',
     metrage_ph: 'Ex : 80',
+    optional: 'facultatif',
     add_product: 'Ajouter un produit',
     message_label: 'Message complémentaire',
     message_ph: 'Décrivez vos besoins, conditions de livraison, délais...',

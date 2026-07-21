@@ -184,22 +184,13 @@ Ce qui est neuf ou corrigé récemment est signalé par ⚠️ / **(nouveau)**.
 
 ---
 
+
+
+
+
+
 # ══════════════ BACK-OFFICE ══════════════
 
-
-## 🏠 8. Dashboard (`/admin/dashboard`)
-6. ⚡ Faire une commande depuis le site → le dashboard se met à jour **tout seul** (SSE temps réel, sans rafraîchir)
-7. ⚡ **Aucun clignotement** (nouveau) : la mise à jour temps réel ne fait **pas** réapparaître les "Chargement…" — les chiffres se mettent à jour en douceur
-
-**Nouvelles stats (P2) :**
-8. Carte **Commandes ce mois** → nombre + **évolution %** vs mois précédent (▲ vert / ▼ rouge)
-9. Carte **Devis en attente** → nombre + **montant estimé** (somme des prix proposés)
-10. Graphique **Commandes par wilaya** (barres, top 10) — se charge à l'ouverture ("Chargement du graphique…" bref)
-11. Graphique **Évolution sur 6 mois** (courbe commandes vert + devis violet)
-12. Tableau **Employés actifs ce mois** (barres par employé, trié)
-13. ⚡ **Perf** : ces graphiques (Recharts) ne se chargent **que** sur le dashboard — le site public et les autres pages admin ne sont pas alourdis
-
----
 
 ## 📋 9. Commandes & devis (`/admin/requests`)
 

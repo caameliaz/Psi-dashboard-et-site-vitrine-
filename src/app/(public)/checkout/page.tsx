@@ -63,6 +63,9 @@ export default function CheckoutPage() {
       }
       clearCart();
       setSubmitted(true);
+    } catch {
+      // Erreur réseau (serveur injoignable) → message propre au lieu d'un crash
+      setSubmitError(t('checkout.error'));
     } finally {
       setLoading(false);
     }

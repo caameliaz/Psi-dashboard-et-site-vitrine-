@@ -296,6 +296,11 @@ export default function DashboardPage() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
   useSSE(useCallback(() => { fetchData(true); }, [fetchData]));
+  // Filet de sécurité : rafraîchit les stats toutes les 15s en silence (marche même si le SSE ne pousse pas)
+  useEffect(() => {
+    const id = setInterval(() => fetchData(true), 15000);
+    return () => clearInterval(id);
+  }, [fetchData]);
 
   const handleSort = (key: SortKey) => {
     if (sortKey === key) setSortAsc((a) => !a);
@@ -361,7 +366,6 @@ export default function DashboardPage() {
               Objectifs
             </button>
           )}
-          <div className="hidden md:block"><BellButton /></div>
         </div>
       </div>
 
@@ -527,30 +531,6 @@ export default function DashboardPage() {
         <WilayaBarChart data={topWilayas} />
         <TrendLineChart data={serie6Mois} />
       </div>
-
-      {/* Dashboard des employés (admin) : nb commandes + devis LIVRÉS gérés */}
-      {isAdmin && (
-        <div className="bg-white rounded-2xl border border-[#E4EBF5] p-5 shadow-sm mt-8">
-          <h3 className="text-[14px] font-bold text-[#0F172A] mb-1">Employés ce mois</h3>
-          <p className="text-[11px] text-[#8A9BB5] mb-4">Commandes et devis livrés gérés (en tant que commercial)</p>
-          {employesLivres.length === 0 ? (
-            <p className="text-[12px] text-[#8A9BB5] py-4 text-center">Aucune vente livrée ce mois</p>
-          ) : (
-            <div className="flex flex-col gap-2.5">
-              {employesLivres.map((e, i) => (
-                <div key={i} className="flex items-center gap-3">
-                  <span className="text-[13px] font-semibold text-[#374151] w-40 truncate">{e.name}</span>
-                  <div className="flex items-center gap-2 flex-1">
-                    <span className="text-[11px] font-bold px-2 py-0.5 rounded-md bg-[#F0FDF4] text-[#166534] border border-[#BBF7D0]">{e.commandes} cmd</span>
-                    <span className="text-[11px] font-bold px-2 py-0.5 rounded-md bg-[#F5F3FF] text-[#5B21B6] border border-[#DDD6FE]">{e.devis} devis</span>
-                  </div>
-                  <span className="text-[13px] font-bold text-[#0F172A] tabular-nums w-8 text-right">{e.total}</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
 
       {/* Tableau dernières demandes */}
       <div className="bg-white rounded-2xl border border-[#E2E8F0] overflow-hidden shadow-sm mt-8">

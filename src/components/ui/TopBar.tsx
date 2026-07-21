@@ -247,44 +247,54 @@ export function TopBar() {
     });
   }, [notifs, filterType, filterUser]);
 
-  const fetchNotifs = useCallback(async () => {
+  // Rafraîchit les notifs. Si showToast=true, affiche un toast pour chaque NOUVELLE notif.
+  // firstLoad=true : premier chargement → on enregistre les ids sans toaster (évite un flood au démarrage).
+  const refreshNotifs = useCallback(async (showToast: boolean, firstLoad = false) => {
     try {
       const res = await fetch('/api/notifications');
       if (!res.ok) return;
       const data = await res.json();
-      const mapped = data.map(mapDbNotif);
-      mapped.forEach((n: Notif) => notifIds.current.add(n.id));
-      setNotifs(mapped);
-    } catch { /* silently ignore */ }
-  }, []);
-
-  useEffect(() => {
-    return subscribe(async (payload) => {
-      // Toast simple pour l'acteur lui-même : jamais persisté, jamais dans la sidebar,
-      // pas de refetch de /api/notifications.
-      if (payload.event === 'self-toast') {
-        const n = payload.notif;
-        if (n) setToasts((prev) => [...prev, { id: n.id, type: n.type as NotifType, title: n.title, message: n.message }]);
-        return;
-      }
-      try {
-        const res = await fetch('/api/notifications');
-        if (!res.ok) return;
-        const data = await res.json();
-        const mapped: Notif[] = data.map(mapDbNotif);
-        // Toast uniquement pour les notifs vraiment reçues par cet utilisateur
+      const mapped: Notif[] = data.map(mapDbNotif);
+      if (firstLoad) {
+        mapped.forEach((n) => notifIds.current.add(n.id));
+      } else if (showToast) {
         mapped
           .filter((n) => !notifIds.current.has(n.id))
           .forEach((n) => {
             notifIds.current.add(n.id);
             setToasts((prev) => [...prev, { id: n.id, type: n.type, title: n.title, message: n.message }]);
           });
-        setNotifs(mapped);
-      } catch { /* silently ignore */ }
-    });
-  }, [subscribe]);
+      } else {
+        mapped.forEach((n) => notifIds.current.add(n.id));
+      }
+      setNotifs(mapped);
+    } catch { /* silently ignore */ }
+  }, []);
 
-  useEffect(() => { fetchNotifs(); }, [fetchNotifs]);
+  const fetchNotifs = useCallback(() => refreshNotifs(false), [refreshNotifs]);
+
+  // Temps réel instantané via SSE (quand il fonctionne)
+  useEffect(() => {
+    return subscribe(async (payload) => {
+      // Toast simple pour l'acteur lui-même : jamais persisté, pas de refetch.
+      if (payload.event === 'self-toast') {
+        const n = payload.notif;
+        if (n) setToasts((prev) => [...prev, { id: n.id, type: n.type as NotifType, title: n.title, message: n.message }]);
+        return;
+      }
+      refreshNotifs(true); // fetch + toast des nouvelles
+    });
+  }, [subscribe, refreshNotifs]);
+
+  // Premier chargement (sans toaster l'existant)
+  useEffect(() => { refreshNotifs(false, true); }, [refreshNotifs]);
+
+  // Filet de sécurité : polling toutes les 15s → garantit la réception des notifs
+  // (ex: nouvelle commande/devis depuis le SITE) même si le SSE ne pousse pas (prod serverless).
+  useEffect(() => {
+    const id = setInterval(() => refreshNotifs(true), 15000);
+    return () => clearInterval(id);
+  }, [refreshNotifs]);
 
   // Exposer le count et le toggle au store (pour Sidebar)
   useEffect(() => { notifBell.setCount(unread); }, [unread]);

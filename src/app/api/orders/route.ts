@@ -119,13 +119,14 @@ export async function POST(request: NextRequest) {
     const isAdmin = body.source !== 'SITE';
     const actorName = session?.user?.name ?? session?.user?.email ?? 'Agent';
     const clientLabel = client.company ?? client.name;
+    // Commande du SITE = client externe → actorId null pour que TOUT LE MONDE reçoive la notif.
     const { notif, userIds } = await createNotif({
       type: isAdmin ? 'ACTION_AUTRE' : 'SITE_COMMANDE',
       title: isAdmin ? 'Nouvelle commande · Manuel' : 'Nouvelle commande · Site web',
       message: isAdmin
         ? `${actorName} a créé une commande pour ${clientLabel} (${order.ref ?? ''})`
         : `${clientLabel} a lancé une commande (${order.ref ?? ''})`,
-      actorId: session?.user?.id ?? null,
+      actorId: isAdmin ? (session?.user?.id ?? null) : null,
       orderId: order.id,
       selfToastMessage: isAdmin ? 'Vous avez créé une commande' : undefined,
     });

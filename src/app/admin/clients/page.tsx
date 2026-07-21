@@ -648,6 +648,11 @@ export default function ClientsPage() {
   useEffect(() => { fetchSectors(); }, [fetchSectors]);
   // Temps réel : rafraîchit la liste + l'historique client en silence sur événement SSE
   useSSE(useCallback(() => { fetchClients(true); }, [fetchClients]));
+  // Filet de sécurité : rafraîchit toutes les 15s en silence
+  useEffect(() => {
+    const id = setInterval(() => fetchClients(true), 15000);
+    return () => clearInterval(id);
+  }, [fetchClients]);
 
   // Ouverture directe d'une fiche via ?open=<clientId> (depuis l'historique / une notif)
   // — inclut les clients désactivés (?inactifs=true) pour voir la justif.

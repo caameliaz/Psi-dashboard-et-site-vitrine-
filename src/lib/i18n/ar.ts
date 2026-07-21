@@ -126,6 +126,7 @@ export const ar: Translations = {
     metrage_label: 'الطول (م) — اختياري',
     metrage_short: 'الطول (م)',
     metrage_ph: 'مثال: 80',
+    optional: 'اختياري',
     add_product: 'إضافة منتج',
     message_label: 'ملاحظات إضافية',
     message_ph: 'صف احتياجاتك، شروط التوصيل، المواعيد...',

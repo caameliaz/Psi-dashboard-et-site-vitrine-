@@ -138,11 +138,24 @@ function quoteToDetail(q: any): RequestDetail {
   };
 }
 
+// Ordre logique des statuts : En attente (à traiter) en haut → Confirmé → Livré → Annulé en bas
+const STATUT_ORDER: Record<string, number> = { 'En attente': 0, 'Confirmé': 1, 'Livré': 2, 'Annulé': 3 };
+
+// Clé de date (JJ/MM/AAAA + heure) → nombre comparable (récent = grand)
+function dateKey(it: RequestDetail): number {
+  const [d, m, y] = (it.date ?? '').split('/').map(Number);
+  const [hh, mm] = (it.heure ?? '00:00').split(':').map(Number);
+  return new Date(y || 0, (m || 1) - 1, d || 1, hh || 0, mm || 0).getTime();
+}
+
 function sortItems(items: RequestDetail[]): RequestDetail[] {
   return [...items].sort((a, b) => {
-    const aA = ARCHIVED.includes(a.statut) ? 1 : 0;
-    const bA = ARCHIVED.includes(b.statut) ? 1 : 0;
-    return aA - bA;
+    // 1) par statut (En attente → Confirmé → Livré → Annulé)
+    const sa = STATUT_ORDER[a.statut] ?? 99;
+    const sb = STATUT_ORDER[b.statut] ?? 99;
+    if (sa !== sb) return sa - sb;
+    // 2) dans le même statut : le plus récent en premier
+    return dateKey(b) - dateKey(a);
   });
 }
 
@@ -480,6 +493,11 @@ export default function RequestsPage() {
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
   useSSE(useCallback(() => { fetchAll(true); }, [fetchAll]));
+  // Filet de sécurité : rafraîchit la liste toutes les 15s en silence (nouveaux devis/commandes du site)
+  useEffect(() => {
+    const id = setInterval(() => fetchAll(true), 15000);
+    return () => clearInterval(id);
+  }, [fetchAll]);
 
   // Ouverture directe d'un détail via ?open=<id> (depuis l'historique / une notif)
   useEffect(() => {

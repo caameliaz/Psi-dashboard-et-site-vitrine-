@@ -94,6 +94,9 @@ export default function QuotePage() {
       }
       clearCart();
       setSubmitted(true);
+    } catch {
+      // Erreur réseau (serveur injoignable) → message propre au lieu d'un crash
+      setSubmitError(t('quote.error'));
     } finally {
       setLoading(false);
     }
@@ -243,14 +246,13 @@ export default function QuotePage() {
               </div>
 
               <div>
-                <label className={labelClass}>{t('quote.message_label')}</label>
+                <label className={labelClass}>{t('quote.message_label')} <span className="text-[#ABBED1] font-normal">({t('quote.optional')})</span></label>
                 <textarea
                   name="message"
                   value={formData.message}
                   onChange={handleChange}
                   placeholder={t('quote.message_ph')}
                   rows={4}
-                  required
                   className={inputClass + ' resize-none'}
                 />
               </div>
