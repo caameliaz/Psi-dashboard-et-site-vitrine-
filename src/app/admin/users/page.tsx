@@ -51,9 +51,16 @@ function dbUserToUser(u: any): User {
 }
 
 
+// Mot de passe SIMPLE à retenir : un mot capitalisé + 3 chiffres (ex: "Papier482").
+// Facile à dire/taper, l'utilisateur le changera à sa première connexion.
 function genPassword() {
-  const chars = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789@#!';
-  return Array.from({ length: 10 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+  const mots = [
+    'Papier', 'Soleil', 'Bureau', 'Client', 'Facture', 'Rapide', 'Alger', 'Commande',
+    'Produit', 'Livraison', 'Modele', 'Bureau', 'Projet', 'Devis', 'Ticket', 'Rouleau',
+  ];
+  const mot = mots[Math.floor(Math.random() * mots.length)];
+  const chiffres = String(Math.floor(100 + Math.random() * 900)); // 100-999
+  return `${mot}${chiffres}`;
 }
 
 function avatarColor(role: string) {
@@ -382,12 +389,13 @@ function CreateUserForm({ onSubmit, onClose, customRoles, onAddCustomRole, onDel
 
 /* ─── Formulaire de modification ─── */
 /* ─── Fiche utilisateur (slide-in) ─── */
-function UserSlideIn({ user, onClose, onDelete, onPermChange, customRoles, onSaveProfile, onResetPassword, initialEditing = false }: {
+function UserSlideIn({ user, onClose, onDelete, onPermChange, customRoles, onSaveProfile, onResetPassword, onReactivate, initialEditing = false }: {
   user: User; onClose: () => void; onDelete: () => void;
   onPermChange: (userId: number, perm: PermKey, value: boolean) => void;
   customRoles: CustomRole[];
   onSaveProfile: (user: User, data: { name: string; email: string; role: string; password?: string; permissions: PermKey[] }) => Promise<void>;
   onResetPassword: (user: User) => Promise<void>;
+  onReactivate: (user: User) => Promise<void>;
   initialEditing?: boolean;
 }) {
   const ac = avatarColor(user.role);
@@ -397,6 +405,7 @@ function UserSlideIn({ user, onClose, onDelete, onPermChange, customRoles, onSav
   const [editing, setEditing] = useState(initialEditing);
   const [saving, setSaving] = useState(false);
   const [resetting, setResetting] = useState(false);
+  const [reactivating, setReactivating] = useState(false);
   const [fNom, setFNom] = useState(user.nom);
   const [fEmail, setFEmail] = useState(user.email);
   const [fRole, setFRole] = useState<string>(user.role); // 'Admin' | 'Employe' | id rôle perso
@@ -529,6 +538,14 @@ function UserSlideIn({ user, onClose, onDelete, onPermChange, customRoles, onSav
             <>
               <button onClick={() => setEditing(false)} disabled={saving} className="flex-1 px-4 py-2.5 rounded-xl border border-[#E2E8F0] text-[13px] font-semibold text-[#374151] hover:bg-white transition-colors">Annuler</button>
               <button onClick={save} disabled={saving || !fNom.trim() || !fEmail.trim()} className="flex-1 px-4 py-2.5 rounded-xl text-[13px] font-bold text-white bg-[#4CAF4F] hover:bg-[#43A047] disabled:opacity-60 transition-colors">{saving ? 'Enregistrement…' : 'Enregistrer'}</button>
+            </>
+          ) : user.statut === 'Inactif' ? (
+            <>
+              <button onClick={startEdit} className="flex-1 px-4 py-2.5 rounded-xl border border-[#E2E8F0] text-[13px] font-semibold text-[#374151] hover:bg-white transition-colors">Modifier</button>
+              <button onClick={async () => { setReactivating(true); try { await onReactivate(user); } finally { setReactivating(false); } }} disabled={reactivating}
+                className="flex-1 px-4 py-2.5 rounded-xl text-[13px] font-bold text-white bg-[#4CAF4F] hover:bg-[#43A047] disabled:opacity-60 transition-colors">
+                {reactivating ? 'Réactivation…' : '✓ Réactiver le compte'}
+              </button>
             </>
           ) : (
             <>
@@ -709,6 +726,20 @@ export default function UsersPage() {
       : prev);
   };
 
+  // Réactive un compte désactivé (active: true)
+  const handleReactivateUser = async (u: User) => {
+    const res = await fetch(`/api/users/${u.id}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ active: true }),
+    });
+    if (res.ok) {
+      await fetchUsers();
+      setProfilUser((prev) => prev && prev.id === u.id ? { ...prev, statut: 'Actif' } : prev);
+    } else {
+      alert('Réactivation impossible.');
+    }
+  };
+
   const handleDeactivate = async () => {
     if (!deleteUser) return;
     await fetch(`/api/users/${deleteUser.id}`, {
@@ -832,7 +863,8 @@ export default function UsersPage() {
           customRoles={customRoles}
           initialEditing={profilEditing}
           onSaveProfile={handleSaveProfile}
-          onResetPassword={handleResetPassword} />
+          onResetPassword={handleResetPassword}
+          onReactivate={handleReactivateUser} />
       )}
 
       {showAdd && (

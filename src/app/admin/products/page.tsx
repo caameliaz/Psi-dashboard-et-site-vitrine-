@@ -84,8 +84,8 @@ function RefFormFields({ form, setForm }: { form: RefForm; setForm: (f: RefForm)
   return (
     <div className="space-y-4">
       <div>
-        <label className="block text-[12px] font-semibold text-[#374151] mb-1.5">Nom du produit <span className="text-[#ABBED1] font-normal">(facultatif)</span></label>
-        <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="ex: Rouleau thermique standard" className={inputClass} />
+        <label className="block text-[12px] font-semibold text-[#374151] mb-1.5">Nom de la référence <span className="text-[#ABBED1] font-normal">(facultatif)</span></label>
+        <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="ex: Rouleau thermique 80×80" className={inputClass} />
       </div>
       <div className="grid grid-cols-2 gap-3">
         <div>
@@ -356,6 +356,22 @@ export default function ProductsPage() {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ active: !r.active }),
     });
+    await fetchProducts();
+  };
+
+  // Active / désactive TOUTE la catégorie (toutes ses références) d'un coup
+  const toggleCategory = async () => {
+    if (!selectedCat) return;
+    const anyActive = catRefs.some((r) => r.active);
+    const target = !anyActive; // si au moins une active → on désactive tout ; sinon on réactive tout
+    const verbe = target ? 'réactiver' : 'désactiver';
+    if (!window.confirm(`Êtes-vous sûr de vouloir ${verbe} TOUTE la catégorie « ${selectedCat.name} » (${catRefs.length} référence${catRefs.length > 1 ? 's' : ''}) ?`)) return;
+    await Promise.all(catRefs.map((r) =>
+      fetch(`/api/products/${r.id}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ active: target }),
+      })
+    ));
     await fetchProducts();
   };
 
@@ -656,6 +672,11 @@ export default function ProductsPage() {
               <input ref={catPhotoRef} type="file" accept="image/*" className="hidden"
                 onChange={(e) => { const f = e.target.files?.[0] ?? null; setCatPhoto(f); e.target.value = ''; }} />
             </div>
+            {canEdit && catRefs.length > 0 && (
+              <button onClick={toggleCategory} className="self-end text-[12px] font-semibold text-[#B45309] hover:text-[#92400E] transition-colors">
+                {catRefs.some((r) => r.active) ? 'Désactiver toute la catégorie' : 'Réactiver toute la catégorie'}
+              </button>
+            )}
             {canEdit && (
               <button onClick={deleteCategory} className="self-end text-[12px] font-semibold text-[#EF4444] hover:text-[#991B1B] transition-colors">
                 Supprimer cette catégorie

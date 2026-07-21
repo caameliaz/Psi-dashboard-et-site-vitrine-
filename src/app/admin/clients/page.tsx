@@ -222,7 +222,6 @@ function ClientSlideIn({ client, onClose, onEdit, onDelete, onReactivate, onDele
   const fileRef = useRef<HTMLInputElement>(null);
   const [photo, setPhoto] = useState<string | undefined>(client.photo);
   const [selectedRequest, setSelectedRequest] = useState<RequestDetail | null>(null);
-  const [showNewOrder, setShowNewOrder] = useState(false);
   const [templateMode, setTemplateMode] = useState<'wa' | 'mail' | null>(null);
   const ac = avatarColor(client.id);
 
@@ -386,7 +385,7 @@ function ClientSlideIn({ client, onClose, onEdit, onDelete, onReactivate, onDele
           <div className="px-6 py-5">
             <div className="flex items-center justify-between mb-4">
               <p className="text-[11px] font-bold text-[#ABBED1] uppercase tracking-widest">Historique</p>
-              <button onClick={() => setShowNewOrder(true)} title="Nouvelle commande / devis"
+              <button onClick={() => { window.location.href = `/admin/requests?newFor=${(client as any)._dbId ?? client.id}`; }} title="Nouvelle commande / devis"
                 className="w-8 h-8 flex items-center justify-center rounded-lg text-white text-[18px] font-bold leading-none"
                 style={{ background: '#4CAF4F' }}>
                 +
@@ -490,7 +489,6 @@ function ClientSlideIn({ client, onClose, onEdit, onDelete, onReactivate, onDele
           }}
         />
       )}
-      {showNewOrder && <NewOrderForm client={client} onClose={() => setShowNewOrder(false)} />}
       {templateMode && <TemplatePopover item={clientAsItem} mode={templateMode} recipientEmail={client.email} onClose={() => setTemplateMode(null)} />}
     </>
   );
@@ -693,6 +691,11 @@ export default function ClientsPage() {
 
   const handleAdd = async () => {
     if (!addForm.contact.trim()) return;
+    // Avertit si l'entreprise existe déjà (doublon) — mais laisse créer si confirmé
+    const ent = addForm.entreprise.trim().toLowerCase();
+    if (ent && clients.some((c) => (c.entreprise || '').trim().toLowerCase() === ent)) {
+      if (!window.confirm(`Une entreprise « ${addForm.entreprise.trim()} » est déjà cliente. Créer quand même un nouveau client ?`)) return;
+    }
     const res = await fetch('/api/clients', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

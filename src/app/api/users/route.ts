@@ -6,6 +6,7 @@ import { createAudit } from '@/lib/audit';
 import { sendEmail } from '@/lib/email/send';
 import { logoAttachment } from '@/emails/shared';
 import { renderWelcomeEmail, renderAccountCreatedAdminEmail } from '@/emails/accountCreatedTemplate';
+import { notifyUserCreated } from '@/lib/notify-activity';
 
 // GET /api/users — liste tous les utilisateurs (permission gerer_utilisateurs)
 // GET /api/users?assignable=true — liste réduite (id + name) des users actifs,
@@ -84,6 +85,13 @@ export async function POST(request: NextRequest) {
     });
 
     createAudit({ userId: session.user.id, action: 'Utilisateur créé', entity: 'UTILISATEUR', entityId: user.id, detail: `${user.name} (${user.email})` });
+
+    // Notif in-app aux AUTRES admins (marche même sans emails)
+    notifyUserCreated({
+      actorId: session.user.id!,
+      actorName: session.user.name ?? session.user.email ?? 'Un administrateur',
+      userName: user.name,
+    }).catch(() => {});
 
     // ── Emails automatiques (bienvenue au user + récap aux admins) ──
     // Non bloquant : si l'envoi échoue, le compte reste créé.

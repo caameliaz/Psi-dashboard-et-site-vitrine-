@@ -14,7 +14,7 @@ export function Footer() {
 
   const adresse   = content['contact_adresse']   ?? 'Centre El Qods, Niveau M1, Chéraga, Alger';
   const email     = content['contact_email']     ?? 'Contact@psi.dz';
-  const facebook  = content['contact_facebook']  ?? 'https://www.facebook.com/PSI';
+  const facebook  = content['contact_facebook']  ?? 'https://www.facebook.com/share/1Hkb5H5owq/?mibextid=wwXIfr';
   const instagram = content['contact_instagram'] ?? 'https://www.instagram.com/psi04_2026';
 
   return (
@@ -36,7 +36,7 @@ export function Footer() {
           <div className="flex items-center gap-3">
             <a href={facebook} target="_blank" rel="noopener noreferrer"
               className="w-9 h-9 rounded-lg bg-white/10 hover:bg-[#1877F2]/30 flex items-center justify-center transition-colors group"
-              title="PSI sur Facebook · 82K abonnés">
+              title="PSI sur Facebook">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
                 <path d="M18 2h-3a5 5 0 00-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 011-1h3z" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
               </svg>

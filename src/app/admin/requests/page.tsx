@@ -196,24 +196,25 @@ export async function submitNewRequest(
   return { ok: true, type: isCmd ? 'Commande' : 'Devis' };
 }
 
-export function CreateForm({ defaultType, onClose, onSave, users, currentUserId, inline = false }: {
+export function CreateForm({ defaultType, onClose, onSave, users, currentUserId, inline = false, prefill }: {
   defaultType: 'Commande' | 'Devis';
   onClose: () => void;
   onSave: (item: any) => Promise<void>;
   users: { id: string; name: string }[];
   currentUserId?: string;
   inline?: boolean;
+  prefill?: { client?: string; entreprise?: string; telephone?: string; email?: string; wilaya?: string; commune?: string };
 }) {
   const ic = "w-full px-3 py-2 rounded-xl border border-[#E2E8F0] text-[13px] text-[#263238] focus:outline-none focus:border-[#4CAF4F] focus:ring-[2px] focus:ring-[#4CAF4F]/15 transition-all bg-white";
   const lc = "block text-[11px] font-bold text-[#8A9BB5] uppercase tracking-wide mb-1";
 
   const [type, setType] = useState<'Commande' | 'Devis'>(defaultType);
-  const [client, setClient] = useState('');
-  const [entreprise, setEntreprise] = useState('');
-  const [telephone, setTelephone] = useState('');
-  const [email, setEmail] = useState('');
-  const [wilaya, setWilaya] = useState('');
-  const [commune, setCommune] = useState('');
+  const [client, setClient] = useState(prefill?.client ?? '');
+  const [entreprise, setEntreprise] = useState(prefill?.entreprise ?? '');
+  const [telephone, setTelephone] = useState(prefill?.telephone ?? '');
+  const [email, setEmail] = useState(prefill?.email ?? '');
+  const [wilaya, setWilaya] = useState(prefill?.wilaya ?? '');
+  const [commune, setCommune] = useState(prefill?.commune ?? '');
   const [lignes, setLignes] = useState<Ligne[]>([emptyLigne()]);
   const [tva, setTva] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -471,6 +472,7 @@ export default function RequestsPage() {
   const [users, setUsers] = useState<{ id: string; name: string }[]>([]);
   const [selected, setSelected]   = useState<RequestDetail | null>(null);
   const [showCreate, setShowCreate] = useState(false);
+  const [createPrefill, setCreatePrefill] = useState<{ client?: string; entreprise?: string; telephone?: string; email?: string; wilaya?: string; commune?: string } | undefined>(undefined);
 
   // silent = refetch en arrière-plan (SSE temps réel) → pas de spinner, pas de clignotement
   const fetchAll = useCallback(async (silent = false) => {
@@ -512,6 +514,22 @@ export default function RequestsPage() {
     if (found) setSelected(found);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orders, quotes]);
+
+  // Nouvelle commande pré-remplie depuis la fiche client via ?newFor=<clientId>
+  useEffect(() => {
+    const clientId = new URLSearchParams(window.location.search).get('newFor');
+    if (!clientId) return;
+    fetch('/api/clients?light=true')
+      .then((r) => (r.ok ? r.json() : []))
+      .then((list: any[]) => {
+        const c = list.find((x) => x.id === clientId);
+        if (c) {
+          setCreatePrefill({ client: c.name ?? '', entreprise: c.company ?? '', telephone: c.phone ?? '', email: c.email ?? '', wilaya: c.wilaya ?? '', commune: c.commune ?? '' });
+          setShowCreate(true);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   // Liste des utilisateurs actifs (pour l'assignation "pris en charge par")
   useEffect(() => {
@@ -818,10 +836,11 @@ export default function RequestsPage() {
       {showCreate && (
         <CreateForm
           defaultType={isDevis ? 'Devis' : 'Commande'}
-          onClose={() => setShowCreate(false)}
+          onClose={() => { setShowCreate(false); setCreatePrefill(undefined); }}
           onSave={handleSaveNew}
           users={users}
           currentUserId={currentUserId}
+          prefill={createPrefill}
         />
       )}
     </div>

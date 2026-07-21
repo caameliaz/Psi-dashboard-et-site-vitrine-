@@ -20,7 +20,11 @@ export function CategoryBrowser({ limit }: { limit?: number }) {
     fetch('/api/products').then(r => r.ok ? r.json() : []).then(setProducts).catch(() => {});
   }, []);
 
-  const visibleCats = limit ? cats.slice(0, limit) : cats;
+  // Masque les catégories qui n'ont AUCUN produit actif (ex: catégorie entièrement désactivée)
+  const catsWithProducts = cats.filter((c) =>
+    products.some((p) => p.category?.id === c.id && p.width > 0 && p.length > 0)
+  );
+  const visibleCats = limit ? catsWithProducts.slice(0, limit) : catsWithProducts;
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 md:gap-6">

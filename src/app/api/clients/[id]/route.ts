@@ -146,8 +146,12 @@ export async function DELETE(request: NextRequest, { params }: Ctx) {
     }).catch(() => {});
 
     return NextResponse.json({ success: true, deactivated: true });
-  } catch (e) {
+  } catch (e: any) {
     console.error(e);
-    return NextResponse.json({ error: 'Failed to deactivate client' }, { status: 500 });
+    // Contrainte FK : le client a des commandes/devis → message clair (proposer la désactivation)
+    if (e?.code === 'P2003' || e?.code === 'P2014') {
+      return NextResponse.json({ error: 'Impossible de supprimer : ce client a des commandes/devis. Désactivez-le plutôt (l\'historique est conservé).' }, { status: 409 });
+    }
+    return NextResponse.json({ error: 'Opération impossible' }, { status: 500 });
   }
 }

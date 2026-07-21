@@ -196,45 +196,7 @@ Ce qui est neuf ou corrigé récemment est signalé par ⚠️ / **(nouveau)**.
 
 # ══════════════ BACK-OFFICE ══════════════
 
-## 👥 11. Clients (`/admin/clients`)
 
-
-7. **Plusieurs téléphones** par client, chacun avec un label (Principal / Secrétaire / Mobile…)
-8. **Notes internes** sur le client
-9. **Nouvelle commande** depuis la fiche → client pré-rempli, apparaît dans /requests ET l'historique client
-10. **Supprimer** un client → confirmation → il part, ses commandes/devis **restent**
-11. ⚠️ Suppression impossible → **message clair** (pas d'erreur brute)
-
----
-
-## 📦 12. Produits (`/admin/products`)
-
-1. Liste des produits (référence, dimensions, usage, prix, catégorie, statut actif)
-2. **+ Nouveau produit** → référence, largeur/longueur, usage, prix, **catégorie**
-3. **Photo produit** → cliquer la zone photo → choisir une image → aperçu → enregistrer
-4. ✅ La photo apparaît sur le **site public** (`/products`) ; sans photo → visuel par défaut
-5. **Champs personnalisés** (Grammage, Origine, BPA Free…) — définis une fois, remplis par produit
-6. **Modifier** un produit → changements sauvés
-7. **Catégories** (refondu) : bloc **cards catégorie** en bas de page
-   - **+ Ajouter** une catégorie (nom) → apparaît en card, persistée en base
-   - **Photo / Changer** → choisir une image → s'affiche sur la card ; **⊘** la retire
-   - Nombre de produits affiché sous chaque catégorie
-   - **×** supprime la catégorie → ⚠️ refusé avec message si elle contient des produits
-8. ✅ La **photo de catégorie** apparaît sur le site public (accueil + `/products`)
-9. **Activer/Désactiver** un produit (un produit inactif n'apparaît plus sur le site)
-10. ⚠️ Supprimer un produit **utilisé** dans des commandes → message "Impossible, désactivez-le plutôt"
-
----
-
-## 📜 13. Historique (`/admin/history`)
-
-1. `/admin/history` → journal des actions (audit log)
-2. Recherche texte
-3. Filtre par **type** d'action et par **utilisateur**
-4. Bouton **Effacer** les filtres
-5. Clic sur une ligne liée à une commande/devis → ouvre le détail
-
----
 
 ## 📝 14. Contenu du site (`/admin/content`)
 
@@ -246,12 +208,6 @@ Ce qui est neuf ou corrigé récemment est signalé par ⚠️ / **(nouveau)**.
 ---
 
 ## 👤 15. Utilisateurs (Admin seulement — `/admin/users`)
-
-1. Liste des comptes (rôle, statut actif)
-2. **+ Nouveau compte** → nom, email, mot de passe (bouton **générer** un mot de passe)
-3. Cocher les **permissions** une par une (ou "Tout" / "Aucun")
-4. Créer → écran **"Compte créé"** avec les identifiants **copiables**
-5. ✅ Les autres admins reçoivent une **notification**
 5bis. 📧 (À VENIR — todo 8.5) 2 emails automatiques : aux **admins** (récap du compte) + au **nouvel utilisateur** (bienvenue + son mot de passe pour se connecter)
 6. **Rôles personnalisés** : "+ Ajouter un rôle" → nom + set de permissions réutilisable
 7. **Modifier** un compte (rôle, permissions, activer/désactiver)
