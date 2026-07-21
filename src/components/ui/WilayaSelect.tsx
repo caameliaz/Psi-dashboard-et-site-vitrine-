@@ -26,6 +26,13 @@ interface WilayaSelectProps {
 
 export function WilayaSelect({ value, onChange, required, name }: WilayaSelectProps) {
   const [open, setOpen] = useState(false);
+  // Ouvre le menu vers le HAUT quand le champ est trop bas dans la fenêtre
+  // (sinon la liste est rognée par le conteneur qui défile).
+  const [dropUp, setDropUp] = useState(false);
+  // Position calculée à l'écran : le menu est rendu en `fixed` pour qu'AUCUN
+  // parent en overflow (formulaire qui défile) ne puisse le rogner.
+  const [coords, setCoords] = useState<{ left: number; top: number; bottom: number; width: number } | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   const [search, setSearch] = useState('');
   const ref = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
@@ -36,17 +43,36 @@ export function WilayaSelect({ value, onChange, required, name }: WilayaSelectPr
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
+      // Le menu est en `fixed` (hors du conteneur) → il faut le tester à part,
+      // sinon un clic sur une option fermerait avant de sélectionner.
+      const dansChamp = ref.current?.contains(e.target as Node);
+      const dansMenu = menuRef.current?.contains(e.target as Node);
+      if (!dansChamp && !dansMenu) {
         setOpen(false);
         setSearch('');
       }
     }
     document.addEventListener('mousedown', handleClick);
-    return () => document.removeEventListener('mousedown', handleClick);
+    // Menu en `fixed` : si la page défile il resterait "collé" à l'écran → on ferme.
+    // On ferme au DÉFILEMENT seulement. Surtout pas au `resize` : sur mobile,
+    // l'ouverture du clavier redimensionne la fenêtre et refermait le menu aussitôt.
+    const onScroll = (e: Event) => {
+      // Ne pas fermer quand c'est la LISTE elle-même qu'on fait défiler.
+      if (menuRef.current?.contains(e.target as Node)) return;
+      setOpen(false); setSearch('');
+    };
+    window.addEventListener('scroll', onScroll, true);
+    return () => {
+      document.removeEventListener('mousedown', handleClick);
+      window.removeEventListener('scroll', onScroll, true);
+    };
   }, []);
 
   useEffect(() => {
-    if (open && searchRef.current) searchRef.current.focus();
+    // Focus auto sur ORDINATEUR seulement : sur mobile ça ouvre le clavier,
+    // ce qui masque la liste et perturbe la sélection.
+    const estMobile = typeof window !== 'undefined' && window.matchMedia('(max-width: 767px)').matches;
+    if (open && !estMobile && searchRef.current) searchRef.current.focus();
   }, [open]);
 
   return (
@@ -80,7 +106,15 @@ export function WilayaSelect({ value, onChange, required, name }: WilayaSelectPr
 
       {/* Dropdown */}
       {open && (
-        <div className="absolute z-50 top-[calc(100%+6px)] left-0 right-0 bg-white rounded-xl border border-[#E2E8F0] shadow-[0_8px_32px_rgba(171,190,209,0.45)] overflow-hidden">
+        <div
+          ref={menuRef}
+          className="fixed z-[300] bg-white rounded-xl border border-[#E2E8F0] shadow-[0_8px_32px_rgba(171,190,209,0.45)] overflow-hidden"
+          style={{
+            left: coords?.left,
+            width: coords?.width,
+            ...(dropUp ? { bottom: coords?.bottom } : { top: coords?.top }),
+          }}
+        >
           {/* Search */}
           <div className="p-2 border-b border-[#F0F4F8]">
             <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-[#F5F7FA]">

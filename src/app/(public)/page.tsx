@@ -22,14 +22,16 @@ function renderHeroTitle(text: string) {
 }
 
 export default function Home() {
-  const { t } = useTranslation();
+  const { t, lang } = useTranslation();
   const [content, setContent] = useState<Record<string, string>>({});
 
   useEffect(() => {
     fetch('/api/content').then(r => r.ok ? r.json() : {}).then(setContent).catch(() => {});
   }, []);
 
-  const heroTitre = content['hero_titre'] || `${t('hero.title_pre')}${t('hero.title_highlight')}${t('hero.title_post')}`;
+  // Idem pour le titre : le contenu éditable est en français uniquement.
+  const heroTitre = (lang === 'fr' && content['hero_titre'])
+    || `${t('hero.title_pre')}${t('hero.title_highlight')}${t('hero.title_post')}`;
   const aboutTexte      = content['about_texte'] ?? '';
 
   return (
@@ -156,7 +158,10 @@ export default function Home() {
           </h2>
           <div className="flex flex-col lg:flex-row gap-10 lg:gap-16 items-start">
             <div className="flex flex-col gap-5 text-[16px] md:text-[17px] text-[#717171] leading-[1.75] flex-1">
-              {aboutTexte
+              {/* Le contenu éditable en base n'existe qu'en FRANÇAIS : dans les
+                  autres langues on affiche la traduction, sinon le texte restait
+                  en français même en arabe. */}
+              {aboutTexte && lang === 'fr'
                 ? aboutTexte.split('\n\n').map((para, i) => <p key={i}>{para}</p>)
                 : <>
                     <p>{t('about.p1')}</p>

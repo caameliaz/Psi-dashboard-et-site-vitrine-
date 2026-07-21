@@ -122,8 +122,8 @@ function ToastItem({ toast, onDismiss }: { toast: Toast; onDismiss: (id: string)
   }, [toast.id, onDismiss]);
   return (
     <div
-      className="flex items-start justify-between gap-4 rounded-2xl shadow-2xl border px-5 py-4 cursor-pointer"
-      style={{ background: '#fff', borderColor: '#E2E8F0', minWidth: 360, maxWidth: 440 }}
+      className="flex items-start justify-between gap-3 md:gap-4 rounded-2xl shadow-2xl border px-4 md:px-5 py-3.5 md:py-4 cursor-pointer w-full md:w-auto md:min-w-[360px]"
+      style={{ background: '#fff', borderColor: '#E2E8F0', maxWidth: 440 }}
       onClick={() => onDismiss(toast.id)}
     >
       <div className="flex-1 min-w-0">
@@ -323,7 +323,9 @@ export function TopBar() {
   return (
     <>
       {/* ── Toasts ── */}
-      <div className="fixed top-20 right-5 z-[200] flex flex-col gap-3 items-end pointer-events-none">
+      {/* Mobile : collé aux deux bords (le toast prend la largeur dispo).
+          Desktop : ancré en haut à droite comme avant. */}
+      <div className="fixed top-16 md:top-20 left-3 right-3 md:left-auto md:right-5 z-[200] flex flex-col gap-3 items-stretch md:items-end pointer-events-none">
         {toasts.map((t) => (
           <div key={t.id} className="pointer-events-auto">
             <ToastItem toast={t} onDismiss={dismissToast} />

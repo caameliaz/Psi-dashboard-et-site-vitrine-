@@ -63,22 +63,26 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
     }
 
     // Remplacement complet des lignes de la commande (bouton "Modifier")
-    // body.items = [{ productId, quantity, unitPrice }] — on ne modifie pas une commande livrée/annulée
+    // body.items = [{ productId | description, quantity, unitPrice, metrage }] — pas de modif si livrée/annulée
     if (body.items && Array.isArray(body.items)) {
       const current = await prisma.order.findUnique({ where: { id }, select: { status: true } });
       if (current && (current.status === 'LIVRE' || current.status === 'ANNULE')) {
         return NextResponse.json({ error: 'Impossible de modifier une commande livrée ou annulée' }, { status: 409 });
       }
-      const validItems = (body.items as { productId?: string; quantity?: number; unitPrice?: number }[])
-        .filter((it) => it.productId && (it.quantity ?? 0) > 0);
+      // Une référence LIBRE n'a pas de productId : son libellé est dans `description`.
+      // (avant, ces lignes étaient filtrées → elles disparaissaient à chaque modification)
+      const validItems = (body.items as { productId?: string; description?: string; quantity?: number; unitPrice?: number; metrage?: number }[])
+        .filter((it) => (it.productId || (it.description && it.description.trim() !== '')) && (it.quantity ?? 0) > 0);
       await prisma.orderItem.deleteMany({ where: { orderId: id } });
       if (validItems.length > 0) {
         await prisma.orderItem.createMany({
           data: validItems.map((it) => ({
             orderId: id,
-            productId: it.productId!,
+            productId: it.productId || null,
+            description: it.productId ? null : (it.description ?? null),
             quantity: it.quantity!,
             unitPrice: it.unitPrice ?? 0,
+            metrage: it.metrage ?? null,
           })),
         });
       }

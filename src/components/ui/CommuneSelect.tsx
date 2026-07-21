@@ -15,6 +15,13 @@ interface CommuneSelectProps {
 // pour les communes absentes de la liste.
 export function CommuneSelect({ wilaya, value, onChange, required, name }: CommuneSelectProps) {
   const [open, setOpen] = useState(false);
+  // Ouvre le menu vers le HAUT quand le champ est trop bas dans la fenêtre
+  // (sinon la liste est rognée par le conteneur qui défile).
+  const [dropUp, setDropUp] = useState(false);
+  // Position calculée à l'écran : le menu est rendu en `fixed` pour qu'AUCUN
+  // parent en overflow (formulaire qui défile) ne puisse le rogner.
+  const [coords, setCoords] = useState<{ left: number; top: number; bottom: number; width: number } | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   const [query, setQuery] = useState('');
   const ref = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -33,7 +40,19 @@ export function CommuneSelect({ wilaya, value, onChange, required, name }: Commu
       }
     }
     document.addEventListener('mousedown', handleClick);
-    return () => document.removeEventListener('mousedown', handleClick);
+    // Menu en `fixed` : si la page défile il resterait "collé" à l'écran → on ferme.
+    // Fermeture au défilement uniquement (pas au `resize` : le clavier mobile
+    // redimensionne la fenêtre et refermerait le menu aussitôt).
+    const onScroll = (e: Event) => {
+      // Ne pas fermer quand c'est la LISTE elle-même qu'on fait défiler.
+      if (menuRef.current?.contains(e.target as Node)) return;
+      setOpen(false);
+    };
+    window.addEventListener('scroll', onScroll, true);
+    return () => {
+      document.removeEventListener('mousedown', handleClick);
+      window.removeEventListener('scroll', onScroll, true);
+    };
   }, []);
 
   useEffect(() => {
@@ -62,7 +81,15 @@ export function CommuneSelect({ wilaya, value, onChange, required, name }: Commu
       </button>
 
       {open && (
-        <div className="absolute z-50 top-[calc(100%+6px)] left-0 right-0 bg-white rounded-xl border border-[#E2E8F0] shadow-[0_8px_32px_rgba(171,190,209,0.45)] overflow-hidden">
+        <div
+          ref={menuRef}
+          className="fixed z-[300] bg-white rounded-xl border border-[#E2E8F0] shadow-[0_8px_32px_rgba(171,190,209,0.45)] overflow-hidden"
+          style={{
+            left: coords?.left,
+            width: coords?.width,
+            ...(dropUp ? { bottom: coords?.bottom } : { top: coords?.top }),
+          }}
+        >
           <div className="p-2 border-b border-[#F0F4F8]">
             <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-[#F5F7FA]">
               <svg width="14" height="14" viewBox="0 0 16 16" fill="none" className="shrink-0">

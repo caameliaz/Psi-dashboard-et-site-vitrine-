@@ -21,15 +21,9 @@ interface ClientRecord {
   deactivatedReason?: string | null;
   deactivatedByName?: string | null;
   deactivatedAt?: string | null;
-  historique: Array<{
-    id: string;
-    ref: string;
-    type: 'Commande' | 'Devis';
-    date: string;
-    statut: string;
-    montant: string;
-    produits: string;
-  }>;
+  // Chaque entrée est un RequestDetail COMPLET (produit par la lib partagée
+  // src/lib/request-detail.ts) → le détail est identique partout.
+  historique: RequestDetail[];
 }
 import { StatusPill } from '@/components/ui/StatusPill';
 import { initials } from '@/lib/utils';
@@ -41,6 +35,9 @@ import { useSSE } from '@/lib/use-sse';
 import { RequirePerm } from '@/components/RequirePerm';
 import { useRole } from '@/lib/role-context';
 import { AdminSelect } from '@/components/ui/AdminSelect';
+import { orderToDetail, quoteToDetail } from '@/lib/request-detail';
+import { CreateForm, submitNewRequest } from '@/app/admin/requests/page';
+import { useSession } from 'next-auth/react';
 import { validateEmail, validatePhone, validateText, normalizeEmail, normalizePhone, firstError } from '@/lib/validation';
 
 function avatarColor(id: number | string) {
@@ -224,9 +221,10 @@ function NewOrderForm({ client, onClose }: { client: ClientRecord; onClose: () =
   );
 }
 
-function ClientSlideIn({ client, onClose, onEdit, onDelete, onReactivate, onDeleteDefinitif, onRefresh }: {
+function ClientSlideIn({ client, onClose, onEdit, onDelete, onReactivate, onDeleteDefinitif, onRefresh, onNewRequest }: {
   client: ClientRecord; onClose: () => void; onEdit: () => void; onDelete: () => void;
   onReactivate?: () => void; onDeleteDefinitif?: () => void; onRefresh?: () => void;
+  onNewRequest?: () => void;
 }) {
   const { can } = useRole();
   const canEditClients = can('modifier_clients');
@@ -396,7 +394,7 @@ function ClientSlideIn({ client, onClose, onEdit, onDelete, onReactivate, onDele
           <div className="px-6 py-5">
             <div className="flex items-center justify-between mb-4">
               <p className="text-[11px] font-bold text-[#ABBED1] uppercase tracking-widest">Historique</p>
-              <button onClick={() => { window.location.href = `/admin/requests?newFor=${(client as any)._dbId ?? client.id}`; }} title="Nouvelle commande / devis"
+              <button onClick={() => onNewRequest?.()} title="Nouvelle commande / devis"
                 className="w-8 h-8 flex items-center justify-center rounded-lg text-white text-[18px] font-bold leading-none"
                 style={{ background: '#4CAF4F' }}>
                 +
@@ -405,13 +403,10 @@ function ClientSlideIn({ client, onClose, onEdit, onDelete, onReactivate, onDele
 
             <div className="flex flex-col gap-2">
               {client.historique.map((h) => {
-                const detail: RequestDetail = {
-                  id: h.id, ref: h.ref, type: h.type, date: h.date, statut: h.statut,
-                  montant: h.montant, produits: h.produits,
-                  client: client.contact, entreprise: client.entreprise,
-                  telephone: client.telephone, wilaya: client.wilaya,
-                  adresse: client.adresse, email: client.email,
-                };
+                // `h` EST déjà un RequestDetail complet (lib partagée) —
+                // plus rien à reconstruire ici : c'est ce qui garantit que le
+                // détail est identique à celui de la page Commandes.
+                const detail: RequestDetail = h;
                 const isCmd = h.type === 'Commande';
                 const typeCfg = isCmd
                   ? { bg: '#F0FDF4', color: '#15803D', border: '#BBF7D0', label: 'Commande' }
@@ -560,43 +555,38 @@ function IconSearch() {
   );
 }
 
-const STATUS_DB_TO_UI: Record<string, string> = {
-  EN_ATTENTE: 'En attente',
-  CONTACTE:   'Contacté',
-  VALIDE:     'Confirmé',
-  LIVRE:      'Livré',
-  ANNULE:     'Annulé',
-};
-
 function dbClientToRecord(c: any): ClientRecord {
   const phone = c.phones?.find((p: any) => p.primary)?.number ?? c.phones?.[0]?.number ?? '';
   const ordersCount = c._count?.orders ?? 0;
   const quotesCount = c._count?.quotes ?? 0;
 
-  const orderHist = (c.orders ?? []).map((o: any) => ({
-    id: o.id,
-    ref: o.ref ?? o.id.slice(0, 8).toUpperCase(),
-    type: 'Commande' as const,
-    date: new Date(o.createdAt).toLocaleDateString('fr-FR'),
-    statut: STATUS_DB_TO_UI[o.status] ?? o.status,
-    montant: `${(o.items ?? []).reduce((acc: number, i: any) => acc + i.quantity * (i.unitPrice ?? 0), 0).toLocaleString('fr-FR')} DA`,
-    produits: (o.items ?? []).map((i: any) => `${i.product?.reference ?? '?'} × ${i.quantity}`).join(', ') || '—',
-    _ts: new Date(o.createdAt).getTime(),
-  }));
-  const quoteHist = (c.quotes ?? []).map((q: any) => ({
-    id: q.id,
-    ref: q.ref ?? q.id.slice(0, 8).toUpperCase(),
-    type: 'Devis' as const,
-    date: new Date(q.createdAt).toLocaleDateString('fr-FR'),
-    statut: STATUS_DB_TO_UI[q.status] ?? q.status,
-    montant: q.proposedPrice ? `${Number(q.proposedPrice).toLocaleString('fr-FR')} DA` : 'Sur devis',
-    produits: (q.items ?? []).map((i: any) => `${i.product?.reference ?? '?'} × ${i.quantity}`).join(', ') || '—',
-    _ts: new Date(q.createdAt).getTime(),
-  }));
+  // Coordonnées portées par la FICHE : les commandes renvoyées ici ne les
+  // embarquent pas (on ne recharge pas le client dans chacune d'elles).
+  const fallback = {
+    client: c.name ?? '',
+    entreprise: c.company ?? '',
+    telephone: phone,
+    wilaya: c.wilaya ?? '',
+    commune: c.commune ?? '',
+    adresse: c.address ?? '',
+    email: c.email ?? '',
+  };
 
-  const historique = [...orderHist, ...quoteHist]
+  // ⚠️ Conversion via la lib PARTAGÉE (src/lib/request-detail.ts) : le détail
+  // ouvert depuis la fiche client est ainsi STRICTEMENT identique à celui de
+  // la page Commandes (assignation, référence libre, métrage, source…).
+  const historique = [
+    ...(c.orders ?? []).map((o: any) => ({
+      ...orderToDetail(o, fallback),
+      _ts: new Date(o.createdAt).getTime(),
+    })),
+    ...(c.quotes ?? []).map((q: any) => ({
+      ...quoteToDetail(q, fallback),
+      _ts: new Date(q.createdAt).getTime(),
+    })),
+  ]
     .sort((a, b) => b._ts - a._ts)
-    .map(({ _ts, ...rest }: any) => rest);
+    .map(({ _ts, ...rest }) => rest);
 
   const lastDate = historique[0]?.date ?? '—';
 
@@ -631,6 +621,10 @@ function ClientsPageInner() {
   const [search, setSearch]     = useState('');
   const [filterSector, setFilterSector] = useState('all');   // filtre par secteur
   const [filterActif, setFilterActif] = useState('actifs');  // actifs | inactifs | tous
+  // Nouvelle commande/devis créée DEPUIS la fiche client (sans quitter la page)
+  const [newRequestFor, setNewRequestFor] = useState<ClientRecord | null>(null);
+  const [users, setUsers] = useState<{ id: string; name: string }[]>([]);
+  const { data: session } = useSession();
   const [sortBy, setSortBy]     = useState('recent');        // tri
   const [selected, setSelected] = useState<ClientRecord | null>(null);
   const [editClient, setEditClient]   = useState<ClientRecord | null>(null);
@@ -641,6 +635,11 @@ function ClientsPageInner() {
   const [sectors, setSectors]   = useState<{ id: string; name: string }[]>([]);
   const [showSectors, setShowSectors] = useState(false);
   const [showImport, setShowImport] = useState(false);
+
+  const fetchUsers = useCallback(async () => {
+    const r = await fetch('/api/users?assignable=true');
+    if (r.ok) setUsers(await r.json());
+  }, []);
 
   const fetchSectors = useCallback(async () => {
     const r = await fetch('/api/sectors');
@@ -665,7 +664,7 @@ function ClientsPageInner() {
   }, []);
 
   useEffect(() => { fetchClients(); }, [fetchClients]);
-  useEffect(() => { fetchSectors(); }, [fetchSectors]);
+  useEffect(() => { fetchSectors(); fetchUsers(); }, [fetchSectors, fetchUsers]);
   // Temps réel : rafraîchit la liste + l'historique client en silence sur événement SSE
   useSSE(useCallback(() => { fetchClients(true); }, [fetchClients]));
   // Filet de sécurité : rafraîchit toutes les 15s en silence
@@ -836,20 +835,38 @@ function ClientsPageInner() {
         <p className="text-[13px] text-[#8A9BB5] mt-0.5">{loading ? 'Chargement…' : `${clients.length} clients enregistrés`}</p>
       </div>
 
-      {/* Search + Nouveau client */}
-      <div className="flex items-center gap-3 mb-6 flex-wrap">
-        <div className="relative w-full sm:w-auto">
-          <span className="absolute left-3 top-1/2 -translate-y-1/2"><IconSearch /></span>
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Rechercher un client..."
-            className="pl-9 pr-4 py-2.5 w-full sm:w-[280px] rounded-xl border border-[#E2E8F0] bg-white text-[14px] text-[#263238] placeholder-[#8A9BB5] focus:outline-none focus:border-[#4CAF4F] focus:ring-[3px] focus:ring-[#4CAF4F]/15 transition-all"
-          />
+      {/* Actions : Nouveau client + Secteurs (+ Import Excel sur ordi seulement) */}
+      {canEditClients && (
+        <div className="flex items-center gap-2 mb-3 flex-wrap">
+          <button onClick={() => { setAddForm({ ...emptyClient }); setShowAdd(true); }} className="flex items-center gap-2 px-4 py-2 rounded-xl text-[13px] font-semibold text-white transition-colors whitespace-nowrap" style={{ background: '#4CAF4F' }}>
+            + Nouveau client
+          </button>
+          <button onClick={() => setShowSectors(true)} className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-[13px] font-semibold text-[#374151] border border-[#E2E8F0] bg-white hover:bg-[#F8FAFC] transition-colors whitespace-nowrap">
+            Secteurs
+          </button>
+          {/* Import Excel : ordinateur uniquement (choix de fichier peu pratique sur mobile) */}
+          <button onClick={() => setShowImport(true)} className="hidden md:flex items-center gap-1.5 px-4 py-2 rounded-xl text-[13px] font-semibold text-[#374151] border border-[#E2E8F0] bg-white hover:bg-[#F8FAFC] transition-colors whitespace-nowrap">
+            <svg width={15} height={15} fill="none" viewBox="0 0 24 24"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            Importer Excel
+          </button>
         </div>
+      )}
 
-        {/* Filtre par secteur */}
+      {/* Barre de recherche — pleine largeur */}
+      <div className="relative mb-3">
+        <span className="absolute left-3 top-1/2 -translate-y-1/2"><IconSearch /></span>
+        <input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Rechercher un client..."
+          className="pl-9 pr-4 py-2.5 w-full md:w-[320px] rounded-xl border border-[#E2E8F0] bg-white text-[14px] text-[#263238] placeholder-[#8A9BB5] focus:outline-none focus:border-[#4CAF4F] focus:ring-[3px] focus:ring-[#4CAF4F]/15 transition-all"
+        />
+      </div>
+
+      {/* Les 3 filtres — toujours sur une seule ligne */}
+      <div className="grid grid-cols-3 gap-2 mb-6">
         <AdminSelect
+          className="w-full"
           value={filterSector}
           onChange={setFilterSector}
           options={[
@@ -858,9 +875,8 @@ function ClientsPageInner() {
             { value: 'none', label: 'Sans secteur' },
           ]}
         />
-
-        {/* Filtre actifs / désactivés */}
         <AdminSelect
+          className="w-full"
           value={filterActif}
           onChange={setFilterActif}
           options={[
@@ -869,9 +885,8 @@ function ClientsPageInner() {
             { value: 'tous', label: 'Tous' },
           ]}
         />
-
-        {/* Tri */}
         <AdminSelect
+          className="w-full"
           value={sortBy}
           onChange={setSortBy}
           options={[
@@ -881,24 +896,6 @@ function ClientsPageInner() {
             { value: 'wilaya', label: 'Tri : wilaya' },
           ]}
         />
-
-
-        {canEditClients && (
-          <button onClick={() => setShowImport(true)} className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-[13px] font-semibold text-[#374151] border border-[#E2E8F0] hover:bg-[#F8FAFC] transition-colors sm:ml-auto whitespace-nowrap">
-            <svg width={15} height={15} fill="none" viewBox="0 0 24 24"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg>
-            Importer Excel
-          </button>
-        )}
-        {canEditClients && (
-          <button onClick={() => setShowSectors(true)} className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-[13px] font-semibold text-[#374151] border border-[#E2E8F0] hover:bg-[#F8FAFC] transition-colors whitespace-nowrap">
-            Secteurs
-          </button>
-        )}
-        {canEditClients && (
-          <button onClick={() => { setAddForm({ ...emptyClient }); setShowAdd(true); }} className="flex items-center gap-2 px-4 py-2 rounded-xl text-[13px] font-semibold text-white transition-colors whitespace-nowrap" style={{ background: '#4CAF4F' }}>
-            + Nouveau client
-          </button>
-        )}
       </div>
 
       {/* Grille */}
@@ -962,6 +959,7 @@ function ClientsPageInner() {
           onReactivate={() => handleReactivate(selected)}
           onDeleteDefinitif={() => handleDeleteDefinitif(selected)}
           onRefresh={() => { fetchClients(); setSelected(null); }}
+          onNewRequest={() => setNewRequestFor(selected)}
         />
       )}
 
@@ -994,6 +992,37 @@ function ClientsPageInner() {
           onClose={() => setShowImport(false)}
           onDone={() => { setShowImport(false); fetchClients(true); fetchSectors(); }}
         />
+      )}
+
+      {/* Nouvelle commande / devis DEPUIS la fiche client : on reste sur la page,
+          et l'historique du client se rafraîchit dès l'enregistrement. */}
+      {newRequestFor && (
+        <div className="fixed inset-0 z-[150] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/30 backdrop-blur-[2px]" onClick={() => setNewRequestFor(null)} />
+          <div className="relative z-10 w-full max-w-[560px] max-h-[94vh] overflow-hidden">
+            <CreateForm
+              defaultType="Commande"
+              users={users}
+              currentUserId={session?.user?.id}
+              onClose={() => setNewRequestFor(null)}
+              prefill={{
+                clientId: (newRequestFor as any)._dbId ?? newRequestFor.id,
+                client: newRequestFor.contact,
+                entreprise: newRequestFor.entreprise,
+                telephone: newRequestFor.telephone,
+                email: newRequestFor.email,
+                wilaya: newRequestFor.wilaya,
+                commune: (newRequestFor as any).commune ?? '',
+              }}
+              onSave={async (item) => {
+                const res = await submitNewRequest(item);
+                if (!res.ok) { alert(res.error ?? 'Échec de la création.'); return; }
+                setNewRequestFor(null);
+                await fetchClients(true); // met à jour l'historique de la fiche ouverte
+              }}
+            />
+          </div>
+        </div>
       )}
     </div>
   );

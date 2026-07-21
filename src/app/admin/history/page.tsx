@@ -8,45 +8,7 @@ import { RequestPanel, type RequestDetail } from '@/components/ui/RequestPanel';
 import { AdminSelect } from '@/components/ui/AdminSelect';
 import { useSSE } from '@/lib/use-sse';
 import { RequirePerm } from '@/components/RequirePerm';
-
-const DB_TO_UI: Record<string, string> = { EN_ATTENTE: 'En attente', CONTACTE: 'En attente', VALIDE: 'Confirmé', LIVRE: 'Livré', ANNULE: 'Annulé' };
-
-// Mappe une commande/devis (API) → RequestDetail pour le panneau
-function toRequestDetail(o: any, type: 'Commande' | 'Devis'): RequestDetail {
-  const phone = o.client?.phones?.find((p: any) => p.primary)?.number ?? o.client?.phones?.[0]?.number ?? '';
-  const items = (o.items ?? []).map((i: any) => {
-    const base = i.product?.reference ?? i.description ?? '?';
-    return {
-      designation: i.metrage != null ? `${base} · ${i.metrage} m` : base,
-      categorie: i.product?.category?.name ?? '',
-      quantite: i.quantity ?? 0,
-      prixUnitaire: i.unitPrice ?? 0,
-      metrage: i.metrage ?? null,
-    };
-  });
-  const total = items.reduce((a: number, i: any) => a + i.quantite * i.prixUnitaire, 0);
-  return {
-    id: o.id,
-    ref: o.ref ?? o.id.slice(0, 8).toUpperCase(),
-    type,
-    source: o.source ?? 'SITE',
-    client: o.client?.name ?? o.clientName ?? '—',
-    entreprise: o.client?.company ?? o.clientCompany ?? '—',
-    telephone: phone,
-    wilaya: o.client?.wilaya ?? o.clientWilaya ?? '',
-    commune: o.client?.commune ?? '',
-    adresse: o.client?.address ?? '',
-    email: o.client?.email ?? '',
-    produits: items.map((i: any) => `${i.designation} × ${i.quantite}`).join(', ') || '—',
-    items,
-    montant: type === 'Devis'
-      ? (o.proposedPrice ? `${Number(o.proposedPrice).toLocaleString('fr-FR')} DA` : 'Sur devis')
-      : (total > 0 ? `${total.toLocaleString('fr-FR')} DA` : '—'),
-    statut: DB_TO_UI[o.status] ?? o.status,
-    date: new Date(o.createdAt).toLocaleDateString('fr-FR'),
-    heure: new Date(o.createdAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
-  };
-}
+import { orderToDetail, quoteToDetail } from '@/lib/request-detail';
 
 type ActionType = 'commande' | 'devis' | 'produit' | 'client' | 'utilisateur' | 'contenu';
 
@@ -113,10 +75,10 @@ function HistoryPageInner() {
   const openEntry = async (h: HistoryEntry) => {
     if (h.orderId) {
       const res = await fetch(`/api/orders/${h.orderId}`);
-      if (res.ok) setSelected(toRequestDetail(await res.json(), 'Commande'));
+      if (res.ok) setSelected(orderToDetail(await res.json()));
     } else if (h.quoteId) {
       const res = await fetch(`/api/quotes/${h.quoteId}`);
-      if (res.ok) setSelected(toRequestDetail(await res.json(), 'Devis'));
+      if (res.ok) setSelected(quoteToDetail(await res.json()));
     } else if (h.clientId) {
       router.push(`/admin/clients?open=${h.clientId}`);
     }

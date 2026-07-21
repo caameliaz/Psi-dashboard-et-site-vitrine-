@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react';
 import { StatusPill } from './StatusPill';
 import { useRole } from '@/lib/role-context';
 import { ClientAutocomplete } from './ClientAutocomplete';
+import { AdminSelect } from './AdminSelect';
+import { RefSelect } from './RefSelect';
 
 interface Template { id: string; title: string; content: string; category: string; }
 
@@ -558,34 +560,49 @@ function PriceModal({ item, onConfirm, onClose }: {
 }
 
 // ── Modale "Modifier la commande" — édition complète des lignes ──────────────
-interface ProdOption { id: string; reference: string; price: number; }
-interface EditLine { productId: string | null; designation: string; quantite: number; prixUnitaire: number; }
+interface ProdOption { id: string; reference: string; price: number; categoryId?: string; category?: { id: string; name: string } | null; }
+interface EditLine { categoryId: string; productId: string | null; designation: string; quantite: number; prixUnitaire: number; metrage: number | null; }
 
 function EditOrderModal({ item, onClose, onSaved }: {
   item: RequestDetail; onClose: () => void; onSaved: () => void;
 }) {
   const [products, setProducts] = useState<ProdOption[]>([]);
+  const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
   const [lines, setLines] = useState<EditLine[]>([]);
   const [saving, setSaving] = useState(false);
-  const [pickerOpen, setPickerOpen] = useState<number | null>(null);
 
   useEffect(() => {
+    fetch('/api/categories').then(r => r.ok ? r.json() : []).then((cats: any[]) =>
+      setCategories(cats.map((c) => ({ id: c.id, name: c.name })))
+    ).catch(() => {});
     fetch('/api/products').then(r => r.json()).then((data: ProdOption[]) => {
       setProducts(data);
       // Initialise les lignes depuis la commande, en retrouvant le productId via la référence
       const init: EditLine[] = (item.items ?? []).map(it => {
-        const p = data.find(pr => pr.reference === it.designation);
-        return { productId: p?.id ?? null, designation: it.designation, quantite: it.quantite, prixUnitaire: it.prixUnitaire };
+        // ⚠️ `designation` peut contenir le métrage ("57/40 · 80 m") : on compare
+        // sur la partie AVANT le " · ", sinon le produit n'est jamais retrouvé
+        // (le prix était alors réinitialisé et le métrage perdu).
+        const refSeule = it.designation.split(' · ')[0].trim();
+        const p = data.find(pr => pr.reference === refSeule);
+        return {
+          categoryId: p?.category?.id ?? p?.categoryId ?? '',
+          productId: p?.id ?? null,
+          designation: refSeule,
+          quantite: it.quantite,
+          prixUnitaire: it.prixUnitaire,
+          metrage: it.metrage ?? null,
+        };
       });
-      setLines(init.length > 0 ? init : [{ productId: null, designation: '', quantite: 1, prixUnitaire: 0 }]);
+      setLines(init.length > 0 ? init : [{ categoryId: '', productId: null, designation: '', quantite: 1, prixUnitaire: 0, metrage: null }]);
     }).catch(() => {});
   }, [item.items]);
 
   const setLine = (i: number, patch: Partial<EditLine>) =>
     setLines(prev => prev.map((l, idx) => idx === i ? { ...l, ...patch } : l));
-  const pickProduct = (i: number, p: ProdOption) => {
-    setLine(i, { productId: p.id, designation: p.reference, prixUnitaire: p.price });
-    setPickerOpen(null);
+  // Sélection d'une référence : reprend le prix du catalogue (comme à la création)
+  const selectRef = (i: number, ref: string) => {
+    const p = products.find(pr => pr.reference === ref);
+    setLine(i, { productId: p?.id ?? null, designation: ref, prixUnitaire: p?.price ?? 0 });
   };
   const total = lines.reduce((acc, l) => acc + l.quantite * l.prixUnitaire, 0);
   const inputCls = "px-3 py-2 rounded-xl border border-[#E2E8F0] text-[13px] text-[#0F172A] focus:outline-none focus:border-[#4CAF4F] focus:ring-[2px] focus:ring-[#4CAF4F]/15 transition-all";
@@ -593,9 +610,17 @@ function EditOrderModal({ item, onClose, onSaved }: {
   const save = async () => {
     if (!item.id) return;
     setSaving(true);
+    // Une référence LIBRE n'a pas de productId : on l'envoie via `description`,
+    // sinon la ligne était purement et simplement supprimée à l'enregistrement.
     const items = lines
-      .filter(l => l.productId && l.quantite > 0)
-      .map(l => ({ productId: l.productId, quantity: l.quantite, unitPrice: l.prixUnitaire }));
+      .filter(l => (l.productId || l.designation.trim()) && l.quantite > 0)
+      .map(l => ({
+        productId: l.productId ?? undefined,
+        description: l.productId ? undefined : l.designation.trim(),
+        quantity: l.quantite,
+        unitPrice: l.prixUnitaire,
+        metrage: l.metrage ?? undefined,
+      }));
     const res = await fetch(`/api/orders/${item.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -613,57 +638,90 @@ function EditOrderModal({ item, onClose, onSaved }: {
   return (
     <>
       <div className="fixed inset-0 z-[150] bg-black/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="fixed inset-0 z-[160] flex items-center justify-center p-6 pointer-events-none">
-        <div className="pointer-events-auto bg-white rounded-2xl shadow-2xl p-6 w-[560px] max-w-[94vw] max-h-[88vh] flex flex-col">
+      {/* Marges réduites sur mobile → plus de hauteur utile pour la liste produits */}
+      <div className="fixed inset-0 z-[160] flex items-center justify-center p-2 md:p-6 pointer-events-none">
+        <div className="pointer-events-auto bg-white rounded-2xl shadow-2xl p-4 md:p-6 w-[560px] max-w-[96vw] max-h-[94vh] md:max-h-[88vh] flex flex-col">
           <p className="text-[16px] font-bold text-[#0F172A] mb-1">Modifier la commande</p>
           <p className="text-[12px] text-[#8A9BB5] mb-4">{item.ref} — {item.entreprise || item.client}</p>
 
           <div className="flex-1 overflow-y-auto -mx-1 px-1">
-            {/* En-têtes */}
-            <div className="grid grid-cols-[1fr_70px_100px_28px] gap-2 mb-2 px-1">
-              <span className="text-[10px] font-bold text-[#ABBED1] uppercase tracking-wide">Produit</span>
-              <span className="text-[10px] font-bold text-[#ABBED1] uppercase tracking-wide">Qté</span>
-              <span className="text-[10px] font-bold text-[#ABBED1] uppercase tracking-wide">Prix unit.</span>
-              <span />
+            {/* En-têtes — même disposition que le formulaire de création */}
+            <div className="hidden md:grid gap-2 mb-1 px-1" style={{ gridTemplateColumns: '1fr 1fr 72px' }}>
+              <span className="text-[10px] font-bold text-[#ABBED1] uppercase tracking-wide">Catégorie</span>
+              <span className="text-[10px] font-bold text-[#ABBED1] uppercase tracking-wide">Référence</span>
+              <span className="text-[10px] font-bold text-[#ABBED1] uppercase tracking-wide">Métrage (m)</span>
             </div>
+
             <div className="flex flex-col gap-2">
-              {lines.map((l, i) => (
-                <div key={i} className="grid grid-cols-[1fr_70px_100px_28px] gap-2 items-center">
-                  {/* Sélecteur produit */}
-                  <div className="relative">
-                    <button type="button" onClick={() => setPickerOpen(pickerOpen === i ? null : i)}
-                      className="w-full flex items-center justify-between px-3 py-2 rounded-xl border border-[#E2E8F0] bg-white text-[13px] hover:border-[#4CAF4F]"
-                      style={{ color: l.designation ? '#0F172A' : '#94A3B8' }}>
-                      <span className="truncate">{l.designation || '— Réf —'}</span>
-                      <svg width={12} height={12} fill="none" viewBox="0 0 24 24" className="flex-shrink-0 text-[#ABBED1]"><path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                    </button>
-                    {pickerOpen === i && (
-                      <>
-                        <div className="fixed inset-0 z-[100]" onClick={() => setPickerOpen(null)} />
-                        <div className="absolute top-full left-0 right-0 mt-1 z-[110] bg-white rounded-xl border border-[#E2E8F0] shadow-xl overflow-hidden">
-                          <div className="max-h-[180px] overflow-y-auto py-1">
-                            {products.map(p => (
-                              <button key={p.id} type="button" onClick={() => pickProduct(i, p)}
-                                className="w-full text-left px-3 py-2 flex items-center justify-between gap-2 hover:bg-[#F0FDF4]">
-                                <span className="text-[13px] font-semibold text-[#0F172A]">{p.reference}</span>
-                                <span className="text-[11px] text-[#ABBED1]">{p.price.toLocaleString('fr-FR')} DA</span>
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      </>
-                    )}
+              {lines.map((l, i) => {
+                const ligneProducts = l.categoryId
+                  ? products.filter(p => (p.category?.id ?? p.categoryId) === l.categoryId)
+                  : products;
+                return (
+                <div key={i} className="rounded-xl border border-[#E2E8F0] p-3 md:p-0 md:border-0 md:rounded-none">
+                  {/* Catégorie seule sur mobile, puis Référence + Métrage */}
+                  <div className="md:grid md:gap-2 md:items-center" style={{ gridTemplateColumns: '1fr 1fr 72px' }}>
+                    <div className="mb-2 md:mb-0">
+                      <span className="md:hidden block text-[10px] font-bold text-[#ABBED1] uppercase tracking-wide mb-1">Catégorie</span>
+                      <AdminSelect
+                        className="w-full"
+                        value={l.categoryId}
+                        onChange={(v) => setLine(i, { categoryId: v, designation: '', productId: null })}
+                        options={[
+                          { value: '', label: 'Toutes catégories' },
+                          ...categories.map((c) => ({ value: c.id, label: c.name })),
+                        ]}
+                      />
+                    </div>
+                    <div className="grid grid-cols-[1fr_84px] gap-2 md:contents">
+                      <div>
+                        <span className="md:hidden block text-[10px] font-bold text-[#ABBED1] uppercase tracking-wide mb-1">Référence</span>
+                        <RefSelect
+                          value={l.designation}
+                          products={ligneProducts}
+                          allowFree
+                          onChange={(ref, isFree) => {
+                            if (isFree) setLine(i, { designation: ref, productId: null });
+                            else selectRef(i, ref);
+                          }}
+                        />
+                      </div>
+                      <div>
+                        <span className="md:hidden block text-[10px] font-bold text-[#ABBED1] uppercase tracking-wide mb-1">Métrage</span>
+                        <input type="number" min="0" step="any" value={l.metrage ?? ''} placeholder="—"
+                          onChange={e => setLine(i, { metrage: e.target.value === '' ? null : Number(e.target.value) })}
+                          className={inputCls + ' w-full text-center'} />
+                      </div>
+                    </div>
                   </div>
-                  <input type="number" min="1" value={l.quantite} onChange={e => setLine(i, { quantite: Math.max(1, Number(e.target.value)) })} className={inputCls} />
-                  <input type="number" min="0" value={l.prixUnitaire} onChange={e => setLine(i, { prixUnitaire: Number(e.target.value) })} className={inputCls} />
-                  <button onClick={() => setLines(prev => prev.filter((_, idx) => idx !== i))}
-                    className="w-7 h-7 flex items-center justify-center rounded-lg text-[#EF4444] hover:bg-[#FEF2F2]" title="Retirer">
-                    <svg width={14} height={14} fill="none" viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
-                  </button>
+
+                  {/* Qté · Prix unitaire, alignés à droite */}
+                  <div className="flex items-end justify-end gap-2 mt-2">
+                    <div className="w-[72px]">
+                      <span className="block text-[10px] font-bold text-[#ABBED1] uppercase tracking-wide mb-1">Qté</span>
+                      <input type="number" min="1" value={l.quantite}
+                        onChange={e => setLine(i, { quantite: Math.max(1, Number(e.target.value)) })}
+                        className={inputCls + ' w-full text-center'} />
+                    </div>
+                    <div className="w-[110px]">
+                      <span className="block text-[10px] font-bold text-[#ABBED1] uppercase tracking-wide mb-1">Prix unit. DA</span>
+                      <input type="number" min="0" value={l.prixUnitaire}
+                        onChange={e => setLine(i, { prixUnitaire: Number(e.target.value) })}
+                        className={inputCls + ' w-full text-right'} />
+                    </div>
+                    {lines.length > 1 ? (
+                      <button onClick={() => setLines(prev => prev.filter((_, idx) => idx !== i))}
+                        title="Retirer la ligne"
+                        className="w-8 h-[38px] flex-shrink-0 flex items-center justify-center rounded-lg text-[#ABBED1] hover:text-[#EF4444] hover:bg-[#FEF2F2] transition-colors">
+                        <svg width={13} height={13} fill="none" viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"/></svg>
+                      </button>
+                    ) : <span className="w-8 flex-shrink-0" />}
+                  </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
-            <button onClick={() => setLines(prev => [...prev, { productId: null, designation: '', quantite: 1, prixUnitaire: 0 }])}
+            <button onClick={() => setLines(prev => [...prev, { categoryId: '', productId: null, designation: '', quantite: 1, prixUnitaire: 0, metrage: null }])}
               className="mt-3 flex items-center gap-1.5 text-[12px] font-bold text-[#4CAF4F] hover:text-[#388E3C] transition-colors">
               <svg width={14} height={14} fill="none" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
               Ajouter un produit
@@ -1065,8 +1123,10 @@ export function RequestPanel({ item, onClose, onStatusChange, onConfirmQuoteWith
                 </IconBtn>
               </div>
 
-              {/* Ligne 2 : Notes+Modifier à gauche, actions statut à droite */}
-              <div className="flex items-start justify-between gap-3 flex-wrap">
+              {/* Ligne 2 : Notes+Modifier à gauche, actions statut à droite.
+                  `w-full` + `justify-end` sur le 2e bloc : quand ça passe à la ligne
+                  sur mobile, les actions restent alignées à DROITE (et non à gauche). */}
+              <div className="flex items-start justify-between gap-3 gap-y-2 flex-wrap">
               <div className="flex items-center gap-2">
                 <button onClick={() => { setNewNote(''); setEditingNotes(true); }}
                   className="flex items-center gap-1.5 px-3 h-9 rounded-full border text-[11px] font-bold transition-colors"
@@ -1088,8 +1148,8 @@ export function RequestPanel({ item, onClose, onStatusChange, onConfirmQuoteWith
                 )}
               </div>
 
-              {/* Droite : actions statut (côte à côte) */}
-              <div className="flex flex-row items-center gap-2 flex-wrap justify-end">
+              {/* Droite : actions statut (côte à côte, toujours alignées à droite) */}
+              <div className="flex flex-row items-center gap-2 flex-wrap justify-end ml-auto">
                 {!isArchived && onStatusChange && canModifierStatuts && (
                   <>
                     {/* Commande en attente → Confirmer (garde le détail ouvert) */}
@@ -1148,9 +1208,10 @@ export function RequestPanel({ item, onClose, onStatusChange, onConfirmQuoteWith
           item={item}
           onClose={() => setShowEdit(false)}
           onSaved={() => {
+            // On ferme la modale de modification, PAS le détail : l'utilisateur
+            // reste sur la commande qu'il vient d'éditer (le parent resynchronise).
             setShowEdit(false);
             onStatusChange?.(item.ref, item.statut); // déclenche un refetch côté parent
-            onClose();
           }}
         />
       )}

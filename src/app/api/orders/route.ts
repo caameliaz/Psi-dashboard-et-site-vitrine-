@@ -54,8 +54,15 @@ export async function POST(request: NextRequest) {
     ]);
     if (vErr) return NextResponse.json({ error: vErr }, { status: 400 });
 
-    // 1. Cherche par téléphone
-    let client = primaryPhone
+    // 0. Identifiant explicite (commande créée DEPUIS une fiche client) :
+    //    c'est la source la plus fiable, elle évite de créer un doublon quand
+    //    le téléphone est saisi différemment (espaces, +213 vs 0…).
+    let client = body.client?.id
+      ? await prisma.client.findUnique({ where: { id: String(body.client.id) } })
+      : null;
+
+    // 1. Sinon cherche par téléphone
+    if (!client) client = primaryPhone
       ? await prisma.client.findFirst({
           where: { phones: { some: { number: primaryPhone } } },
         })

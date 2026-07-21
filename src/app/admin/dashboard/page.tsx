@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { StatusPill } from '@/components/ui/StatusPill';
 import { RequestPanel, type RequestDetail } from '@/components/ui/RequestPanel';
+import { orderToDetail, quoteToDetail, DB_TO_UI } from '@/lib/request-detail';
 import { useSSE } from '@/lib/use-sse';
 import dynamic from 'next/dynamic';
 import type { Order, Quote } from '@/types';
@@ -29,61 +30,11 @@ function ChartSkeleton({ title }: { title: string }) {
   );
 }
 
-const DB_TO_UI: Record<string, string> = {
-  EN_ATTENTE: 'En attente', CONTACTE: 'En attente',
-  VALIDE: 'Confirmé', LIVRE: 'Livré', ANNULE: 'Annulé',
-};
-
 function getSourceLabel(src: string) { return src === 'SITE' ? 'Site web' : 'Manuel'; }
 const SOURCE_COLOR: Record<'SITE' | 'OTHER', { bg: string; color: string; border: string }> = {
   SITE:  { bg: '#F0FDF4', color: '#166534', border: '#BBF7D0' },
   OTHER: { bg: '#FFF7ED', color: '#92400E', border: '#FDE68A' },
 };
-
-function orderToDetail(o: Order): RequestDetail {
-  const phone = o.client?.phones?.find((p) => p.primary)?.number ?? o.client?.phones?.[0]?.number ?? '';
-  const produits = o.items?.map((i) => `${i.product?.reference ?? 'Produit supprimé'} × ${i.quantity}`).join(', ') || '—';
-  const total = o.items?.reduce((acc, i) => acc + i.quantity * (i.unitPrice ?? 0), 0) ?? 0;
-  return {
-    id: o.id,
-    ref: o.ref ?? o.id?.slice(0, 8).toUpperCase(),
-    type: 'Commande',
-    source: o.source ?? 'SITE',
-    client: o.clientName || o.client?.name || '—',
-    entreprise: o.clientCompany || o.client?.company || o.clientName || o.client?.name || '—',
-    telephone: phone,
-    wilaya: o.clientWilaya || o.client?.wilaya || '',
-    email: o.client?.email ?? '',
-    produits,
-    montant: total > 0 ? `${total.toLocaleString('fr-FR')} DA` : '—',
-    statut: DB_TO_UI[o.status] ?? o.status,
-    date: new Date(o.createdAt).toLocaleDateString('fr-FR'),
-    heure: new Date(o.createdAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
-  };
-}
-
-function quoteToDetail(q: Quote): RequestDetail {
-  const phone = q.client?.phones?.find((p) => p.primary)?.number ?? q.client?.phones?.[0]?.number ?? '';
-  const produits = q.items?.map((i) => `${i.product?.reference ?? i.description ?? 'Produit supprimé'} × ${i.quantity}`).join(', ') || '—';
-  return {
-    id: q.id,
-    ref: q.ref ?? q.id?.slice(0, 8).toUpperCase(),
-    type: 'Devis',
-    source: q.source ?? 'SITE',
-    client: q.clientName || q.client?.name || '—',
-    entreprise: q.clientCompany || q.client?.company || q.clientName || q.client?.name || '—',
-    telephone: phone,
-    wilaya: q.clientWilaya || q.client?.wilaya || '',
-    email: q.client?.email ?? '',
-    produits,
-    items: q.items?.map((i) => ({ designation: i.product?.reference ?? i.description ?? 'Produit supprimé', quantite: i.quantity, prixUnitaire: 0 })) ?? [],
-    montant: q.proposedPrice ? `${Number(q.proposedPrice).toLocaleString('fr-FR')} DA` : 'Sur devis',
-    statut: DB_TO_UI[q.status] ?? q.status,
-    date: new Date(q.createdAt).toLocaleDateString('fr-FR'),
-    heure: new Date(q.createdAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
-    message: q.message ?? '',
-  };
-}
 
 // Palette diagrammes — sobre & pro, sans vert ni bleu : violet grisé, ambre, terracotta, ardoise, taupe, mauve
 const TOP_COLORS = ['#7C6BAF', '#E0A458', '#C97B63', '#5E6B7A', '#B0A38F', '#8A6FA8'];
@@ -281,8 +232,8 @@ export default function DashboardPage() {
         }))
       );
       const allDetails = [
-        ...(data.recentOrders as Order[]).map(orderToDetail),
-        ...(data.recentQuotes as Quote[]).map(quoteToDetail),
+        ...(data.recentOrders as Order[]).map((o) => orderToDetail(o)),
+        ...(data.recentQuotes as Quote[]).map((q) => quoteToDetail(q)),
       ].sort((a, b) => {
         const da = a.date.split('/').reverse().join('') + (a.heure ?? '');
         const db = b.date.split('/').reverse().join('') + (b.heure ?? '');

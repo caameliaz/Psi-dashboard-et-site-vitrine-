@@ -47,16 +47,18 @@ export async function GET(request: NextRequest) {
         _count: { select: { orders: true, quotes: true } },
         orders: {
           select: {
-            id: true, ref: true, createdAt: true, status: true,
-            items: { select: { quantity: true, unitPrice: true, product: { select: { reference: true } } } },
+            id: true, ref: true, createdAt: true, status: true, source: true,
+            assignedTo: { select: { id: true, name: true } },
+            items: { select: { quantity: true, unitPrice: true, description: true, metrage: true, product: { select: { reference: true } } } },
           },
           orderBy: { createdAt: 'desc' },
           take: 10,
         },
         quotes: {
           select: {
-            id: true, ref: true, createdAt: true, status: true,
-            items: { select: { quantity: true, product: { select: { reference: true } } } },
+            id: true, ref: true, createdAt: true, status: true, proposedPrice: true, source: true,
+            assignedTo: { select: { id: true, name: true } },
+            items: { select: { quantity: true, description: true, metrage: true, product: { select: { reference: true } } } },
           },
           orderBy: { createdAt: 'desc' },
           take: 10,

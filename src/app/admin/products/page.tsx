@@ -629,17 +629,24 @@ function ProductsPageInner() {
               ) : (
                 <div className="rounded-xl border-2 border-[#E2E8F0] overflow-hidden bg-white">
                   {filteredRefs.map((r, i) => (
-                    <div key={r.id} className={`flex items-center gap-3 px-4 py-3 ${i > 0 ? 'border-t border-[#E2E8F0]' : ''}`} style={{ opacity: r.active ? 1 : 0.55 }}>
+                    <div key={r.id} className={`flex flex-col md:flex-row md:items-center gap-2 md:gap-3 px-4 py-3 ${i > 0 ? 'border-t border-[#E2E8F0]' : ''}`} style={{ opacity: r.active ? 1 : 0.55 }}>
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
+                        {/* Ligne 1 : la référence seule (badge + nom) */}
+                        <div className="flex items-center gap-2 min-w-0">
                           {/* Code référence (auto PTT-001 si préfixe, sinon dimensions) */}
-                          <span className="text-[11px] font-bold px-2 py-0.5 rounded-md bg-[#EEF2FF] text-[#4F46E5] tabular-nums">{r.reference}</span>
+                          <span className="text-[11px] font-bold px-2 py-0.5 rounded-md bg-[#EEF2FF] text-[#4F46E5] tabular-nums flex-shrink-0">{r.reference}</span>
                           <p className="text-[13px] font-bold text-[#0F172A] truncate">{r.name || `${r.width}mm × ${r.length}m`}</p>
                         </div>
-                        <p className="text-[12px] text-[#8A9BB5] truncate mt-0.5">
-                          {r.width}mm × {r.length}m{r.metrage != null ? ` · ${r.metrage} m` : ''}{r.usage ? ` — ${r.usage}` : ''}
+                        {/* Ligne 2 : dimensions + métrage, puis l'usage */}
+                        <p className="text-[12px] text-[#8A9BB5] mt-0.5">
+                          {r.width}mm × {r.length}m{r.metrage != null ? ` · ${r.metrage} m` : ''}
                         </p>
+                        {r.usage && (
+                          <p className="text-[12px] text-[#ABBED1] truncate">{r.usage}</p>
+                        )}
                       </div>
+                      {/* Prix + actions : à droite sur ordi, sur leur propre ligne sur mobile */}
+                      <div className="flex items-center gap-2 md:gap-3 flex-shrink-0 justify-end">
                       <p className="text-[13px] font-semibold text-[#374151] flex-shrink-0 tabular-nums">{r.price.toLocaleString('fr-FR')} DA</p>
                       {canEdit && editMode && <Toggle active={r.active} onToggle={() => toggleRef(r)} />}
                       {canEdit && editMode && (
@@ -652,6 +659,7 @@ function ProductsPageInner() {
                           </button>
                         </div>
                       )}
+                      </div>
                     </div>
                   ))}
                 </div>

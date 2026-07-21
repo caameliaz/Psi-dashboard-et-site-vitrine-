@@ -13,6 +13,7 @@ import { exportVentesExcel } from '@/lib/export-ventes';
 import { useSSE } from '@/lib/use-sse';
 import { useSession } from 'next-auth/react';
 import { RequirePerm } from '@/components/RequirePerm';
+import { orderToDetail, quoteToDetail, DB_TO_UI, UI_TO_DB } from '@/lib/request-detail';
 import { validateEmail, validatePhone, validateQuantity, validatePositiveNumber, normalizeEmail, normalizePhone, firstError } from '@/lib/validation';
 
 const ARCHIVED = ['Livré', 'Annulé'];
@@ -21,15 +22,6 @@ function getSourceLabel(src: string) { return src === 'SITE' ? 'Site web' : 'Man
 const SOURCE_COLOR: Record<'SITE' | 'OTHER', { bg: string; color: string; border: string }> = {
   SITE:  { bg: '#F0FDF4', color: '#166534', border: '#BBF7D0' },
   OTHER: { bg: '#FFF7ED', color: '#92400E', border: '#FDE68A' },
-};
-
-// DB status → UI label
-const DB_TO_UI: Record<string, string> = {
-  EN_ATTENTE: 'En attente',
-  CONTACTE:   'En attente',
-  VALIDE:     'Confirmé',
-  LIVRE:      'Livré',
-  ANNULE:     'Annulé',
 };
 
 const PERIODE_LABEL: Record<string, string> = {
@@ -54,90 +46,6 @@ function periodeStartDate(periode: string): Date | null {
 function periodeToFrom(periode: string): string | null {
   const d = periodeStartDate(periode);
   return d ? d.toISOString() : null;
-}
-
-// UI label → DB status
-const UI_TO_DB: Record<string, string> = {
-  'En attente': 'EN_ATTENTE',
-  'Confirmé':   'VALIDE',
-  'Livré':      'LIVRE',
-  'Annulé':     'ANNULE',
-};
-
-function orderToDetail(o: any): RequestDetail {
-  const phone = o.client?.phones?.find((p: any) => p.primary)?.number ?? o.client?.phones?.[0]?.number ?? '';
-  const rawItems = o.items ?? [];
-  const items = rawItems.map((i: any) => {
-    const baseName = i.product?.reference ?? i.product?.ref ?? i.description ?? '?';
-    return {
-      designation: i.metrage != null ? `${baseName} · ${i.metrage} m` : baseName,
-      categorie: i.product?.category?.name ?? '',
-      quantite: i.quantity ?? 0,
-      prixUnitaire: i.unitPrice ?? 0,
-      metrage: i.metrage ?? null,
-    };
-  });
-  const produits = items.map((i: any) => `${i.designation} × ${i.quantite}`).join(', ') || '—';
-  const total = items.reduce((acc: number, i: any) => acc + i.quantite * i.prixUnitaire, 0);
-  return {
-    id: o.id,
-    ref: o.ref ?? o.id.slice(0, 8).toUpperCase(),
-    type: 'Commande',
-    source: o.source ?? 'SITE',
-    client: o.clientName || o.client?.name || '—',
-    entreprise: o.clientCompany || o.client?.company || '—',
-    telephone: phone,
-    wilaya: o.client?.wilaya ?? '',
-    commune: o.client?.commune ?? '',
-    adresse: o.client?.address ?? '',
-    email: o.client?.email ?? '',
-    produits,
-    items,
-    montant: total > 0 ? `${total.toLocaleString('fr-FR')} DA` : '—',
-    statut: DB_TO_UI[o.status] ?? o.status,
-    assignedToId: o.assignedTo?.id ?? o.assignedToId ?? null,
-    assignedToName: o.assignedTo?.name ?? null,
-    date: new Date(o.createdAt).toLocaleDateString('fr-FR'),
-    heure: new Date(o.createdAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
-  };
-}
-
-function quoteToDetail(q: any): RequestDetail {
-  const phone = q.client?.phones?.find((p: any) => p.primary)?.number ?? q.client?.phones?.[0]?.number ?? '';
-  const rawItems = q.items ?? [];
-  const items = rawItems.map((i: any) => {
-    const baseName = i.product?.reference ?? i.product?.ref ?? i.description ?? '?';
-    return {
-      designation: i.metrage != null ? `${baseName} · ${i.metrage} m` : baseName,
-      categorie: i.product?.category?.name ?? '',
-      quantite: i.quantity ?? 0,
-      prixUnitaire: i.unitPrice ?? 0,
-      metrage: i.metrage ?? null,
-    };
-  });
-  const produits = items.map((i: any) => `${i.designation} × ${i.quantite}`).join(', ') || '—';
-  return {
-    id: q.id,
-    ref: q.ref ?? q.id.slice(0, 8).toUpperCase(),
-    type: 'Devis',
-    source: q.source ?? 'SITE',
-    client: q.clientName || q.client?.name || '—',
-    entreprise: q.clientCompany || q.client?.company || '—',
-    telephone: phone,
-    wilaya: q.client?.wilaya ?? '',
-    commune: q.client?.commune ?? '',
-    adresse: q.client?.address ?? '',
-    email: q.client?.email ?? '',
-    produits,
-    items,
-    montant: q.proposedPrice ? `${Number(q.proposedPrice).toLocaleString('fr-FR')} DA` : 'Sur devis',
-    statut: DB_TO_UI[q.status] ?? q.status,
-    assignedToId: q.assignedTo?.id ?? q.assignedToId ?? null,
-    assignedToName: q.assignedTo?.name ?? null,
-    date: new Date(q.createdAt).toLocaleDateString('fr-FR'),
-    heure: new Date(q.createdAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
-    message: q.message ?? '',
-  };
 }
 
 // Ordre logique des statuts : En attente (à traiter) en haut → Confirmé → Livré → Annulé en bas
@@ -187,6 +95,8 @@ export async function submitNewRequest(
   const body = isCmd
     ? {
         client: {
+          // id transmis quand la demande est créée depuis une fiche client → pas de doublon
+          id: item._clientId || undefined,
           name: item.client, company: item._entreprise || undefined, phone: item._telephone ? normalizePhone(item._telephone) : undefined,
           email: item._email ? normalizeEmail(item._email) : undefined, wilaya: item._wilaya || 'Non spécifié', commune: item._commune || undefined,
         },
@@ -194,6 +104,8 @@ export async function submitNewRequest(
         assignedToId: item._assignedToId ?? undefined, source: 'AUTRE',
       }
     : {
+        // id transmis quand le devis est créé depuis une fiche client → pas de doublon
+        clientId: item._clientId || undefined,
         name: item.client, company: item._entreprise || undefined, phone: item._telephone ? normalizePhone(item._telephone) : undefined,
         email: item._email ? normalizeEmail(item._email) : undefined, wilaya: item._wilaya || 'Non spécifié', commune: item._commune || undefined, message: '',
         items: lignes.filter((l: any) => l.ref).map((l: any) => ({ productId: l.productId ?? undefined, description: l.productId ? undefined : l.ref, quantity: l.qte, metrage: l.metrage ? Number(l.metrage) : undefined })),
@@ -215,7 +127,7 @@ export function CreateForm({ defaultType, onClose, onSave, users, currentUserId,
   users: { id: string; name: string }[];
   currentUserId?: string;
   inline?: boolean;
-  prefill?: { client?: string; entreprise?: string; telephone?: string; email?: string; wilaya?: string; commune?: string };
+  prefill?: { clientId?: string; client?: string; entreprise?: string; telephone?: string; email?: string; wilaya?: string; commune?: string };
 }) {
   const ic = "w-full px-3 py-2 rounded-xl border border-[#E2E8F0] text-[13px] text-[#263238] focus:outline-none focus:border-[#4CAF4F] focus:ring-[2px] focus:ring-[#4CAF4F]/15 transition-all bg-white";
   const lc = "block text-[11px] font-bold text-[#8A9BB5] uppercase tracking-wide mb-1";
@@ -256,7 +168,7 @@ export function CreateForm({ defaultType, onClose, onSave, users, currentUserId,
 
   const handleSave = async () => {
     // Entreprise obligatoire (+ téléphone + au moins une ligne). Nom facultatif.
-    if (!entreprise.trim() || !telephone.trim() || lignes.every(l => !l.ref)) return;
+    if (!entreprise.trim() || !telephone.trim() || !wilaya.trim() || !commune.trim() || lignes.every(l => !l.ref)) return;
     setSaving(true);
     const now = new Date();
     const produits = lignes.filter(l => l.ref).map(l => `${l.ref} × ${l.qte}`).join(', ');
@@ -282,6 +194,8 @@ export function CreateForm({ defaultType, onClose, onSave, users, currentUserId,
       _email: email.trim(),
       _telephone: telephone.trim(),
       _entreprise: entreprise.trim(),
+      // Rattache la demande au client d'origine (créée depuis sa fiche)
+      _clientId: prefill?.clientId,
       _assignedToId: assignedToId || undefined,
     } as any);
     setSaving(false);
@@ -342,8 +256,8 @@ export function CreateForm({ defaultType, onClose, onSave, users, currentUserId,
             <div><label className={lc}>Email</label><input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="client@email.com" className={ic} /></div>
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <div><label className={lc}>Wilaya</label><WilayaSelect value={wilaya} onChange={(v) => { setWilaya(v); setCommune(''); }} /></div>
-            <div><label className={lc}>Commune</label><CommuneSelect wilaya={wilaya} value={commune} onChange={setCommune} /></div>
+            <div><label className={lc}>Wilaya *</label><WilayaSelect value={wilaya} onChange={(v) => { setWilaya(v); setCommune(''); }} /></div>
+            <div><label className={lc}>Commune *</label><CommuneSelect wilaya={wilaya} value={commune} onChange={setCommune} /></div>
           </div>
           <div>
             <label className={lc}>Commercial</label>
@@ -361,70 +275,85 @@ export function CreateForm({ defaultType, onClose, onSave, users, currentUserId,
               <label className={lc}>Produits</label>
             </div>
 
-            {/* En-têtes colonnes */}
-            <div className="grid gap-2 mb-1" style={{ gridTemplateColumns: '1fr 1fr 72px 64px 96px 24px' }}>
+            {/* En-têtes colonnes — masqués sur mobile (chaque ligne devient une carte
+                avec ses propres libellés). Alignés sur la 1re ligne de chaque bloc. */}
+            <div className="hidden md:grid gap-2 mb-1" style={{ gridTemplateColumns: '1fr 1fr 72px' }}>
               <span className="text-[10px] font-bold text-[#ABBED1] uppercase tracking-wide">Catégorie</span>
               <span className="text-[10px] font-bold text-[#ABBED1] uppercase tracking-wide">Référence</span>
               <span className="text-[10px] font-bold text-[#ABBED1] uppercase tracking-wide">Métrage (m)</span>
-              <span className="text-[10px] font-bold text-[#ABBED1] uppercase tracking-wide">Qté</span>
-              <span className="text-[10px] font-bold text-[#ABBED1] uppercase tracking-wide">Prix unit. DA</span>
-              <span />
             </div>
 
             <div className="flex flex-col gap-2">
               {lignes.map((ligne, i) => {
                 const ligneProducts = ligne.categoryId ? products.filter(p => p.categoryId === ligne.categoryId) : products;
                 return (
-                <div key={i} className="grid gap-2 items-center" style={{ gridTemplateColumns: '1fr 1fr 72px 64px 96px 24px' }}>
-                  {/* Catégorie : filtre les réfs proposées à droite */}
-                  <AdminSelect
-                    className="w-full"
-                    value={ligne.categoryId}
-                    onChange={(v) => setLigne(i, { categoryId: v, ref: '', productId: null })}
-                    options={[
-                      { value: '', label: 'Toutes catégories' },
-                      ...categories.map((c) => ({ value: c.id, label: c.name })),
-                    ]}
-                  />
+                <div key={i} className="rounded-xl border border-[#E2E8F0] p-3 md:p-0 md:border-0 md:rounded-none">
+                  {/* Mobile : Catégorie SEULE sur sa ligne, puis Référence + Métrage en dessous.
+                      Ordinateur : les 3 côte à côte comme avant. */}
+                  <div className="md:grid md:gap-2 md:items-center" style={{ gridTemplateColumns: '1fr 1fr 72px' }}>
+                    <div className="mb-2 md:mb-0">
+                      <span className="md:hidden block text-[10px] font-bold text-[#ABBED1] uppercase tracking-wide mb-1">Catégorie</span>
+                      <AdminSelect
+                        className="w-full"
+                        value={ligne.categoryId}
+                        onChange={(v) => setLigne(i, { categoryId: v, ref: '', productId: null })}
+                        options={[
+                          { value: '', label: 'Toutes catégories' },
+                          ...categories.map((c) => ({ value: c.id, label: c.name })),
+                        ]}
+                      />
+                    </div>
+                    {/* md:contents = ce wrapper "disparaît" sur ordinateur,
+                        Référence et Métrage reprennent leur place dans la grille. */}
+                    <div className="grid grid-cols-[1fr_84px] gap-2 md:contents">
+                    <div>
+                      <span className="md:hidden block text-[10px] font-bold text-[#ABBED1] uppercase tracking-wide mb-1">Référence</span>
+                      <RefSelect
+                        value={ligne.ref}
+                        products={ligneProducts}
+                        allowFree
+                        onChange={(ref, isFree) => {
+                          if (isFree) {
+                            setLigne(i, { ref, productId: null });
+                          } else {
+                            selectRef(i, ref);
+                          }
+                        }}
+                      />
+                    </div>
+                    <div>
+                      <span className="md:hidden block text-[10px] font-bold text-[#ABBED1] uppercase tracking-wide mb-1">Métrage</span>
+                      <input type="number" inputMode="decimal" min={0} step="any" value={ligne.metrage}
+                        onChange={e => setLigne(i, { metrage: e.target.value })}
+                        placeholder="—"
+                        className={ic + ' text-center'} />
+                    </div>
+                    </div>
+                  </div>
 
-                  {/* Ref : dropdown des réfs existantes + option "Référence libre" (commande ET devis) */}
-                  <RefSelect
-                    value={ligne.ref}
-                    products={ligneProducts}
-                    allowFree
-                    onChange={(ref, isFree) => {
-                      if (isFree) {
-                        setLigne(i, { ref, productId: null });
-                      } else {
-                        selectRef(i, ref);
-                      }
-                    }}
-                  />
-
-                  {/* Métrage (facultatif) */}
-                  <input type="number" inputMode="decimal" min={0} step="any" value={ligne.metrage}
-                    onChange={e => setLigne(i, { metrage: e.target.value })}
-                    placeholder="—"
-                    className={ic + ' text-center'} />
-
-                  {/* Quantité */}
-                  <input type="number" inputMode="numeric" min={1} value={ligne.qte}
-                    onChange={e => setLigne(i, { qte: Math.max(1, Number(e.target.value)) })}
-                    className={ic + ' text-center'} />
-
-                  {/* Prix unitaire — toujours modifiable */}
-                  <input type="number" inputMode="numeric" min={0} value={ligne.pu || ''}
-                    onChange={e => setLigne(i, { pu: Number(e.target.value) })}
-                    placeholder="0"
-                    className={ic + ' text-right'} />
-
-                  {/* Supprimer ligne */}
-                  {lignes.length > 1 ? (
-                    <button onClick={() => setLignes(prev => prev.filter((_, idx) => idx !== i))}
-                      className="w-6 h-6 flex items-center justify-center rounded-lg text-[#ABBED1] hover:text-[#EF4444] hover:bg-[#FEF2F2] transition-colors">
-                      <svg width={12} height={12} viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"/></svg>
-                    </button>
-                  ) : <span />}
+                  {/* Ligne 2 : Qté · Prix unitaire, alignés à droite */}
+                  <div className="flex items-end justify-end gap-2 mt-2">
+                    <div className="w-[72px]">
+                      <span className="block text-[10px] font-bold text-[#ABBED1] uppercase tracking-wide mb-1">Qté</span>
+                      <input type="number" inputMode="numeric" min={1} value={ligne.qte}
+                        onChange={e => setLigne(i, { qte: Math.max(1, Number(e.target.value)) })}
+                        className={ic + ' text-center'} />
+                    </div>
+                    <div className="w-[110px]">
+                      <span className="block text-[10px] font-bold text-[#ABBED1] uppercase tracking-wide mb-1">Prix unit. DA</span>
+                      <input type="number" inputMode="numeric" min={0} value={ligne.pu || ''}
+                        onChange={e => setLigne(i, { pu: Number(e.target.value) })}
+                        placeholder="0"
+                        className={ic + ' text-right'} />
+                    </div>
+                    {lignes.length > 1 ? (
+                      <button onClick={() => setLignes(prev => prev.filter((_, idx) => idx !== i))}
+                        title="Supprimer la ligne"
+                        className="w-8 h-[38px] flex-shrink-0 flex items-center justify-center rounded-lg text-[#ABBED1] hover:text-[#EF4444] hover:bg-[#FEF2F2] transition-colors">
+                        <svg width={13} height={13} viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"/></svg>
+                      </button>
+                    ) : <span className="w-8 flex-shrink-0" />}
+                  </div>
                 </div>
               );})}
             </div>
@@ -468,7 +397,7 @@ export function CreateForm({ defaultType, onClose, onSave, users, currentUserId,
         {/* Footer */}
         <div className="flex gap-3 px-6 py-4 border-t border-[#F2F4F7]">
           <button onClick={onClose} className="flex-1 px-4 py-2.5 rounded-xl border border-[#E2E8F0] text-[13px] font-semibold text-[#374151] hover:bg-[#F8FAFC] transition-colors">Annuler</button>
-          <button onClick={handleSave} disabled={saving || !entreprise.trim() || !telephone.trim() || lignes.every(l => !l.ref)}
+          <button onClick={handleSave} disabled={saving || !entreprise.trim() || !telephone.trim() || !wilaya.trim() || !commune.trim() || lignes.every(l => !l.ref)}
             className="flex-1 px-4 py-2.5 rounded-xl text-[13px] font-bold text-white disabled:opacity-40 transition-opacity"
             style={{ background: '#4CAF4F' }}>
             {saving ? 'Création…' : `Créer ${type === 'Commande' ? 'la commande' : 'le devis'}`}
@@ -515,14 +444,26 @@ function RequestsPageInner() {
         fetch(`/api/orders${qs}`),
         fetch(`/api/quotes${qs}`),
       ]);
+      let freshOrders: RequestDetail[] | null = null;
+      let freshQuotes: RequestDetail[] | null = null;
       if (ordRes.ok) {
         const data = await ordRes.json();
-        setOrders(data.map(orderToDetail));
+        freshOrders = data.map(orderToDetail);
+        setOrders(freshOrders!);
       }
       if (quoRes.ok) {
         const data = await quoRes.json();
-        setQuotes(data.map(quoteToDetail));
+        freshQuotes = data.map(quoteToDetail);
+        setQuotes(freshQuotes!);
       }
+      // Garde le détail ouvert à jour en TEMPS RÉEL (statut, montant, assignation…)
+      // sans jamais le refermer sous les doigts de l'utilisateur.
+      setSelected((prev) => {
+        if (!prev) return prev;
+        const source = prev.type === 'Devis' ? freshQuotes : freshOrders;
+        if (!source) return prev;
+        return source.find((r) => r.id === prev.id) ?? prev;
+      });
     } finally {
       if (!silent) setLoading(false);
     }
@@ -599,14 +540,9 @@ function RequestsPageInner() {
       body: JSON.stringify({ status: dbStatus }),
     });
     if (!res.ok) console.error('PATCH failed', await res.text());
+    // fetchAll resynchronise le détail ouvert : on ne ferme jamais le panneau,
+    // l'utilisateur enchaîne ses actions et ferme lui-même quand il a fini.
     await fetchAll(true);
-    // Statut final (Livré/Annulé) → on ferme le détail. Sinon on le garde ouvert
-    // en mettant à jour son statut (l'utilisateur peut enchaîner les actions).
-    if (newStatut === 'Livré' || newStatut === 'Annulé') {
-      setSelected(null);
-    } else {
-      setSelected((prev) => (prev ? { ...prev, statut: newStatut } : prev));
-    }
   };
 
   // Change l'assignation ("pris en charge par") d'une commande/devis
@@ -645,8 +581,8 @@ function RequestsPageInner() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status: 'VALIDE', proposedPrice }),
     });
+    // On reste sur le détail : fetchAll resynchronise le panneau (montant + statut).
     await fetchAll(true);
-    setSelected(null);
   };
 
   const handleSaveNew = async (item: any) => {
@@ -860,7 +796,7 @@ function RequestsPageInner() {
           onConfirmQuoteWithPrice={selected.type === 'Devis' ? handleConfirmQuoteWithPrice : undefined}
           users={users}
           onAssign={handleAssign}
-          onReassigned={() => { setSelected(null); fetchAll(true); }}
+          onReassigned={() => { fetchAll(true); }}
         />
       )}
       {showCreate && (

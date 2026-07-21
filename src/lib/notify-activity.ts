@@ -24,12 +24,14 @@ export async function notifyAssignment({
   quoteId?: string;
 }) {
   if (!assignedToId || assignedToId === actorId) return;
-  const titre = entityType === 'commande' ? 'Commande assignée' : 'Devis assigné';
+  // Le destinataire est TOUJOURS la personne assignée → on s'adresse à elle
+  // directement ("vous a assigné"), sinon la notif ressemble à une simple info.
+  const titre = entityType === 'commande' ? 'Une commande vous est assignée' : 'Un devis vous est assigné';
   const notif = await prisma.notification.create({
     data: {
       type: 'ACTION_AUTRE',
       title: titre,
-      message: `${actorName} a assigné ${entityType === 'commande' ? 'la commande' : 'le devis'} ${ref} — ${clientLabel}`,
+      message: `${actorName} vous a assigné ${entityType === 'commande' ? 'la commande' : 'le devis'} ${ref} (${clientLabel}) — ${entityType === 'commande' ? 'elle est' : 'il est'} maintenant sous votre responsabilité.`,
       orderId: orderId ?? null,
       quoteId: quoteId ?? null,
       reads: { create: [{ userId: assignedToId, read: false }] },
