@@ -4,7 +4,9 @@ import Link from 'next/link';
 import { useTranslation } from '@/lib/i18n';
 
 // Container "besoin d'un devis" — utilisé sur l'accueil et la fiche produit.
-export function QuoteCTA({ id }: { id?: string }) {
+// fullBleed : le fond prend toute la largeur de l'écran, mais le contenu reste
+// aligné sur la même colonne (max-w-[1280px]) que le reste de la page.
+export function QuoteCTA({ id, fullBleed = false }: { id?: string; fullBleed?: boolean }) {
   const { t } = useTranslation();
 
   const features = [
@@ -13,8 +15,8 @@ export function QuoteCTA({ id }: { id?: string }) {
     { name: t('quote_cta.feature3_name'), desc: t('quote_cta.feature3_desc') },
   ];
 
-  return (
-    <div id={id} className="bg-[#E8F5E9] rounded-[28px] p-8 md:p-12 flex flex-col md:flex-row gap-8 md:gap-12">
+  const content = (
+    <div className={`flex flex-col md:flex-row gap-8 md:gap-12 ${fullBleed ? 'max-w-[1280px] mx-auto px-6 md:px-12 py-10 md:py-14' : ''}`}>
       <div className="flex-1 flex flex-col items-start gap-4 text-left">
         <h4 className="text-[20px] md:text-[22px] font-bold text-[#263238] italic leading-snug">
           {t('quote_cta.title')}
@@ -46,4 +48,10 @@ export function QuoteCTA({ id }: { id?: string }) {
       </div>
     </div>
   );
+
+  if (fullBleed) {
+    return <div id={id} className="bg-[#E8F5E9] w-full">{content}</div>;
+  }
+
+  return <div id={id} className="bg-[#E8F5E9] rounded-[28px] p-8 md:p-12">{content}</div>;
 }

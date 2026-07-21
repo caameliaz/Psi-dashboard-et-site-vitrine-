@@ -1,5 +1,10 @@
 export interface Cat { id: string; name: string; photo: string | null; description?: string | null }
-export interface Prod { id: string; reference: string; width: number; length: number; metrage?: number | null; usage: string; price: number; photo?: string | null; category?: { id: string; name: string } | null }
+export interface Prod {
+  id: string; reference: string; width: number; length: number; usage: string; price: number;
+  photo?: string | null; category?: { id: string; name: string } | null;
+  customFields?: { value: string; definition: { label: string } }[];
+  metrage?: number | null;
+}
 
 type Lang = 'fr' | 'ar';
 

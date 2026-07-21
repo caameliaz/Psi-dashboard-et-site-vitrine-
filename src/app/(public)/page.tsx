@@ -56,11 +56,11 @@ export default function Home() {
       {/* ════════════════════════════════════════════════════════════
           PRODUITS
       ════════════════════════════════════════════════════════════ */}
-      <section id="products" className="bg-white pt-10 pb-20 px-6 md:px-12">
+      <section id="products" className="bg-white pt-10 pb-8 px-6 md:px-12">
         <div className="max-w-[1280px] mx-auto flex flex-col gap-10">
 
           <div className="flex flex-col items-center gap-3 text-center">
-            <h2 className="text-[32px] md:text-[38px] font-bold text-[#263238] leading-tight">
+            <h2 className="text-[24px] md:text-[30px] font-bold text-[#263238] leading-tight">
               {t('products_section.title')}
             </h2>
             <p className="text-[16px] md:text-[18px] text-[#717171] max-w-[480px] leading-relaxed">
@@ -75,7 +75,7 @@ export default function Home() {
       {/* ════════════════════════════════════════════════════════════
           QUALITÉ & CONFORMITÉ
       ════════════════════════════════════════════════════════════ */}
-      <section id="contact" className="bg-[#F5F7FA] py-16 px-6 md:px-12">
+      <section id="contact" className="bg-[#F5F7FA] pt-16 px-6 md:px-12 mt-14 md:mt-20 mb-14 md:mb-20">
         <div className="max-w-[1280px] mx-auto flex flex-col gap-10">
           <div className="flex flex-col gap-3">
             <h2 className="text-[22px] md:text-[28px] font-bold text-[#263238] italic leading-snug">
@@ -85,54 +85,58 @@ export default function Home() {
             <div className="w-16 h-[3px] bg-[#4CAF4F] rounded-full" />
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 md:gap-8">
+          <div className="grid grid-cols-3 gap-2 sm:gap-6 md:gap-8">
             {[
               {
                 titleKey: 'quality.badge1_title',
                 descKey:  'quality.badge1_desc',
+                descShortKey: 'quality.badge1_desc_short',
                 icon: (
-                  <img src="/lot-de-3-rouleaux-de-papier-pour-tableau.avif" alt="" className="w-full h-full object-cover" />
+                  <img src="/icons8-papier-50.png" alt="" className="w-[22px] h-[22px] sm:w-[34px] sm:h-[34px] object-contain" />
                 ),
               },
               {
                 titleKey: 'quality.badge2_title',
                 descKey:  'quality.badge2_desc',
+                descShortKey: 'quality.badge2_desc_short',
                 icon: (
-                  <svg width="26" height="26" viewBox="0 0 24 24" fill="none">
-                    <rect x="2" y="5" width="20" height="5" fill="#1a1a1a" rx="1"/>
-                    <rect x="2" y="10" width="20" height="4.5" fill="#D32F2F"/>
-                    <rect x="2" y="14.5" width="20" height="5" fill="#FDD835" rx="1"/>
-                  </svg>
+                  <img src="/icons8-imprimante-50.png" alt="" className="w-[22px] h-[22px] sm:w-[34px] sm:h-[34px] object-contain" />
                 ),
               },
               {
                 titleKey: 'quality.badge3_title',
                 descKey:  'quality.badge3_desc',
+                descShortKey: 'quality.badge3_desc_short',
                 icon: (
-                  <img src="/images.jpg" alt="" className="w-full h-full object-cover" />
+                  <img src="/icons8-feuille-50.png" alt="" className="w-[22px] h-[22px] sm:w-[34px] sm:h-[34px] object-contain" />
                 ),
               },
             ].map((item) => (
-              <div key={item.titleKey} className="bg-white border border-[#E0E0E0] rounded-2xl shadow-[0_4px_16px_rgba(171,190,209,0.3)] p-8 flex flex-col items-center text-center gap-4">
-                <div className="w-16 h-16 rounded-full border-2 border-[#E0E0E0] overflow-hidden flex items-center justify-center">
-                  {item.icon}
+              <div key={item.titleKey} className="flex flex-col items-center text-center gap-2 sm:gap-4 min-w-0">
+                <div className="flex flex-col items-center gap-1">
+                  <div className="w-[44px] h-[44px] sm:w-[76px] sm:h-[76px] flex items-center justify-center">
+                    {item.icon}
+                  </div>
+                  <h3 className="text-[11px] sm:text-[18px] font-bold text-[#4CAF4F] italic leading-tight">{t(item.titleKey)}</h3>
                 </div>
-                <h3 className="text-[18px] font-bold text-[#4CAF4F] italic">{t(item.titleKey)}</h3>
-                <p className="text-[14px] text-[#717171] leading-relaxed">{t(item.descKey)}</p>
+                <p className="sm:hidden text-[10px] text-[#717171] leading-snug">{t(item.descShortKey)}</p>
+                <p className="hidden sm:block text-[14px] text-[#717171] leading-relaxed">{t(item.descKey)}</p>
               </div>
             ))}
           </div>
+        </div>
 
-          <QuoteCTA id="devis" />
+        <div className="mt-10 -mx-6 md:-mx-12">
+          <QuoteCTA id="devis" fullBleed />
         </div>
       </section>
 
       {/* ════════════════════════════════════════════════════════════
           À PROPOS
       ════════════════════════════════════════════════════════════ */}
-      <section id="about" className="bg-white py-20 px-6 md:px-12">
+      <section id="about" className="bg-white pt-8 pb-20 px-6 md:px-12">
         <div className="max-w-[1280px] mx-auto flex flex-col gap-8">
-          <h2 className="text-[32px] md:text-[38px] font-bold text-[#4D4D4D] leading-tight">
+          <h2 className="text-[24px] md:text-[30px] font-bold text-[#4D4D4D] leading-tight">
             {t('about.title')}
           </h2>
           <div className="flex flex-col lg:flex-row gap-10 lg:gap-16 items-start">

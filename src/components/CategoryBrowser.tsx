@@ -1,12 +1,13 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useCartStore } from '@/store/cartStore';
 import { useTranslation } from '@/lib/i18n';
-import { type Cat, type Prod, getFallbackDescription } from '@/lib/hardcodedCatalog';
+import { FormatPreview } from '@/components/FormatPreview';
+import { type Cat, type Prod } from '@/lib/hardcodedCatalog';
 
-// Grille de catégories : chaque card affiche une image, un nom, une description
+// Grille de catégories : chaque card affiche une image, un nom
 // et un carrousel de références (produits de la catégorie) qu'on parcourt à la flèche.
 export function CategoryBrowser({ limit }: { limit?: number }) {
   const [cats, setCats] = useState<Cat[]>([]);
@@ -22,7 +23,7 @@ export function CategoryBrowser({ limit }: { limit?: number }) {
   const visibleCats = limit ? cats.slice(0, limit) : cats;
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8">
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 md:gap-6">
       {visibleCats.map((cat) => (
         <CategoryCard
           key={cat.id}
@@ -35,20 +36,27 @@ export function CategoryBrowser({ limit }: { limit?: number }) {
 }
 
 function CategoryCard({ category, products }: { category: Cat; products: Prod[] }) {
-  const { t, lang } = useTranslation();
+  const { t } = useTranslation();
   const addItem = useCartStore((s) => s.addItem);
-  const [index, setIndex] = useState(0);
+  const trackRef = useRef<HTMLDivElement>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  const description = category.description || getFallbackDescription(category.name, lang) || '';
-  const displayed = products.length <= 1 ? products : [products[index], products[(index + 1) % products.length]];
+  const current = products.find((p) => p.id === selectedId) ?? products[0];
 
-  const prev = () => setIndex((i) => (i - 1 + products.length) % products.length);
-  const next = () => setIndex((i) => (i + 1) % products.length);
+  // Fait défiler d'une "page" entière — le nombre d'items par page est mesuré au moment du clic, pas figé en JS.
+  const scrollByPage = (dir: 1 | -1) => {
+    const track = trackRef.current;
+    if (!track) return;
+    const item = track.firstElementChild as HTMLElement | null;
+    const itemStep = item ? item.getBoundingClientRect().width + 4 : track.clientWidth;
+    const perPage = Math.max(1, Math.round(track.clientWidth / itemStep));
+    track.scrollBy({ left: dir * itemStep * perPage, behavior: 'smooth' });
+  };
 
   return (
-    <div className="bg-white rounded-2xl shadow-[0_4px_24px_rgba(171,190,209,0.35)] hover:shadow-[0_8px_32px_rgba(171,190,209,0.5)] transition-shadow flex flex-col overflow-hidden">
-      {/* Image catégorie */}
-      <Link href={`/products/${category.id}`} className="bg-[#F5F7FA] h-56 md:h-64 flex items-center justify-center overflow-hidden">
+    <div className="flex flex-col gap-3">
+      {/* Image catégorie — garde son propre container */}
+      <Link href={`/products/${category.id}`} className="bg-[#F5F7FA] rounded-2xl shadow-[0_4px_24px_rgba(171,190,209,0.35)] hover:shadow-[0_8px_32px_rgba(171,190,209,0.5)] transition-shadow w-[85%] mx-auto h-72 md:h-80 flex items-center justify-center overflow-hidden">
         {category.photo ? (
           <img src={category.photo} alt={category.name} className="w-full h-full object-cover" />
         ) : (
@@ -59,65 +67,77 @@ function CategoryCard({ category, products }: { category: Cat; products: Prod[] 
         )}
       </Link>
 
-      <div className="p-5 md:p-6 flex flex-col gap-4">
-        <div>
-          <Link href={`/products/${category.id}`}>
-            <h3 className="text-[20px] md:text-[22px] font-bold text-[#263238] leading-tight hover:text-[#4CAF4F] transition-colors">{category.name}</h3>
-          </Link>
-          {description && (
-            <p className="text-[13px] md:text-[14px] text-[#717171] leading-relaxed mt-1.5">{description}</p>
-          )}
-        </div>
+      {/* Titre + refs + bouton, alignés avec la largeur de la photo */}
+      <div className="w-[85%] mx-auto flex flex-col gap-3">
+        <Link href={`/products/${category.id}`}>
+          <h3 className="text-[15px] md:text-[16px] font-bold text-[#263238] leading-tight hover:text-[#4CAF4F] transition-colors">{category.name}</h3>
+        </Link>
 
         {products.length === 0 ? (
           <p className="text-[13px] text-[#717171]">{t('common.no_products')}</p>
         ) : (
-          <div className="flex items-center gap-2">
-            <button
-              onClick={prev}
-              disabled={products.length < 2}
-              aria-label={t('product_detail.prev_ref_aria')}
-              className="shrink-0 w-8 h-8 rounded-full border border-[#ABBED1]/50 flex items-center justify-center text-[#717171] hover:border-[#4CAF4F] hover:text-[#4CAF4F] disabled:opacity-30 disabled:hover:border-[#ABBED1]/50 disabled:hover:text-[#717171] transition-colors"
-            >
-              <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
-                <path d="M10 3L5 8l5 5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-            </button>
+          <div className="flex flex-col gap-2.5">
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={() => scrollByPage(-1)}
+                disabled={products.length < 2}
+                aria-label={t('product_detail.prev_ref_aria')}
+                className="shrink-0 w-7 h-7 rounded-full border border-[#ABBED1]/50 flex items-center justify-center text-[#717171] hover:border-[#4CAF4F] hover:text-[#4CAF4F] disabled:opacity-30 disabled:hover:border-[#ABBED1]/50 disabled:hover:text-[#717171] transition-colors"
+              >
+                <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
+                  <path d="M10 3L5 8l5 5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              </button>
 
-            <div className="flex-1 flex gap-2 overflow-hidden">
-              {displayed.map((p, i) => (
-                <div
-                  key={p.id}
-                  className={`bg-[#F5F7FA] border border-[#E0E0E0] rounded-xl px-4 py-3.5 flex items-center justify-between gap-3 min-w-0 ${
-                    i === 0 ? 'basis-[85%] sm:basis-[78%] shrink-0' : 'basis-[85%] sm:basis-[78%] shrink-0 opacity-50'
-                  }`}
-                >
-                  <div className="min-w-0">
-                    <p className="text-[15px] md:text-[16px] font-bold text-[#263238] leading-5 whitespace-nowrap">
-                      {t('common.ref')} {p.width}mm × {p.length}m
-                    </p>
-                    <p className="text-[13px] md:text-[14px] text-[#717171] leading-5 truncate">{p.usage}</p>
-                  </div>
+              <div
+                ref={trackRef}
+                className="flex-1 flex gap-1 min-w-0 overflow-x-auto scroll-smooth snap-x snap-mandatory [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+              >
+                {products.map((p) => {
+                  const isSelected = p.id === current.id;
+                  return (
+                    <button
+                      key={p.id}
+                      onClick={() => setSelectedId(p.id)}
+                      className="flex flex-col items-center gap-1.5 shrink-0 snap-start w-[calc(33.333%-2.67px)]"
+                    >
+                      <div
+                        className={`inline-flex border rounded-xl p-3.5 items-center justify-center transition-all ${
+                          isSelected
+                            ? 'border-[#4CAF4F] bg-[#F0FDF4] shadow-[0_4px_12px_rgba(76,175,79,0.2)]'
+                            : 'border-[#E0E0E0] hover:border-[#4CAF4F]/50'
+                        }`}
+                      >
+                        <FormatPreview width={p.width} length={p.length} color={isSelected ? '#4CAF4F' : '#9AA5B1'} compact scale={1.2} />
+                      </div>
+                      <p className="text-[10px] text-[#717171] text-center leading-3.5 line-clamp-2 min-h-[28px]">{p.usage}</p>
+                    </button>
+                  );
+                })}
+              </div>
 
-                  <button
-                    onClick={() => addItem({ productId: p.id, quantity: 1, reference: p.reference, unitPrice: p.price })}
-                    className="shrink-0 bg-[#2196F3] text-white text-[12px] font-semibold px-3.5 py-2 rounded-lg hover:bg-[#1E88E5] transition-colors"
-                  >
-                    + {t('common.add_to_cart')}
-                  </button>
-                </div>
-              ))}
+              <button
+                onClick={() => scrollByPage(1)}
+                disabled={products.length < 2}
+                aria-label={t('product_detail.next_ref_aria')}
+                className="shrink-0 w-7 h-7 rounded-full border border-[#ABBED1]/50 flex items-center justify-center text-[#717171] hover:border-[#4CAF4F] hover:text-[#4CAF4F] disabled:opacity-30 disabled:hover:border-[#ABBED1]/50 disabled:hover:text-[#717171] transition-colors"
+              >
+                <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
+                  <path d="M6 3l5 5-5 5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              </button>
             </div>
 
+            {/* Ajouter au panier — prix mis à jour selon la réf choisie */}
             <button
-              onClick={next}
-              disabled={products.length < 2}
-              aria-label={t('product_detail.next_ref_aria')}
-              className="shrink-0 w-8 h-8 rounded-full border border-[#ABBED1]/50 flex items-center justify-center text-[#717171] hover:border-[#4CAF4F] hover:text-[#4CAF4F] disabled:opacity-30 disabled:hover:border-[#ABBED1]/50 disabled:hover:text-[#717171] transition-colors"
+              onClick={() => addItem({ productId: current.id, quantity: 1, reference: current.reference, unitPrice: current.price })}
+              className="w-full flex items-center justify-between gap-3 rounded-lg border border-[#4CAF4F]/40 bg-[#F0FDF4] px-4 py-2.5 hover:border-[#4CAF4F] hover:bg-[#E3F9E5] transition-colors"
             >
-              <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
-                <path d="M6 3l5 5-5 5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
+              <span className="text-[13px] font-semibold text-[#263238]">{t('common.add_to_cart')}</span>
+              <span className="flex items-center gap-3">
+                <span className="w-px h-4 bg-[#4CAF4F]/30" />
+                <span className="text-[13px] font-bold text-[#4CAF4F] whitespace-nowrap">{current.price.toFixed(2)} DA</span>
+              </span>
             </button>
           </div>
         )}
