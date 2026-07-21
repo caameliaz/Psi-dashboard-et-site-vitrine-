@@ -196,28 +196,8 @@ Ce qui est neuf ou corrigé récemment est signalé par ⚠️ / **(nouveau)**.
 
 # ══════════════ BACK-OFFICE ══════════════
 
-
-## 🎯 10bis. Assignation "Pris en charge par" (nouveau)
-
-Se connecter avec **`admin1`** (a la permission "assigner") et **`employe2`** (limité, ne l'a pas) :
-
-1. **admin1** ouvre une demande → change le **Responsable** dans le select → enregistré
-2. ✅ La colonne **Responsable** de la liste se met à jour
-3. ✅ La personne nouvellement assignée reçoit **une notif** dans sa cloche (elle seule)
-4. **employe2** ouvre la même demande → le "Pris en charge par" est en **lecture seule** (pas de select)
-5. **Test API direct** (optionnel) : `employe2` fait un PATCH avec `assignedToId` → refusé **403**
-6. Créer une commande manuelle sans toucher au dropdown → elle est assignée **au créateur** par défaut
-7. Filtre **Responsable** dans la liste → n'affiche que les demandes de cette personne
-
----
-
 ## 👥 11. Clients (`/admin/clients`)
 
-1. Tous les clients s'affichent (**même ceux sans commande**)
-2. Recherche par nom / entreprise / wilaya
-3. Clic sur un client → **fiche** (infos + historique commandes/devis)
-4. Clic sur une ligne d'historique → ouvre le détail de cette demande
-5. **Modifier** le client (dont la **photo**, la **wilaya + commune**) → sauvegardé
 6. **+ Nouveau client** → wilaya + commune (select filtré + saisie libre) → apparaît dans la liste ; la fiche montre « Commune, Wilaya »
 7. **Plusieurs téléphones** par client, chacun avec un label (Principal / Secrétaire / Mobile…)
 8. **Notes internes** sur le client
