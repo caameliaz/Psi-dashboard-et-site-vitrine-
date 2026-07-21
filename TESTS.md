@@ -133,56 +133,6 @@ Ce qui est neuf ou corrigé récemment est signalé par ⚠️ / **(nouveau)**.
 
 ---
 
-# ══════════════ SITE PUBLIC ══════════════
-
-## 🌐 3. Accueil & catalogue (`/`)
-
-1. Le **hero** affiche le titre + sous-titre (modifiables depuis l'admin → Contenu)
-2. Section **Nos produits** → **cards catégories** (photo + nom) + carte **Tout** (nouveau)
-3. Cliquer une catégorie → les produits de cette catégorie s'affichent **sur la même page** (pas de rechargement, filtre in-place)
-4. Cliquer **Tout** → tous les produits (max 6 sur l'accueil, bouton "Voir tous les produits" si plus)
-5. Les cartes produit affichent la **photo** du produit si elle existe, sinon le visuel par défaut (cercles verts)
-6. Section **Qualité & conformité** (55 gr/m², Allemagne, BPA Free)
-7. Section **À propos** (texte modifiable depuis l'admin → Contenu)
-8. Boutons CTA → **Demander un devis** / **Nous contacter**
-9. `/products` → **toutes** les catégories + tous les produits (même système de filtre)
-
----
-
-## 🛒 4. Panier & commande (`/cart` → `/checkout`)
-
-1. Depuis une carte produit → **Ajouter au panier**
-2. `/cart` → ajuster les quantités (−/+), retirer une ligne, voir le **récapitulatif** (total)
-3. Panier vide → message "Votre panier est vide"
-4. **Finaliser la commande** → `/checkout`
-5. Remplir : nom *, entreprise, email, téléphone *, wilaya *, **commune** (nouveau), adresse
-6. **Commune** (nouveau) → le select ne propose que les communes de la wilaya choisie ; on peut aussi **taper** une commune absente
-7. Changer de wilaya → la commune se **réinitialise**
-8. Valider → écran **"Commande envoyée !"**
-9. ✅ Vérifier côté admin (`/admin/requests`) → la commande apparaît, source **Site web**, statut **En attente**
-10. ✅ Un client est créé automatiquement avec **wilaya + commune** (visible dans `/admin/clients`)
-
----
-
-## 📝 5. Demande de devis (`/quote`)
-
-1. Remplir les coordonnées (nom *, tél *, wilaya *, **commune** nouveau, email, entreprise)
-2. **Produits souhaités** : choisir un produit du catalogue OU **dimension personnalisée** (format libre)
-3. **+ Ajouter une ligne** → plusieurs produits dans un même devis
-4. Retirer une ligne (bouton poubelle)
-5. Message complémentaire (délais, conditions…)
-6. Valider → écran **"Demande envoyée !"**
-7. ✅ Côté admin → apparaît dans l'onglet **Devis**, source Site web
-
----
-
-## ✉️ 6. Contact (`/contact`)
-
-1. Adresse / email / téléphone / réseaux sociaux affichés (modifiables via admin → Contenu)
-2. Envoyer un message → il arrive côté admin
-3. ✅ Un client est créé/rattaché + un **message de contact** est enregistré
-
----
 
 
 
