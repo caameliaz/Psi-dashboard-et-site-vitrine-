@@ -14,6 +14,34 @@ admin.microsoft.com → Utilisateurs → Contact@psi.dz → onglet Courrier → 
 
 Si c'est Icosnet qui gère, il suffit de les appeler et leur dire : « activez SMTP AUTH pour Contact@psi.dz ».
 ═══════════════════════════════════════════════════════════
+💰 HÉBERGEMENT & COÛTS (à savoir face à l'entreprise)
+═══════════════════════════════════════════════════════════
+Architecture = 2 services séparés :
+  • VERCEL = héberge l'APP (le site + l'admin)
+  • NEON   = héberge la BASE DE DONNÉES (clients, commandes, users…)  ← reliée via DATABASE_URL
+
+VERCEL :
+  - Gratuit (Hobby) : ~100 Go/mois de trafic, largement suffisant pour un usage interne.
+    ⚠️ Le gratuit interdit l'usage COMMERCIAL dans ses conditions → OK pour tester, pas pour la prod officielle.
+  - Pro (~20$/mois) : à prendre quand l'entreprise l'utilise "pour de vrai". C'est l'entreprise qui paie.
+
+NEON (base de données) :
+  - Gratuit : 0,5 Go de stockage = facilement +10 000 clients (100 clients = quelques Mo → on est TRÈS loin).
+  - ⚠️ Le gratuit met la base "en veille" après inactivité → 1ère requête ~1s de délai (erreur P1001 vue en dev).
+  - Payant (~19$/mois) : supprime la veille (base toujours réveillée). À prendre seulement si la lenteur gêne.
+
+RÉSUMÉ COÛTS :
+  - Démarrage / tests : 0$ (Vercel gratuit + Neon gratuit, avec la petite veille DB)
+  - Production réelle  : ~20$/mois (Vercel Pro) + éventuellement ~19$ (Neon payant) = 20 à 40$/mois
+  - Le NOMBRE DE CLIENTS n'est jamais un problème (la limite c'est le trafic/stockage, pas le nb de fiches).
+
+À CONSEILLER À L'ENTREPRISE :
+  « On démarre gratuit pour valider. En production quotidienne → Vercel Pro (~20$/mois), sans maintenance
+    de votre côté (HTTPS auto, redéploiement en 1 commande). La base reste gratuite tant qu'on ne dépasse
+    pas ~10 000 clients, donc pour longtemps. Un VPS coûterait moins cher mais demande un admin serveur —
+    pas rentable pour une PME. »
+
+═══════════════════════════════════════════════════════════
 # 🚀 CHECKLIST DÉPLOIEMENT VERCEL (à faire une fois avant mise en ligne)
 
 Variables d'environnement à ajouter sur Vercel (Settings → Environment Variables) :

@@ -6,6 +6,7 @@ import { createNotif } from '@/lib/notifications';
 import { generateOrderRef } from '@/lib/generate-ref';
 import { pushSSE } from '@/lib/sse-bus';
 import { createAudit } from '@/lib/audit';
+import { rateLimit } from '@/lib/rate-limit';
 
 export async function GET(request: NextRequest) {
   const guard = await requirePermission('voir_commandes');
@@ -34,6 +35,8 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const limited = rateLimit(request, 'orders', 10, 60_000); // 10 commandes / min / IP
+  if (limited) return limited;
   try {
     const body = await request.json();
     const session = await auth();

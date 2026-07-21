@@ -1,11 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { createNotif } from '@/lib/notifications';
+import { rateLimit } from '@/lib/rate-limit';
 
 // POST /api/password-reset — un utilisateur demande la réinitialisation de son mot de passe (PUBLIC).
 // Body : { email }. Marque le compte "reset demandé" + notifie les admins (in-app).
 // Réponse volontairement neutre (ne révèle pas si l'email existe).
 export async function POST(request: NextRequest) {
+  const limited = rateLimit(request, 'password-reset', 5, 300_000); // 5 / 5 min / IP
+  if (limited) return limited;
   try {
     const { email } = await request.json();
     const clean = String(email ?? '').trim().toLowerCase();
