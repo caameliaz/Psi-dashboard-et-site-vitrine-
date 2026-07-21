@@ -7,6 +7,7 @@ import { StatusPill } from '@/components/ui/StatusPill';
 import { RequestPanel, type RequestDetail } from '@/components/ui/RequestPanel';
 import { AdminSelect } from '@/components/ui/AdminSelect';
 import { useSSE } from '@/lib/use-sse';
+import { RequirePerm } from '@/components/RequirePerm';
 
 const DB_TO_UI: Record<string, string> = { EN_ATTENTE: 'En attente', CONTACTE: 'En attente', VALIDE: 'Confirmé', LIVRE: 'Livré', ANNULE: 'Annulé' };
 
@@ -99,7 +100,7 @@ const typeConfig: Record<ActionType, { label: string; dot: string; bg: string; t
   contenu:     { label: 'Contenu',     dot: '#6B7280', bg: '#F9FAFB', text: '#374151' },
 };
 
-export default function HistoryPage() {
+function HistoryPageInner() {
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch]   = useState('');
@@ -245,4 +246,8 @@ export default function HistoryPage() {
       {selected && <RequestPanel item={selected} onClose={() => setSelected(null)} />}
     </div>
   );
+}
+
+export default function HistoryPage() {
+  return <RequirePerm perm="voir_historique"><HistoryPageInner /></RequirePerm>;
 }

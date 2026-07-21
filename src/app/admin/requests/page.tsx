@@ -12,6 +12,7 @@ import { exportTableauExcel } from '@/lib/export-tableau';
 import { exportVentesExcel } from '@/lib/export-ventes';
 import { useSSE } from '@/lib/use-sse';
 import { useSession } from 'next-auth/react';
+import { RequirePerm } from '@/components/RequirePerm';
 
 const ARCHIVED = ['Livré', 'Annulé'];
 
@@ -473,7 +474,7 @@ export function CreateForm({ defaultType, onClose, onSave, users, currentUserId,
   );
 }
 
-export default function RequestsPage() {
+function RequestsPageInner() {
   const { data: session } = useSession();
   const currentUserId = (session?.user as { id?: string } | undefined)?.id;
   const [activeTab, setActiveTab] = useState<'tous' | 'commandes' | 'devis'>('tous');
@@ -860,4 +861,8 @@ export default function RequestsPage() {
       )}
     </div>
   );
+}
+
+export default function RequestsPage() {
+  return <RequirePerm perm="voir_commandes"><RequestsPageInner /></RequirePerm>;
 }

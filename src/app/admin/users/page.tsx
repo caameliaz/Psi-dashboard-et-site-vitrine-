@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { initials } from '@/lib/utils';
 import { Modal } from '@/components/ui/Modal';
 import { AdminSelect } from '@/components/ui/AdminSelect';
+import { RequirePerm } from '@/components/RequirePerm';
 
 const ALL_PERMISSIONS = [
   { key: 'voir_commandes',     label: 'Voir les commandes & devis',    short: 'Voir commandes'      },
@@ -44,9 +45,9 @@ function dbUserToUser(u: any): User {
     role: u.role === 'ADMIN' ? 'Admin' : 'Employe',
     statut: u.active ? 'Actif' : 'Inactif',
     resetRequested: !!u.resetRequested,
-    permissions: u.role === 'ADMIN'
-      ? [...ADMIN_PERMS]
-      : (u.permissions?.length ? u.permissions : [...EMPLOYE_PERMS]),
+    // Un employé a EXACTEMENT ses permissions stockées (pas de fallback :
+    // sinon décocher toutes les cases les ferait "revenir" à l'affichage).
+    permissions: u.role === 'ADMIN' ? [...ADMIN_PERMS] : (u.permissions ?? []),
   };
 }
 
@@ -389,9 +390,10 @@ function CreateUserForm({ onSubmit, onClose, customRoles, onAddCustomRole, onDel
 
 /* ─── Formulaire de modification ─── */
 /* ─── Fiche utilisateur (slide-in) ─── */
-function UserSlideIn({ user, onClose, onDelete, onPermChange, customRoles, onSaveProfile, onResetPassword, onReactivate, initialEditing = false }: {
+function UserSlideIn({ user, onClose, onDelete, onPermChange, onPermSetAll, customRoles, onSaveProfile, onResetPassword, onReactivate, initialEditing = false }: {
   user: User; onClose: () => void; onDelete: () => void;
   onPermChange: (userId: number, perm: PermKey, value: boolean) => void;
+  onPermSetAll: (userId: number, perms: PermKey[]) => void;
   customRoles: CustomRole[];
   onSaveProfile: (user: User, data: { name: string; email: string; role: string; password?: string; permissions: PermKey[] }) => Promise<void>;
   onResetPassword: (user: User) => Promise<void>;
@@ -485,14 +487,17 @@ function UserSlideIn({ user, onClose, onDelete, onPermChange, customRoles, onSav
           <div className="h-px bg-[#F2F4F7]" />
 
           <div>
+            {/* Les autorisations ne sont modifiables qu'en mode édition (bouton "Modifier"). */}
+            {(() => { const unlocked = editing && !isAdmin; return (
+            <>
             <div className="flex items-center justify-between mb-3">
               <p className="text-[12px] font-bold text-[#8A9BB5] uppercase tracking-widest">Autorisations</p>
               {isAdmin && <span className="text-[11px] text-[#ABBED1]">Toutes les autorisations (Admin)</span>}
-              {!isAdmin && (
+              {unlocked && (
                 <div className="flex gap-2">
-                  <button onClick={() => ALL_PERMISSIONS.forEach((p) => onPermChange(user.id, p.key, true))} className="text-[11px] font-semibold text-[#4CAF4F] hover:underline">Tout cocher</button>
+                  <button onClick={() => onPermSetAll(user.id, ALL_PERMISSIONS.map((p) => p.key))} className="text-[11px] font-semibold text-[#4CAF4F] hover:underline">Tout cocher</button>
                   <span className="text-[#E2E8F0]">·</span>
-                  <button onClick={() => ALL_PERMISSIONS.forEach((p) => onPermChange(user.id, p.key, false))} className="text-[11px] font-semibold text-[#8A9BB5] hover:underline">Tout décocher</button>
+                  <button onClick={() => onPermSetAll(user.id, [])} className="text-[11px] font-semibold text-[#8A9BB5] hover:underline">Tout décocher</button>
                 </div>
               )}
             </div>
@@ -501,16 +506,22 @@ function UserSlideIn({ user, onClose, onDelete, onPermChange, customRoles, onSav
               {ALL_PERMISSIONS.map((perm) => {
                 const checked = user.permissions.includes(perm.key);
                 return (
-                  <div key={perm.key} onClick={() => !isAdmin && onPermChange(user.id, perm.key, !checked)}
+                  <div key={perm.key} onClick={() => unlocked && onPermChange(user.id, perm.key, !checked)}
                     className="flex items-center gap-3 px-4 py-3 rounded-xl transition-all"
-                    style={{ background: checked ? '#F0FDF4' : '#F8FAFC', border: `1.5px solid ${checked ? '#BBF7D0' : '#F2F4F7'}`, cursor: isAdmin ? 'default' : 'pointer' }}>
-                    <PermToggle checked={checked} onChange={() => onPermChange(user.id, perm.key, !checked)} disabled={isAdmin} />
+                    style={{ background: checked ? '#F0FDF4' : '#F8FAFC', border: `1.5px solid ${checked ? '#BBF7D0' : '#F2F4F7'}`, cursor: unlocked ? 'pointer' : 'default', opacity: unlocked || checked ? 1 : 0.6 }}>
+                    <PermToggle checked={checked} onChange={() => onPermChange(user.id, perm.key, !checked)} disabled={!unlocked} />
                     <span className="text-[13px] font-medium" style={{ color: checked ? '#166534' : '#374151' }}>{perm.label}</span>
                   </div>
                 );
               })}
             </div>
-            {!isAdmin && <p className="text-[11px] text-[#ABBED1] mt-3">Les modifications sont appliquées immédiatement.</p>}
+            {!isAdmin && (
+              <p className="text-[11px] text-[#ABBED1] mt-3">
+                {unlocked ? 'Les modifications sont appliquées immédiatement.' : 'Cliquez sur « Modifier » pour changer les autorisations.'}
+              </p>
+            )}
+            </>
+            ); })()}
           </div>
 
           {/* Sécurité : réinitialiser le mot de passe */}
@@ -598,7 +609,7 @@ function DeleteUserModal({ user, onDeactivate, onDelete, onClose }: { user: User
 }
 
 /* ─── Page principale ─── */
-export default function UsersPage() {
+function UsersPageInner() {
   const [users, setUsers]           = useState<User[]>([]);
   const [loading, setLoading]       = useState(true);
   const [search, setSearch]         = useState('');
@@ -635,23 +646,48 @@ export default function UsersPage() {
 
   useEffect(() => { fetchUsers(); fetchRoles(); }, [fetchUsers, fetchRoles]);
 
-  const handlePermChange = (userId: string | number, perm: PermKey, value: boolean) => {
-    let newPerms: PermKey[] = [];
-    setUsers((prev) => prev.map((u) => {
-      if (u.id !== userId) return u;
-      newPerms = value ? [...new Set([...u.permissions, perm])] : u.permissions.filter((p) => p !== perm);
-      return { ...u, permissions: newPerms };
-    }));
-    setProfilUser((prev) => {
-      if (!prev || prev.id !== userId) return prev;
-      newPerms = value ? [...new Set([...prev.permissions, perm])] : prev.permissions.filter((p) => p !== perm);
-      return { ...prev, permissions: newPerms };
-    });
-    fetch(`/api/users/${userId}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ permissions: newPerms }),
-    });
+  const handlePermChange = async (userId: string | number, perm: PermKey, value: boolean) => {
+    // ⚠️ On calcule newPerms AVANT les setState (à partir de l'état courant),
+    // et NON dans l'updater : sinon le fetch part avec newPerms encore vide
+    // (les updaters React sont asynchrones) → l'API recevait toujours [].
+    const current = users.find((u) => u.id === userId)?.permissions ?? profilUser?.permissions ?? [];
+    const newPerms: PermKey[] = value
+      ? [...new Set([...current, perm])]
+      : current.filter((p) => p !== perm);
+
+    // MAJ optimiste de l'UI
+    setUsers((prev) => prev.map((u) => (u.id === userId ? { ...u, permissions: newPerms } : u)));
+    setProfilUser((prev) => (prev && prev.id === userId ? { ...prev, permissions: newPerms } : prev));
+
+    try {
+      const res = await fetch(`/api/users/${userId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ permissions: newPerms }),
+      });
+      if (!res.ok) throw new Error(String(res.status));
+    } catch {
+      // Échec serveur → on annule la MAJ optimiste et on recharge la vérité DB
+      alert("Impossible d'enregistrer l'autorisation. Réessayez.");
+      fetchUsers();
+    }
+  };
+
+  // Cocher / décocher TOUT en un seul PATCH (évite les appels concurrents qui s'écrasent).
+  const handlePermSetAll = async (userId: string | number, perms: PermKey[]) => {
+    setUsers((prev) => prev.map((u) => (u.id === userId ? { ...u, permissions: perms } : u)));
+    setProfilUser((prev) => (prev && prev.id === userId ? { ...prev, permissions: perms } : prev));
+    try {
+      const res = await fetch(`/api/users/${userId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ permissions: perms }),
+      });
+      if (!res.ok) throw new Error(String(res.status));
+    } catch {
+      alert("Impossible d'enregistrer les autorisations. Réessayez.");
+      fetchUsers();
+    }
   };
 
   const handleAdd = async (data: AddFormData) => {
@@ -860,6 +896,7 @@ export default function UsersPage() {
         <UserSlideIn user={profilUser} onClose={() => { setProfilUser(null); setProfilEditing(false); }}
           onDelete={() => setDeleteUser(profilUser)}
           onPermChange={handlePermChange}
+          onPermSetAll={handlePermSetAll}
           customRoles={customRoles}
           initialEditing={profilEditing}
           onSaveProfile={handleSaveProfile}
@@ -888,4 +925,8 @@ export default function UsersPage() {
       )}
     </div>
   );
+}
+
+export default function UsersPage() {
+  return <RequirePerm perm="gerer_utilisateurs"><UsersPageInner /></RequirePerm>;
 }

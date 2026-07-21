@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { Modal } from '@/components/ui/Modal';
 import { useRole } from '@/lib/role-context';
+import { RequirePerm } from '@/components/RequirePerm';
 
 function IconPencil() {
   return (
@@ -292,9 +293,12 @@ function NewCategoryModal({ onClose, onCreated }: { onClose: () => void; onCreat
   );
 }
 
-export default function ProductsPage() {
+function ProductsPageInner() {
   const { can } = useRole();
   const canEdit = can('modifier_produits');
+  // Mode édition explicite : même avec la permission, il faut cliquer "Modifier"
+  // avant de pouvoir toucher aux toggles / actions (évite les clics accidentels).
+  const [editMode, setEditMode] = useState(false);
 
   const [refs, setRefs] = useState<Ref[]>([]);
   const [catList, setCatList] = useState<Cat[]>([]);
@@ -510,15 +514,26 @@ export default function ProductsPage() {
         </div>
         {canEdit && (
           <div className="flex items-center gap-2">
-            {selectedCatId && (
+            {/* Bouton mode édition : tant qu'il n'est pas actif, les actions sont verrouillées */}
+            <button onClick={() => setEditMode((v) => !v)}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold border transition-colors ${
+                editMode
+                  ? 'border-[#4CAF4F] bg-[#4CAF4F] text-white hover:bg-[#43A047]'
+                  : 'border-[#E2E8F0] text-[#374151] hover:bg-[#F8FAFC]'
+              }`}>
+              {editMode ? '✓ Terminer' : '✎ Modifier'}
+            </button>
+            {editMode && selectedCatId && (
               <button onClick={() => { setNewRefForm(emptyRefForm); setShowNewRef(true); }}
                 className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold border border-[#4CAF4F] text-[#4CAF4F] hover:bg-[#F0FDF4] transition-colors">
                 + Nouvelle référence
               </button>
             )}
-            <button onClick={() => setShowNewCategory(true)} className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white transition-colors" style={{ background: '#4CAF4F' }}>
-              + Nouveau produit
-            </button>
+            {editMode && (
+              <button onClick={() => setShowNewCategory(true)} className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white transition-colors" style={{ background: '#4CAF4F' }}>
+                + Nouveau produit
+              </button>
+            )}
           </div>
         )}
       </div>
@@ -571,7 +586,7 @@ export default function ProductsPage() {
                     <span className="px-2 py-0.5 rounded-md bg-[#EEF2FF] text-[#4F46E5] text-[11px] font-bold tracking-wide">{selectedCat.prefix}</span>
                   )}
                 </div>
-                {canEdit && !editingDesc && (
+                {canEdit && editMode && !editingDesc && (
                   <button onClick={startEditDesc} className="flex items-center gap-1 text-[12px] font-bold text-[#4CAF4F] hover:text-[#388E3C]">
                     <IconPencil /> Modifier
                   </button>
@@ -626,8 +641,8 @@ export default function ProductsPage() {
                         </p>
                       </div>
                       <p className="text-[13px] font-semibold text-[#374151] flex-shrink-0 tabular-nums">{r.price.toLocaleString('fr-FR')} DA</p>
-                      {canEdit && <Toggle active={r.active} onToggle={() => toggleRef(r)} />}
-                      {canEdit && (
+                      {canEdit && editMode && <Toggle active={r.active} onToggle={() => toggleRef(r)} />}
+                      {canEdit && editMode && (
                         <div className="flex items-center gap-1 flex-shrink-0">
                           <button onClick={() => openEditRef(r)} title="Modifier" className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-[#F0FDF4] transition-colors">
                             <IconPencil />
@@ -655,7 +670,7 @@ export default function ProductsPage() {
                   <div className="absolute inset-[30%] rounded-full bg-[#4CAF4F]" />
                 </div>
               )}
-              {canEdit && (
+              {canEdit && editMode && (
                 <div className="absolute bottom-3 right-3 flex items-center gap-2">
                   {selectedCat.photo && (
                     <button onClick={() => setCatPhoto(null)}
@@ -672,12 +687,12 @@ export default function ProductsPage() {
               <input ref={catPhotoRef} type="file" accept="image/*" className="hidden"
                 onChange={(e) => { const f = e.target.files?.[0] ?? null; setCatPhoto(f); e.target.value = ''; }} />
             </div>
-            {canEdit && catRefs.length > 0 && (
+            {canEdit && editMode && catRefs.length > 0 && (
               <button onClick={toggleCategory} className="self-end text-[12px] font-semibold text-[#B45309] hover:text-[#92400E] transition-colors">
                 {catRefs.some((r) => r.active) ? 'Désactiver toute la catégorie' : 'Réactiver toute la catégorie'}
               </button>
             )}
-            {canEdit && (
+            {canEdit && editMode && (
               <button onClick={deleteCategory} className="self-end text-[12px] font-semibold text-[#EF4444] hover:text-[#991B1B] transition-colors">
                 Supprimer cette catégorie
               </button>
@@ -735,4 +750,8 @@ export default function ProductsPage() {
       )}
     </div>
   );
+}
+
+export default function ProductsPage() {
+  return <RequirePerm perm="voir_produits"><ProductsPageInner /></RequirePerm>;
 }

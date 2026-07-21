@@ -74,7 +74,7 @@ const navItems: { href: string; label: string; Icon: typeof IconHome; perm: Perm
 
 export function Sidebar({ mobileOpen = false, onCloseMobile }: { mobileOpen?: boolean; onCloseMobile?: () => void } = {}) {
   const pathname = usePathname();
-  const { role, can } = useRole();
+  const { role, can, loading } = useRole();
   const { data: session } = useSession();
   const [collapsed, setCollapsed] = useState(false);
   const userName  = session?.user?.name ?? '—';
@@ -122,7 +122,17 @@ export function Sidebar({ mobileOpen = false, onCloseMobile }: { mobileOpen?: bo
 
       {/* Nav */}
       <nav className="flex-1 py-4 overflow-y-auto overflow-x-hidden">
-        {navItems.filter(({ perm }) => perm === null || can(perm)).map(({ href, label, Icon }) => {
+        {/* Tant que la session charge, on affiche des placeholders neutres au lieu
+            de montrer TOUS les liens puis de les filtrer (= flash disgracieux). */}
+        {loading ? (
+          Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} className="flex items-center gap-3 px-4 py-3">
+              <div className="w-[18px] h-[18px] rounded bg-[#EEF2F7] animate-pulse flex-shrink-0" />
+              {!collapsed && <div className="h-3 w-24 rounded bg-[#EEF2F7] animate-pulse" />}
+            </div>
+          ))
+        ) : (
+        navItems.filter(({ perm }) => perm === null || can(perm)).map(({ href, label, Icon }) => {
           const isActive = pathname === href || pathname.startsWith(href + '/');
           return (
             <Link
@@ -144,7 +154,8 @@ export function Sidebar({ mobileOpen = false, onCloseMobile }: { mobileOpen?: bo
               )}
             </Link>
           );
-        })}
+        })
+        )}
       </nav>
 
       {/* User + Logout */}

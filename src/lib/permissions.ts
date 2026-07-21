@@ -30,13 +30,17 @@ export const EMPLOYE_DEFAULT_PERMS: PermKey[] = [
 
 type SessionUser = (Session['user'] & { role?: string; permissions?: string[] }) | undefined;
 
-/** Retourne la liste effective des permissions d'un utilisateur de session. */
+/**
+ * Retourne la liste effective des permissions d'un utilisateur de session.
+ * Un employé a EXACTEMENT ses permissions stockées (pas de fallback "défaut" :
+ * un tableau vide signifie que l'admin a tout retiré volontairement).
+ * Les permissions par défaut (EMPLOYE_DEFAULT_PERMS) ne servent qu'à PRÉ-COCHER
+ * le formulaire de création, jamais à décider des droits d'un compte existant.
+ */
 export function getPermissions(user: SessionUser): PermKey[] {
   if (!user) return [];
   if (user.role === 'ADMIN') return [...ALL_PERM_KEYS];
-  const perms = user.permissions;
-  if (perms && perms.length > 0) return perms as PermKey[];
-  return [...EMPLOYE_DEFAULT_PERMS];
+  return (user.permissions ?? []) as PermKey[];
 }
 
 /** Vrai si l'utilisateur possède la permission demandée (ADMIN = toujours). */

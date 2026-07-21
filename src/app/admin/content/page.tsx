@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { RequirePerm } from '@/components/RequirePerm';
 
 function IconCheck() {
   return (
@@ -22,7 +23,7 @@ function SaveButton({ onClick, saved, loading }: { onClick: () => void; saved: b
 
 const inputClass = "w-full px-3 py-2.5 rounded-lg border border-[#E2E8F0] text-sm text-[#0F172A] placeholder-[#94A3B8] focus:outline-none focus:border-[#4CAF4F] focus:ring-1 focus:ring-[#4CAF4F] transition-colors bg-[#F8FAFC]";
 
-export default function ContentPage() {
+function ContentPageInner() {
   const [hero,    setHero]    = useState({ titre: '' });
   const [about,   setAbout]   = useState({ texte: '' });
   const [contact, setContact] = useState({ adresse: '', email: '', telephone: '', facebook: '', instagram: '' });
@@ -151,4 +152,8 @@ export default function ContentPage() {
       </div>
     </div>
   );
+}
+
+export default function ContentPage() {
+  return <RequirePerm perm="modifier_contenu"><ContentPageInner /></RequirePerm>;
 }

@@ -38,6 +38,8 @@ import { Modal } from '@/components/ui/Modal';
 import { WilayaSelect } from '@/components/ui/WilayaSelect';
 import { exportClientExcel, printClientDoc, type ClientExportData } from '@/lib/export-client';
 import { useSSE } from '@/lib/use-sse';
+import { RequirePerm } from '@/components/RequirePerm';
+import { useRole } from '@/lib/role-context';
 
 function avatarColor(id: number | string) {
   const n = typeof id === 'string' ? id.charCodeAt(0) + id.charCodeAt(1) : id;
@@ -219,6 +221,8 @@ function ClientSlideIn({ client, onClose, onEdit, onDelete, onReactivate, onDele
   client: ClientRecord; onClose: () => void; onEdit: () => void; onDelete: () => void;
   onReactivate?: () => void; onDeleteDefinitif?: () => void; onRefresh?: () => void;
 }) {
+  const { can } = useRole();
+  const canEditClients = can('modifier_clients');
   const fileRef = useRef<HTMLInputElement>(null);
   const [photo, setPhoto] = useState<string | undefined>(client.photo);
   const [selectedRequest, setSelectedRequest] = useState<RequestDetail | null>(null);
@@ -450,13 +454,17 @@ function ClientSlideIn({ client, onClose, onEdit, onDelete, onReactivate, onDele
             </>
           ) : (
             <>
-              <button onClick={() => onDelete()} className="px-4 py-2 rounded-lg text-[12px] font-semibold text-[#B45309] border border-[#FDE68A] hover:bg-[#FFFBEB] transition-colors">
-                Désactiver
-              </button>
+              {canEditClients && (
+                <button onClick={() => onDelete()} className="px-4 py-2 rounded-lg text-[12px] font-semibold text-[#B45309] border border-[#FDE68A] hover:bg-[#FFFBEB] transition-colors">
+                  Désactiver
+                </button>
+              )}
               <div className="flex-1" />
-              <button onClick={() => { onClose(); onEdit(); }} className="px-4 py-2 rounded-lg text-[13px] font-bold text-white" style={{ background: '#4CAF4F' }}>
-                Modifier
-              </button>
+              {canEditClients && (
+                <button onClick={() => { onClose(); onEdit(); }} className="px-4 py-2 rounded-lg text-[13px] font-bold text-white" style={{ background: '#4CAF4F' }}>
+                  Modifier
+                </button>
+              )}
             </>
           )}
         </div>
@@ -608,7 +616,9 @@ function dbClientToRecord(c: any): ClientRecord {
   };
 }
 
-export default function ClientsPage() {
+function ClientsPageInner() {
+  const { can } = useRole();
+  const canEditClients = can('modifier_clients');
   const [clients, setClients] = useState<ClientRecord[]>([]);
   const [loading, setLoading]   = useState(true);
   const [search, setSearch]     = useState('');
@@ -829,16 +839,22 @@ export default function ClientsPage() {
           <svg className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-[#8A9BB5]" width={13} height={13} viewBox="0 0 24 24" fill="none"><path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
         </div>
 
-        <button onClick={() => setShowImport(true)} className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-[13px] font-semibold text-[#374151] border border-[#E2E8F0] hover:bg-[#F8FAFC] transition-colors sm:ml-auto whitespace-nowrap">
-          <svg width={15} height={15} fill="none" viewBox="0 0 24 24"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg>
-          Importer Excel
-        </button>
-        <button onClick={() => setShowSectors(true)} className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-[13px] font-semibold text-[#374151] border border-[#E2E8F0] hover:bg-[#F8FAFC] transition-colors whitespace-nowrap">
-          Secteurs
-        </button>
-        <button onClick={() => { setAddForm({ ...emptyClient }); setShowAdd(true); }} className="flex items-center gap-2 px-4 py-2 rounded-xl text-[13px] font-semibold text-white transition-colors whitespace-nowrap" style={{ background: '#4CAF4F' }}>
-          + Nouveau client
-        </button>
+        {canEditClients && (
+          <button onClick={() => setShowImport(true)} className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-[13px] font-semibold text-[#374151] border border-[#E2E8F0] hover:bg-[#F8FAFC] transition-colors sm:ml-auto whitespace-nowrap">
+            <svg width={15} height={15} fill="none" viewBox="0 0 24 24"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            Importer Excel
+          </button>
+        )}
+        {canEditClients && (
+          <button onClick={() => setShowSectors(true)} className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-[13px] font-semibold text-[#374151] border border-[#E2E8F0] hover:bg-[#F8FAFC] transition-colors whitespace-nowrap">
+            Secteurs
+          </button>
+        )}
+        {canEditClients && (
+          <button onClick={() => { setAddForm({ ...emptyClient }); setShowAdd(true); }} className="flex items-center gap-2 px-4 py-2 rounded-xl text-[13px] font-semibold text-white transition-colors whitespace-nowrap" style={{ background: '#4CAF4F' }}>
+            + Nouveau client
+          </button>
+        )}
       </div>
 
       {/* Grille */}
@@ -1108,4 +1124,8 @@ function SectorsModal({ sectors, onChange, onClose }: {
       </div>
     </Modal>
   );
+}
+
+export default function ClientsPage() {
+  return <RequirePerm perm="voir_clients"><ClientsPageInner /></RequirePerm>;
 }

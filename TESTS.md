@@ -1,4 +1,102 @@
 
+2️⃣ Récap général — ce qu'il reste
+🔨 Ton code à toi (admin/API)
+Rien à coder. Tout P1→P9 est fini. Il reste juste 2 tests qui ont besoin du déploiement (HTTPS obligatoire) :
+
+⬜ Notifs push en prod (PC + Android app fermée ; iPhone via « ajout à l'écran d'accueil »)
+⬜ Emails auto (création de compte) — testables une fois que ton chef a activé SMTP AUTH
+🔨 Ton collègue (site public) — pas ton code
+⬜ Responsive mobile (2 produits/ligne, zoom image détail)
+⬜ Photos HD partout
+⬜ Refonte affichage catégories/références
+⏸️ Reportés (optionnels, à décider plus tard)
+Bouton « Modifier montant » dans détail commande
+Carte « nouveaux clients » sur dashboard
+Traduction auto AR du contenu
+Récap email quotidien (le hebdo jeudi 23h59 est déjà codé)
+En clair : côté code, tu es prête. Le reste = déploiement + une action de ton chef (SMTP).
+
+3️⃣ TUTO — Comment TU déploies (Vercel)
+Prérequis : le code est sur GitHub (fait ✅), tu as une base Neon de prod.
+
+Va sur vercel.com → connecte-toi avec ton compte GitHub.
+Add New → Project → sélectionne ton repo psisite → Import.
+Avant de cliquer Deploy, ouvre Environment Variables et ajoute (une par une) :
+Variable	Valeur
+DATABASE_URL	l'URL de ta base Neon de prod
+NEXTAUTH_SECRET	une chaîne aléatoire forte (voir juste en dessous)
+NEXTAUTH_URL	tu la mettras après (étape 6) une fois l'URL connue
+SMTP_USER	Contact@psi.dz
+SMTP_PASS	le mot de passe (celui de ton .env)
+EMAIL_FROM	Contact@psi.dz
+SMTP_PROVIDER	outlook
+VAPID_PUBLIC	même valeur que ton .env local
+VAPID_PRIVATE	même valeur que ton .env local
+NEXT_PUBLIC_VAPID_PUBLIC	même valeur que ton .env local
+Générer un NEXTAUTH_SECRET fort — dans ton terminal :
+
+
+node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
+Copie ce que ça affiche → c'est ta valeur.
+
+Clique Deploy. Attends ~2-3 min. Le build applique tout seul les migrations de la base (prisma migrate deploy).
+Vercel te donne une URL du type https://psisite-xxxx.vercel.app → c'est ton lien de test.
+Reviens dans Settings → Environment Variables → mets NEXTAUTH_URL = cette URL (avec https://) → Redéploie (bouton Redeploy dans l'onglet Deployments).
+✅ Site en ligne.
+
+4️⃣ TUTO — Tests post-déploiement (dans l'ordre)
+Sur l'URL .vercel.app :
+
+Connexion admin → dashboard s'ouvre
+Créer une commande + un devis → la cloche sonne, notif reçue
+Exports Excel + PDF → se téléchargent
+Notifs push : autorise les notifications → ferme l'onglet → fais une action depuis un autre compte → tu dois recevoir la push (PC et Android ; iPhone : ajoute d'abord le site à l'écran d'accueil)
+Email test : ⚠️ ne marchera qu'après que ton chef a activé SMTP AUTH (étape 5)
+5️⃣ MESSAGE à envoyer à ton chef (SMTP)
+Copie-colle tel quel :
+
+Objet : Activer « SMTP AUTH » sur Contact@psi.dz
+
+Bonjour,
+
+Pour que notre application puisse envoyer les emails automatiques (création de comptes, récapitulatifs) depuis Contact@psi.dz, Microsoft demande d'activer une option appelée « SMTP AUTH » (authentification SMTP). Tant qu'elle n'est pas activée, les envois sont bloqués (erreur 535).
+
+Deux façons de le faire, une seule suffit :
+
+Option A — via le portail Microsoft 365 (si vous gérez les comptes) :
+
+Aller sur admin.microsoft.com (avec un compte administrateur)
+Utilisateurs → sélectionner Contact@psi.dz → onglet Courrier
+Cocher / activer « SMTP authentifié » (SMTP AUTH)
+Option B — via ICOSNET (qui gère notre domaine et nos boîtes mail) :
+
+Leur demander simplement : « Activer SMTP AUTH sur la boîte Contact@psi.dz »
+ℹ️ Si le compte a la double authentification (MFA) activée, il faudra aussi générer un « mot de passe d'application » — dites-le moi si c'est le cas, je m'en occupe.
+
+Merci !
+
+6️⃣ TUTO — Redéployer après un changement
+À chaque fois que tu modifies le code :
+
+
+git add -A
+git commit -m "ta description"
+git push
+👉 Vercel redéploie tout seul à chaque push (rien d'autre à faire). Les migrations de base passent automatiquement.
+
+7️⃣ TUTO — Brancher le domaine psi.dz
+Une fois le site validé sur l'URL .vercel.app :
+
+Sur Vercel : Project → Settings → Domains → Add → tape psi.dz (et www.psi.dz).
+Vercel t'affiche des enregistrements DNS à créer (type A et/ou CNAME avec des valeurs précises).
+Envoie ces enregistrements à ICOSNET (qui gère le DNS de psi.dz) en leur demandant de les ajouter — ou fais-le toi-même si tu as accès au panneau DNS.
+Propagation : quelques heures (jusqu'à 24-48h max). Vercel met le HTTPS tout seul.
+Important : une fois psi.dz actif, reviens changer NEXTAUTH_URL = https://psi.dz → Redeploy.
+✅ Site accessible sur psi.dz.
+
+Veux-tu que j'écrive cette todo + les tutos dans un fichier (DEPLOIEMENT.md) à la racine pour que tu l'aies toujours sous la main, plutôt que dans ce chat ?
+
+
 B	Tester en local la logique métier (guide de tests dans TESTS.md)	Maintenant
 C	Corriger les petits trucs trouvés → recommit	Au fil des tests
 D	Créer compte Vercel + déployer	Quand B/C sont ok

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { Modal } from '@/components/ui/Modal';
+import { RequirePerm } from '@/components/RequirePerm';
 
 type Category = 'CONFIRMATION' | 'DEVIS' | 'LIVRAISON' | 'RELANCE' | 'AUTRE';
 
@@ -74,7 +75,7 @@ function TemplateForm({ form, setForm, onSubmit, onClose, submitLabel }: {
   );
 }
 
-export default function TemplatesPage() {
+function TemplatesPageInner() {
   const [templates, setTemplates] = useState<Template[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
@@ -200,4 +201,8 @@ export default function TemplatesPage() {
       )}
     </div>
   );
+}
+
+export default function TemplatesPage() {
+  return <RequirePerm perm="modifier_contenu"><TemplatesPageInner /></RequirePerm>;
 }
