@@ -85,6 +85,19 @@ export async function POST(request: NextRequest) {
           },
         },
       });
+    } else if (client.active === false) {
+      // Le client était désactivé mais refait une demande → réactivation auto
+      client = await prisma.client.update({
+        where: { id: client.id },
+        data: { active: true, deactivatedReason: null, deactivatedById: null, deactivatedAt: null },
+      });
+      createNotif({
+        type: 'ACTION_AUTRE',
+        title: 'Client réactivé',
+        message: `${client.company ?? client.name} était désactivé et vient de passer une nouvelle demande — le compte a été réactivé automatiquement.`,
+        adminOnly: true,
+        clientId: client.id,
+      }).catch(() => {});
     }
 
     const ref = await generateQuoteRef(client.wilaya);

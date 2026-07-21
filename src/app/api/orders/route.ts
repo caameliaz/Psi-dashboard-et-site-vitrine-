@@ -86,6 +86,20 @@ export async function POST(request: NextRequest) {
           },
         },
       });
+    } else if (client.active === false) {
+      // Le client était désactivé mais repasse commande → on le réactive
+      // automatiquement (sinon il resterait invisible dans la liste).
+      client = await prisma.client.update({
+        where: { id: client.id },
+        data: { active: true, deactivatedReason: null, deactivatedById: null, deactivatedAt: null },
+      });
+      createNotif({
+        type: 'ACTION_AUTRE',
+        title: 'Client réactivé',
+        message: `${client.company ?? client.name} était désactivé et vient de passer une nouvelle demande — le compte a été réactivé automatiquement.`,
+        adminOnly: true,
+        clientId: client.id,
+      }).catch(() => {});
     }
 
     const VALID_SOURCES = ['SITE', 'ADMIN', 'WHATSAPP', 'TELEPHONE', 'AUTRE'];

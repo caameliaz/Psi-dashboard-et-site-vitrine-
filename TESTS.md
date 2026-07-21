@@ -281,27 +281,6 @@ Avec 2 fenêtres ouvertes (ex. `admin1` sur une liste, `admin2` qui agit) :
 
 
 
-
-
-
-
-
-### Désactivation client (À VENIR — todo 8.3)
-7. "Supprimer" un client → une **boîte demande un motif** (obligatoire)
-8. Valider → le client passe **désactivé** (pas supprimé), son historique reste intact
-9. Les **admins** reçoivent une notif "X a désactivé le client Y — motif : …"
-10. Dans la fiche du client désactivé → bandeau avec le **motif** + qui/quand
-11. Un admin peut **réactiver** ou **supprimer définitivement**
-
----
-
-## 📝 Notes commande/devis (À VENIR — todo 8.4)
-1. Dans le détail d'une commande/devis → ajouter une **note**
-2. La note s'affiche avec le **nom de l'auteur** + date, visible par tout le monde
-3. Ajouter une 2e note → les deux restent (fil, pas d'écrasement)
-
----
-
 ## 📱 21bis. Mobile — accès terrain (nouveau)
 
 Tester en ouvrant l'app sur un **téléphone** (adresse `http://192.168.X.X:3000` affichée par `npm run dev`, même WiFi).

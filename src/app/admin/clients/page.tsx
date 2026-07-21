@@ -630,6 +630,7 @@ function ClientsPageInner() {
   const [loading, setLoading]   = useState(true);
   const [search, setSearch]     = useState('');
   const [filterSector, setFilterSector] = useState('all');   // filtre par secteur
+  const [filterActif, setFilterActif] = useState('actifs');  // actifs | inactifs | tous
   const [sortBy, setSortBy]     = useState('recent');        // tri
   const [selected, setSelected] = useState<ClientRecord | null>(null);
   const [editClient, setEditClient]   = useState<ClientRecord | null>(null);
@@ -649,7 +650,8 @@ function ClientsPageInner() {
   const fetchClients = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
     try {
-      const res = await fetch('/api/clients');
+      // On charge AUSSI les clients désactivés : le filtre se fait côté interface
+      const res = await fetch('/api/clients?inactifs=true');
       if (res.ok) {
         const data = await res.json();
         const records = data.map(dbClientToRecord);
@@ -694,7 +696,10 @@ function ClientsPageInner() {
       const matchSearch = !q || c.entreprise.toLowerCase().includes(q) || c.contact.toLowerCase().includes(q) || c.wilaya.toLowerCase().includes(q);
       const matchSector = filterSector === 'all'
         || (filterSector === 'none' ? !c.sectorId : c.sectorId === filterSector);
-      return matchSearch && matchSector;
+      // Par défaut on n'affiche que les clients actifs
+      const estActif = c.active !== false;
+      const matchActif = filterActif === 'tous' || (filterActif === 'inactifs' ? !estActif : estActif);
+      return matchSearch && matchSector && matchActif;
     })
     .sort((a, b) => {
       switch (sortBy) {
@@ -844,27 +849,39 @@ function ClientsPageInner() {
         </div>
 
         {/* Filtre par secteur */}
-        <div className="relative">
-          <select value={filterSector} onChange={(e) => setFilterSector(e.target.value)}
-            className="appearance-none pl-3 pr-8 py-2.5 rounded-xl border border-[#E2E8F0] bg-white text-[13px] font-medium text-[#374151] cursor-pointer focus:outline-none focus:border-[#4CAF4F] focus:ring-[3px] focus:ring-[#4CAF4F]/15 transition-all">
-            <option value="all">Tous les secteurs</option>
-            {sectors.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-            <option value="none">Sans secteur</option>
-          </select>
-          <svg className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-[#8A9BB5]" width={13} height={13} viewBox="0 0 24 24" fill="none"><path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-        </div>
+        <AdminSelect
+          value={filterSector}
+          onChange={setFilterSector}
+          options={[
+            { value: 'all', label: 'Tous les secteurs' },
+            ...sectors.map((s) => ({ value: s.id, label: s.name })),
+            { value: 'none', label: 'Sans secteur' },
+          ]}
+        />
+
+        {/* Filtre actifs / désactivés */}
+        <AdminSelect
+          value={filterActif}
+          onChange={setFilterActif}
+          options={[
+            { value: 'actifs', label: 'Clients actifs' },
+            { value: 'inactifs', label: 'Désactivés' },
+            { value: 'tous', label: 'Tous' },
+          ]}
+        />
 
         {/* Tri */}
-        <div className="relative">
-          <select value={sortBy} onChange={(e) => setSortBy(e.target.value)}
-            className="appearance-none pl-3 pr-8 py-2.5 rounded-xl border border-[#E2E8F0] bg-white text-[13px] font-medium text-[#374151] cursor-pointer focus:outline-none focus:border-[#4CAF4F] focus:ring-[3px] focus:ring-[#4CAF4F]/15 transition-all">
-            <option value="recent">Tri : plus récents</option>
-            <option value="commandes">Tri : plus de commandes</option>
-            <option value="nom">Tri : nom (A→Z)</option>
-            <option value="wilaya">Tri : wilaya</option>
-          </select>
-          <svg className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-[#8A9BB5]" width={13} height={13} viewBox="0 0 24 24" fill="none"><path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-        </div>
+        <AdminSelect
+          value={sortBy}
+          onChange={setSortBy}
+          options={[
+            { value: 'recent', label: 'Tri : plus récents' },
+            { value: 'commandes', label: 'Tri : plus de commandes' },
+            { value: 'nom', label: 'Tri : nom (A→Z)' },
+            { value: 'wilaya', label: 'Tri : wilaya' },
+          ]}
+        />
+
 
         {canEditClients && (
           <button onClick={() => setShowImport(true)} className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-[13px] font-semibold text-[#374151] border border-[#E2E8F0] hover:bg-[#F8FAFC] transition-colors sm:ml-auto whitespace-nowrap">
@@ -919,6 +936,9 @@ function ClientsPageInner() {
                   </div>
                 </div>
 
+                {c.active === false && (
+                  <span className="inline-block mb-1.5 mr-1.5 text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#FFF7ED] text-[#9A3412] border border-[#FED7AA]">Désactivé</span>
+                )}
                 {c.sectorName && (
                   <span className="inline-block mb-1.5 text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#EFF6FF] text-[#1E40AF] border border-[#BFDBFE]">{c.sectorName}</span>
                 )}

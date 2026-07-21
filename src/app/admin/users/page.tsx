@@ -462,12 +462,13 @@ function UserSlideIn({ user, onClose, onDelete, onPermChange, onPermSetAll, cust
                 <input type="email" value={fEmail} onChange={(e) => setFEmail(e.target.value)} placeholder="email@psi.dz" className={inputCls} />
                 <div className="flex items-center gap-2">
                   <span className="text-[12px] font-semibold text-[#8A9BB5] w-12">Rôle</span>
-                  <div className="relative flex-1">
-                    <select value={fRole} onChange={(e) => setFRole(e.target.value)}
-                      className={inputCls + ' appearance-none pr-8 cursor-pointer'}>
-                      {roleOptions.map((r) => <option key={r.id} value={r.id}>{r.label}</option>)}
-                    </select>
-                    <svg className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-[#8A9BB5]" width={13} height={13} viewBox="0 0 24 24" fill="none"><path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                  <div className="flex-1">
+                    <AdminSelect
+                      className="w-full"
+                      value={fRole}
+                      onChange={setFRole}
+                      options={roleOptions.map((r) => ({ value: r.id, label: r.label }))}
+                    />
                   </div>
                 </div>
                 <input value={fPwd} onChange={(e) => setFPwd(e.target.value)} placeholder="Nouveau mot de passe (laisser vide pour garder)" className={inputCls + ' font-mono text-[12px]'} />

@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requirePermission } from '@/lib/permissions';
 import { prisma } from '@/lib/prisma';
+import { createNotif } from '@/lib/notifications';
+import { pushSSE } from '@/lib/sse-bus';
+import { createAudit } from '@/lib/audit';
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -37,6 +40,39 @@ export async function POST(request: NextRequest, { params }: Ctx) {
       data: { quoteId, authorId: session.user.id, content },
       include: { author: { select: { id: true, name: true } } },
     });
+
+    // Prévient les admins + l'employé assigné (createNotif cible via quoteId)
+    const actorName = session.user.name ?? session.user.email ?? 'Un membre';
+    const cible = await prisma.quote.findUnique({
+      where: { id: quoteId },
+      select: { ref: true, clientName: true, client: { select: { name: true, company: true } } },
+    });
+    const clientLabel = cible?.client?.company ?? cible?.client?.name ?? cible?.clientName ?? '';
+    const extrait = content.length > 60 ? content.slice(0, 60) + '…' : content;
+
+    const { notif, userIds } = await createNotif({
+      type: 'ACTION_AUTRE',
+      title: 'Nouvelle note · Devis',
+      message: `${actorName} a ajouté une note sur le devis ${cible?.ref ?? ''}${clientLabel ? ` — ${clientLabel}` : ''} : « ${extrait} »`,
+      actorId: session.user.id,
+      quoteId,
+    });
+    pushSSE('note_added', {
+      id: notif.id,
+      type: notif.type,
+      title: notif.title,
+      message: notif.message,
+      createdAt: notif.createdAt.toISOString(),
+    }, userIds);
+    createAudit({
+      userId: session.user.id,
+      action: 'Note ajoutée',
+      entity: 'DEVIS',
+      entityId: quoteId,
+      detail: `${cible?.ref ?? ''} — ${extrait}`,
+      quoteId,
+    });
+
     return NextResponse.json(note, { status: 201 });
   } catch (e) {
     console.error(e);
