@@ -189,65 +189,13 @@ Ce qui est neuf ou corrigé récemment est signalé par ⚠️ / **(nouveau)**.
 
 
 
+
+
+
+
+
 # ══════════════ BACK-OFFICE ══════════════
 
-
-## 📋 9. Commandes & devis (`/admin/requests`)
-
-### Filtres et recherche
-1. Onglet **Tous** → commandes + devis, en attente en haut, archivés (annulés) en bas
-2. Onglet **Commandes** → seulement les commandes
-3. Onglet **Devis** → seulement les devis
-4. Filtre **statut** (En attente / Confirmé / Livré / Annulé)
-5. Changer la **période** (Ce mois / 3 derniers mois / Tout)
-6. Recherche par **entreprise** → filtre en direct
-7. Recherche par **numéro** (ex "CMD-") → filtre par référence
-8. Bouton **Effacer** → remet tous les filtres à zéro
-
-9. **Filtre "Responsable"** (nouveau) → filtre par personne assignée, + option **Non assigné**
-
-### Créer une demande à la main
-1. **+ Nouvelle commande** → choisir **Commande** ou **Devis**
-2. **Champ Nom = autocomplete** (nouveau) → taper le début d'un client existant → une liste apparaît → **choisir** → entreprise/téléphone/wilaya/commune/email se **remplissent tout seuls**
-3. Ne rien choisir + taper un nouveau nom = **nouveau client** créé (comme avant)
-4. Choisir un produit → le **prix se remplit tout seul**
-5. Ajouter plusieurs lignes (devis multi-lignes)
-6. Activer **TVA 19 %** → le total se recalcule (HT → TTC)
-7. **Commercial** (ex-"Pris en charge par") → dropdown pré-rempli sur **soi-même**, modifiable
-8. Valider → apparaît avec le badge **Manuel** + la colonne **Responsable** remplie
-
-### Le panneau de détail (clic sur une demande)
-1. Clic sur une demande → **panneau latéral** s'ouvre
-2. Infos client, lignes produits, total
-3. **Imprimer / PDF** → génère un document
-4. **Exporter Excel** → télécharge la fiche
-5. Bouton **WhatsApp** → choisir un **template de message** (variables [Nom]/[Référence]/[Wilaya] remplies) → ouvre WhatsApp
-6. Bouton **Email** → même chose avec un template → ouvre la messagerie
-7. Bouton **Appeler** → lien téléphone
-8. **Notes internes** → écrire une remarque, enregistrer
-9. **Commercial** → si permission "assigner", un select modifie le commercial ; sinon **lecture seule**
-10. **Changer de client** (nouveau) → si permission "ré-assigner client", un bouton apparaît en haut du bloc Client → rechercher un autre client → le choisir → la demande passe à ce client (visible dans l'historique du nouveau client)
-    - ⚠️ Sans la permission `reassigner_client` → le bouton n'apparaît pas ; via API un PATCH `clientId` → **403**
-11. Actions statut (si permission "modifier statuts") :
-   - **Commande** : Confirmer → Livrer, ou Annuler → Restaurer
-   - **Devis** : Confirmer (popup prix) → Livrer, ou Annuler → Restaurer
-   - **Modifier** (commande) → éditer les lignes (produits/quantités)
-
----
-
-## 🔄 10. Cycle des devis — devis chiffré = vente (nouveau)
-
-⚠️ Il n'y a **plus** de bouton "Convertir en commande". Les devis ont leur propre cycle et un devis **livré** compte comme une vente.
-
-1. Ouvrir un **devis** en **attente** → **Confirmer**
-2. ✅ Un **popup demande le prix** (total global OU prix unitaire par ligne) → valider
-3. ✅ Le devis passe en **Confirmé** avec son montant (`proposedPrice`)
-4. Devis confirmé → **Marquer Livré**
-5. ✅ Le devis passe en **Livré** → il est compté dans **"X livrées ce mois"** du dashboard
-6. Devis → **Annuler** → **Restaurer** possible
-7. ⚠️ Cas à vérifier : devis avec une **ligne hors-catalogue** (dimension perso, sans produit) → le popup prix doit quand même permettre de saisir le montant
-
----
 
 ## 🎯 10bis. Assignation "Pris en charge par" (nouveau)
 

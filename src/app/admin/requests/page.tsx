@@ -238,14 +238,17 @@ export function CreateForm({ defaultType, onClose, onSave, users, currentUserId,
   const total = tva ? Math.round(ht * 1.19) : ht;
 
   const handleSave = async () => {
-    if (!client.trim() || !telephone.trim() || lignes.every(l => !l.ref)) return;
+    // Entreprise obligatoire (+ téléphone + au moins une ligne). Nom facultatif.
+    if (!entreprise.trim() || !telephone.trim() || lignes.every(l => !l.ref)) return;
     setSaving(true);
     const now = new Date();
     const produits = lignes.filter(l => l.ref).map(l => `${l.ref} × ${l.qte}`).join(', ');
+    // Si pas de nom de contact saisi → on utilise l'entreprise comme nom (name requis en base)
+    const contactName = client.trim() || entreprise.trim();
     await onSave({
       ref: '',
       type,
-      client: client.trim(),
+      client: contactName,
       entreprise: entreprise.trim(),
       telephone: telephone.trim(),
       email: email.trim() || undefined,
@@ -300,14 +303,16 @@ export function CreateForm({ defaultType, onClose, onSave, users, currentUserId,
           {/* Coordonnées */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className={lc}>Nom *</label>
+              <label className={lc}>Entreprise *</label>
               <ClientAutocomplete
-                value={client}
-                onChange={setClient}
+                value={entreprise}
+                onChange={setEntreprise}
                 inputClass={ic}
+                placeholder="Nom entreprise"
+                searchBy="company"
                 onPick={(c) => {
-                  setClient(c.name);
                   setEntreprise(c.company ?? '');
+                  setClient(c.name ?? '');
                   setTelephone(c.phone ?? '');
                   setEmail(c.email ?? '');
                   setWilaya(c.wilaya ?? '');
@@ -315,7 +320,7 @@ export function CreateForm({ defaultType, onClose, onSave, users, currentUserId,
                 }}
               />
             </div>
-            <div><label className={lc}>Entreprise</label><input value={entreprise} onChange={e => setEntreprise(e.target.value)} placeholder="Nom entreprise" className={ic} /></div>
+            <div><label className={lc}>Nom du contact</label><input value={client} onChange={e => setClient(e.target.value)} placeholder="Prénom Nom" className={ic} /></div>
             <div><label className={lc}>Téléphone *</label><input type="tel" inputMode="tel" value={telephone} onChange={e => setTelephone(e.target.value.replace(/[^\d+ ]/g, ''))} placeholder="+213 5XX XXX XXX" className={ic} /></div>
             <div><label className={lc}>Email</label><input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="client@email.com" className={ic} /></div>
           </div>
@@ -432,7 +437,7 @@ export function CreateForm({ defaultType, onClose, onSave, users, currentUserId,
         {/* Footer */}
         <div className="flex gap-3 px-6 py-4 border-t border-[#F2F4F7]">
           <button onClick={onClose} className="flex-1 px-4 py-2.5 rounded-xl border border-[#E2E8F0] text-[13px] font-semibold text-[#374151] hover:bg-[#F8FAFC] transition-colors">Annuler</button>
-          <button onClick={handleSave} disabled={saving || !client.trim() || !telephone.trim() || lignes.every(l => !l.ref)}
+          <button onClick={handleSave} disabled={saving || !entreprise.trim() || !telephone.trim() || lignes.every(l => !l.ref)}
             className="flex-1 px-4 py-2.5 rounded-xl text-[13px] font-bold text-white disabled:opacity-40 transition-opacity"
             style={{ background: '#4CAF4F' }}>
             {saving ? 'Création…' : `Créer ${type === 'Commande' ? 'la commande' : 'le devis'}`}
@@ -807,6 +812,7 @@ export default function RequestsPage() {
           onConfirmQuoteWithPrice={selected.type === 'Devis' ? handleConfirmQuoteWithPrice : undefined}
           users={users}
           onAssign={handleAssign}
+          onReassigned={() => { setSelected(null); fetchAll(true); }}
         />
       )}
       {showCreate && (

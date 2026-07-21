@@ -467,6 +467,7 @@ function ClientSlideIn({ client, onClose, onEdit, onDelete, onReactivate, onDele
         <RequestPanel
           item={selectedRequest}
           onClose={() => setSelectedRequest(null)}
+          onReassigned={() => { setSelectedRequest(null); onRefresh?.(); }}
           onStatusChange={async (_ref, newStatut) => {
             if (!selectedRequest.id) return;
             const UI_TO_DB: Record<string, string> = { 'En attente': 'EN_ATTENTE', 'Confirmé': 'VALIDE', 'Livré': 'LIVRE', 'Annulé': 'ANNULE' };
@@ -613,6 +614,8 @@ export default function ClientsPage() {
   const [clients, setClients] = useState<ClientRecord[]>([]);
   const [loading, setLoading]   = useState(true);
   const [search, setSearch]     = useState('');
+  const [filterSector, setFilterSector] = useState('all');   // filtre par secteur
+  const [sortBy, setSortBy]     = useState('recent');        // tri
   const [selected, setSelected] = useState<ClientRecord | null>(null);
   const [editClient, setEditClient]   = useState<ClientRecord | null>(null);
   const [deleteClient, setDeleteClient] = useState<ClientRecord | null>(null);
@@ -668,12 +671,25 @@ export default function ClientsPage() {
       .catch(() => {});
   }, []);
 
-  const filtered = clients.filter(
-    (c) =>
-      c.entreprise.toLowerCase().includes(search.toLowerCase()) ||
-      c.contact.toLowerCase().includes(search.toLowerCase()) ||
-      c.wilaya.toLowerCase().includes(search.toLowerCase())
-  );
+  const parseDate = (s: string) => { const [d, m, y] = (s || '').split('/').map(Number); return new Date(y || 0, (m || 1) - 1, d || 1).getTime(); };
+
+  const filtered = clients
+    .filter((c) => {
+      const q = search.toLowerCase();
+      const matchSearch = !q || c.entreprise.toLowerCase().includes(q) || c.contact.toLowerCase().includes(q) || c.wilaya.toLowerCase().includes(q);
+      const matchSector = filterSector === 'all'
+        || (filterSector === 'none' ? !c.sectorId : c.sectorId === filterSector);
+      return matchSearch && matchSector;
+    })
+    .sort((a, b) => {
+      switch (sortBy) {
+        case 'nom':        return (a.entreprise || a.contact).localeCompare(b.entreprise || b.contact);
+        case 'commandes':  return (b.commandes + b.devis) - (a.commandes + a.devis);
+        case 'wilaya':     return (a.wilaya || '').localeCompare(b.wilaya || '');
+        case 'recent':
+        default:           return parseDate(b.derniere) - parseDate(a.derniere);
+      }
+    });
 
   const handleAdd = async () => {
     if (!addForm.contact.trim()) return;
@@ -786,6 +802,30 @@ export default function ClientsPage() {
             className="pl-9 pr-4 py-2.5 w-full sm:w-[280px] rounded-xl border border-[#E2E8F0] bg-white text-[14px] text-[#263238] placeholder-[#8A9BB5] focus:outline-none focus:border-[#4CAF4F] focus:ring-[3px] focus:ring-[#4CAF4F]/15 transition-all"
           />
         </div>
+
+        {/* Filtre par secteur */}
+        <div className="relative">
+          <select value={filterSector} onChange={(e) => setFilterSector(e.target.value)}
+            className="appearance-none pl-3 pr-8 py-2.5 rounded-xl border border-[#E2E8F0] bg-white text-[13px] font-medium text-[#374151] cursor-pointer focus:outline-none focus:border-[#4CAF4F] focus:ring-[3px] focus:ring-[#4CAF4F]/15 transition-all">
+            <option value="all">Tous les secteurs</option>
+            {sectors.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+            <option value="none">Sans secteur</option>
+          </select>
+          <svg className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-[#8A9BB5]" width={13} height={13} viewBox="0 0 24 24" fill="none"><path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+        </div>
+
+        {/* Tri */}
+        <div className="relative">
+          <select value={sortBy} onChange={(e) => setSortBy(e.target.value)}
+            className="appearance-none pl-3 pr-8 py-2.5 rounded-xl border border-[#E2E8F0] bg-white text-[13px] font-medium text-[#374151] cursor-pointer focus:outline-none focus:border-[#4CAF4F] focus:ring-[3px] focus:ring-[#4CAF4F]/15 transition-all">
+            <option value="recent">Tri : plus récents</option>
+            <option value="commandes">Tri : plus de commandes</option>
+            <option value="nom">Tri : nom (A→Z)</option>
+            <option value="wilaya">Tri : wilaya</option>
+          </select>
+          <svg className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-[#8A9BB5]" width={13} height={13} viewBox="0 0 24 24" fill="none"><path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+        </div>
+
         <button onClick={() => setShowImport(true)} className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-[13px] font-semibold text-[#374151] border border-[#E2E8F0] hover:bg-[#F8FAFC] transition-colors sm:ml-auto whitespace-nowrap">
           <svg width={15} height={15} fill="none" viewBox="0 0 24 24"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg>
           Importer Excel
@@ -833,9 +873,12 @@ export default function ClientsPage() {
                   </div>
                 </div>
 
+                {c.sectorName && (
+                  <span className="inline-block mb-1.5 text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#EFF6FF] text-[#1E40AF] border border-[#BFDBFE]">{c.sectorName}</span>
+                )}
                 <div className="flex items-center justify-between text-[11px] text-[#ABBED1]">
-                  <span>{c.wilaya}</span>
-                  <span>{c.derniere}</span>
+                  <span className="truncate">{c.wilaya}</span>
+                  <span className="flex-shrink-0 ml-2">{c.derniere}</span>
                 </div>
               </button>
             );

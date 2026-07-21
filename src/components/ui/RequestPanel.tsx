@@ -374,10 +374,17 @@ export function TemplatePopover({ item, mode, recipientEmail, onClose }: {
         }),
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error ?? 'Échec de l\'envoi');
+      if (!res.ok) throw new Error(data.error ?? 'ECHEC');
       onClose();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Échec de l\'envoi');
+    } catch {
+      // L'envoi serveur a échoué (souvent : messagerie pas encore activée côté Microsoft).
+      // → message propre + solution de secours : ouvrir la messagerie de l'appareil (mailto).
+      setError('Envoi automatique indisponible (messagerie pas encore activée). Ouverture de votre messagerie…');
+      const subject = encodeURIComponent(`${item.type} ${item.ref} — PSI`);
+      const bodyTxt = encodeURIComponent(preview);
+      setTimeout(() => {
+        window.location.href = `mailto:${to}?subject=${subject}&body=${bodyTxt}`;
+      }, 900);
     } finally {
       setSending(false);
     }
@@ -448,7 +455,7 @@ export function TemplatePopover({ item, mode, recipientEmail, onClose }: {
                 rows={7}
                 className="w-full resize-none text-[13px] text-[#374151] leading-relaxed border border-[#E2E8F0] rounded-xl px-4 py-3 focus:outline-none focus:border-[#4CAF4F] focus:ring-2 focus:ring-[#4CAF4F]/10 transition-all"
               />
-              {error && <p className="text-[11px] font-semibold text-[#EF4444]">{error}</p>}
+              {error && <p className="text-[11px] font-semibold text-[#B45309] bg-[#FFF7ED] border border-[#FED7AA] rounded-lg px-3 py-2">{error}</p>}
               <button onClick={send} disabled={sending}
                 className="w-full py-2.5 rounded-xl text-[13px] font-bold border transition-colors disabled:opacity-60"
                 style={{ borderColor: accentColor, color: accentColor, background: accentBg }}>
@@ -687,6 +694,7 @@ interface RequestPanelProps {
   onConfirmQuoteWithPrice?: (item: RequestDetail & { _prix?: ConvertPrixData }) => void;
   users?: { id: string; name: string }[];
   onAssign?: (id: string, type: string, assignedToId: string | null) => void;
+  onReassigned?: () => void; // appelé après un changement de client (refresh SANS toucher au statut)
 }
 
 // ── Bouton icône rond ────────────────────────────────────────────────────────
@@ -764,7 +772,7 @@ function ContactDropdown({ title, color, hoverColor, children, options }: {
   );
 }
 
-export function RequestPanel({ item, onClose, onStatusChange, onConfirmQuoteWithPrice, users, onAssign }: RequestPanelProps) {
+export function RequestPanel({ item, onClose, onStatusChange, onConfirmQuoteWithPrice, users, onAssign, onReassigned }: RequestPanelProps) {
   const { can, isAdmin } = useRole();
   const canModifierStatuts = can('modifier_statuts');
   const canAssign = can('assign_commandes');
@@ -794,7 +802,10 @@ export function RequestPanel({ item, onClose, onStatusChange, onConfirmQuoteWith
       }).catch(() => {});
     }
     setShowReassign(false);
-    onStatusChange?.(item.ref, item.statut); // déclenche un refetch parent
+    // Refresh SANS rejouer un changement de statut (sinon notif parasite "mis en attente").
+    // Fallback sur onStatusChange seulement si le parent n'a pas fourni onReassigned.
+    if (onReassigned) onReassigned();
+    else onStatusChange?.(item.ref, item.statut);
     onClose();
   };
   const [templateMode, setTemplateMode] = useState<'wa' | 'mail' | 'sms' | null>(null);
@@ -1231,9 +1242,10 @@ export function RequestPanel({ item, onClose, onStatusChange, onConfirmQuoteWith
                 <ClientAutocomplete
                   value={reassignSearch}
                   onChange={setReassignSearch}
-                  placeholder="Rechercher un client…"
+                  placeholder="Rechercher une entreprise…"
+                  searchBy="company"
                   inputClass="w-full px-3 py-2.5 rounded-xl border border-[#E2E8F0] text-[13px] text-[#0F172A] focus:outline-none focus:border-[#4CAF4F]"
-                  onPick={(c) => { setReassignPicked({ id: c.id, name: c.name }); setReassignSearch(c.name); }}
+                  onPick={(c) => { const lbl = c.company || c.name; setReassignPicked({ id: c.id, name: lbl }); setReassignSearch(lbl); }}
                 />
               )}
 

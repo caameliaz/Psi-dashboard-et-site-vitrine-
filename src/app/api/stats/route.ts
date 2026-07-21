@@ -29,7 +29,8 @@ export async function GET() {
       commandesAujourdhui,
       attenteCommandes,
       attenteDevis,
-      contacteCommandes,
+      confirmesCommandes,
+      confirmesDevis,
       topProduits,
       sourceOrders,
       sourceQuotes,
@@ -65,7 +66,9 @@ export async function GET() {
       prisma.order.count({ where: { createdAt: { gte: startOfToday } } }),
       prisma.order.count({ where: { status: 'EN_ATTENTE' } }),
       prisma.quote.count({ where: { status: 'EN_ATTENTE' } }),
-      prisma.order.count({ where: { status: 'CONTACTE' } }),
+      // Confirmés (statut VALIDE) : commandes + devis
+      prisma.order.count({ where: { status: 'VALIDE' } }),
+      prisma.quote.count({ where: { status: 'VALIDE' } }),
       prisma.orderItem.groupBy({
         by: ['productId'],
         _sum: { quantity: true },
@@ -245,7 +248,7 @@ export async function GET() {
       todayStats: {
         commandes: commandesAujourdhui,
         attente: attenteCommandes + attenteDevis,
-        contactes: contacteCommandes,
+        confirmes: confirmesCommandes + confirmesDevis,
       },
       // Nouvelles stats (P2)
       evolutionCommandes,        // % vs mois précédent

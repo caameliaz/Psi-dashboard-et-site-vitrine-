@@ -238,7 +238,7 @@ export default function DashboardPage() {
   const [objectifs, setObjectifs] = useState<{ global: number; byUser: Record<string, number> }>({ global: 0, byUser: {} });
   const [selectedCommercial, setSelectedCommercial] = useState<string>(''); // '' = total entreprise
   const [goalsOpen, setGoalsOpen] = useState(false);
-  const [todayStats, setTodayStats] = useState({ commandes: 0, attente: 0, contactes: 0 });
+  const [todayStats, setTodayStats] = useState({ commandes: 0, attente: 0, confirmes: 0 });
   const [topProduits, setTopProduits] = useState<{ ref: string; qty: number; label: string; color: string }[]>([]);
   const [sourceStats, setSourceStats] = useState({ site: 0, manuel: 0 });
   const [evolution, setEvolution] = useState(0);
@@ -390,9 +390,9 @@ export default function DashboardPage() {
             <>
               <ul className="space-y-3 mb-4">
                 {[
-                  { label: 'Nouvelles demandes',    value: todayStats.commandes, dot: '#4CAF4F' },
-                  { label: 'En attente de réponse', value: todayStats.attente,   dot: '#FBC02D' },
-                  { label: 'Clients contactés',     value: todayStats.contactes, dot: '#2184F3' },
+                  { label: 'Commandes aujourd’hui', value: todayStats.commandes, dot: '#4CAF4F' },
+                  { label: 'À traiter (en attente)',      value: todayStats.attente,   dot: '#FBC02D' },
+                  { label: 'Confirmés',                   value: todayStats.confirmes, dot: '#2184F3' },
                 ].map((it) => (
                   <li key={it.label} className="flex items-center justify-between">
                     <span className="flex items-center gap-2 text-[13px] text-[#374151]">
@@ -589,6 +589,7 @@ export default function DashboardPage() {
         <RequestPanel
           item={selectedRequest}
           onClose={() => setSelectedRequest(null)}
+          onReassigned={() => { setSelectedRequest(null); fetchData(true); }}
           onStatusChange={async (_ref, newStatut) => {
             const item = selectedRequest;
             if (!item?.id) return;

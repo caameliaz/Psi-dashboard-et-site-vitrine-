@@ -258,11 +258,17 @@ export function TopBar() {
       if (firstLoad) {
         mapped.forEach((n) => notifIds.current.add(n.id));
       } else if (showToast) {
+        const now = Date.now();
         mapped
           .filter((n) => !notifIds.current.has(n.id))
           .forEach((n) => {
             notifIds.current.add(n.id);
-            setToasts((prev) => [...prev, { id: n.id, type: n.type, title: n.title, message: n.message }]);
+            // Ne toaster que les notifs VRAIMENT récentes (< 30s) → évite de re-toaster
+            // d'anciennes notifs au polling. Les nouvelles (site public) sont toujours <30s.
+            const age = now - new Date(n.createdAt).getTime();
+            if (age < 30000) {
+              setToasts((prev) => [...prev, { id: n.id, type: n.type, title: n.title, message: n.message }]);
+            }
           });
       } else {
         mapped.forEach((n) => notifIds.current.add(n.id));

@@ -2,7 +2,7 @@ import { styleBandRow, styleHeaderRow, styleDataRows, styleSectionTitle } from '
 
 export interface DashboardExportData {
   stats: { commandes: number; devisMois: number; ventesMois: number; clients: number; livrees: number };
-  todayStats: { commandes: number; attente: number; contactes: number };
+  todayStats: { commandes: number; attente: number; confirmes: number };
   sourceStats: { site: number; manuel: number };
   evolution: number;
   topProduits: { ref: string; qty: number; label: string }[];
@@ -61,8 +61,8 @@ export async function exportDashboardExcel(d: DashboardExportData) {
 
   section("AUJOURD'HUI", ['Indicateur', 'Valeur'], [
     ['Commandes du jour', d.todayStats.commandes],
-    ['En attente', d.todayStats.attente],
-    ['Contactés', d.todayStats.contactes],
+    ['À traiter (en attente)', d.todayStats.attente],
+    ['Confirmés', d.todayStats.confirmes],
   ]);
 
   section('SOURCE DES DEMANDES', ['Source', 'Nombre'], [

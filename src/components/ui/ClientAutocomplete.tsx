@@ -11,13 +11,14 @@ export interface ClientLight {
 // - taper = met à jour la valeur (nouveau client possible)
 // - choisir dans la liste = appelle onPick avec le client complet (pré-remplissage)
 export function ClientAutocomplete({
-  value, onChange, onPick, inputClass, placeholder = 'Prénom Nom',
+  value, onChange, onPick, inputClass, placeholder = 'Prénom Nom', searchBy = 'name',
 }: {
   value: string;
   onChange: (v: string) => void;
   onPick: (client: ClientLight) => void;
   inputClass?: string;
   placeholder?: string;
+  searchBy?: 'name' | 'company'; // détermine ce qui s'affiche en gros dans la liste
 }) {
   const [clients, setClients] = useState<ClientLight[]>([]);
   const [open, setOpen] = useState(false);
@@ -54,19 +55,24 @@ export function ClientAutocomplete({
       />
       {open && matches.length > 0 && (
         <div className="absolute z-[120] top-full left-0 right-0 mt-1 bg-white rounded-xl border border-[#E2E8F0] shadow-xl overflow-hidden max-h-[220px] overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          {matches.map((c) => (
-            <button
-              key={c.id}
-              type="button"
-              onClick={() => { onPick(c); onChange(c.name); setOpen(false); }}
-              className="w-full text-left px-3 py-2.5 hover:bg-[#F0FDF4] transition-colors border-b border-[#F2F4F7] last:border-b-0"
-            >
-              <p className="text-[13px] font-semibold text-[#0F172A] leading-tight">{c.name}</p>
-              <p className="text-[11px] text-[#8A9BB5] mt-0.5 truncate">
-                {[c.company, c.phone, c.wilaya].filter(Boolean).join(' · ')}
-              </p>
-            </button>
-          ))}
+          {matches.map((c) => {
+            // Affichage : entreprise en gros si on cherche par entreprise, sinon le nom
+            const primary = searchBy === 'company' ? (c.company || c.name) : c.name;
+            const secondary = searchBy === 'company'
+              ? [c.name, c.phone, c.wilaya].filter(Boolean).join(' · ')
+              : [c.company, c.phone, c.wilaya].filter(Boolean).join(' · ');
+            return (
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => { onPick(c); onChange(primary); setOpen(false); }}
+                className="w-full text-left px-3 py-2.5 hover:bg-[#F0FDF4] transition-colors border-b border-[#F2F4F7] last:border-b-0"
+              >
+                <p className="text-[13px] font-semibold text-[#0F172A] leading-tight">{primary}</p>
+                <p className="text-[11px] text-[#8A9BB5] mt-0.5 truncate">{secondary}</p>
+              </button>
+            );
+          })}
         </div>
       )}
     </div>
