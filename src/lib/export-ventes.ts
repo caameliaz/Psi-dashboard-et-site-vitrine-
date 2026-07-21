@@ -49,7 +49,7 @@ export async function exportVentesExcel(filtresLabel?: string) {
     if (!order.items || order.items.length === 0) {
       push([ref, source, dateCmd, dateLiv, client, entreprise, wilaya, agent, '—', 0, 0, 0]);
     } else {
-      order.items.forEach((item: any, idx: number) => {
+      order.items.forEach((item: any) => {
         const prodRef = item.product?.reference ?? '—';
         const qty = item.quantity ?? 0;
         const pu = item.unitPrice ?? 0;
@@ -57,14 +57,14 @@ export async function exportVentesExcel(filtresLabel?: string) {
         grandTotal += totalLigne;
 
         push([
-          idx === 0 ? ref    : '',
-          idx === 0 ? source : '',
-          idx === 0 ? dateCmd : '',
-          idx === 0 ? dateLiv : '',
-          idx === 0 ? client : '',
-          idx === 0 ? entreprise : '',
-          idx === 0 ? wilaya : '',
-          idx === 0 ? agent : '',
+          ref,
+          source,
+          dateCmd,
+          dateLiv,
+          client,
+          entreprise,
+          wilaya,
+          agent,
           prodRef,
           qty,
           pu,

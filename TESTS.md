@@ -174,37 +174,11 @@ Ce qui est neuf ou corrigé récemment est signalé par ⚠️ / **(nouveau)**.
 
 ---
 
-## 🙋 16. Mon profil (`/admin/profile`)
 
-1. **Informations personnelles** (nom, téléphone…) → Enregistrer
-2. **Changer le mot de passe** : ancien + nouveau (min. 6) + confirmation
-3. Boutons œil pour afficher/masquer les mots de passe
-4. Mauvais ancien mot de passe → refusé
+## 🔔 17ter. Notifications SYSTÈME / push  ✅ CODÉ (Web Push / Option B) — À TESTER EN PROD
 
----
-
-## 🔔 17. Notifications (tester avec 2 comptes ouverts)
-
-Ouvre `admin1` dans un navigateur et `admin2` (ou un employé) dans un autre (ou navigation privée).
-
-1. Un **toast** apparaît en haut à droite quand il y a du nouveau (SSE temps réel)
-2. Le toast disparaît après quelques secondes (ou au clic)
-3. La **cloche** montre le nombre de non-lus
-4. Panneau : les non-lus ont un fond coloré
-5. Clic sur une notif → passe en **lue**
-6. **Tout marquer lu** → la cloche se vide
-7. Quand l'**Employé** agit → l'**Admin** reçoit la notif
-8. Quand l'**Admin** agit → l'**Employé** reçoit la notif
-9. Nouvelle commande/devis depuis le **site** → tout le monde est notifié
-10. ⚠️ Celui qui fait l'action ne reçoit **jamais** sa propre notif
-11. Page dédiée `/admin/notifications` → historique complet
-12. ⚡ **Toast d'assignation ciblé** (nouveau) : quand on assigne une demande, **seul l'assigné** voit le toast (les autres ne le voient pas)
-
----
-
-## 🔔 17ter. Notifications SYSTÈME / push (À VENIR — voir todo « 3bis »)
-
-⚠️ Pas encore codé. Tests à faire une fois développé (surtout EN PROD, HTTPS requis) :
+Le code est prêt. Marche seulement en PROD (HTTPS). Chaque user clique "Activer les notifications" (profil ou menu mobile).
+Ne pas oublier les 3 variables VAPID sur Vercel. Tests à faire une fois déployé (HTTPS requis) :
 
 **Si Option A (app ouverte) :**
 1. Autoriser les notifs à la 1ère demande → popup navigateur
@@ -233,19 +207,7 @@ Avec 2 fenêtres ouvertes (ex. `admin1` sur une liste, `admin2` qui agit) :
 
 ---
 
-## 📊 18. Exports Excel
 
-**Rapport de ventes** (`/admin/requests`) :
-1. Bouton **Rapport de ventes** → fichier `.xlsx`
-2. Contient seulement les commandes **Livrées**
-3. Une ligne par produit + colonne **Source** (Site web / Manuel)
-4. Ligne **TOTAL** en bas
-
-**Export du tableau** :
-1. Filtrer puis **Exporter** → télécharge le tableau tel qu'affiché
-2. Vérifier colonnes + récap en bas
-
----
 
 ## 🎫 19. Permissions employé (bien tester)
 
