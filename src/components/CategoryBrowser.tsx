@@ -4,7 +4,6 @@ import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useCartStore } from '@/store/cartStore';
 import { useTranslation } from '@/lib/i18n';
-import { FormatPreview } from '@/components/FormatPreview';
 import { type Cat, type Prod } from '@/lib/hardcodedCatalog';
 
 // Grille de catégories : chaque card affiche une image, un nom
@@ -59,16 +58,6 @@ function CategoryCard({ category, products }: { category: Cat; products: Prod[] 
 
   const current = products.find((p) => p.id === selectedId) ?? products[0];
 
-  // Fait défiler d'une "page" entière — le nombre d'items par page est mesuré au moment du clic, pas figé en JS.
-  const scrollByPage = (dir: 1 | -1) => {
-    const track = trackRef.current;
-    if (!track) return;
-    const item = track.firstElementChild as HTMLElement | null;
-    const itemStep = item ? item.getBoundingClientRect().width + 4 : track.clientWidth;
-    const perPage = Math.max(1, Math.round(track.clientWidth / itemStep));
-    track.scrollBy({ left: dir * itemStep * perPage, behavior: 'smooth' });
-  };
-
   return (
     <div className="flex flex-col gap-3">
       {/* Image catégorie — garde son propre container */}
@@ -93,56 +82,34 @@ function CategoryCard({ category, products }: { category: Cat; products: Prod[] 
           <p className="text-[13px] text-[#717171]">{t('common.no_products')}</p>
         ) : (
           <div className="flex flex-col gap-2.5">
-            <div className="flex items-center gap-1.5">
-              <button
-                onClick={() => scrollByPage(-1)}
-                disabled={products.length < 2}
-                aria-label={t('product_detail.prev_ref_aria')}
-                className="shrink-0 w-7 h-7 rounded-full border border-[#ABBED1]/50 flex items-center justify-center text-[#717171] hover:border-[#4CAF4F] hover:text-[#4CAF4F] disabled:opacity-30 disabled:hover:border-[#ABBED1]/50 disabled:hover:text-[#717171] transition-colors"
-              >
-                <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
-                  <path d="M10 3L5 8l5 5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-              </button>
-
-              <div
-                ref={trackRef}
-                className="flex-1 flex gap-1 min-w-0 overflow-x-auto scroll-smooth snap-x snap-mandatory [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-              >
-                {products.map((p) => {
-                  const isSelected = p.id === current.id;
-                  return (
-                    <button
-                      key={p.id}
-                      onClick={() => setSelectedId(p.id)}
-                      className="flex flex-col items-center gap-1.5 shrink-0 snap-start w-[calc(33.333%-2.67px)]"
-                    >
-                      <div
-                        className={`inline-flex border rounded-xl p-3.5 items-center justify-center transition-all ${
-                          isSelected
-                            ? 'border-[#4CAF4F] bg-[#F0FDF4] shadow-[0_4px_12px_rgba(76,175,79,0.2)]'
-                            : 'border-[#E0E0E0] hover:border-[#4CAF4F]/50'
-                        }`}
-                      >
-                        <FormatPreview width={p.width} length={p.length} color={isSelected ? '#4CAF4F' : '#9AA5B1'} compact scale={1.2} />
-                      </div>
-                      <p className="text-[10px] text-[#717171] text-center leading-3.5 line-clamp-2 min-h-[28px]">{p.usage}</p>
-                    </button>
-                  );
-                })}
-              </div>
-
-              <button
-                onClick={() => scrollByPage(1)}
-                disabled={products.length < 2}
-                aria-label={t('product_detail.next_ref_aria')}
-                className="shrink-0 w-7 h-7 rounded-full border border-[#ABBED1]/50 flex items-center justify-center text-[#717171] hover:border-[#4CAF4F] hover:text-[#4CAF4F] disabled:opacity-30 disabled:hover:border-[#ABBED1]/50 disabled:hover:text-[#717171] transition-colors"
-              >
-                <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
-                  <path d="M6 3l5 5-5 5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-              </button>
+            {/* Étiquettes défilables (dimensions + métrage) — la sélectionnée est verte */}
+            <div
+              ref={trackRef}
+              className="flex gap-2 overflow-x-auto pb-1 [scrollbar-width:thin]"
+            >
+              {products.map((p) => {
+                const isSelected = p.id === current.id;
+                return (
+                  <button
+                    key={p.id}
+                    onClick={() => setSelectedId(p.id)}
+                    className={`flex-shrink-0 px-3 py-1.5 rounded-lg border text-[12px] font-bold whitespace-nowrap transition-all ${
+                      isSelected
+                        ? 'border-[#4CAF4F] bg-[#4CAF4F] text-white shadow-[0_3px_10px_rgba(76,175,79,0.3)]'
+                        : 'border-[#E0E0E0] bg-white text-[#374151] hover:border-[#4CAF4F]/60'
+                    }`}
+                  >
+                    {p.width}mm × {p.length}
+                    {p.metrage != null ? ` · ${p.metrage} m` : ''}
+                  </button>
+                );
+              })}
             </div>
+
+            {/* Usage de la référence sélectionnée (à quoi ça sert) */}
+            {current?.usage && (
+              <p className="text-[12px] text-[#717171] leading-relaxed line-clamp-2 min-h-[32px]">{current.usage}</p>
+            )}
 
             {/* Ajouter au panier — prix mis à jour selon la réf choisie */}
             <button

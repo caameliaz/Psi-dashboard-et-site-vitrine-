@@ -80,32 +80,32 @@ export default function ProductDetailPage() {
   const refsBlock = items.length > 0 && (
     <div className="flex flex-col gap-3 mt-2">
       <h2 className="text-[15px] font-bold text-[#263238]">{t('product_detail.available_refs')}</h2>
-      <div className="grid grid-cols-3 lg:grid-cols-4 gap-1.5">
+
+      {/* Étiquettes défilables (dimensions + métrage) — la sélectionnée est verte */}
+      <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 [scrollbar-width:thin]">
         {items.map((p, i) => {
           const active = i === index;
-          const dimColor = active ? '#4CAF4F' : '#9AA5B1';
           return (
             <button
               key={p.id}
               onClick={() => { setIndex(i); setQty(1); }}
-              className="flex flex-col items-center gap-1.5"
+              className={`flex-shrink-0 px-3 py-2 rounded-xl border text-[13px] font-bold whitespace-nowrap transition-all ${
+                active
+                  ? 'border-[#4CAF4F] bg-[#4CAF4F] text-white shadow-[0_4px_12px_rgba(76,175,79,0.3)]'
+                  : 'border-[#E0E0E0] bg-white text-[#374151] hover:border-[#4CAF4F]/60'
+              }`}
             >
-              <div
-                className={`inline-flex border rounded-xl p-4 items-center justify-center transition-all ${
-                  active
-                    ? 'border-[#4CAF4F] bg-[#F0FDF4] shadow-[0_4px_12px_rgba(76,175,79,0.2)]'
-                    : 'border-[#E0E0E0] hover:border-[#4CAF4F]/50'
-                }`}
-              >
-                <FormatPreview width={p.width} length={p.length} color={dimColor} scale={1.3} />
-              </div>
-
-              {/* Utilisation de cette référence (remplace la légende dimensions) */}
-              <p className="text-[11px] text-[#717171] text-center leading-4 line-clamp-2 min-h-[32px]">{p.usage}</p>
+              {p.width}mm × {p.length}
+              {p.metrage != null ? ` · ${p.metrage} m` : ''}
             </button>
           );
         })}
       </div>
+
+      {/* Usage de la référence sélectionnée (à quoi ça sert) */}
+      {current?.usage && (
+        <p className="text-[13px] text-[#717171] leading-relaxed">{current.usage}</p>
+      )}
     </div>
   );
 
