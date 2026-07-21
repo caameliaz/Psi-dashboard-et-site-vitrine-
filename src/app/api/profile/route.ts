@@ -10,14 +10,14 @@ export async function GET() {
 
   const user = await prisma.user.findUnique({
     where: { id: session.user.id },
-    select: { id: true, name: true, email: true, phone: true, role: true, createdAt: true },
+    select: { id: true, name: true, email: true, phone: true, role: true, createdAt: true, recapDaily: true, recapWeekly: true },
   });
   if (!user) return NextResponse.json({ error: 'Introuvable' }, { status: 404 });
   return NextResponse.json(user);
 }
 
 // PATCH /api/profile — met à jour ses propres infos OU son mot de passe
-// Body infos : { name?, phone? }
+// Body infos : { name?, phone?, recapDaily?, recapWeekly? }
 // Body mot de passe : { currentPassword, newPassword }
 export async function PATCH(request: NextRequest) {
   const session = await auth();
@@ -48,6 +48,9 @@ export async function PATCH(request: NextRequest) {
       data: {
         ...(body.name !== undefined && { name: body.name }),
         ...(body.phone !== undefined && { phone: body.phone || null }),
+        // Préférences d'emails récap (admins) — désabonnement depuis le profil
+        ...(body.recapDaily !== undefined && { recapDaily: Boolean(body.recapDaily) }),
+        ...(body.recapWeekly !== undefined && { recapWeekly: Boolean(body.recapWeekly) }),
       },
     });
     return NextResponse.json({ success: true });

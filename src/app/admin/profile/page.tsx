@@ -76,6 +76,9 @@ export default function ProfilePage() {
   const [depuis, setDepuis] = useState('');
   const [savedInfo, setSavedInfo] = useState(false);
   const [infoError, setInfoError] = useState('');
+  // Préférences emails récap (admins uniquement)
+  const [recapDaily, setRecapDaily] = useState(true);
+  const [recapWeekly, setRecapWeekly] = useState(true);
 
   const [currentPwd, setCurrentPwd] = useState('');
   const [newPwd, setNewPwd] = useState('');
@@ -93,6 +96,8 @@ export default function ProfilePage() {
       setNom(u.name ?? ''); setEmail(u.email ?? ''); setTelephone(u.phone ?? '');
       setRole(u.role === 'ADMIN' ? 'Admin' : 'Employé');
       setDepuis(u.createdAt ? new Date(u.createdAt).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' }) : '');
+      setRecapDaily(u.recapDaily ?? true);
+      setRecapWeekly(u.recapWeekly ?? true);
     }).catch(() => {});
   }, []);
 
@@ -108,6 +113,16 @@ export default function ProfilePage() {
     if (!res.ok) { const e = await res.json().catch(() => ({})); setInfoError(e.error ?? 'Échec.'); return; }
     setSavedInfo(true);
     setTimeout(() => setSavedInfo(false), 2500);
+  };
+
+  // Enregistre immédiatement le choix (pas besoin de cliquer "Enregistrer")
+  const saveRecapPref = async (patch: { recapDaily?: boolean; recapWeekly?: boolean }) => {
+    if (patch.recapDaily !== undefined) setRecapDaily(patch.recapDaily);
+    if (patch.recapWeekly !== undefined) setRecapWeekly(patch.recapWeekly);
+    await fetch('/api/profile', {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(patch),
+    }).catch(() => {});
   };
 
   const handleSavePwd = async () => {
@@ -230,7 +245,57 @@ export default function ProfilePage() {
 
         <PushSection />
 
+        {/* Emails récapitulatifs — admins uniquement (eux seuls les reçoivent) */}
+        {role === 'Admin' && (
+          <Section title="Emails récapitulatifs">
+            <div className="flex flex-col gap-3">
+              <RecapToggle
+                checked={recapDaily}
+                onChange={() => saveRecapPref({ recapDaily: !recapDaily })}
+                titre="Récap quotidien"
+                detail="Chaque jour à 20h — les commandes et devis de la journée"
+              />
+              <RecapToggle
+                checked={recapWeekly}
+                onChange={() => saveRecapPref({ recapWeekly: !recapWeekly })}
+                titre="Bilan hebdomadaire"
+                detail="Chaque jeudi à 23h59 — le bilan de la semaine"
+              />
+              <p className="text-[12px] text-[#8A9BB5] mt-1">
+                Les modifications sont enregistrées immédiatement.
+              </p>
+            </div>
+          </Section>
+        )}
+
       </div>
     </div>
+  );
+}
+
+// Ligne "récap" avec interrupteur (même style que les toggles de l'app)
+function RecapToggle({ checked, onChange, titre, detail }: {
+  checked: boolean; onChange: () => void; titre: string; detail: string;
+}) {
+  return (
+    <button
+      onClick={onChange}
+      className="flex items-center justify-between gap-4 w-full text-left px-4 py-3 rounded-xl border transition-colors"
+      style={{ background: checked ? '#F0FDF4' : '#F8FAFC', borderColor: checked ? '#BBF7D0' : '#E2E8F0' }}
+    >
+      <span className="min-w-0">
+        <span className="block text-[13px] font-bold" style={{ color: checked ? '#166534' : '#374151' }}>{titre}</span>
+        <span className="block text-[12px] text-[#8A9BB5] mt-0.5">{detail}</span>
+      </span>
+      <span
+        className="relative flex-shrink-0 rounded-full transition-colors duration-200"
+        style={{ width: 40, height: 24, background: checked ? '#4CAF4F' : '#D0D5DD' }}
+      >
+        <span
+          className="absolute top-[3px] left-[3px] w-[18px] h-[18px] rounded-full bg-white shadow-sm transition-all duration-200"
+          style={{ transform: checked ? 'translateX(16px)' : 'translateX(0px)' }}
+        />
+      </span>
+    </button>
   );
 }

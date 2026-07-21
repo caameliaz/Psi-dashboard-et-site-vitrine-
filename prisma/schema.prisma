@@ -313,6 +313,8 @@ model User {
   sessionVersion  Int                @default(0) // incrémenté pour invalider tous les cookies
   resetRequested  Boolean            @default(false) // l'utilisateur a demandé une réinit. de mot de passe
   resetRequestedAt DateTime?
+  recapDaily      Boolean            @default(true)  // reçoit le récap quotidien (20h) — désactivable dans le profil
+  recapWeekly     Boolean            @default(true)  // reçoit le bilan hebdomadaire (jeudi 23h59)
   ordersCreated   Order[]            @relation("OrderCreatedBy")
   quotesCreated   Quote[]            @relation("QuoteCreatedBy")
   ordersAssigned  Order[]            @relation("OrderAssignedTo")

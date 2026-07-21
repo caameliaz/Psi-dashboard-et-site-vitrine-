@@ -15,7 +15,7 @@ export function dailyRecapTemplate({ dateLabel, commandes, devis, items, adminUr
   const subject = `Récap quotidien PSI — ${dateLabel} (${total} demande${total !== 1 ? 's' : ''})`;
 
   const body = `
-    ${renderHeader(`Récapitulatif du ${dateLabel}`, `${total} demande${total !== 1 ? 's' : ''} reçue${total !== 1 ? 's' : ''} la veille`, adminUrl)}
+    ${renderHeader(`Récapitulatif du ${dateLabel}`, `${total} demande${total !== 1 ? 's' : ''} reçue${total !== 1 ? 's' : ''} aujourd'hui`, adminUrl)}
     ${renderCards(commandes, devis)}
     ${renderItemsTable(items)}`;
 

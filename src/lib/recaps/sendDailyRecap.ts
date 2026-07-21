@@ -21,18 +21,18 @@ export interface SendDailyRecapResult {
 }
 
 export async function sendDailyRecap(): Promise<SendDailyRecapResult> {
+  // Récap envoyé à 20h : on prend les demandes du JOUR MÊME (00h00 → maintenant).
   const todayStart = startOfDay(new Date());
-  const yesterdayStart = new Date(todayStart);
-  yesterdayStart.setDate(yesterdayStart.getDate() - 1);
+  const now = new Date();
 
   const [orders, quotes, admins] = await Promise.all([
     prisma.order.findMany({
-      where: { createdAt: { gte: yesterdayStart, lt: todayStart } },
+      where: { createdAt: { gte: todayStart, lte: now } },
       include: { client: true, items: true },
       orderBy: { createdAt: 'asc' },
     }),
     prisma.quote.findMany({
-      where: { createdAt: { gte: yesterdayStart, lt: todayStart } },
+      where: { createdAt: { gte: todayStart, lte: now } },
       include: { client: true },
       orderBy: { createdAt: 'asc' },
     }),
@@ -40,7 +40,8 @@ export async function sendDailyRecap(): Promise<SendDailyRecapResult> {
     // `User.email` est obligatoire en base (schema.prisma), mais on filtre quand même
     // les chaînes vides par sécurité plutôt que de supposer que la contrainte tient.
     prisma.user.findMany({
-      where: { role: 'ADMIN', active: true },
+      // recapDaily: true → l'admin peut se désabonner depuis son profil.
+      where: { role: 'ADMIN', active: true, recapDaily: true },
       select: { id: true, name: true, email: true },
     }),
   ]);
@@ -72,7 +73,7 @@ export async function sendDailyRecap(): Promise<SendDailyRecapResult> {
     return { itemCount: items.length, sent: 0, failed: [] };
   }
 
-  const dateLabel = yesterdayStart.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
+  const dateLabel = todayStart.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
   const adminUrl = `${process.env.NEXTAUTH_URL ?? 'http://localhost:3000'}/admin/requests`;
   const { subject, html, text } = dailyRecapTemplate({
     dateLabel,

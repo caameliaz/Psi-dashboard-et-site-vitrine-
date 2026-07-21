@@ -16,6 +16,10 @@ Traduction auto AR du contenu
 Récap email quotidien (le hebdo jeudi 23h59 est déjà codé)
 En clair : côté code, tu es prête. Le reste = déploiement + une action de ton chef (SMTP).
 
+
+
+
+
 3️⃣ TUTO — Comment TU déploies (Vercel)
 Prérequis : le code est sur GitHub (fait ✅), tu as une base Neon de prod.
 
@@ -52,28 +56,6 @@ Créer une commande + un devis → la cloche sonne, notif reçue
 Exports Excel + PDF → se téléchargent
 Notifs push : autorise les notifications → ferme l'onglet → fais une action depuis un autre compte → tu dois recevoir la push (PC et Android ; iPhone : ajoute d'abord le site à l'écran d'accueil)
 Email test : ⚠️ ne marchera qu'après que ton chef a activé SMTP AUTH (étape 5)
-5️⃣ MESSAGE à envoyer à ton chef (SMTP)
-Copie-colle tel quel :
-
-Objet : Activer « SMTP AUTH » sur Contact@psi.dz
-
-Bonjour,
-
-Pour que notre application puisse envoyer les emails automatiques (création de comptes, récapitulatifs) depuis Contact@psi.dz, Microsoft demande d'activer une option appelée « SMTP AUTH » (authentification SMTP). Tant qu'elle n'est pas activée, les envois sont bloqués (erreur 535).
-
-Deux façons de le faire, une seule suffit :
-
-Option A — via le portail Microsoft 365 (si vous gérez les comptes) :
-
-Aller sur admin.microsoft.com (avec un compte administrateur)
-Utilisateurs → sélectionner Contact@psi.dz → onglet Courrier
-Cocher / activer « SMTP authentifié » (SMTP AUTH)
-Option B — via ICOSNET (qui gère notre domaine et nos boîtes mail) :
-
-Leur demander simplement : « Activer SMTP AUTH sur la boîte Contact@psi.dz »
-ℹ️ Si le compte a la double authentification (MFA) activée, il faudra aussi générer un « mot de passe d'application » — dites-le moi si c'est le cas, je m'en occupe.
-
-Merci !
 
 6️⃣ TUTO — Redéployer après un changement
 À chaque fois que tu modifies le code :
@@ -94,17 +76,8 @@ Propagation : quelques heures (jusqu'à 24-48h max). Vercel met le HTTPS tout se
 Important : une fois psi.dz actif, reviens changer NEXTAUTH_URL = https://psi.dz → Redeploy.
 ✅ Site accessible sur psi.dz.
 
-Veux-tu que j'écrive cette todo + les tutos dans un fichier (DEPLOIEMENT.md) à la racine pour que tu l'aies toujours sous la main, plutôt que dans ce chat ?
 
-
-B	Tester en local la logique métier (guide de tests dans TESTS.md)	Maintenant
-C	Corriger les petits trucs trouvés → recommit	Au fil des tests
-D	Créer compte Vercel + déployer	Quand B/C sont ok
-E	Tester en prod (push, emails, cookies)	Après D
-F	Entreprise : emails + domaine + import clients	Demain
-
-## Salut, pour que le site puisse envoyer les emails automatiques depuis Contact@psi.dz, il faut activer un réglage sur Microsoft. Peux-tu me dire :
-
+# infos vercel
 Qui gère les comptes Microsoft / Outlook de l'entreprise ? (toi, quelqu'un de l'équipe, ou Icosnet ?)
 As-tu un accès "administrateur" sur admin.microsoft.com ? (pas juste ta boîte mail — le vrai compte admin du domaine psi.dz)
 Si oui, il y a une seule case à cocher (5 min) :
@@ -144,14 +117,21 @@ RÉSUMÉ COÛTS :
 
 Variables d'environnement à ajouter sur Vercel (Settings → Environment Variables) :
   - DATABASE_URL (Neon prod) · NEXTAUTH_SECRET · NEXTAUTH_URL (= l'URL prod, https://…)
-  - SMTP_USER=Contact@psi.dz · SMTP_PASS · EMAIL_FROM=Contact@psi.dz · SMTP_PROVIDER=outlook
+  - EMAILS (⚠️ la boîte est chez ICOSNET/cPanel, PAS chez Microsoft — vérifié via MX/SPF) :
+      SMTP_PROVIDER=cpanel · SMTP_HOST=mail.psi.dz · SMTP_PORT=465
+      SMTP_USER=Contact@psi.dz · SMTP_PASS=<mdp de la boîte> · EMAIL_FROM=Contact@psi.dz
+      ✅ testé le 21/07/2026 : connexion + envoi réels OK
   - VAPID_PUBLIC · VAPID_PRIVATE · NEXT_PUBLIC_VAPID_PUBLIC  (notifs push — mêmes valeurs que .env local)
-  - TRIGGER_* si récap hebdo via Trigger.dev
+  - ⚠️ CRON_SECRET  ← OBLIGATOIRE pour les récaps auto (quotidien 20h + hebdo jeudi 23h59).
+      Sans lui la route /api/cron/recap refuse tout (protection anti-envoi massif d'emails).
+      Générer la valeur :  node -e "console.log(require('crypto').randomBytes(24).toString('hex'))"
+      Puis vérifier dans Vercel → onglet "Cron Jobs" que les 2 tâches apparaissent.
+      (bouton "Run" pour tester sans attendre 20h)
 Code / config :
   - [x] build applique les migrations auto : "build": "prisma migrate deploy && next build"
   - [x] cookies Secure AUTO en prod (useSecureCookies = NODE_ENV==='production') — plus rien à faire
   - [x] headers de sécurité (HSTS/X-Frame/nosniff) + rate limiting (login + routes publiques) en place
-  - [ ] activer SMTP AUTH côté Microsoft/Icosnet (voir bloc EMAILS) → sinon emails KO
+  - [x] emails OK (Icosnet/cPanel — voir bloc EMAILS) — testé en réel le 21/07/2026
   - [ ] mettre un NEXTAUTH_SECRET fort/unique sur Vercel (pas celui de dev)
 Tests post-déploiement (HTTPS requis) : notifs push (PC/Android app fermée, iPhone via écran d'accueil) + envoi email test.
 
@@ -167,8 +147,8 @@ employe2@psi.dz	Employé limité (lecture seule)
 ═══════════════════════════════════════════════════════════
 ✅ PRIORITÉ 9 — Retours entreprise (réunion)  TERMINÉE (9.1 → 9.9)
 ═══════════════════════════════════════════════════════════
-- 9.1 Emails : plus de récap quotidien, récap hebdo jeudi 23h59, expéditeur Contact@psi.dz (Outlook), emails auto création compte ✅
-       ⏳ reste externe : activer SMTP AUTH côté Microsoft (voir bloc ci-dessous)
+- 9.1 Emails : récap hebdo jeudi 23h59 + récap quotidien 20h, expéditeur Contact@psi.dz (Icosnet/cPanel), emails auto création compte ✅
+       ✅ envoi réel testé le 21/07/2026 — plus aucun bloqueur externe
 - 9.2 Export fiche client PDF + Excel (infos + historique) ✅
 - 9.3 Secteur d'activité par client (dropdown + gestion dashboard + badge) ✅
 - 9.4 Champ métrage (m) facultatif partout (commande/devis/produit/site/Excel) ✅
@@ -180,11 +160,15 @@ employe2@psi.dz	Employé limité (lecture seule)
 > Migration `p9` : Product.name/metrage, Category.prefix/refCounter, OrderItem/QuoteItem.metrage,
 > Client.sectorId + table Sector, OrderItem.productId/description, table RequestNote.
 
-📧 EMAILS — bloqueur externe (code prêt, il manque juste l'activation)
-> Microsoft refuse l'envoi depuis Contact@psi.dz tant que "SMTP AUTH" n'est pas activé (erreur 535).
-> À faire : soit via admin.microsoft.com (compte ADMIN → Utilisateurs → Contact@psi.dz → Courrier → cocher "SMTP authentifié"),
-> soit demander à ICOSNET (qui gère le domaine/mails) d'activer SMTP AUTH sur Contact@psi.dz.
-> Config app déjà OK : smtp.office365.com:587 STARTTLS, user Contact@psi.dz, mdp dans .env. Si MFA → générer un "mot de passe d'application".
+📧 EMAILS — ✅ RÉSOLU le 21/07/2026 (connexion + envoi réels testés)
+> ⚠️ Fausse piste initiale : on croyait la boîte chez Microsoft/Office 365 → erreur 535 en boucle.
+> RÉALITÉ : la boîte Contact@psi.dz est hébergée chez ICOSNET (cPanel).
+>   Preuves : MX de psi.dz → 197.140.11.7 (Icosnet) · SPF n'autorise que cette IP · cPanel accessible.
+> Config qui marche (dans .env ET à mettre sur Vercel) :
+>   SMTP_PROVIDER=cpanel · SMTP_HOST=mail.psi.dz · SMTP_PORT=465 (SSL) · user contact@psi.dz
+> Le mot de passe était le bon depuis le début — aucun "mot de passe d'application" nécessaire.
+> 💡 Le mdp de la boîte est réinitialisable seul depuis cPanel → Email Accounts → Manage.
+> ⚠️ Depuis certaines connexions locales le port 465 fait des timeouts (1 essai sur 2) — normal, OK depuis Vercel.
 
 
 ═══════════════════════════════════════════════════════════
@@ -217,19 +201,6 @@ Rien à coder. Reste uniquement des tests/config qui exigent le déploiement (HT
 5. Brancher le domaine psi.dz sur l'URL Vercel (config DNS via Icosnet — propagation ~qq heures)
 6. Remplir les vraies données (produits, clients) directement via l'app en ligne
 > Cycle de correction après déploiement : git add -A && git commit -m "..." && git push → Vercel redéploie tout seul (~2 min).
-
-
-# PSI — Guide de tests complet
-
-Guide pour tester **toute l'application** avant de livrer. On suit les sections dans l'ordre, workflow par workflow.
-Ce qui est neuf ou corrigé récemment est signalé par ⚠️ / **(nouveau)**.
-
-
-
-> Base de prod = **sans** clients/commandes/devis (à créer via l'app).
-> Base de démo (`seed.ts`) = comptes différents (`admin@psi.dz` / `password`, `amira@psi.dz`…) avec données d'exemple.
-
----
 
 
 
@@ -304,12 +275,16 @@ Avec 2 fenêtres ouvertes (ex. `admin1` sur une liste, `admin2` qui agit) :
 5. ⚠️ Vérifier qu'à aucun moment une vue ne "flashe" un état de chargement pendant une mise à jour temps réel
 
 
-## 🗑️ 21. Suppressions — vérifier les messages (important)
 
-oui
-4. **Utilisateur** ayant créé commandes/notes → "Impossible, désactivez-le plutôt"
-5. Son **propre compte** → refusé
-6. **Client** (même avec messages de contact) → doit marcher
+
+
+
+
+
+
+
+
+
 
 ### Désactivation client (À VENIR — todo 8.3)
 7. "Supprimer" un client → une **boîte demande un motif** (obligatoire)

@@ -7,29 +7,43 @@ import nodemailer from 'nodemailer';
 
 let transporter: nodemailer.Transporter | null = null;
 
-// L'entreprise utilise Contact@psi.dz (compte Outlook / Office 365).
-// Config SMTP Outlook par défaut ; bascule sur Gmail si SMTP_PROVIDER=gmail.
+// La boîte Contact@psi.dz est hébergée chez ICOSNET (cPanel), PAS chez Microsoft.
+// (vérifié : le MX de psi.dz pointe vers 197.140.11.7 et le SPF n'autorise que cette IP)
+//
 // Variables .env attendues :
-//   SMTP_USER = Contact@psi.dz
-//   SMTP_PASS = <mot de passe / mot de passe d'application>
-//   SMTP_PROVIDER = outlook (défaut) | gmail
+//   SMTP_USER = contact@psi.dz
+//   SMTP_PASS = <mot de passe de la boîte (réinitialisable depuis cPanel)>
+//   SMTP_HOST = mail.psi.dz        (serveur sortant indiqué par cPanel)
+//   SMTP_PORT = 465                (465 = SSL direct · 587 = STARTTLS)
+//   SMTP_PROVIDER = cpanel (défaut) | outlook | gmail
 // (les anciennes GMAIL_USER / GMAIL_APP_PASSWORD restent acceptées en repli)
 function getTransporter() {
   if (!transporter) {
     const user = process.env.SMTP_USER ?? process.env.GMAIL_USER;
     const pass = process.env.SMTP_PASS ?? process.env.GMAIL_APP_PASSWORD;
-    const provider = (process.env.SMTP_PROVIDER ?? 'outlook').toLowerCase();
+    const provider = (process.env.SMTP_PROVIDER ?? 'cpanel').toLowerCase();
 
     if (provider === 'gmail') {
       transporter = nodemailer.createTransport({ service: 'gmail', auth: { user, pass } });
-    } else {
-      // Outlook / Office 365 (SMTP STARTTLS sur le port 587)
+    } else if (provider === 'outlook') {
+      // Outlook / Office 365 (STARTTLS sur le port 587)
       transporter = nodemailer.createTransport({
         host: 'smtp.office365.com',
         port: 587,
         secure: false,
         auth: { user, pass },
         tls: { ciphers: 'TLSv1.2' },
+      });
+    } else {
+      // cPanel / Icosnet — hôte et port pilotés par le .env pour pouvoir
+      // basculer 465 (SSL) <-> 587 (STARTTLS) sans retoucher au code.
+      const host = process.env.SMTP_HOST ?? 'mail.psi.dz';
+      const port = Number(process.env.SMTP_PORT ?? 465);
+      transporter = nodemailer.createTransport({
+        host,
+        port,
+        secure: port === 465, // 465 = connexion chiffrée d'emblée ; 587 = STARTTLS
+        auth: { user, pass },
       });
     }
   }

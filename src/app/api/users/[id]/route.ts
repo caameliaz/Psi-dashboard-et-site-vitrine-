@@ -3,6 +3,9 @@ import { requirePermission } from '@/lib/permissions';
 import { prisma } from '@/lib/prisma';
 import bcrypt from 'bcryptjs';
 import { createAudit } from '@/lib/audit';
+import { sendEmail } from '@/lib/email/send';
+import { logoAttachment } from '@/emails/shared';
+import { renderPasswordResetDoneEmail } from '@/emails/passwordResetTemplate';
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -46,6 +49,31 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
       : body.permissions !== undefined && Object.keys(body).length === 1 ? 'Autorisations modifiées'
       : 'Utilisateur modifié';
     createAudit({ userId: session.user.id, action, entity: 'UTILISATEUR', entityId: id, detail: user.name });
+
+    // Réinitialisation de mot de passe → le nouveau est envoyé par email AUX ADMINS,
+    // pour qu'ils puissent le transmettre sans avoir à le recopier de l'écran.
+    if (body.password !== undefined) {
+      const resetBy = session.user.name ?? session.user.email ?? 'Un administrateur';
+      prisma.user
+        .findMany({ where: { role: 'ADMIN', active: true }, select: { email: true } })
+        .then((admins) => {
+          const mail = renderPasswordResetDoneEmail({
+            name: user.name ?? '—',
+            email: user.email ?? '—',
+            password: body.password,
+            resetBy,
+          });
+          return Promise.all(
+            admins
+              .filter((a) => a.email && a.email.trim() !== '')
+              .map((a) =>
+                sendEmail({ to: a.email!, subject: mail.subject, html: mail.html, attachments: [logoAttachment] }),
+              ),
+          );
+        })
+        .catch(() => {});
+    }
+
     return NextResponse.json(user);
   } catch (e) {
     console.error(e);

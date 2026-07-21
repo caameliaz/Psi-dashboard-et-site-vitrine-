@@ -150,13 +150,13 @@ export default function LoginPage() {
             <div className="w-12 h-12 rounded-full bg-[#F0FDF4] flex items-center justify-center mx-auto">
               <svg width={24} height={24} fill="none" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5" stroke="#16A34A" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
             </div>
-            <p className="text-[14px] font-bold text-[#0F172A]">Demande envoyée</p>
-            <p className="text-[13px] text-[#8A9BB5] leading-relaxed">Un administrateur va réinitialiser votre mot de passe et vous transmettra le nouveau. Merci de patienter.</p>
+            <p className="text-[14px] font-bold text-[#0F172A]">Email envoyé</p>
+            <p className="text-[13px] text-[#8A9BB5] leading-relaxed">Si un compte existe avec cet email, vous venez de recevoir un <strong>nouveau mot de passe</strong>. Vérifiez votre boîte de réception (et vos spams).</p>
             <button onClick={() => { setForgot(false); setForgotSent(false); }} className="w-full py-3 rounded-xl text-[14px] font-bold text-white" style={{ background: '#4CAF4F' }}>Retour à la connexion</button>
           </div>
         ) : (
           <form onSubmit={handleForgot} className="space-y-5">
-            <p className="text-[13px] text-[#8A9BB5] leading-relaxed">Entrez votre email. Un administrateur recevra votre demande et vous transmettra un nouveau mot de passe.</p>
+            <p className="text-[13px] text-[#8A9BB5] leading-relaxed">Entrez votre email : un nouveau mot de passe vous sera envoyé immédiatement.</p>
             <div>
               <label className="block text-[13px] font-semibold text-[#101828] mb-2">Email</label>
               <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="votre@email.dz" required

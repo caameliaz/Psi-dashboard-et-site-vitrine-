@@ -31,7 +31,7 @@ export function renderWelcomeEmail(params: {
       </table>
     </div>
 
-    <p style="margin:0 0 20px;font-size:12px;color:#8A9BB5">Nous vous conseillons de changer ce mot de passe après votre première connexion, depuis votre profil.</p>
+    <p style="margin:0 0 20px;font-size:12px;color:#8A9BB5">Vous pouvez modifier ce mot de passe à tout moment depuis votre profil. En cas d'oubli, cliquez sur « Mot de passe oublié » sur la page de connexion : un administrateur vous en transmettra un nouveau.</p>
 
     <a href="${ADMIN_URL}/admin" style="display:inline-block;background:#4CAF4F;color:#fff;text-decoration:none;padding:11px 22px;border-radius:8px;font-size:13px;font-weight:700">Se connecter →</a>
   `;

@@ -1,0 +1,12 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/recap?type=daily",
+      "schedule": "0 19 * * *"
+    },
+    {
+      "path": "/api/cron/recap?type=weekly",
+      "schedule": "59 22 * * 4"
+    }
+  ]
+}

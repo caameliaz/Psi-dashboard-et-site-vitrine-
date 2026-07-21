@@ -43,7 +43,7 @@ export async function sendWeeklyRecap(): Promise<SendWeeklyRecapResult> {
     }),
     // Étape 4 : seuls les admins ACTIFS avec une adresse email non vide reçoivent le récap.
     prisma.user.findMany({
-      where: { role: 'ADMIN', active: true },
+      where: { role: 'ADMIN', active: true, recapWeekly: true },
       select: { id: true, name: true, email: true },
     }),
   ]);
