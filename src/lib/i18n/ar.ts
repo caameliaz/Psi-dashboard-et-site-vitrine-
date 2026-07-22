@@ -209,4 +209,17 @@ export const ar: Translations = {
     specs_title: 'تفاصيل المنتج',
     metrage_label: 'المتراج',
   },
+  // رسائل خطأ النماذج
+  errors: {
+    email_invalid: 'بريد إلكتروني غير صالح (مثال: nom@entreprise.dz).',
+    email_required: 'البريد الإلكتروني مطلوب.',
+    phone_invalid: 'رقم هاتف غير صالح: 0X XX XX XX XX (10 أرقام) أو ‎+213 متبوعاً بـ 9 أرقام.',
+    phone_required: 'رقم الهاتف مطلوب.',
+    quantity_invalid: 'الكمية غير صالحة.',
+    quantity_integer: 'يجب أن تكون الكمية رقماً صحيحاً.',
+    quantity_positive: 'يجب أن تكون الكمية أكبر من 0.',
+    field_required: 'هذا الحقل مطلوب.',
+    number_invalid: 'رقم غير صالح.',
+    number_negative: 'لا يمكن أن تكون هذه القيمة سالبة.',
+  },
 };

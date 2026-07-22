@@ -38,7 +38,7 @@ import { AdminSelect } from '@/components/ui/AdminSelect';
 import { orderToDetail, quoteToDetail } from '@/lib/request-detail';
 import { CreateForm, submitNewRequest } from '@/app/admin/requests/page';
 import { useSession } from 'next-auth/react';
-import { validateEmail, validatePhone, validateText, normalizeEmail, normalizePhone, firstError } from '@/lib/validation';
+import { validateEmail, validatePhone, validateText, normalizeEmail, normalizePhone, firstError, messageErreur } from '@/lib/validation';
 
 function avatarColor(id: number | string) {
   const n = typeof id === 'string' ? id.charCodeAt(0) + id.charCodeAt(1) : id;
@@ -717,7 +717,7 @@ function ClientsPageInner() {
       validateEmail(addForm.email),
       validatePhone(addForm.telephone),
     ]);
-    if (err) { alert(err); return; }
+    if (err) { alert(messageErreur(err)); return; }
 
     // Avertit si l'entreprise existe déjà (doublon) — mais laisse créer si confirmé
     const ent = addForm.entreprise.trim().toLowerCase();
@@ -762,7 +762,7 @@ function ClientsPageInner() {
       validateEmail(editForm.email),
       validatePhone(editForm.telephone),
     ]);
-    if (err) { alert(err); return; }
+    if (err) { alert(messageErreur(err)); return; }
 
     const id = (editClient as any)._dbId ?? editClient.id;
     const res = await fetch(`/api/clients/${id}`, {

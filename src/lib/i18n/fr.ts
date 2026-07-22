@@ -207,6 +207,19 @@ export const fr = {
     specs_title: 'Détails du produit',
     metrage_label: 'Métrage',
   },
+  // Messages d'erreur des formulaires (validation des saisies)
+  errors: {
+    email_invalid: 'Email invalide (exemple : nom@entreprise.dz).',
+    email_required: 'Email obligatoire.',
+    phone_invalid: 'Téléphone invalide : 0X XX XX XX XX (10 chiffres) ou +213 suivi de 9 chiffres.',
+    phone_required: 'Téléphone obligatoire.',
+    quantity_invalid: 'Quantité invalide.',
+    quantity_integer: 'La quantité doit être un nombre entier.',
+    quantity_positive: 'La quantité doit être supérieure à 0.',
+    field_required: 'Ce champ est obligatoire.',
+    number_invalid: 'Nombre invalide.',
+    number_negative: 'Cette valeur ne peut pas être négative.',
+  },
 };
 
 export type Translations = typeof fr;

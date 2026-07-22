@@ -15,7 +15,7 @@ import { useSession } from 'next-auth/react';
 import { RequirePerm } from '@/components/RequirePerm';
 import { ImportVentesModal } from '@/components/ui/ImportVentesModal';
 import { orderToDetail, quoteToDetail, DB_TO_UI, UI_TO_DB } from '@/lib/request-detail';
-import { validateEmail, validatePhone, validateQuantity, validatePositiveNumber, normalizeEmail, normalizePhone, firstError } from '@/lib/validation';
+import { validateEmail, validatePhone, validateQuantity, validatePositiveNumber, normalizeEmail, normalizePhone, firstError, messageErreur } from '@/lib/validation';
 
 const ARCHIVED = ['Livré', 'Annulé'];
 
@@ -95,7 +95,7 @@ export async function submitNewRequest(
     ...lignesRemplies.map((l: any) => validateQuantity(l.qte)),
     ...lignesRemplies.map((l: any) => validatePositiveNumber(l.metrage ?? '', 'Métrage')),
   ]);
-  if (vErr) return { ok: false, type: isCmd ? 'Commande' : 'Devis', error: vErr };
+  if (vErr) return { ok: false, type: isCmd ? 'Commande' : 'Devis', error: messageErreur(vErr) };
   const body = isCmd
     ? {
         client: {
@@ -156,7 +156,7 @@ export function CreateForm({ defaultType, onClose, onSave, users, currentUserId,
   const [paymentMethod, setPaymentMethod] = useState('');
   const [paymentDate, setPaymentDate] = useState('');
   const [vatEnabled, setVatEnabled] = useState(false);
-  const [products, setProducts] = useState<{ id: string; reference: string; price: number; categoryId: string }[]>([]);
+  const [products, setProducts] = useState<{ id: string; reference: string; price: number; categoryId: string; metrage?: number | null }[]>([]);
   const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
 
   useEffect(() => {
@@ -173,7 +173,13 @@ export function CreateForm({ defaultType, onClose, onSave, users, currentUserId,
 
   const selectRef = (i: number, reference: string) => {
     const p = products.find(p => p.reference === reference);
-    setLigne(i, { ref: reference, productId: p?.id ?? null, pu: p?.price ?? 0 });
+    // Le métrage du produit est pré-rempli s'il existe — modifiable ensuite.
+    setLigne(i, {
+      ref: reference,
+      productId: p?.id ?? null,
+      pu: p?.price ?? 0,
+      ...(p?.metrage != null ? { metrage: String(p.metrage) } : {}),
+    });
   };
 
   const ht = lignes.reduce((acc, l) => acc + l.qte * l.pu, 0);

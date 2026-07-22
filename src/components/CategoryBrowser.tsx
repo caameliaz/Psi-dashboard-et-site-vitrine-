@@ -28,7 +28,10 @@ export function CategoryBrowser({ limit }: { limit?: number }) {
 
   return (
     <div className="flex flex-col gap-8">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 md:gap-6">
+      {/* Grille centrée : avec 1 ou 2 catégories seulement, elles restaient
+          collées à gauche au lieu d'être centrées dans la page. */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 md:gap-6 justify-center mx-auto"
+        style={{ gridTemplateColumns: `repeat(auto-fit, minmax(280px, ${visibleCats.length < 3 ? '380px' : '1fr'}))` }}>
         {visibleCats.map((cat) => (
           <CategoryCard
             key={cat.id}
@@ -123,7 +126,9 @@ function CategoryCard({ category, products }: { category: Cat; products: Prod[] 
                       onClick={() => setSelectedId(p.id)}
                       className={`flex-shrink-0 px-3 py-1.5 rounded-lg border text-[12px] font-bold whitespace-nowrap transition-all ${
                         isSelected
-                          ? 'border-[#E0E0E0] bg-[#F5F7FA] text-[#263238] shadow-[0_3px_10px_rgba(171,190,209,0.4)]'
+                          // Bordure VERTE + fond vert clair : la référence choisie doit
+                          // se distinguer nettement (l'ombre seule ne suffisait pas sur mobile).
+                          ? 'border-[#4CAF4F] border-2 bg-[#F0FDF4] text-[#166534] shadow-[0_3px_10px_rgba(76,175,79,0.25)]'
                           : 'border-[#E0E0E0] bg-white text-[#374151] hover:border-[#4CAF4F]/60 hover:outline hover:outline-1 hover:outline-[#CBD5E1] hover:shadow-[0_4px_14px_rgba(171,190,209,0.5)]'
                       }`}
                     >

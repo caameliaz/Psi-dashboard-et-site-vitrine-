@@ -77,12 +77,23 @@ export default function CartPage() {
                   <p className="text-[11px] md:text-[13px] text-[#89939E] mt-0.5">{item.unitPrice} DA / u.</p>
                 </div>
 
+                {/* − / + conservés, avec un petit champ saisissable au milieu */}
                 <div className="flex items-center gap-1.5 md:gap-2 shrink-0">
                   <button
                     onClick={() => updateQuantity(item.productId, Math.max(1, item.quantity - 1))}
                     className="w-7 h-7 md:w-8 md:h-8 rounded-lg border border-[#ABBED1] flex items-center justify-center text-[#4D4D4D] hover:border-[#4CAF4F] hover:text-[#4CAF4F] transition-colors text-[16px] leading-none"
                   >−</button>
-                  <span className="w-6 text-center text-[13px] md:text-[15px] font-semibold text-[#263238]">{item.quantity}</span>
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    min={1}
+                    value={item.quantity}
+                    onChange={(e) => {
+                      const v = parseInt(e.target.value, 10);
+                      updateQuantity(item.productId, Number.isFinite(v) && v > 0 ? v : 1);
+                    }}
+                    className="w-12 md:w-14 px-1 py-1 rounded-lg border border-[#ABBED1] text-center text-[13px] md:text-[15px] font-semibold text-[#263238] focus:outline-none focus:border-[#4CAF4F] focus:ring-2 focus:ring-[#4CAF4F]/20 transition-all"
+                  />
                   <button
                     onClick={() => updateQuantity(item.productId, item.quantity + 1)}
                     className="w-7 h-7 md:w-8 md:h-8 rounded-lg border border-[#ABBED1] flex items-center justify-center text-[#4D4D4D] hover:border-[#4CAF4F] hover:text-[#4CAF4F] transition-colors text-[16px] leading-none"

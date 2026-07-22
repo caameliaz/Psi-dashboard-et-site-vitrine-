@@ -64,7 +64,9 @@ export function CartDropdown({ variant = 'desktop' }: { variant?: 'desktop' | 'm
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full mt-2 w-[320px] bg-white rounded-2xl border border-[#E4EBF5] shadow-[0_12px_40px_rgba(38,50,56,0.18)] z-50 overflow-hidden">
+        // Mobile : panneau pleine largeur (320px fixes débordaient sur petits écrans).
+        // Ordinateur : inchangé.
+        <div className="fixed md:absolute left-3 right-3 md:left-auto md:right-0 top-16 md:top-full md:mt-2 md:w-[320px] bg-white rounded-2xl border border-[#E4EBF5] shadow-[0_12px_40px_rgba(38,50,56,0.18)] z-50 overflow-hidden">
           {items.length === 0 ? (
             <div className="p-6 flex flex-col items-center gap-3 text-center">
               <p className="text-[13px] text-[#8A9BB5]">{t('cart.empty_title')}</p>

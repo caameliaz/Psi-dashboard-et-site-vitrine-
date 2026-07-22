@@ -45,7 +45,8 @@ export default function CheckoutPage() {
       validatePhone(formData.phone, true),
       validateEmail(formData.email),
     ]);
-    if (vErr) { setSubmitError(vErr); return; }
+    // vErr est une CLÉ de traduction (ex. 'errors.phone_invalid') → message traduit
+    if (vErr) { setSubmitError(vErr.startsWith('errors.') ? t(vErr) : vErr); return; }
 
     setLoading(true);
     setSubmitError('');

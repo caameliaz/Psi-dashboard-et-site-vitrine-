@@ -566,7 +566,7 @@ function PriceModal({ item, onConfirm, onClose }: {
 }
 
 // ── Modale "Modifier la commande" — édition complète des lignes ──────────────
-interface ProdOption { id: string; reference: string; price: number; categoryId?: string; category?: { id: string; name: string } | null; }
+interface ProdOption { id: string; reference: string; price: number; metrage?: number | null; categoryId?: string; category?: { id: string; name: string } | null; }
 interface EditLine { categoryId: string; productId: string | null; designation: string; quantite: number; prixUnitaire: number; metrage: number | null; }
 
 function EditOrderModal({ item, onClose, onSaved }: {
@@ -615,7 +615,13 @@ function EditOrderModal({ item, onClose, onSaved }: {
   // Sélection d'une référence : reprend le prix du catalogue (comme à la création)
   const selectRef = (i: number, ref: string) => {
     const p = products.find(pr => pr.reference === ref);
-    setLine(i, { productId: p?.id ?? null, designation: ref, prixUnitaire: p?.price ?? 0 });
+    // Le métrage du produit est pré-rempli s'il existe — modifiable ensuite.
+    setLine(i, {
+      productId: p?.id ?? null,
+      designation: ref,
+      prixUnitaire: p?.price ?? 0,
+      ...(p?.metrage != null ? { metrage: p.metrage } : {}),
+    });
   };
   const total = lines.reduce((acc, l) => acc + l.quantite * l.prixUnitaire, 0);
   const inputCls = "px-3 py-2 rounded-xl border border-[#E2E8F0] text-[13px] text-[#0F172A] focus:outline-none focus:border-[#4CAF4F] focus:ring-[2px] focus:ring-[#4CAF4F]/15 transition-all";

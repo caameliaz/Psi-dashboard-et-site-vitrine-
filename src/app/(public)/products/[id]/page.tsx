@@ -114,7 +114,8 @@ export default function ProductDetailPage() {
                 onClick={() => { setIndex(i); setQty(1); }}
                 className={`flex-shrink-0 px-3 py-2 rounded-xl border text-[13px] font-bold whitespace-nowrap transition-all ${
                   active
-                    ? 'border-[#E0E0E0] bg-[#F5F7FA] text-[#263238] shadow-[0_4px_12px_rgba(171,190,209,0.4)]'
+                    // Bordure VERTE : la référence choisie doit se voir nettement
+                    ? 'border-[#4CAF4F] border-2 bg-[#F0FDF4] text-[#166534] shadow-[0_4px_12px_rgba(76,175,79,0.25)]'
                     : 'border-[#E0E0E0] bg-white text-[#374151] hover:border-[#4CAF4F]/60 hover:outline hover:outline-1 hover:outline-[#CBD5E1] hover:shadow-[0_4px_14px_rgba(171,190,209,0.5)]'
                 }`}
               >
