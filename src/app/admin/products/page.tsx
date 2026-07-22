@@ -49,7 +49,10 @@ interface Ref {
   price: number;
   active: boolean;
   categoryId: string;
+  customFields: { definitionId: string; label: string; value: string }[];
 }
+
+interface FieldDef { id: string; label: string; type: string; required: boolean; order: number; }
 
 interface Cat {
   id: string;
@@ -72,16 +75,19 @@ function dbToRef(p: any): Ref {
     price: p.price ?? 0,
     active: p.active ?? true,
     categoryId: p.categoryId ?? p.category?.id ?? '',
+    customFields: (p.customFields ?? []).map((cf: any) => ({
+      definitionId: cf.definitionId, label: cf.definition?.label ?? '', value: cf.value,
+    })),
   };
 }
 
 const inputClass = "w-full px-3 py-2.5 rounded-lg border border-[#E2E8F0] text-sm text-[#0F172A] focus:outline-none focus:border-[#4CAF4F] focus:ring-1 focus:ring-[#4CAF4F] transition-colors bg-[#F8FAFC]";
 
 // ── Modale "Nouvelle référence" — pour la catégorie sélectionnée ────────────
-interface RefForm { name: string; width: string; length: string; metrage: string; usage: string; price: string; }
-const emptyRefForm: RefForm = { name: '', width: '', length: '', metrage: '', usage: '', price: '' };
+interface RefForm { name: string; width: string; length: string; metrage: string; usage: string; price: string; customFields: Record<string, string>; }
+const emptyRefForm: RefForm = { name: '', width: '', length: '', metrage: '', usage: '', price: '', customFields: {} };
 
-function RefFormFields({ form, setForm }: { form: RefForm; setForm: (f: RefForm) => void }) {
+function RefFormFields({ form, setForm, fieldDefs }: { form: RefForm; setForm: (f: RefForm) => void; fieldDefs: FieldDef[] }) {
   return (
     <div className="space-y-4">
       <div>
@@ -112,6 +118,27 @@ function RefFormFields({ form, setForm }: { form: RefForm; setForm: (f: RefForm)
         <label className="block text-[12px] font-semibold text-[#374151] mb-1.5">Utilisation</label>
         <input value={form.usage} onChange={(e) => setForm({ ...form, usage: e.target.value })} placeholder="ex: Caisses enregistreuses" className={inputClass} />
       </div>
+
+      {fieldDefs.length > 0 && (
+        <div className="pt-1 border-t border-[#F0F4F8]">
+          <p className="text-[11px] font-bold text-[#8A9BB5] uppercase tracking-wide mt-3 mb-2">Fiche technique (affichée sur le site)</p>
+          <div className="grid grid-cols-2 gap-3">
+            {fieldDefs.map((def) => (
+              <div key={def.id}>
+                <label className="block text-[12px] font-semibold text-[#374151] mb-1.5">
+                  {def.label}{def.required && <span className="text-[#EF4444]"> *</span>}
+                </label>
+                <input
+                  value={form.customFields[def.id] ?? ''}
+                  onChange={(e) => setForm({ ...form, customFields: { ...form.customFields, [def.id]: e.target.value } })}
+                  placeholder={`ex: ${def.label}`}
+                  className={inputClass}
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -167,7 +194,7 @@ function DeleteModal({ label, onDeactivate, onDelete, onClose }: {
 interface NewCatForm { name: string; prefix: string; photo: string; description: string; refs: RefForm[]; }
 const emptyNewCatForm: NewCatForm = { name: '', prefix: '', photo: '', description: '', refs: [{ ...emptyRefForm }] };
 
-function NewCategoryModal({ onClose, onCreated }: { onClose: () => void; onCreated: (catId: string) => void }) {
+function NewCategoryModal({ onClose, onCreated, fieldDefs }: { onClose: () => void; onCreated: (catId: string) => void; fieldDefs: FieldDef[] }) {
   const [form, setForm] = useState<NewCatForm>(emptyNewCatForm);
   const [saving, setSaving] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -216,6 +243,19 @@ function NewCategoryModal({ onClose, onCreated }: { onClose: () => void; onCreat
       if (failedCount > 0) {
         alert(`Catégorie créée, mais ${failedCount} référence(s) n'ont pas pu être ajoutée(s). Vous pourrez les ajouter via "Nouvelle référence".`);
       }
+
+      // Envoie la fiche technique (champs personnalisés) de chaque référence créée avec succès
+      await Promise.all(refResults.map(async (res, i) => {
+        if (!res.ok) return;
+        const created = await res.json();
+        const entries = Object.entries(validRefs[i].customFields).filter(([, v]) => v.trim() !== '');
+        await Promise.all(entries.map(([definitionId, value]) =>
+          fetch(`/api/products/${created.id}/fields`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ definitionId, value: value.trim() }),
+          })
+        ));
+      }));
 
       onCreated(cat.id);
     } finally {
@@ -276,7 +316,7 @@ function NewCategoryModal({ onClose, onCreated }: { onClose: () => void; onCreat
                   <button type="button" onClick={() => removeRef(i)} title="Retirer"
                     className="absolute top-2 right-2 w-6 h-6 flex items-center justify-center rounded-lg text-[#EF4444] hover:bg-[#FEF2F2] text-xs font-bold">×</button>
                 )}
-                <RefFormFields form={r} setForm={(nf) => setRef(i, nf)} />
+                <RefFormFields form={r} setForm={(nf) => setRef(i, nf)} fieldDefs={fieldDefs} />
               </div>
             ))}
           </div>
@@ -302,6 +342,7 @@ function ProductsPageInner() {
 
   const [refs, setRefs] = useState<Ref[]>([]);
   const [catList, setCatList] = useState<Cat[]>([]);
+  const [fieldDefs, setFieldDefs] = useState<FieldDef[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedCatId, setSelectedCatId] = useState<string | null>(null);
 
@@ -344,6 +385,11 @@ function ProductsPageInner() {
   }, []);
 
   useEffect(() => { fetchProducts(); fetchCategories(); }, [fetchProducts, fetchCategories]);
+  useEffect(() => {
+    fetch('/api/products/fields').then((r) => r.ok ? r.json() : []).then((data: FieldDef[]) =>
+      setFieldDefs(data.sort((a, b) => a.order - b.order))
+    ).catch(() => {});
+  }, []);
 
   const selectedCat = useMemo(() => catList.find((c) => c.id === selectedCatId) ?? null, [catList, selectedCatId]);
 
@@ -380,8 +426,24 @@ function ProductsPageInner() {
   };
 
   const openEditRef = (r: Ref) => {
-    setEditRefForm({ name: r.name ?? '', width: String(r.width), length: String(r.length), metrage: r.metrage != null ? String(r.metrage) : '', usage: r.usage, price: String(r.price) });
+    const customFields: Record<string, string> = {};
+    r.customFields.forEach((cf) => { customFields[cf.definitionId] = cf.value; });
+    setEditRefForm({ name: r.name ?? '', width: String(r.width), length: String(r.length), metrage: r.metrage != null ? String(r.metrage) : '', usage: r.usage, price: String(r.price), customFields });
     setEditRef(r);
+  };
+
+  // Envoie les champs personnalisés remplis (non vides) pour un produit donné
+  const saveCustomFields = async (productId: string, customFields: Record<string, string>) => {
+    await Promise.all(
+      Object.entries(customFields)
+        .filter(([, value]) => value.trim() !== '')
+        .map(([definitionId, value]) =>
+          fetch(`/api/products/${productId}/fields`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ definitionId, value: value.trim() }),
+          })
+        )
+    );
   };
 
   const handleEditRef = async () => {
@@ -402,6 +464,7 @@ function ProductsPageInner() {
       alert(err.error ?? 'Impossible de modifier cette référence.');
       return;
     }
+    await saveCustomFields(editRef.id, editRefForm.customFields);
     await fetchProducts();
     setEditRef(null);
   };
@@ -424,6 +487,8 @@ function ProductsPageInner() {
       alert(err.error ?? 'Impossible de créer cette référence.');
       return;
     }
+    const created = await res.json();
+    await saveCustomFields(created.id, newRefForm.customFields);
     await fetchProducts();
     await fetchCategories();
     setNewRefForm(emptyRefForm);
@@ -726,13 +791,14 @@ function ProductsPageInner() {
             setSelectedCatId(catId);
             setShowNewCategory(false);
           }}
+          fieldDefs={fieldDefs}
         />
       )}
 
       {showNewRef && (
         <Modal title="Nouvelle référence" onClose={() => setShowNewRef(false)}>
           <div className="space-y-4">
-            <RefFormFields form={newRefForm} setForm={setNewRefForm} />
+            <RefFormFields form={newRefForm} setForm={setNewRefForm} fieldDefs={fieldDefs} />
             <div className="flex gap-3 pt-2">
               <button onClick={() => setShowNewRef(false)} className="flex-1 px-4 py-2.5 rounded-lg border border-[#E2E8F0] text-sm font-semibold text-[#374151] hover:bg-[#F8FAFC] transition-colors">Annuler</button>
               <button onClick={handleCreateRef} className="flex-1 px-4 py-2.5 rounded-lg text-sm font-bold text-white transition-colors" style={{ background: '#4CAF4F' }}>Ajouter</button>
@@ -744,7 +810,7 @@ function ProductsPageInner() {
       {editRef && (
         <Modal title="Modifier la référence" onClose={() => setEditRef(null)}>
           <div className="space-y-4">
-            <RefFormFields form={editRefForm} setForm={setEditRefForm} />
+            <RefFormFields form={editRefForm} setForm={setEditRefForm} fieldDefs={fieldDefs} />
             <div className="flex gap-3 pt-2">
               <button onClick={() => setEditRef(null)} className="flex-1 px-4 py-2.5 rounded-lg border border-[#E2E8F0] text-sm font-semibold text-[#374151] hover:bg-[#F8FAFC] transition-colors">Annuler</button>
               <button onClick={handleEditRef} className="flex-1 px-4 py-2.5 rounded-lg text-sm font-bold text-white transition-colors" style={{ background: '#4CAF4F' }}>Enregistrer</button>

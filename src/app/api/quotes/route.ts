@@ -58,6 +58,9 @@ export async function POST(request: NextRequest) {
       validateEmail(body.email ?? ''),
       validateText(clientCompany, 'Entreprise', 0, false, 200),
       validateText(String(body.message ?? ''), 'Message', 0, false, 3000),
+      items.length === 0 && !String(body.message ?? '').trim()
+        ? 'Sélectionnez au moins une référence ou laissez un message.'
+        : null,
       items.length > 50 ? 'Trop de lignes (max 50).' : null,
       ...items.map((item, i) =>
         item?.description != null && String(item.description).length > 300
