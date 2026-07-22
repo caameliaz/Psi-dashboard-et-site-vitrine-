@@ -18,15 +18,15 @@ export function QuoteCTA({ id, fullBleed = false }: { id?: string; fullBleed?: b
   const content = (
     <div className={`flex flex-col md:flex-row gap-8 md:gap-12 ${fullBleed ? 'max-w-[1280px] mx-auto px-6 md:px-12 py-10 md:py-14' : ''}`}>
       <div className="flex-1 flex flex-col items-start gap-4 text-left">
-        <h4 className="text-[20px] md:text-[22px] font-bold text-[#263238] italic leading-snug">
+        <h4 className="text-[28px] md:text-[36px] font-bold text-[#388E3C] italic leading-tight">
           {t('quote_cta.title')}
         </h4>
-        <p className="text-[15px] text-[#4D4D4D] leading-relaxed">
+        <p className="text-[17px] md:text-[18px] text-[#4D4D4D] leading-relaxed">
           {t('quote_cta.desc')}
         </p>
         <Link
           href="/quote"
-          className="bg-[#4CAF4F] text-white text-[15px] font-semibold px-7 py-3 rounded-xl shadow-[0_8px_24px_rgba(76,175,79,0.3)] hover:bg-[#43A047] transition-all"
+          className="bg-[#4CAF4F] text-white text-[16px] font-semibold px-7 py-3 rounded-xl shadow-[0_8px_24px_rgba(76,175,79,0.3)] hover:bg-[#43A047] transition-all"
         >
           {t('quote_cta.btn')}
         </Link>
@@ -40,7 +40,7 @@ export function QuoteCTA({ id, fullBleed = false }: { id?: string; fullBleed?: b
             <svg width="18" height="18" viewBox="0 0 20 20" fill="none" className="shrink-0 mt-0.5">
               <path d="M4 10.5l4 4 8-9" stroke="#4CAF4F" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
-            <p className="text-[15px] text-[#263238] leading-relaxed">
+            <p className="text-[16px] md:text-[17px] text-[#263238] leading-relaxed">
               <span className="font-bold">{item.name} — </span>{item.desc}
             </p>
           </div>

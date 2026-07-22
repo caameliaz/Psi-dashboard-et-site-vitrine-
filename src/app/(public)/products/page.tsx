@@ -7,15 +7,15 @@ export default function ProductsPage() {
   const { t } = useTranslation();
 
   return (
-    <div className="bg-[#F5F7FA] min-h-screen">
+    <div className="bg-white min-h-screen">
 
       {/* Header */}
-      <div className="bg-white border-b border-[#ABBED1]/30 py-14 px-6 md:px-12">
+      <div className="bg-[#F5F7FA] border-b border-[#ABBED1]/30 py-14 px-6 md:px-12">
         <div className="max-w-[1280px] mx-auto flex flex-col gap-3">
           <span className="text-[13px] font-semibold text-[#4CAF4F] uppercase tracking-widest">
             {t('products_page.badge')}
           </span>
-          <h1 className="text-[40px] md:text-[54px] font-bold text-[#263238] leading-tight">
+          <h1 className="text-[40px] md:text-[54px] font-bold text-[#388E3C] leading-tight">
             {t('products_page.title')}
           </h1>
           <p className="text-[18px] md:text-[20px] text-[#717171] max-w-[560px] leading-relaxed">

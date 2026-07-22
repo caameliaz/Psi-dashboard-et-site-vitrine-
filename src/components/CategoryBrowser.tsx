@@ -113,7 +113,7 @@ function CategoryCard({ category, products }: { category: Cat; products: Prod[] 
 
               <div
                 ref={trackRef}
-                className="flex-1 flex gap-2 overflow-x-auto min-w-0 [scrollbar-width:thin] [scrollbar-color:#4CAF4F_#F0F4F8] [&::-webkit-scrollbar]:h-0.5 [&::-webkit-scrollbar-track]:bg-[#F0F4F8] [&::-webkit-scrollbar-track]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[#4CAF4F] [&::-webkit-scrollbar-thumb]:rounded-full"
+                className="flex-1 flex gap-2 overflow-x-auto min-w-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
               >
                 {products.map((p) => {
                   const isSelected = p.id === current.id;
@@ -123,7 +123,7 @@ function CategoryCard({ category, products }: { category: Cat; products: Prod[] 
                       onClick={() => setSelectedId(p.id)}
                       className={`flex-shrink-0 px-3 py-1.5 rounded-lg border text-[12px] font-bold whitespace-nowrap transition-all ${
                         isSelected
-                          ? 'border-[#4CAF4F] bg-[#4CAF4F] text-white shadow-[0_3px_10px_rgba(76,175,79,0.3)]'
+                          ? 'border-[#E0E0E0] bg-[#F5F7FA] text-[#263238] shadow-[0_3px_10px_rgba(171,190,209,0.4)]'
                           : 'border-[#E0E0E0] bg-white text-[#374151] hover:border-[#4CAF4F]/60 hover:outline hover:outline-1 hover:outline-[#CBD5E1] hover:shadow-[0_4px_14px_rgba(171,190,209,0.5)]'
                       }`}
                     >

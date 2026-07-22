@@ -24,7 +24,7 @@ function SaveButton({ onClick, saved, loading }: { onClick: () => void; saved: b
 const inputClass = "w-full px-3 py-2.5 rounded-lg border border-[#E2E8F0] text-sm text-[#0F172A] placeholder-[#94A3B8] focus:outline-none focus:border-[#4CAF4F] focus:ring-1 focus:ring-[#4CAF4F] transition-colors bg-[#F8FAFC]";
 
 function ContentPageInner() {
-  const [hero,    setHero]    = useState({ titre: '' });
+  const [hero,    setHero]    = useState({ titre: '', sousTitre: '' });
   const [about,   setAbout]   = useState({ texte: '' });
   const [contact, setContact] = useState({ adresse: '', email: '', telephone: '', facebook: '', instagram: '' });
   const [saved,   setSaved]   = useState<Record<string, boolean>>({});
@@ -35,6 +35,7 @@ function ContentPageInner() {
     fetch('/api/content').then((r) => r.json()).then((data: Record<string, string>) => {
       setHero({
         titre: data['hero_titre'] ?? 'Votre spécialiste du papier thermique en Algérie',
+        sousTitre: data['hero_sous_titre'] ?? "PSI fournit aux professionnels d'Algérie un papier thermique premium 55 gr/m², fabriqué en Allemagne et garanti 100% sans BPA.",
       });
       setAbout({
         texte: data['about_texte'] ?? 'PSI (Paper Solutions Industry) est une entreprise algérienne spécialisée dans la transformation et la distribution de papier thermique professionnel. Basée à Alger, nous servons commerces, banques, restaurants et pharmacies à travers tout le territoire national.\n\nNous nous approvisionnons exclusivement auprès de fournisseurs européens certifiés, garantissant à nos clients des produits de qualité supérieure, conformes aux normes sanitaires les plus strictes.\n\nNotre mission est d\'offrir des solutions papier fiables, rapides et accessibles à tous les professionnels qui en ont besoin, avec un service client réactif et de proximité.',
@@ -89,9 +90,13 @@ function ContentPageInner() {
                 <label className="block text-[12px] font-semibold text-[#374151] mb-1.5">Titre principal</label>
                 <input value={hero.titre} onChange={(e) => setHero({ ...hero, titre: e.target.value })} className={inputClass} placeholder="Titre principal..." />
               </div>
+              <div>
+                <label className="block text-[12px] font-semibold text-[#374151] mb-1.5">Sous-titre</label>
+                <textarea value={hero.sousTitre} onChange={(e) => setHero({ ...hero, sousTitre: e.target.value })} rows={3} className={inputClass + ' resize-none'} placeholder="Sous-titre..." />
+              </div>
               <div className="flex justify-end pt-1">
                 <SaveButton
-                  onClick={() => save('hero', { hero_titre: hero.titre })}
+                  onClick={() => save('hero', { hero_titre: hero.titre, hero_sous_titre: hero.sousTitre })}
                   saved={!!saved['hero']} loading={!!saving['hero']} />
               </div>
             </div>

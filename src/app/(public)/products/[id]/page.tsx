@@ -104,7 +104,7 @@ export default function ProductDetailPage() {
 
         <div
           ref={refsTrackRef}
-          className="flex-1 flex gap-2 overflow-x-auto min-w-0 [scrollbar-width:thin] [scrollbar-color:#4CAF4F_#F0F4F8] [&::-webkit-scrollbar]:h-0.5 [&::-webkit-scrollbar-track]:bg-[#F0F4F8] [&::-webkit-scrollbar-track]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[#4CAF4F] [&::-webkit-scrollbar-thumb]:rounded-full"
+          className="flex-1 flex gap-2 overflow-x-auto min-w-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         >
           {items.map((p, i) => {
             const active = i === index;
@@ -114,7 +114,7 @@ export default function ProductDetailPage() {
                 onClick={() => { setIndex(i); setQty(1); }}
                 className={`flex-shrink-0 px-3 py-2 rounded-xl border text-[13px] font-bold whitespace-nowrap transition-all ${
                   active
-                    ? 'border-[#4CAF4F] bg-[#4CAF4F] text-white shadow-[0_4px_12px_rgba(76,175,79,0.3)]'
+                    ? 'border-[#E0E0E0] bg-[#F5F7FA] text-[#263238] shadow-[0_4px_12px_rgba(171,190,209,0.4)]'
                     : 'border-[#E0E0E0] bg-white text-[#374151] hover:border-[#4CAF4F]/60 hover:outline hover:outline-1 hover:outline-[#CBD5E1] hover:shadow-[0_4px_14px_rgba(171,190,209,0.5)]'
                 }`}
               >
@@ -251,7 +251,7 @@ export default function ProductDetailPage() {
 
         {/* ── Mobile : titre → description → photo → refs → total/panier → détails ── */}
         <div className="flex lg:hidden flex-col gap-5">
-          <h1 className="text-[27px] font-extrabold text-[#263238] leading-tight">
+          <h1 className="text-[27px] font-extrabold text-[#388E3C] leading-tight">
             {category.name}
           </h1>
           {description && (
@@ -275,7 +275,7 @@ export default function ProductDetailPage() {
             <span className="text-[13px] font-bold text-[#4CAF4F] uppercase tracking-wide">
               {t('product_detail.fast_delivery')}
             </span>
-            <h1 className="text-[46px] font-extrabold text-[#263238] leading-tight">
+            <h1 className="text-[46px] font-extrabold text-[#388E3C] leading-tight">
               {category.name}
             </h1>
             {description && (
@@ -298,7 +298,7 @@ export default function ProductDetailPage() {
         {/* Autres catégories */}
         {otherCats.length > 0 && (
           <div className="flex flex-col gap-6 mt-6">
-            <h2 className="text-[27px] md:text-[32px] font-extrabold text-[#263238]">
+            <h2 className="text-[27px] md:text-[32px] font-extrabold text-[#388E3C]">
               {t('product_detail.also_liked')}
             </h2>
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-5">

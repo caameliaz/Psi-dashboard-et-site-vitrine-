@@ -1,10 +1,43 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { CategoryBrowser } from '@/components/CategoryBrowser';
 import { QuoteCTA } from '@/components/QuoteCTA';
 import { useTranslation } from '@/lib/i18n';
+
+// Fait apparaître un item de la section Qualité en glissant de la droite vers
+// sa place, avec un délai croissant selon sa position (haut → bas) pour un
+// effet d'apparition en cascade au scroll.
+function QualityItem({ delayMs, children }: { delayMs: number; children: React.ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => { if (entry.isIntersecting) { setVisible(true); observer.disconnect(); } },
+      { threshold: 0.2 }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  return (
+    <div
+      ref={ref}
+      className="transition-all duration-700 ease-out"
+      style={{
+        opacity: visible ? 1 : 0,
+        transform: visible ? 'translate(0, 0)' : 'translate(-32px, -24px)',
+        transitionDelay: visible ? `${delayMs}ms` : '0ms',
+      }}
+    >
+      {children}
+    </div>
+  );
+}
 
 // Met "papier thermique" en vert dans le titre du hero, que ce soit le texte
 // par défaut ou un titre personnalisé saisi depuis l'admin.
@@ -32,6 +65,7 @@ export default function Home() {
   // Idem pour le titre : le contenu éditable est en français uniquement.
   const heroTitre = (lang === 'fr' && content['hero_titre'])
     || `${t('hero.title_pre')}${t('hero.title_highlight')}${t('hero.title_post')}`;
+  const heroSousTitre = (lang === 'fr' && content['hero_sous_titre']) || t('hero.subtitle');
   const aboutTexte      = content['about_texte'] ?? '';
 
   return (
@@ -48,11 +82,15 @@ export default function Home() {
         <div className="absolute inset-0 bg-gradient-to-r from-[rgba(38,50,56,0.90)] via-[rgba(38,50,56,0.75)] to-[rgba(38,50,56,0.45)]" />
 
         <div className="relative w-full max-w-[1280px] mx-auto px-6 md:px-12 py-20">
-          <div className="max-w-[620px] flex flex-col gap-6">
-            <div className="flex flex-col gap-2">
-              <h1 className="text-[28px] md:text-[38px] font-extrabold text-white leading-tight tracking-tight">
+          <div className="max-w-[760px] flex flex-col gap-6">
+            <div className="flex flex-col gap-3">
+              <h1 className="text-[32px] md:text-[44px] font-extrabold text-white leading-tight tracking-tight">
                 {renderHeroTitle(heroTitre)}
               </h1>
+              <div className="w-10 h-[3px] bg-white rounded-full" />
+              <p className="text-[14px] md:text-[16px] text-white/80 leading-relaxed">
+                {heroSousTitre}
+              </p>
             </div>
 
             <div className="flex flex-row flex-wrap gap-4 mt-4">
@@ -77,10 +115,10 @@ export default function Home() {
         <div className="max-w-[1280px] mx-auto flex flex-col gap-10">
 
           <div className="flex flex-col items-center gap-3 text-center">
-            <h2 className="text-[28px] md:text-[36px] font-bold text-[#263238] leading-tight">
+            <h2 className="text-[28px] md:text-[36px] font-bold text-[#388E3C] leading-tight">
               {t('products_section.title')}
             </h2>
-            <p className="text-[18px] md:text-[20px] text-[#4CAF4F] max-w-[520px] leading-relaxed [font-family:var(--font-noto-serif)]">
+            <p className="text-[18px] md:text-[20px] text-[#1A1A1A] max-w-[520px] leading-relaxed [font-family:var(--font-noto-serif)]">
               {t('products_section.subtitle')}
             </p>
           </div>
@@ -92,58 +130,58 @@ export default function Home() {
       {/* ════════════════════════════════════════════════════════════
           QUALITÉ & CONFORMITÉ
       ════════════════════════════════════════════════════════════ */}
-      <section id="contact" className="bg-[#F5F7FA] pt-16 px-6 md:px-12 mt-14 md:mt-20 mb-14 md:mb-20">
-        <div className="max-w-[1280px] mx-auto flex flex-col gap-10">
-          <div className="flex flex-col gap-3">
-            <h2 className="text-[26px] md:text-[34px] font-bold text-[#263238] italic leading-snug">
-              <span className="text-[#4CAF4F] mr-2">»</span>
+      <section id="contact" className="bg-[#F5F7FA] pt-6 px-8 md:px-20 mt-2 md:mt-3 mb-14 md:mb-20">
+        <div className="flex flex-col gap-12 md:gap-14">
+          <div className="flex flex-col gap-3 items-center text-center">
+            <h2 className="text-[26px] md:text-[34px] font-bold text-[#388E3C] italic leading-snug">
               {t('quality.title2')}
             </h2>
-            <div className="w-16 h-[3px] bg-[#4CAF4F] rounded-full" />
           </div>
 
-          <div className="grid grid-cols-3 gap-2 sm:gap-6 md:gap-8">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-20 gap-y-14 md:gap-x-28 md:gap-y-20">
             {[
               {
                 titleKey: 'quality.badge1_title',
                 descKey:  'quality.badge1_desc',
-                descShortKey: 'quality.badge1_desc_short',
-                icon: (
-                  <img src="/icons8-papier-50.png" alt="" className="w-[22px] h-[22px] sm:w-[34px] sm:h-[34px] object-contain" />
-                ),
+                icon: <img src="/icons8-papier-50-v2.png" alt="" className="w-9 h-9 md:w-11 md:h-11 object-contain" />,
               },
               {
                 titleKey: 'quality.badge2_title',
                 descKey:  'quality.badge2_desc',
-                descShortKey: 'quality.badge2_desc_short',
-                icon: (
-                  <img src="/icons8-imprimante-50.png" alt="" className="w-[22px] h-[22px] sm:w-[34px] sm:h-[34px] object-contain" />
-                ),
+                icon: <img src="/icons8-attestation-48.png" alt="" className="w-9 h-9 md:w-11 md:h-11 object-contain" />,
               },
               {
                 titleKey: 'quality.badge3_title',
                 descKey:  'quality.badge3_desc',
-                descShortKey: 'quality.badge3_desc_short',
-                icon: (
-                  <img src="/icons8-feuille-50.png" alt="" className="w-[22px] h-[22px] sm:w-[34px] sm:h-[34px] object-contain" />
-                ),
+                icon: <img src="/icons8-imprimante-50-v2.png" alt="" className="w-9 h-9 md:w-11 md:h-11 object-contain" />,
               },
-            ].map((item) => (
-              <div key={item.titleKey} className="flex flex-col items-center text-center gap-2 sm:gap-4 min-w-0">
-                <div className="flex flex-col items-center gap-1">
-                  <div className="w-[44px] h-[44px] sm:w-[76px] sm:h-[76px] flex items-center justify-center">
-                    {item.icon}
+              {
+                titleKey: 'quality.badge4_title',
+                descKey:  'quality.badge4_desc',
+                icon: <img src="/icons8-feuille-50-v2.png" alt="" className="w-9 h-9 md:w-11 md:h-11 object-contain" />,
+              },
+            ].map((item, i) => {
+              // Cascade haut → bas, et droite → gauche à l'intérieur de chaque ligne
+              // (index 0/2 = colonne gauche, 1/3 = colonne droite).
+              const delayByIndex = [150, 0, 450, 300];
+              return (
+                <QualityItem key={item.titleKey} delayMs={delayByIndex[i]}>
+                  <div className="flex flex-col gap-5 min-w-0">
+                    <div className="flex items-center gap-4">
+                      <div className="w-12 h-12 md:w-14 md:h-14 flex items-center justify-center flex-shrink-0">
+                        {item.icon}
+                      </div>
+                      <h3 className="text-[21px] md:text-[26px] font-semibold text-[#263238] leading-tight">{t(item.titleKey)}</h3>
+                    </div>
+                    <p className="text-[15px] md:text-[17px] text-[#1A1A1A] leading-loose">{t(item.descKey)}</p>
                   </div>
-                  <h3 className="text-[11px] sm:text-[18px] font-bold text-[#4CAF4F] italic leading-tight">{t(item.titleKey)}</h3>
-                </div>
-                <p className="sm:hidden text-[10px] text-[#717171] leading-snug">{t(item.descShortKey)}</p>
-                <p className="hidden sm:block text-[14px] text-[#717171] leading-relaxed">{t(item.descKey)}</p>
-              </div>
-            ))}
+                </QualityItem>
+              );
+            })}
           </div>
         </div>
 
-        <div className="mt-10 -mx-6 md:-mx-12">
+        <div className="mt-10 -mx-8 md:-mx-20">
           <QuoteCTA id="devis" fullBleed />
         </div>
       </section>
@@ -153,7 +191,7 @@ export default function Home() {
       ════════════════════════════════════════════════════════════ */}
       <section id="about" className="bg-white pt-8 pb-20 px-6 md:px-12">
         <div className="max-w-[1280px] mx-auto flex flex-col gap-8">
-          <h2 className="text-[28px] md:text-[36px] font-bold text-[#263238] leading-tight">
+          <h2 className="text-[28px] md:text-[36px] font-bold text-[#388E3C] leading-tight">
             {t('about.title')}
           </h2>
           <div className="flex flex-col lg:flex-row gap-10 lg:gap-16 items-start">
