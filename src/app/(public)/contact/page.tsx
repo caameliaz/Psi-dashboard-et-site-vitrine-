@@ -33,8 +33,8 @@ export default function ContactPage() {
           {t('contact.back')}
         </Link>
 
-        <h1 className="text-[36px] md:text-[42px] font-bold text-[#263238] mb-2">{t('contact.title')}</h1>
-        <p className="text-[16px] text-[#717171] mb-10">{t('contact.subtitle')}</p>
+        <h1 className="text-[40px] md:text-[48px] font-bold text-[#263238] mb-2">{t('contact.title')}</h1>
+        <p className="text-[17px] text-[#717171] mb-10">{t('contact.subtitle')}</p>
 
         {/* Boutons de contact */}
         <div className="flex flex-col gap-4 mb-10">

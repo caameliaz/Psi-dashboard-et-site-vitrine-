@@ -160,8 +160,8 @@ export default function QuotePage() {
           {t('quote.back')}
         </Link>
 
-        <h1 className="text-[24px] md:text-[42px] font-bold text-[#263238] mb-2">{t('quote.title')}</h1>
-        <p className="text-[14px] md:text-[16px] text-[#717171] mb-6 md:mb-10">{t('quote.subtitle')}</p>
+        <h1 className="text-[27px] md:text-[46px] font-bold text-[#263238] mb-2">{t('quote.title')}</h1>
+        <p className="text-[15px] md:text-[18px] text-[#717171] mb-6 md:mb-10">{t('quote.subtitle')}</p>
 
         <div className="flex flex-col lg:flex-row gap-8">
 

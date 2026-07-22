@@ -547,7 +547,7 @@ function ProductsPageInner() {
               return (
                 <button key={cat.id} onClick={() => setSelectedCatId(cat.id)} className="flex-shrink-0 w-[120px] flex flex-col items-center gap-2 group">
                   <div
-                    className="w-[110px] h-[110px] rounded-2xl overflow-hidden bg-[#F5F7FA] border-2 flex items-center justify-center transition-all duration-200"
+                    className={`w-[110px] h-[110px] rounded-2xl overflow-hidden border-2 flex items-center justify-center transition-all duration-200 ${cat.photo ? '' : 'bg-[#F5F7FA]'}`}
                     style={{
                       borderColor: isSelected ? '#4CAF4F' : 'transparent',
                       boxShadow: isSelected ? '0 8px 24px rgba(76,175,79,0.35)' : '0 2px 10px rgba(171,190,209,0.35)',
@@ -669,9 +669,9 @@ function ProductsPageInner() {
 
           {/* Droite : photo */}
           <div className="flex flex-col gap-3">
-            <div className="relative rounded-2xl overflow-hidden bg-[#F5F7FA] h-[340px] md:h-[420px] flex items-center justify-center">
+            <div className={`relative rounded-2xl overflow-hidden flex items-center justify-center ${selectedCat.photo ? '' : 'bg-[#F5F7FA] h-[340px] md:h-[420px]'}`}>
               {selectedCat.photo ? (
-                <img src={selectedCat.photo} alt={selectedCat.name} className="w-full h-full object-cover" />
+                <img src={selectedCat.photo} alt={selectedCat.name} className="w-auto h-auto max-w-full max-h-[340px] md:max-h-[420px] mx-auto rounded-2xl" />
               ) : (
                 <div className="relative w-20 h-20">
                   <div className="absolute inset-0 rounded-full bg-[#E8F5E9] border-2 border-[#4CAF4F]" />

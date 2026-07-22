@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { useCartStore } from '@/store/cartStore';
@@ -44,6 +44,13 @@ export default function ProductDetailPage() {
   const [products, setProducts] = useState<Prod[]>([]);
   const [index, setIndex] = useState(0);
   const [qty, setQty] = useState(1);
+  const refsTrackRef = useRef<HTMLDivElement>(null);
+
+  const scrollRefsByPage = (dir: 1 | -1) => {
+    const track = refsTrackRef.current;
+    if (!track) return;
+    track.scrollBy({ left: dir * track.clientWidth * 0.8, behavior: 'smooth' });
+  };
 
   useEffect(() => {
     fetch('/api/categories').then(r => r.ok ? r.json() : []).then((data: any[]) =>
@@ -79,27 +86,56 @@ export default function ProductDetailPage() {
 
   const refsBlock = items.length > 0 && (
     <div className="flex flex-col gap-3 mt-2">
-      <h2 className="text-[15px] font-bold text-[#263238]">{t('product_detail.available_refs')}</h2>
+      <h2 className="text-[17px] font-bold text-[#263238]">{t('product_detail.available_refs')}</h2>
 
       {/* Étiquettes défilables (dimensions + métrage) — la sélectionnée est verte */}
-      <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 [scrollbar-width:thin]">
-        {items.map((p, i) => {
-          const active = i === index;
-          return (
-            <button
-              key={p.id}
-              onClick={() => { setIndex(i); setQty(1); }}
-              className={`flex-shrink-0 px-3 py-2 rounded-xl border text-[13px] font-bold whitespace-nowrap transition-all ${
-                active
-                  ? 'border-[#4CAF4F] bg-[#4CAF4F] text-white shadow-[0_4px_12px_rgba(76,175,79,0.3)]'
-                  : 'border-[#E0E0E0] bg-white text-[#374151] hover:border-[#4CAF4F]/60'
-              }`}
-            >
-              {p.width}mm × {p.length}
-              {p.metrage != null ? ` · ${p.metrage} m` : ''}
-            </button>
-          );
-        })}
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => scrollRefsByPage(-1)}
+          disabled={items.length < 2}
+          aria-label={t('product_detail.prev_ref_aria')}
+          className="shrink-0 w-7 h-7 rounded-full border border-[#ABBED1]/50 flex items-center justify-center text-[#717171] hover:border-[#4CAF4F] hover:text-[#4CAF4F] disabled:opacity-30 transition-colors"
+        >
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
+            <path d="M10 3L5 8l5 5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        </button>
+
+        <div
+          ref={refsTrackRef}
+          className="flex-1 flex gap-2 overflow-x-auto min-w-0 [scrollbar-width:thin] [scrollbar-color:#4CAF4F_#F0F4F8] [&::-webkit-scrollbar]:h-0.5 [&::-webkit-scrollbar-track]:bg-[#F0F4F8] [&::-webkit-scrollbar-track]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[#4CAF4F] [&::-webkit-scrollbar-thumb]:rounded-full"
+        >
+          {items.map((p, i) => {
+            const active = i === index;
+            return (
+              <button
+                key={p.id}
+                onClick={() => { setIndex(i); setQty(1); }}
+                className={`flex-shrink-0 px-3 py-2 rounded-xl border text-[13px] font-bold whitespace-nowrap transition-all ${
+                  active
+                    ? 'border-[#4CAF4F] bg-[#4CAF4F] text-white shadow-[0_4px_12px_rgba(76,175,79,0.3)]'
+                    : 'border-[#E0E0E0] bg-white text-[#374151] hover:border-[#4CAF4F]/60 hover:outline hover:outline-1 hover:outline-[#CBD5E1] hover:shadow-[0_4px_14px_rgba(171,190,209,0.5)]'
+                }`}
+              >
+                {p.width}mm × {p.length}
+                {p.metrage != null ? ` · ${p.metrage} m` : ''}
+              </button>
+            );
+          })}
+        </div>
+
+        <button
+          type="button"
+          onClick={() => scrollRefsByPage(1)}
+          disabled={items.length < 2}
+          aria-label={t('product_detail.next_ref_aria')}
+          className="shrink-0 w-7 h-7 rounded-full border border-[#ABBED1]/50 flex items-center justify-center text-[#717171] hover:border-[#4CAF4F] hover:text-[#4CAF4F] disabled:opacity-30 transition-colors"
+        >
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
+            <path d="M6 3l5 5-5 5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        </button>
       </div>
 
       {/* Usage de la référence sélectionnée (à quoi ça sert) */}
@@ -111,7 +147,7 @@ export default function ProductDetailPage() {
 
   const specsBlock = specRows.length > 0 && (
     <div className="flex flex-col gap-3 mt-2">
-      <h2 className="text-[15px] font-bold text-[#263238]">{t('product_detail.specs_title')}</h2>
+      <h2 className="text-[17px] font-bold text-[#263238]">{t('product_detail.specs_title')}</h2>
       <div className="grid grid-cols-2 gap-x-6 gap-y-3.5 rounded-xl border border-[#E0E0E0] p-4">
         {specRows.map((row) => (
           <div key={row.key} className="flex items-center gap-2.5 min-w-0">
@@ -188,9 +224,9 @@ export default function ProductDetailPage() {
   );
 
   const photoBlock = (heightClass: string) => (
-    <div className={`bg-[#F5F7FA] rounded-2xl overflow-hidden ${heightClass} flex items-center justify-center`}>
+    <div className={`${category.photo ? '' : 'bg-[#F5F7FA]'} rounded-2xl overflow-hidden ${heightClass} flex items-center justify-center p-3`}>
       {category.photo ? (
-        <img src={category.photo} alt={category.name} className="w-full h-full object-cover" />
+        <img src={category.photo} alt={category.name} className="w-full h-full object-contain" />
       ) : (
         <div className="relative w-20 h-20">
           <div className="absolute inset-0 rounded-full bg-[#E8F5E9] border-2 border-[#4CAF4F]" />
@@ -215,7 +251,7 @@ export default function ProductDetailPage() {
 
         {/* ── Mobile : titre → description → photo → refs → total/panier → détails ── */}
         <div className="flex lg:hidden flex-col gap-5">
-          <h1 className="text-[24px] font-extrabold text-[#263238] leading-tight">
+          <h1 className="text-[27px] font-extrabold text-[#263238] leading-tight">
             {category.name}
           </h1>
           {description && (
@@ -224,7 +260,7 @@ export default function ProductDetailPage() {
             </p>
           )}
 
-          {photoBlock('h-[220px]')}
+          {photoBlock('h-[260px]')}
 
           {refsBlock}
           {summaryBlock}
@@ -239,7 +275,7 @@ export default function ProductDetailPage() {
             <span className="text-[13px] font-bold text-[#4CAF4F] uppercase tracking-wide">
               {t('product_detail.fast_delivery')}
             </span>
-            <h1 className="text-[42px] font-extrabold text-[#263238] leading-tight">
+            <h1 className="text-[46px] font-extrabold text-[#263238] leading-tight">
               {category.name}
             </h1>
             {description && (
@@ -254,7 +290,7 @@ export default function ProductDetailPage() {
 
           {/* Colonne droite : photo de la catégorie + récap */}
           <div className="flex flex-col gap-5">
-            {photoBlock('h-[380px]')}
+            {photoBlock('h-[440px]')}
             {summaryBlock}
           </div>
         </div>
@@ -262,7 +298,7 @@ export default function ProductDetailPage() {
         {/* Autres catégories */}
         {otherCats.length > 0 && (
           <div className="flex flex-col gap-6 mt-6">
-            <h2 className="text-[24px] md:text-[28px] font-extrabold text-[#263238]">
+            <h2 className="text-[27px] md:text-[32px] font-extrabold text-[#263238]">
               {t('product_detail.also_liked')}
             </h2>
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-5">

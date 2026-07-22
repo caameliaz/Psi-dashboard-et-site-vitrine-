@@ -52,7 +52,7 @@ export default function CartPage() {
           {t('cart.back')}
         </Link>
 
-        <h1 className="text-[36px] md:text-[42px] font-bold text-[#263238] mb-8">{t('cart.title')}</h1>
+        <h1 className="text-[40px] md:text-[48px] font-bold text-[#263238] mb-8">{t('cart.title')}</h1>
 
         <div className="flex flex-col lg:flex-row gap-6">
 

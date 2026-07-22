@@ -116,8 +116,8 @@ export default function CheckoutPage() {
           {t('checkout.back')}
         </Link>
 
-        <h1 className="text-[36px] md:text-[42px] font-bold text-[#263238] mb-2">{t('checkout.title')}</h1>
-        <p className="text-[16px] text-[#717171] mb-10">{t('checkout.subtitle')}</p>
+        <h1 className="text-[40px] md:text-[48px] font-bold text-[#263238] mb-2">{t('checkout.title')}</h1>
+        <p className="text-[17px] text-[#717171] mb-10">{t('checkout.subtitle')}</p>
 
         <div className="flex flex-col lg:flex-row gap-8">
 
