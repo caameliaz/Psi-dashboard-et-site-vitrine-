@@ -4,7 +4,15 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
+  // url       = connexion applicative, via le POOLER Neon (rapide, beaucoup de connexions)
+  // directUrl = connexion DIRECTE, utilisée UNIQUEMENT par les migrations.
+  //
+  // ⚠️ Indispensable : un verrou d'avis Postgres est lié à une SESSION, or le
+  // pooler recycle les connexions → le verrou de migration restait pris pour
+  // toujours (erreur P1002 "Timed out trying to acquire a postgres advisory lock"
+  // à chaque déploiement, jusqu'à libération manuelle).
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 // ─── CATÉGORIE ───────────────────────────────────────────────────────────────
