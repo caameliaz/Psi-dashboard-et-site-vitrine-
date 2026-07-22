@@ -7,7 +7,7 @@ import { generateQuoteRef } from '@/lib/generate-ref';
 import { pushSSE } from '@/lib/sse-bus';
 import { createAudit } from '@/lib/audit';
 import { rateLimit } from '@/lib/rate-limit';
-import { validateEmail, validatePhone, validateText, firstError } from '@/lib/validation';
+import { validateEmail, validatePhone, validateText, validateQuantity, firstError } from '@/lib/validation';
 
 export async function GET(request: NextRequest) {
   const guard = await requirePermission('voir_commandes');
@@ -46,11 +46,24 @@ export async function POST(request: NextRequest) {
     const clientName: string = body.name ?? '';
     const clientCompany: string = body.company ?? '';
 
+    interface QuoteItemInput {
+      productId?: string; description?: string; width?: number; length?: number; metrage?: number; quantity: number;
+    }
+    const items: QuoteItemInput[] = Array.isArray(body.items) ? body.items : [];
+
     // Validation serveur (le client peut contourner la validation du navigateur)
     const vErr = firstError([
-      validateText(clientName, 'Nom du client'),
-      validatePhone(primaryPhone),
+      validateText(clientName, 'Nom du client', 2, true, 200),
+      validatePhone(primaryPhone, true),
       validateEmail(body.email ?? ''),
+      validateText(clientCompany, 'Entreprise', 0, false, 200),
+      validateText(String(body.message ?? ''), 'Message', 0, false, 3000),
+      items.length > 50 ? 'Trop de lignes (max 50).' : null,
+      ...items.map((item, i) =>
+        item?.description != null && String(item.description).length > 300
+          ? `Description ligne ${i + 1} trop longue (300 caractères max).`
+          : item?.quantity != null ? validateQuantity(item.quantity) : null
+      ),
     ]);
     if (vErr) return NextResponse.json({ error: vErr }, { status: 400 });
 
@@ -105,6 +118,9 @@ export async function POST(request: NextRequest) {
       }).catch(() => {});
     }
 
+    const VALID_SOURCES = ['SITE', 'ADMIN', 'WHATSAPP', 'TELEPHONE', 'AUTRE'];
+    const source = VALID_SOURCES.includes(body.source) ? body.source : 'SITE';
+
     const ref = await generateQuoteRef(client.wilaya);
     const quote = await prisma.quote.create({
       data: {
@@ -116,12 +132,12 @@ export async function POST(request: NextRequest) {
         clientCompany: clientCompany || client.company || null,
         clientWilaya: body.wilaya || client.wilaya || null,
         message: body.message ?? '',
-        source: body.source ?? 'SITE',
+        source: source as any,
         createdById: session?.user?.id ?? null,
         // Assignation : valeur fournie, sinon le créateur (utilisateur connecté)
         assignedToId: body.assignedToId ?? session?.user?.id ?? null,
         items: {
-          create: (body.items ?? []).map((item: {
+          create: items.map((item: {
             productId?: string;
             description?: string;
             width?: number;

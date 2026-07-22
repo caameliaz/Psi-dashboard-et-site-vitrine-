@@ -19,6 +19,19 @@ export default function LoginPage() {
   const [forgot, setForgot] = useState(false);
   const [forgotSent, setForgotSent] = useState(false);
   const [forgotLoading, setForgotLoading] = useState(false);
+  // 2FA : après email+mot de passe valides, un code à 6 chiffres est envoyé par email
+  const [step, setStep] = useState<'credentials' | 'otp'>('credentials');
+  const [otp, setOtp] = useState('');
+  const [resending, setResending] = useState(false);
+
+  const sendOtp = async () => {
+    const res = await fetch('/api/auth/2fa/send', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || 'Identifiant ou mot de passe incorrect.');
+  };
 
   const handleForgot = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -39,16 +52,33 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
+      // Étape 1 : vérifie email + mot de passe, puis envoie le code 2FA par email
+      await sendOtp();
+      setStep('otp');
+      setLoading(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Identifiant ou mot de passe incorrect.');
+      setLoading(false);
+    }
+  };
+
+  const handleVerifyOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+
+    try {
       const res = await signIn('credentials', {
         email,
         password,
+        otp,
         remember: remember ? '1' : '0',
         redirect: false,
       });
 
       // NextAuth v5 : identifiants faux → res.error présent OU res.ok === false
       if (!res || res.error || res.ok === false) {
-        setError('Identifiant ou mot de passe incorrect.');
+        setError('Code incorrect ou expiré.');
         setLoading(false);
         return;
       }
@@ -57,8 +87,20 @@ export default function LoginPage() {
       router.push(isMobile ? '/admin/mobile' : '/admin/dashboard');
       router.refresh();
     } catch {
-      setError('Identifiant ou mot de passe incorrect.');
+      setError('Code incorrect ou expiré.');
       setLoading(false);
+    }
+  };
+
+  const handleResend = async () => {
+    setError('');
+    setResending(true);
+    try {
+      await sendOtp();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Échec de l'envoi du code.");
+    } finally {
+      setResending(false);
     }
   };
 
@@ -78,7 +120,81 @@ export default function LoginPage() {
           <p className="text-[13px] text-[#8A9BB5] mt-1">Espace administration</p>
         </div>
 
-        {!forgot ? (
+        {forgot ? (
+          forgotSent ? (
+          <div className="text-center space-y-4">
+            <div className="w-12 h-12 rounded-full bg-[#F0FDF4] flex items-center justify-center mx-auto">
+              <svg width={24} height={24} fill="none" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5" stroke="#16A34A" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            </div>
+            <p className="text-[14px] font-bold text-[#0F172A]">Email envoyé</p>
+            <p className="text-[13px] text-[#8A9BB5] leading-relaxed">Si un compte existe avec cet email, vous venez de recevoir un <strong>nouveau mot de passe</strong>. Vérifiez votre boîte de réception (et vos spams).</p>
+            <button onClick={() => { setForgot(false); setForgotSent(false); }} className="w-full py-3 rounded-xl text-[14px] font-bold text-white" style={{ background: '#4CAF4F' }}>Retour à la connexion</button>
+          </div>
+          ) : (
+          <form onSubmit={handleForgot} className="space-y-5">
+            <p className="text-[13px] text-[#8A9BB5] leading-relaxed">Entrez votre email : un nouveau mot de passe vous sera envoyé immédiatement.</p>
+            <div>
+              <label className="block text-[13px] font-semibold text-[#101828] mb-2">Email</label>
+              <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="votre@email.dz" required
+                className="w-full px-4 py-3 rounded-xl border border-[#E4EBF5] text-[14px] focus:outline-none focus:border-[#4CAF4F] focus:ring-[3px] focus:ring-[#4CAF4F]/15 transition-all" />
+            </div>
+            {error && <p className="text-[13px] text-[#EF4444] bg-[#FEF2F2] rounded-xl px-4 py-3 border border-[#FECACA]">{error}</p>}
+            <button type="submit" disabled={forgotLoading} className="w-full py-3 rounded-xl text-[15px] font-bold text-white transition-colors disabled:opacity-60 hover:bg-[#43A047]" style={{ background: '#4CAF4F' }}>
+              {forgotLoading ? 'Envoi…' : 'Envoyer la demande'}
+            </button>
+            <button type="button" onClick={() => { setForgot(false); setError(''); }} className="block w-full text-center text-[12px] font-semibold text-[#8A9BB5] hover:underline">
+              Retour à la connexion
+            </button>
+          </form>
+          )
+        ) : step === 'otp' ? (
+          <form onSubmit={handleVerifyOtp} className="space-y-5">
+            <p className="text-[13px] text-[#8A9BB5] leading-relaxed">
+              Un code à 6 chiffres a été envoyé à <strong className="text-[#374151]">{email}</strong>. Il expire dans 5 minutes.
+            </p>
+            <div>
+              <label className="block text-[13px] font-semibold text-[#101828] mb-2">Code de vérification</label>
+              <input
+                type="text"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                maxLength={6}
+                value={otp}
+                onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                placeholder="000000"
+                required
+                autoFocus
+                className="w-full px-4 py-3.5 rounded-xl border border-[#E4EBF5] text-[22px] text-center tracking-[10px] font-bold text-[#101828] placeholder-[#ABBED1] focus:outline-none focus:border-[#4CAF4F] focus:ring-2 focus:ring-[#4CAF4F]/20 transition-all"
+              />
+            </div>
+
+            {error && (
+              <p className="text-[13px] text-[#EF4444] bg-[#FEF2F2] rounded-xl px-4 py-3 border border-[#FECACA]">
+                {error}
+              </p>
+            )}
+
+            <button
+              type="submit"
+              disabled={loading || otp.length !== 6}
+              className="w-full py-3 rounded-xl text-[15px] font-bold text-white transition-colors disabled:opacity-60 hover:bg-[#43A047]"
+              style={{ background: '#4CAF4F' }}
+            >
+              {loading ? 'Vérification…' : 'Valider le code'}
+            </button>
+
+            <div className="flex items-center justify-between">
+              <button type="button" onClick={() => { setStep('credentials'); setOtp(''); setError(''); }}
+                className="text-[12px] font-semibold text-[#8A9BB5] hover:underline">
+                ← Retour
+              </button>
+              <button type="button" onClick={handleResend} disabled={resending}
+                className="text-[12px] font-semibold text-[#4CAF4F] hover:underline disabled:opacity-60">
+                {resending ? 'Envoi…' : 'Renvoyer le code'}
+              </button>
+            </div>
+          </form>
+        ) : (
         <form onSubmit={handleSubmit} className="space-y-5">
           <div>
             <label className="block text-[13px] font-semibold text-[#101828] mb-2">Email</label>
@@ -137,7 +253,7 @@ export default function LoginPage() {
             className="w-full py-3 rounded-xl text-[15px] font-bold text-white transition-colors disabled:opacity-60 hover:bg-[#43A047]"
             style={{ background: '#4CAF4F' }}
           >
-            {loading ? 'Connexion…' : 'Se connecter'}
+            {loading ? 'Envoi du code…' : 'Se connecter'}
           </button>
 
           <button type="button" onClick={() => { setForgot(true); setError(''); setForgotSent(false); }}
@@ -145,31 +261,6 @@ export default function LoginPage() {
             Mot de passe oublié ?
           </button>
         </form>
-        ) : forgotSent ? (
-          <div className="text-center space-y-4">
-            <div className="w-12 h-12 rounded-full bg-[#F0FDF4] flex items-center justify-center mx-auto">
-              <svg width={24} height={24} fill="none" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5" stroke="#16A34A" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-            </div>
-            <p className="text-[14px] font-bold text-[#0F172A]">Email envoyé</p>
-            <p className="text-[13px] text-[#8A9BB5] leading-relaxed">Si un compte existe avec cet email, vous venez de recevoir un <strong>nouveau mot de passe</strong>. Vérifiez votre boîte de réception (et vos spams).</p>
-            <button onClick={() => { setForgot(false); setForgotSent(false); }} className="w-full py-3 rounded-xl text-[14px] font-bold text-white" style={{ background: '#4CAF4F' }}>Retour à la connexion</button>
-          </div>
-        ) : (
-          <form onSubmit={handleForgot} className="space-y-5">
-            <p className="text-[13px] text-[#8A9BB5] leading-relaxed">Entrez votre email : un nouveau mot de passe vous sera envoyé immédiatement.</p>
-            <div>
-              <label className="block text-[13px] font-semibold text-[#101828] mb-2">Email</label>
-              <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="votre@email.dz" required
-                className="w-full px-4 py-3 rounded-xl border border-[#E4EBF5] text-[14px] focus:outline-none focus:border-[#4CAF4F] focus:ring-[3px] focus:ring-[#4CAF4F]/15 transition-all" />
-            </div>
-            {error && <p className="text-[13px] text-[#EF4444] bg-[#FEF2F2] rounded-xl px-4 py-3 border border-[#FECACA]">{error}</p>}
-            <button type="submit" disabled={forgotLoading} className="w-full py-3 rounded-xl text-[15px] font-bold text-white transition-colors disabled:opacity-60 hover:bg-[#43A047]" style={{ background: '#4CAF4F' }}>
-              {forgotLoading ? 'Envoi…' : 'Envoyer la demande'}
-            </button>
-            <button type="button" onClick={() => { setForgot(false); setError(''); }} className="block w-full text-center text-[12px] font-semibold text-[#8A9BB5] hover:underline">
-              Retour à la connexion
-            </button>
-          </form>
         )}
 
         <p className="text-center text-[11px] text-[#ABBED1] mt-6">

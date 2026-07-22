@@ -7,7 +7,7 @@ import { generateOrderRef } from '@/lib/generate-ref';
 import { pushSSE } from '@/lib/sse-bus';
 import { createAudit } from '@/lib/audit';
 import { rateLimit } from '@/lib/rate-limit';
-import { validateEmail, validatePhone, validateText, firstError } from '@/lib/validation';
+import { validateEmail, validatePhone, validateText, validateQuantity, validatePositiveNumber, firstError } from '@/lib/validation';
 
 export async function GET(request: NextRequest) {
   const guard = await requirePermission('voir_commandes');
@@ -46,11 +46,23 @@ export async function POST(request: NextRequest) {
     const clientName: string = body.client?.name ?? '';
     const clientCompany: string = body.client?.company ?? '';
 
+    const rawItems: { productId?: string | null; description?: string; quantity?: number; unitPrice?: number; metrage?: number }[] =
+      Array.isArray(body.items) ? body.items : [];
+
     // Validation serveur (le client peut contourner la validation du navigateur)
     const vErr = firstError([
-      validateText(clientName, 'Nom du client'),
-      validatePhone(primaryPhone),
+      validateText(clientName, 'Nom du client', 2, true, 200),
+      validatePhone(primaryPhone, true),
       validateEmail(body.client?.email ?? ''),
+      validateText(clientCompany, 'Entreprise', 0, false, 200),
+      rawItems.length > 50 ? 'Trop de lignes (max 50).' : null,
+      ...rawItems.map((it, i) => {
+        if (it.description != null && String(it.description).length > 300) return `Description ligne ${i + 1} trop longue (300 caractères max).`;
+        // Le prix saisi côté client n'est utilisé QUE pour les lignes libres (sans productId) —
+        // pour un produit du catalogue, le prix est de toute façon recalculé serveur ci-dessous.
+        if (!it.productId && it.unitPrice != null) return validatePositiveNumber(it.unitPrice, `Prix ligne ${i + 1}`);
+        return null;
+      }),
     ]);
     if (vErr) return NextResponse.json({ error: vErr }, { status: 400 });
 
@@ -113,14 +125,21 @@ export async function POST(request: NextRequest) {
     const source = VALID_SOURCES.includes(body.source) ? body.source : 'SITE';
 
     const ref = await generateOrderRef(client.wilaya);
-    const validItems = (body.items ?? []).filter(
-      (i: { productId?: string | null; description?: string; quantity?: number }) =>
-        ((i.productId && i.productId !== '') || (i.description && i.description.trim() !== '')) && (i.quantity ?? 0) > 0
+    const validItems = rawItems.filter(
+      (i) => ((i.productId && i.productId !== '') || (i.description && i.description.trim() !== '')) && (i.quantity ?? 0) > 0
     );
 
     if (validItems.length === 0) {
       return NextResponse.json({ error: 'Au moins un produit valide est requis' }, { status: 400 });
     }
+
+    // Prix : jamais fait confiance au body pour un produit du catalogue — toujours
+    // recalculé depuis la base pour empêcher une manipulation du prix côté client.
+    const productIds = [...new Set(validItems.filter((i) => i.productId).map((i) => i.productId as string))];
+    const dbProducts = productIds.length
+      ? await prisma.product.findMany({ where: { id: { in: productIds } }, select: { id: true, price: true } })
+      : [];
+    const priceById = new Map(dbProducts.map((p) => [p.id, p.price]));
 
     const order = await prisma.order.create({
       data: {
@@ -136,11 +155,11 @@ export async function POST(request: NextRequest) {
         // Assignation : valeur fournie, sinon le créateur (utilisateur connecté)
         assignedToId: body.assignedToId ?? session?.user?.id ?? null,
         items: {
-          create: validItems.map((item: { productId?: string | null; description?: string; quantity: number; unitPrice: number; metrage?: number }) => ({
+          create: validItems.map((item) => ({
             productId: item.productId || null,
             description: item.productId ? null : (item.description ?? null),
-            quantity: item.quantity,
-            unitPrice: item.unitPrice ?? 0,
+            quantity: item.quantity as number,
+            unitPrice: item.productId ? (priceById.get(item.productId) ?? 0) : Math.max(0, Number(item.unitPrice) || 0),
             metrage: item.metrage ?? null,
           })),
         },
