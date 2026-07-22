@@ -27,6 +27,13 @@ function getTransporter() {
     const user = process.env.SMTP_USER ?? process.env.GMAIL_USER;
     const pass = process.env.SMTP_PASS ?? process.env.GMAIL_APP_PASSWORD;
     const provider = (process.env.SMTP_PROVIDER ?? 'cpanel').toLowerCase();
+    // Log de diagnostic : montre la config RÉELLEMENT utilisée en production
+    // (sans jamais afficher le mot de passe).
+    console.log(
+      `[sendEmail] provider=${provider} host=${process.env.SMTP_HOST ?? '(defaut)'} ` +
+      `port=${process.env.SMTP_PORT ?? '(defaut)'} user=${process.env.SMTP_USER ?? '(absent)'} ` +
+      `from=${process.env.EMAIL_FROM ?? '(absent)'} pass=${process.env.SMTP_PASS ? process.env.SMTP_PASS.length + ' car.' : 'ABSENT'}`,
+    );
 
     if (provider === 'gmail') {
       transporter = nodemailer.createTransport({ service: 'gmail', auth: { user, pass } });
