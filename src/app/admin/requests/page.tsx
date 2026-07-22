@@ -13,10 +13,14 @@ import { exportVentesExcel } from '@/lib/export-ventes';
 import { useSSE } from '@/lib/use-sse';
 import { useSession } from 'next-auth/react';
 import { RequirePerm } from '@/components/RequirePerm';
+import { ImportVentesModal } from '@/components/ui/ImportVentesModal';
 import { orderToDetail, quoteToDetail, DB_TO_UI, UI_TO_DB } from '@/lib/request-detail';
 import { validateEmail, validatePhone, validateQuantity, validatePositiveNumber, normalizeEmail, normalizePhone, firstError } from '@/lib/validation';
 
 const ARCHIVED = ['Livré', 'Annulé'];
+
+// Modes de paiement proposés à la validation d'une commande / d'un devis
+export const PAYMENT_METHODS = ['Espèces', 'Chèque', 'Virement', 'Versement', 'À crédit', 'Dépensé', 'Offert'];
 
 function getSourceLabel(src: string) { return src === 'SITE' ? 'Site web' : 'Manuel'; }
 const SOURCE_COLOR: Record<'SITE' | 'OTHER', { bg: string; color: string; border: string }> = {
@@ -102,6 +106,8 @@ export async function submitNewRequest(
         },
         items: lignes.filter((l: any) => l.ref).map((l: any) => ({ productId: l.productId ?? undefined, description: l.productId ? undefined : l.ref, quantity: l.qte, unitPrice: l.pu, metrage: l.metrage ? Number(l.metrage) : undefined })),
         assignedToId: item._assignedToId ?? undefined, source: 'AUTRE',
+        invoiceNumber: item._invoiceNumber, paymentMethod: item._paymentMethod,
+        paymentDate: item._paymentDate, vatEnabled: item._vatEnabled,
       }
     : {
         // id transmis quand le devis est créé depuis une fiche client → pas de doublon
@@ -110,6 +116,8 @@ export async function submitNewRequest(
         email: item._email ? normalizeEmail(item._email) : undefined, wilaya: item._wilaya || 'Non spécifié', commune: item._commune || undefined, message: '',
         items: lignes.filter((l: any) => l.ref).map((l: any) => ({ productId: l.productId ?? undefined, description: l.productId ? undefined : l.ref, quantity: l.qte, metrage: l.metrage ? Number(l.metrage) : undefined })),
         assignedToId: item._assignedToId ?? undefined, source: 'AUTRE',
+        invoiceNumber: item._invoiceNumber, paymentMethod: item._paymentMethod,
+        paymentDate: item._paymentDate, vatEnabled: item._vatEnabled,
       };
   const res = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   if (!res.ok) {
@@ -143,6 +151,11 @@ export function CreateForm({ defaultType, onClose, onSave, users, currentUserId,
   const [tva, setTva] = useState(false);
   const [saving, setSaving] = useState(false);
   const [assignedToId, setAssignedToId] = useState<string>(currentUserId ?? '');
+  // Infos de facturation / règlement (toutes facultatives)
+  const [invoiceNumber, setInvoiceNumber] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState('');
+  const [paymentDate, setPaymentDate] = useState('');
+  const [vatEnabled, setVatEnabled] = useState(false);
   const [products, setProducts] = useState<{ id: string; reference: string; price: number; categoryId: string }[]>([]);
   const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
 
@@ -197,6 +210,10 @@ export function CreateForm({ defaultType, onClose, onSave, users, currentUserId,
       // Rattache la demande au client d'origine (créée depuis sa fiche)
       _clientId: prefill?.clientId,
       _assignedToId: assignedToId || undefined,
+      _invoiceNumber: invoiceNumber.trim() || undefined,
+      _paymentMethod: paymentMethod || undefined,
+      _paymentDate: paymentDate || undefined,
+      _vatEnabled: vatEnabled,
     } as any);
     setSaving(false);
     onClose();
@@ -267,6 +284,40 @@ export function CreateForm({ defaultType, onClose, onSave, users, currentUserId,
               onChange={setAssignedToId}
               options={[{ value: '', label: '— Non assigné —' }, ...users.map(u => ({ value: u.id, label: u.name }))]}
             />
+          </div>
+
+          {/* ── Facturation / règlement (facultatif) ── */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className={lc}>N° facture <span className="text-[#ABBED1] font-normal normal-case">(facultatif)</span></label>
+              <input value={invoiceNumber}
+                onChange={e => { const v = e.target.value; setInvoiceNumber(v); setVatEnabled(/^f/i.test(v.trim())); }}
+                placeholder="ex: F2026-001" className={ic} />
+            </div>
+            <div>
+              <label className={lc}>Mode de paiement</label>
+              <AdminSelect
+                className="w-full"
+                value={paymentMethod}
+                onChange={setPaymentMethod}
+                options={[
+                  { value: '', label: '— Non précisé —' },
+                  ...PAYMENT_METHODS.map(m => ({ value: m, label: m })),
+                ]}
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3 items-end">
+            <div>
+              <label className={lc}>Date de règlement <span className="text-[#ABBED1] font-normal normal-case">(facultatif)</span></label>
+              <input type="date" value={paymentDate} onChange={e => setPaymentDate(e.target.value)} className={ic} />
+            </div>
+            {/* TVA : déduite du n° de facture (commence par F → facturé avec TVA),
+                comme à l'import Excel. Pas de case séparée à cocher. */}
+            <div className="flex items-center gap-2 px-3 py-2 rounded-xl border text-[12px]"
+              style={{ borderColor: vatEnabled ? '#BBF7D0' : '#E2E8F0', background: vatEnabled ? '#F0FDF4' : '#F8FAFC', color: vatEnabled ? '#166534' : '#8A9BB5' }}>
+              TVA {vatEnabled ? 'appliquée (n° en F)' : 'non appliquée'}
+            </div>
           </div>
 
           {/* Lignes produits */}
@@ -431,6 +482,7 @@ function RequestsPageInner() {
   const [users, setUsers] = useState<{ id: string; name: string }[]>([]);
   const [selected, setSelected]   = useState<RequestDetail | null>(null);
   const [showCreate, setShowCreate] = useState(false);
+  const [showImportVentes, setShowImportVentes] = useState(false);
   const [createPrefill, setCreatePrefill] = useState<{ client?: string; entreprise?: string; telephone?: string; email?: string; wilaya?: string; commune?: string } | undefined>(undefined);
 
   // silent = refetch en arrière-plan (SSE temps réel) → pas de spinner, pas de clignotement
@@ -654,6 +706,13 @@ function RequestsPageInner() {
             <svg width={14} height={14} fill="none" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6z" stroke="currentColor" strokeWidth="1.8"/><path d="M14 2v6h6M8 13h8M8 17h8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>
             Exporter
           </button>
+          {/* Import de ventes passées — ordinateur uniquement (choix de fichier) */}
+          <button onClick={() => setShowImportVentes(true)}
+            className="hidden md:flex items-center gap-1.5 px-3 py-2 rounded-xl text-[13px] font-semibold border border-[#E2E8F0] text-[#374151] hover:bg-[#F8FAFC] hover:border-[#4CAF4F] hover:text-[#4CAF4F] transition-colors"
+            title="Importer des ventes passées depuis un Excel">
+            <svg width={14} height={14} fill="none" viewBox="0 0 24 24"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            Importer
+          </button>
           <button onClick={() => setShowCreate(true)}
             className="px-4 py-2 rounded-xl text-[13px] font-bold border border-[#4CAF4F] text-[#4CAF4F] hover:bg-[#F0FDF4] transition-colors whitespace-nowrap">
             + Nouveau
@@ -799,6 +858,13 @@ function RequestsPageInner() {
           onReassigned={() => { fetchAll(true); }}
         />
       )}
+      {showImportVentes && (
+        <ImportVentesModal
+          onClose={() => setShowImportVentes(false)}
+          onDone={() => fetchAll(true)}
+        />
+      )}
+
       {showCreate && (
         <CreateForm
           defaultType={isDevis ? 'Devis' : 'Commande'}

@@ -83,6 +83,11 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
       where: { id },
       data: {
         ...(body.status !== undefined && { status: body.status }),
+        // Facturation / règlement — modifiables après validation
+        ...(body.invoiceNumber !== undefined && { invoiceNumber: body.invoiceNumber || null }),
+        ...(body.paymentMethod !== undefined && { paymentMethod: body.paymentMethod || null }),
+        ...(body.paymentDate !== undefined && { paymentDate: body.paymentDate ? new Date(body.paymentDate) : null }),
+        ...(body.vatEnabled !== undefined && { vatEnabled: Boolean(body.vatEnabled) }),
         ...(body.notes !== undefined && { notes: body.notes }),
         ...(body.assignedToId !== undefined && { assignedToId: body.assignedToId || null }),
         ...(body.clientId !== undefined && { clientId: body.clientId || null }),

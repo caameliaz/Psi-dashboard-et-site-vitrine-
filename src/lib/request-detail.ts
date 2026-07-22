@@ -82,6 +82,14 @@ export function orderToDetail(o: any, fallback?: ClientFallback): RequestDetail 
     statut: DB_TO_UI[o.status] ?? o.status,
     assignedToId: o.assignedTo?.id ?? o.assignedToId ?? null,
     assignedToName: o.assignedTo?.name ?? null,
+    invoiceNumber: o.invoiceNumber ?? null,
+    paymentMethod: o.paymentMethod ?? null,
+    paymentDate: o.paymentDate ? new Date(o.paymentDate).toLocaleDateString('fr-FR') : null,
+    vatEnabled: Boolean(o.vatEnabled),
+    // `tva` pilote les documents exportés (bon de commande, PDF) : on le
+    // renseigne depuis vatEnabled pour n'avoir QU'UNE source de vérité.
+    tva: Boolean(o.vatEnabled),
+    salesRepName: o.salesRepName ?? null,
     date: new Date(o.createdAt).toLocaleDateString('fr-FR'),
     heure: new Date(o.createdAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
   };
@@ -115,6 +123,14 @@ export function quoteToDetail(q: any, fallback?: ClientFallback): RequestDetail 
     statut: DB_TO_UI[q.status] ?? q.status,
     assignedToId: q.assignedTo?.id ?? q.assignedToId ?? null,
     assignedToName: q.assignedTo?.name ?? null,
+    invoiceNumber: q.invoiceNumber ?? null,
+    paymentMethod: q.paymentMethod ?? null,
+    paymentDate: q.paymentDate ? new Date(q.paymentDate).toLocaleDateString('fr-FR') : null,
+    vatEnabled: Boolean(q.vatEnabled),
+    // `tva` pilote les documents exportés (bon de commande, PDF) : on le
+    // renseigne depuis vatEnabled pour n'avoir QU'UNE source de vérité.
+    tva: Boolean(q.vatEnabled),
+    salesRepName: q.salesRepName ?? null,
     date: new Date(q.createdAt).toLocaleDateString('fr-FR'),
     heure: new Date(q.createdAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
     message: q.message ?? '',

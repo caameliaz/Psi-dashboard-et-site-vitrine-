@@ -1,4 +1,5 @@
 import path from 'path';
+import fs from 'fs';
 
 // Bouts HTML/données partagés entre dailyRecapTemplate et weeklyRecapTemplate :
 // l'en-tête (titre à gauche + bouton "Ouvrir l'admin" à droite), les deux
@@ -34,11 +35,33 @@ export interface RecapCardData {
 // ── Logo : embarqué en pièce jointe "inline" (Content-ID), pas d'URL publique
 // nécessaire — fonctionne même sans nom de domaine.
 export const LOGO_CID = 'psi-logo';
-export const logoAttachment = {
-  filename: 'logo-psi.jpeg',
-  path: path.join(process.cwd(), 'public', 'Logo PSI-new.jpeg'),
-  cid: LOGO_CID,
-};
+
+// ⚠️ Sur Vercel (serverless), les fichiers de `public/` ne sont PAS lisibles via
+// process.cwd() : ils sont servis par le CDN, pas présents sur le disque de la
+// fonction. Nodemailer échouait donc à joindre le logo → AUCUN email envoyé.
+// On lit le fichier une fois au démarrage ; s'il est introuvable, on envoie
+// l'email SANS logo plutôt que de tout faire échouer.
+function readLogo(): Buffer | null {
+  const candidats = [
+    path.join(process.cwd(), 'public', 'Logo PSI-new.jpeg'),
+    path.join(process.cwd(), '.next', 'server', 'public', 'Logo PSI-new.jpeg'),
+  ];
+  for (const c of candidats) {
+    try { return fs.readFileSync(c); } catch { /* essaie le suivant */ }
+  }
+  return null;
+}
+
+const logoBuffer = readLogo();
+
+/** Pièce jointe du logo — tableau vide si le fichier est introuvable (Vercel). */
+export const logoAttachments = logoBuffer
+  ? [{ filename: 'logo-psi.jpeg', content: logoBuffer, cid: LOGO_CID }]
+  : [];
+
+/** Compat : ancien export utilisé dans `attachments: [logoAttachment]`. */
+export const logoAttachment: { filename: string; content?: Buffer; path?: string; cid: string } =
+  logoAttachments[0] ?? { filename: 'logo-psi.jpeg', content: Buffer.alloc(0), cid: LOGO_CID };
 
 // Couleur par statut, réutilisée pour les pastilles de la répartition.
 export const STATUS_COLOR: Record<string, string> = {

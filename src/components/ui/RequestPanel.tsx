@@ -66,6 +66,12 @@ export interface RequestDetail {
   message?: string;
   assignedToId?: string | null;
   assignedToName?: string | null;
+  // Facturation / règlement
+  invoiceNumber?: string | null;
+  paymentMethod?: string | null;
+  paymentDate?: string | null;
+  vatEnabled?: boolean;
+  salesRepName?: string | null;   // commercial importé, avant rattachement à un compte
 }
 
 function getSourceLabel(src: string) { return src === 'SITE' ? 'Site web' : 'Manuel'; }
@@ -89,7 +95,7 @@ async function exportExcel(item: RequestDetail) {
         });
 
   const ht = lignesData.reduce((acc, l) => acc + l.quantite * l.pu, 0);
-  const hasTva = item.type === 'Commande' ? item.tva !== false : item.tva === true;
+  const hasTva = item.tva === true; // renseigné depuis vatEnabled (base) — plus de valeur implicite
   const ttc = hasTva ? Math.round(ht * 1.19) : ht;
 
   const rows: (string | number)[][] = [];
@@ -193,7 +199,7 @@ async function printDoc(item: RequestDetail) {
         });
 
   const ht = lignesData.reduce((acc, l) => acc + l.quantite * l.pu, 0);
-  const hasTva = item.type === 'Commande' ? item.tva !== false : item.tva === true;
+  const hasTva = item.tva === true; // renseigné depuis vatEnabled (base) — plus de valeur implicite
   const ttc = hasTva ? Math.round(ht * 1.19) : ht;
 
   const rows = lignesData.map(l => {
@@ -1041,6 +1047,48 @@ export function RequestPanel({ item, onClose, onStatusChange, onConfirmQuoteWith
                   })}
                 </div>
               </div>
+
+              {/* Facturation & règlement — affiché seulement si au moins une info existe */}
+              {(item.invoiceNumber || item.paymentMethod || item.paymentDate || item.vatEnabled || item.salesRepName) && (
+                <div>
+                  <p className="text-[11px] font-bold text-[#0F172A] uppercase tracking-wide mb-2">Facturation & règlement</p>
+                  <div className="rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] px-4 py-3 flex flex-col gap-2">
+                    {item.invoiceNumber && (
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-[12px] text-[#8A9BB5]">N° facture</span>
+                        <span className="text-[13px] font-bold text-[#0F172A]">{item.invoiceNumber}</span>
+                      </div>
+                    )}
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-[12px] text-[#8A9BB5]">TVA</span>
+                      <span className="text-[11px] font-bold px-2 py-0.5 rounded-full"
+                        style={item.vatEnabled
+                          ? { background: '#F0FDF4', color: '#166534', border: '1px solid #BBF7D0' }
+                          : { background: '#F9FAFB', color: '#6B7280', border: '1px solid #E5E7EB' }}>
+                        {item.vatEnabled ? 'Appliquée' : 'Non appliquée'}
+                      </span>
+                    </div>
+                    {item.paymentMethod && (
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-[12px] text-[#8A9BB5]">Mode de paiement</span>
+                        <span className="text-[13px] font-semibold text-[#374151]">{item.paymentMethod}</span>
+                      </div>
+                    )}
+                    {item.paymentDate && (
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-[12px] text-[#8A9BB5]">Date de règlement</span>
+                        <span className="text-[13px] font-semibold text-[#374151]">{item.paymentDate}</span>
+                      </div>
+                    )}
+                    {item.salesRepName && !item.assignedToName && (
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-[12px] text-[#8A9BB5]">Commercial (importé)</span>
+                        <span className="text-[13px] font-semibold text-[#374151]">{item.salesRepName}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
 
               {/* Pris en charge par */}
               <div>

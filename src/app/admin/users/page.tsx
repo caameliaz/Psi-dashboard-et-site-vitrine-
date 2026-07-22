@@ -16,6 +16,7 @@ const ALL_PERMISSIONS = [
   { key: 'voir_produits',      label: 'Voir les produits',              short: 'Voir produits'       },
   { key: 'modifier_produits',  label: 'Modifier les produits',          short: 'Modifier produits'  },
   { key: 'voir_historique',    label: "Voir l'historique",              short: 'Voir historique'     },
+  { key: 'recevoir_recaps',    label: 'Recevoir les récaps par email',  short: 'Récaps email'        },
   { key: 'modifier_contenu',   label: 'Modifier le contenu du site',   short: 'Modifier contenu'    },
   { key: 'gerer_utilisateurs', label: 'Gérer les utilisateurs',         short: 'Gérer utilisateurs' },
 ] as const;

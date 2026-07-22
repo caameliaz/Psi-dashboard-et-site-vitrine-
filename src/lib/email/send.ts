@@ -27,6 +27,13 @@ function getTransporter() {
     const user = process.env.SMTP_USER ?? process.env.GMAIL_USER;
     const pass = process.env.SMTP_PASS ?? process.env.GMAIL_APP_PASSWORD;
     const provider = (process.env.SMTP_PROVIDER ?? 'cpanel').toLowerCase();
+    // Log de diagnostic : montre la config RÉELLEMENT utilisée en production
+    // (sans jamais afficher le mot de passe).
+    console.log(
+      `[sendEmail] provider=${provider} host=${process.env.SMTP_HOST ?? '(defaut)'} ` +
+      `port=${process.env.SMTP_PORT ?? '(defaut)'} user=${process.env.SMTP_USER ?? '(absent)'} ` +
+      `from=${process.env.EMAIL_FROM ?? '(absent)'} pass=${process.env.SMTP_PASS ? process.env.SMTP_PASS.length + ' car.' : 'ABSENT'}`,
+    );
 
     if (provider === 'gmail') {
       transporter = nodemailer.createTransport({ service: 'gmail', auth: { user, pass } });
@@ -68,9 +75,13 @@ function smtpConfigured() {
   return Boolean((process.env.SMTP_USER ?? process.env.GMAIL_USER) && (process.env.SMTP_PASS ?? process.env.GMAIL_APP_PASSWORD));
 }
 
+// Une pièce jointe est fournie SOIT par chemin (`path`), SOIT par contenu
+// (`content`) — sur Vercel les fichiers de public/ ne sont pas lisibles sur
+// disque, on passe donc le contenu directement.
 export interface SendEmailAttachment {
   filename: string;
-  path: string;
+  path?: string;
+  content?: Buffer;
   cid?: string;
 }
 
@@ -100,7 +111,13 @@ export async function sendEmail({ to, subject, html, text, attachments }: SendEm
     // par défaut Contact@psi.dz. Le compte technique qui envoie réellement reste
     // GMAIL_USER. Idéalement GMAIL_USER = Contact@psi.dz (compte Workspace) pour
     // que l'envoi parte VRAIMENT de cette adresse sans mention "via".
-    const fromAddress = process.env.EMAIL_FROM ?? process.env.SMTP_USER ?? 'Contact@psi.dz';
+    // ⚠️ TOUJOURS en minuscules : Brevo compare l'expéditeur à sa liste validée
+    // de façon EXACTE. "Contact@psi.dz" (C majuscule) n'était pas reconnu comme
+    // "contact@psi.dz" → Brevo remplaçait l'adresse par la sienne
+    // (contact@…@brevosend.com) et Gmail rejetait le message (usurpation).
+    const fromAddress = (process.env.EMAIL_FROM ?? process.env.SMTP_USER ?? 'contact@psi.dz')
+      .trim()
+      .toLowerCase();
     await getTransporter().sendMail({
       from: `PSI Paper Solutions Industry <${fromAddress}>`, // sans caractère spécial (mieux accepté par les serveurs)
       to,

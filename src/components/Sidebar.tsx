@@ -114,7 +114,7 @@ export function Sidebar({ mobileOpen = false, onCloseMobile }: { mobileOpen?: bo
             <Image src="/Logo PSI-new.jpeg" alt="PSI Logo" width={36} height={36} className="w-9 h-9 object-contain rounded-full flex-shrink-0"/>
             <div className="leading-tight min-w-0">
               <p className="text-[13px] font-bold text-[#0F172A]">Paper Solutions</p>
-              <p className="text-[11px] font-medium text-[#8A9BB5]">Industrielles</p>
+              <p className="text-[13px] font-bold text-[#0F172A]">Industry</p>
             </div>
           </div>
         </div>

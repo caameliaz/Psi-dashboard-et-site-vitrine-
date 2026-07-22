@@ -1,6 +1,18 @@
 
 
+Sur Android (Chrome) :
 
+Ouvre ton site Vercel sur le téléphone
+Connecte-toi
+Profil → section Notifications système → Activer
+Accepte la demande d'autorisation
+Sur iPhone ⚠️ (Safari impose une étape en plus) :
+
+Ouvre le site dans Safari
+Bouton Partager → « Sur l'écran d'accueil »
+Ferme Safari et ouvre l'app depuis l'icône ajoutée
+Là seulement : Profil → Activer les notifications
+(Sans l'ajout à l'écran d'accueil, iOS refuse les notifications push — c'est une limitation d'Apple.)
 # 2️⃣ TUTO — Déployer sur Vercel (à faire UNE fois)
 
 
@@ -66,29 +78,9 @@ fonctionner les emails `@psi.dz` (hébergés chez Icosnet, voir annexe).
 4. Brancher le domaine psi.dz (§5)
 5. Remplir les vraies données (produits, clients) directement via l'app en ligne
 
----
----
 
 # 📎 ANNEXES (infos de référence)
 
-## 📧 EMAILS — ✅ RÉSOLU le 21/07/2026
-
-> ⚠️ **Fausse piste initiale** : on croyait la boîte chez Microsoft/Office 365
-> → erreur 535 en boucle, alors que le problème n'était pas là.
->
-> **RÉALITÉ** : la boîte `Contact@psi.dz` est hébergée chez **ICOSNET (cPanel)**.
-> *Preuves : MX de psi.dz → 197.140.11.7 (Icosnet) · le SPF n'autorise que cette IP · cPanel accessible.*
->
-> **Config qui marche** (dans `.env` ET sur Vercel) :
-> `SMTP_PROVIDER=cpanel` · `SMTP_HOST=mail.psi.dz` · `SMTP_PORT=465` · user `Contact@psi.dz`
->
-> Le mot de passe était **le bon depuis le début** — aucun « mot de passe d'application » nécessaire,
-> aucune action de l'entreprise requise.
->
-> 💡 Le mot de passe de la boîte est réinitialisable seule depuis **cPanel → Email Accounts → Manage**.
->
-> ⚠️ Depuis certaines connexions locales, le port 465 fait des timeouts (1 essai sur 2) —
-> c'est le réseau local, pas le code. Aucun souci depuis Vercel.
 
 ## 💰 HÉBERGEMENT & COÛTS (à savoir face à l'entreprise)
 
@@ -110,71 +102,22 @@ fonctionner les emails `@psi.dz` (hébergés chez Icosnet, voir annexe).
 - Démarrage / tests : **0$**
 - Production réelle : **~20$/mois** (Vercel Pro) + éventuellement ~19$ (Neon payant) = **20 à 40$/mois**
 - Le **nombre de clients n'est jamais un problème** (la limite c'est le trafic/stockage, pas le nb de fiches).
+1️⃣ Brancher psi.dz sur Vercel
+Étape A — Vercel
+Settings → Domains → Add → tape psi.dz → puis recommence avec www.psi.dz.
+Vercel affiche alors les enregistrements DNS à créer.
 
-**À CONSEILLER À L'ENTREPRISE**
-> « On démarre gratuit pour valider. En production quotidienne → Vercel Pro (~20$/mois),
-> sans maintenance de votre côté (HTTPS auto, redéploiement en 1 commande). La base reste
-> gratuite tant qu'on ne dépasse pas ~10 000 clients, donc pour longtemps. Un VPS coûterait
-> moins cher mais demande un admin serveur — pas rentable pour une PME. »
+Étape B — cPanel (Zone Editor, comme pour Brevo)
 
-## 👤 COMPTES DE TEST
+Généralement :
 
-| Email | Rôle |
-|---|---|
-| `admin1@psi.dz` | Admin (tout) — **utilise celui-là** |
-| `admin2@psi.dz` | Admin (2ᵉ, pour tester les notifs à 2) |
-| `employe1@psi.dz` | Employé complet |
-| `employe2@psi.dz` | Employé limité (lecture seule) |
+Type	Name	Valeur
+A	psi.dz	76.76.21.21 (Vercel te donnera l'IP exacte)
+CNAME	www.psi.dz	cname.vercel-dns.com
+⚠️ Deux points critiques :
 
-## ⚙️ CONFIG — déjà en place, rien à faire
+Ne touche AUCUN enregistrement MX → tes emails @psi.dz cesseraient de fonctionner
+Il existe déjà un enregistrement A sur psi.dz pointant vers 197.140.11.7 (le site actuel d'Icosnet). Il faut le modifier (Edit), pas en créer un second
+Étape C — Une fois propagé : Vercel → NEXTAUTH_URL = https://psi.dz → Redeploy
 
-- [x] Le build applique les migrations auto : `"build": "prisma migrate deploy && next build"`
-- [x] Cookies Secure AUTO en prod (`useSecureCookies = NODE_ENV==='production'`)
-- [x] En-têtes de sécurité (HSTS / X-Frame / nosniff) + rate limiting (login + routes publiques)
-- [x] Emails OK (Icosnet/cPanel) — testé en réel le 21/07/2026
-- [ ] ⚠️ Mettre un `NEXTAUTH_SECRET` **fort et unique** sur Vercel (pas celui de dev)
-
-## ✅ PRIORITÉ 9 — Retours entreprise (réunion) — TERMINÉE
-
-- 9.1 Emails : récap hebdo jeudi 23h59 + récap quotidien 20h, expéditeur Contact@psi.dz ✅
-- 9.2 Export fiche client PDF + Excel (infos + historique) ✅
-- 9.3 Secteur d'activité par client (dropdown + gestion + badge) ✅
-- 9.4 Champ métrage (m) facultatif partout (commande/devis/produit/site/Excel) ✅
-- 9.5 Référence libre dans les commandes ✅
-- 9.6 Bouton « + Nouveau » (ex « + Nouvelle commande ») ✅
-- 9.7 Réf auto par catégorie (préfixe → PTT-001, PTT-002…) ✅
-- 9.8 Nom de produit éditable ✅
-- 9.9 Excel 1 ligne/produit sans cases vides + colonnes wilaya/commune/cat/réf/métrage ✅
-
-> Migration `p9` : Product.name/metrage, Category.prefix/refCounter, OrderItem/QuoteItem.metrage,
-> Client.sectorId + table Sector, OrderItem.
-
-## ⚡ TEMPS RÉEL — ✅ VÉRIFIÉ
-
-Avec 2 fenêtres ouvertes (`admin1` sur une liste, `admin2` qui agit) :
-
-1. ✅ `admin2` crée/valide une demande → chez `admin1` la liste `/admin/requests` se met
-   à jour **sans F5** et **sans clignotement** (pas de « Chargement… »)
-2. ✅ Idem sur le **dashboard** : chiffres + camembert bougent en douceur
-3. ✅ **Fiche client** ouverte → l'historique se met à jour en direct
-4. ✅ La **cloche** s'incrémente en direct, le toast apparaît sans recharger
-5. ✅ Aucune vue ne « flashe » d'état de chargement pendant une mise à jour
-
-> **Comment ça marche** : SSE (instantané quand ça passe) + un rafraîchissement silencieux
-> toutes les 15s en filet de sécurité. En prod Vercel, c'est surtout le second qui joue
-> → mise à jour en **max 15s**, mais toujours **sans F5 ni clignotement**.
-
-## ✅ CHECK FINAL — avant de livrer
-
-1. Toutes les sections testées
-2. Aucune erreur rouge dans le terminal du serveur
-3. `npx next build` passe sans erreur
-4. Notifications OK entre 2 comptes (temps réel)
-5. Supprimer un client ne casse pas ses commandes
-6. Permissions employé fonctionnent (limité ≠ admin)
-7. Modifier une commande (quantités/produits) marche
-8. Conversion devis → commande marche
-9. Photos produits visibles sur le site public
-10. Page login sans sidebar + agrandie
-11. La base contient les 4 comptes (2 admins + 2 employés)
-12. Commande/devis depuis le site → apparaît côté admin + client créé
+⏱️ Propagation : 15 min à 24h. Vercel installe le HTTPS tout seul.
