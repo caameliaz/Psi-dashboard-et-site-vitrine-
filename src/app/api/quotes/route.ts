@@ -136,6 +136,10 @@ export async function POST(request: NextRequest) {
         createdById: session?.user?.id ?? null,
         // Assignation : valeur fournie, sinon le créateur (utilisateur connecté)
         assignedToId: body.assignedToId ?? session?.user?.id ?? null,
+        invoiceNumber: body.invoiceNumber ?? null,
+        paymentMethod: body.paymentMethod ?? null,
+        paymentDate: body.paymentDate ? new Date(body.paymentDate) : null,
+        vatEnabled: Boolean(body.vatEnabled),
         items: {
           create: items.map((item: {
             productId?: string;

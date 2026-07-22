@@ -164,6 +164,12 @@ model Order {
   source          OrderSource    @default(SITE)
   cancelReason    String?
   notes           String?
+  // ── Facturation / règlement (renseignés à l'import Excel ou à la validation) ──
+  invoiceNumber String?        // N° de facture (en plus de la référence auto)
+  paymentMethod String?        // Espèces, Chèque, Virement, Versement, À crédit, Dépensé, Offert
+  paymentDate   DateTime?      // date de règlement (facultative, modifiable après validation)
+  vatEnabled    Boolean        @default(false) // TVA appliquée (info seule — le montant saisi est final)
+  salesRepName  String?        // nom du commercial importé, avant rattachement à un compte
   createdBy     User?          @relation("OrderCreatedBy", fields: [createdById], references: [id])
   createdById   String?        // null si commande du site public
   assignedTo    User?          @relation("OrderAssignedTo", fields: [assignedToId], references: [id])
@@ -215,6 +221,12 @@ model Quote {
   paymentTerms     String?        // ex: "50% à la commande"
   adminRemarks     String?
   notes            String?        // notes internes
+  // ── Facturation / règlement (mêmes champs que Order) ──
+  invoiceNumber    String?
+  paymentMethod    String?
+  paymentDate      DateTime?
+  vatEnabled       Boolean        @default(false)
+  salesRepName     String?
   createdBy        User?          @relation("QuoteCreatedBy", fields: [createdById], references: [id])
   createdById      String?
   assignedTo       User?          @relation("QuoteAssignedTo", fields: [assignedToId], references: [id])

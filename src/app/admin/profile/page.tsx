@@ -246,6 +246,8 @@ export default function ProfilePage() {
         <PushSection />
 
         {/* Emails récapitulatifs — admins uniquement (eux seuls les reçoivent) */}
+        {/* Récaps : réglage réservé aux ADMINS. Pour un employé, c'est l'admin
+            qui décide via la permission « Recevoir les récaps par email ». */}
         {role === 'Admin' && (
           <Section title="Emails récapitulatifs">
             <div className="flex flex-col gap-3">

@@ -43,7 +43,13 @@ export async function sendWeeklyRecap(): Promise<SendWeeklyRecapResult> {
     }),
     // Étape 4 : seuls les admins ACTIFS avec une adresse email non vide reçoivent le récap.
     prisma.user.findMany({
-      where: { role: 'ADMIN', active: true, recapWeekly: true },
+      // Reçoivent le récap : les ADMINS + les employés ayant la permission
+      // 'recevoir_recaps'. Chacun peut se désabonner depuis son profil (recapWeekly).
+      where: {
+        active: true,
+        recapWeekly: true,
+        OR: [{ role: 'ADMIN' }, { permissions: { has: 'recevoir_recaps' } }],
+      },
       select: { id: true, name: true, email: true },
     }),
   ]);

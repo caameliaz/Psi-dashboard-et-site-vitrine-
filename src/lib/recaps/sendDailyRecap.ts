@@ -41,7 +41,13 @@ export async function sendDailyRecap(): Promise<SendDailyRecapResult> {
     // les chaînes vides par sécurité plutôt que de supposer que la contrainte tient.
     prisma.user.findMany({
       // recapDaily: true → l'admin peut se désabonner depuis son profil.
-      where: { role: 'ADMIN', active: true, recapDaily: true },
+      // Reçoivent le récap : les ADMINS + les employés ayant la permission
+      // 'recevoir_recaps'. Chacun peut se désabonner depuis son profil (recapDaily).
+      where: {
+        active: true,
+        recapDaily: true,
+        OR: [{ role: 'ADMIN' }, { permissions: { has: 'recevoir_recaps' } }],
+      },
       select: { id: true, name: true, email: true },
     }),
   ]);
