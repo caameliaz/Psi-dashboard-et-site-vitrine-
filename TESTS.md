@@ -1,42 +1,10 @@
 
-
-Sur Android (Chrome) :
-
-Ouvre ton site Vercel sur le téléphone
-Connecte-toi
-Profil → section Notifications système → Activer
-Accepte la demande d'autorisation
-Sur iPhone ⚠️ (Safari impose une étape en plus) :
-
-Ouvre le site dans Safari
-Bouton Partager → « Sur l'écran d'accueil »
-Ferme Safari et ouvre l'app depuis l'icône ajoutée
-Là seulement : Profil → Activer les notifications
-(Sans l'ajout à l'écran d'accueil, iOS refuse les notifications push — c'est une limitation d'Apple.)
-# 2️⃣ TUTO — Déployer sur Vercel (à faire UNE fois)
-
-
-**Étape 7** — Vérifie dans **Vercel → onglet "Cron Jobs"** que les **2 tâches** apparaissent.
-*(bouton « Run » pour tester un récap sans attendre 20h)*
-
-✅ **Site en ligne.**
-
----
-
-# 3️⃣ TESTS À FAIRE UNE FOIS EN LIGNE
-
-Sur l'URL `.vercel.app`, dans cet ordre :
-
-1. **Connexion** admin → le dashboard s'ouvre
-2. **Créer une commande + un devis** → la cloche sonne, notif reçue
-3. **Exports** Excel + PDF → se téléchargent
 4. **Notifs push** : autorise les notifications → ferme l'onglet → fais une action depuis
    un autre compte → tu dois recevoir la push
    *(PC et Android ; sur iPhone : ajoute d'abord le site à l'écran d'accueil)*
 5. **Email test** → doit arriver dans la boîte `Contact@psi.dz`
 6. **Récaps auto** : Vercel → Cron Jobs → « Run » → l'email arrive
 
----
 
 # 4️⃣ TUTO — Modifier le site après le déploiement
 

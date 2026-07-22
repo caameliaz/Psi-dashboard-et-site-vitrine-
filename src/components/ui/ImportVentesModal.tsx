@@ -47,8 +47,35 @@ export function ImportVentesModal({ onClose, onDone }: { onClose: () => void; on
       const buf = await file.arrayBuffer();
       const wb = XLSX.read(buf, { type: 'array', cellDates: false });
       const feuille = wb.Sheets[wb.SheetNames[0]];
-      const brut = XLSX.utils.sheet_to_json<Record<string, unknown>>(feuille, { defval: '' });
-      if (brut.length === 0) { setError('Le fichier ne contient aucune ligne.'); setRows([]); return; }
+      // ⚠️ Beaucoup d'exports Excel ont des lignes de titre AVANT les en-têtes
+      // (ex. "Détails pour Somme de Montant" en ligne 1, en-têtes en ligne 3).
+      // On lit donc la feuille en brut et on CHERCHE la ligne d'en-têtes.
+      const grille = XLSX.utils.sheet_to_json<unknown[]>(feuille, { header: 1, defval: '' });
+
+      const estEntete = (ligne: unknown[]) => {
+        const cells = ligne.map((c) => norm(String(c ?? '')));
+        // La ligne d'en-têtes contient forcément un "client" et une "date"
+        return cells.some((c) => c.includes('client')) && cells.some((c) => c.includes('date'));
+      };
+
+      const idxEntete = grille.findIndex(estEntete);
+      if (idxEntete === -1) {
+        setError("Colonnes introuvables. Le fichier doit contenir au moins « Date » et « Client ».");
+        setRows([]);
+        return;
+      }
+
+      const entetes = (grille[idxEntete] as unknown[]).map((c) => String(c ?? '').trim());
+      const brut = grille
+        .slice(idxEntete + 1)
+        .filter((l) => (l as unknown[]).some((c) => String(c ?? '').trim() !== '')) // ignore les lignes vides
+        .map((l) => {
+          const obj: Record<string, unknown> = {};
+          entetes.forEach((h, i) => { if (h) obj[h] = (l as unknown[])[i] ?? ''; });
+          return obj;
+        });
+
+      if (brut.length === 0) { setError('Aucune ligne de données trouvée sous les en-têtes.'); setRows([]); return; }
       setRows(brut);
     } catch {
       setError('Impossible de lire ce fichier. Format attendu : .xlsx ou .csv');
