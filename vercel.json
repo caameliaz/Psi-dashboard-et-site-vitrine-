@@ -1,11 +1,11 @@
 {
   "crons": [
     {
-      "path": "/api/cron/recap?type=daily",
+      "path": "/api/cron/recap/daily",
       "schedule": "0 19 * * *"
     },
     {
-      "path": "/api/cron/recap?type=weekly",
+      "path": "/api/cron/recap/weekly",
       "schedule": "59 22 * * 4"
     }
   ]

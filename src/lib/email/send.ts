@@ -15,8 +15,13 @@ let transporter: nodemailer.Transporter | null = null;
 //   SMTP_PASS = <mot de passe de la boîte (réinitialisable depuis cPanel)>
 //   SMTP_HOST = mail.psi.dz        (serveur sortant indiqué par cPanel)
 //   SMTP_PORT = 465                (465 = SSL direct · 587 = STARTTLS)
-//   SMTP_PROVIDER = cpanel (défaut) | outlook | gmail
+//   SMTP_PROVIDER = cpanel (défaut) | brevo | outlook | gmail
 // (les anciennes GMAIL_USER / GMAIL_APP_PASSWORD restent acceptées en repli)
+//
+// ⚠️ BREVO : Icosnet (mail.psi.dz) REFUSE le relais depuis les serveurs Vercel
+// (erreur 550 "authorization failed" sur MAIL FROM — l'IP n'est pas autorisée).
+// On passe donc par Brevo, qui accepte les envois depuis n'importe où.
+// L'expéditeur affiché reste Contact@psi.dz (à valider dans Brevo).
 function getTransporter() {
   if (!transporter) {
     const user = process.env.SMTP_USER ?? process.env.GMAIL_USER;
@@ -33,6 +38,15 @@ function getTransporter() {
         secure: false,
         auth: { user, pass },
         tls: { ciphers: 'TLSv1.2' },
+      });
+    } else if (provider === 'brevo') {
+      // Brevo (ex-Sendinblue) — service d'envoi, fonctionne depuis n'importe quelle IP.
+      // SMTP_USER = l'identifiant SMTP Brevo · SMTP_PASS = la clé SMTP Brevo
+      transporter = nodemailer.createTransport({
+        host: process.env.SMTP_HOST ?? 'smtp-relay.brevo.com',
+        port: Number(process.env.SMTP_PORT ?? 587),
+        secure: false, // Brevo utilise STARTTLS sur le port 587
+        auth: { user, pass },
       });
     } else {
       // cPanel / Icosnet — hôte et port pilotés par le .env pour pouvoir
@@ -88,7 +102,7 @@ export async function sendEmail({ to, subject, html, text, attachments }: SendEm
     // que l'envoi parte VRAIMENT de cette adresse sans mention "via".
     const fromAddress = process.env.EMAIL_FROM ?? process.env.SMTP_USER ?? 'Contact@psi.dz';
     await getTransporter().sendMail({
-      from: `PSI — Paper Solutions Industry <${fromAddress}>`,
+      from: `PSI Paper Solutions Industry <${fromAddress}>`, // sans caractère spécial (mieux accepté par les serveurs)
       to,
       subject,
       html,

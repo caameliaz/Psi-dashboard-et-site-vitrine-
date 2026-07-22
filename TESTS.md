@@ -3,50 +3,6 @@
 
 # 2️⃣ TUTO — Déployer sur Vercel (à faire UNE fois)
 
-> Prérequis : le code est sur GitHub ✅ · tu as une base Neon de prod.
-
-**Étape 1** — Va sur `vercel.com` → connecte-toi avec ton compte **GitHub**.
-
-**Étape 2** — **Add New → Project** → sélectionne le repo `psisite` → **Import**.
-
-**Étape 3** — ⚠️ **AVANT de cliquer Deploy**, ouvre **Environment Variables** et ajoute :
-
-| Variable | Valeur |
-|---|---|
-| `DATABASE_URL` | l'URL de ta base **Neon de prod** |
-| `NEXTAUTH_SECRET` | une chaîne aléatoire forte (voir encadré ci-dessous) |
-| `NEXTAUTH_URL` | ⏳ à remplir à l'**étape 6**, une fois l'URL connue |
-| `SMTP_PROVIDER` | `cpanel` |
-| `SMTP_HOST` | `mail.psi.dz` |
-| `SMTP_PORT` | `465` |
-| `SMTP_USER` | `Contact@psi.dz` |
-| `SMTP_PASS` | le mot de passe de la boîte (celui du `.env`) |
-| `EMAIL_FROM` | `Contact@psi.dz` |
-| `VAPID_PUBLIC` | même valeur que le `.env` local |
-| `VAPID_PRIVATE` | même valeur que le `.env` local |
-| `NEXT_PUBLIC_VAPID_PUBLIC` | même valeur que le `.env` local |
-| `CRON_SECRET` | ⚠️ **obligatoire** — voir encadré ci-dessous |
-
-> **Générer `NEXTAUTH_SECRET`** (dans ton terminal) :
-> ```
-> node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
-> ```
->
-> **Générer `CRON_SECRET`** :
-> ```
-> node -e "console.log(require('crypto').randomBytes(24).toString('hex'))"
-> ```
-> Sans lui, les **récaps automatiques** (quotidien 20h + hebdo jeudi 23h59) ne partiront
-> pas : la route les refuse (protection contre les envois massifs d'emails).
-
-**Étape 4** — Clique **Deploy**. Attends ~2-3 min.
-*(Le build applique tout seul les migrations de la base — rien à faire.)*
-
-**Étape 5** — Vercel te donne une URL type `https://psisite-xxxx.vercel.app`
-👉 **c'est ton lien de test.**
-
-**Étape 6** — Retourne dans **Settings → Environment Variables** → mets
-`NEXTAUTH_URL` = cette URL (avec `https://`) → onglet **Deployments** → bouton **Redeploy**.
 
 **Étape 7** — Vérifie dans **Vercel → onglet "Cron Jobs"** que les **2 tâches** apparaissent.
 *(bouton « Run » pour tester un récap sans attendre 20h)*
