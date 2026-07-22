@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requirePermission } from '@/lib/permissions';
+import { requirePermission, ALL_PERM_KEYS } from '@/lib/permissions';
 import { prisma } from '@/lib/prisma';
 import bcrypt from 'bcryptjs';
 import { createAudit } from '@/lib/audit';
@@ -7,6 +7,10 @@ import { sendEmail } from '@/lib/email/send';
 import { logoAttachment } from '@/emails/shared';
 import { renderWelcomeEmail, renderAccountCreatedAdminEmail } from '@/emails/accountCreatedTemplate';
 import { notifyUserCreated } from '@/lib/notify-activity';
+import { rateLimit } from '@/lib/rate-limit';
+import { validateEmail, validateText, firstError } from '@/lib/validation';
+
+const VALID_ROLES = ['ADMIN', 'EMPLOYEE'];
 
 // GET /api/users — liste tous les utilisateurs (permission gerer_utilisateurs)
 // GET /api/users?assignable=true — liste réduite (id + name) des users actifs,
@@ -51,6 +55,9 @@ export async function GET(request: NextRequest) {
 
 // POST /api/users — créer un utilisateur (permission gerer_utilisateurs)
 export async function POST(request: NextRequest) {
+  const limited = rateLimit(request, 'users-create', 10, 60_000); // 10 créations / min / IP
+  if (limited) return limited;
+
   const guard = await requirePermission('gerer_utilisateurs');
   if (guard.error) return guard.error;
   const session = guard.session;
@@ -58,11 +65,19 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
 
-    if (!body.name || !body.email || !body.password) {
-      return NextResponse.json({ error: 'name, email et password sont requis' }, { status: 400 });
-    }
+    const vErr = firstError([
+      validateText(body.name ?? '', 'Nom', 2, true, 200),
+      validateEmail(body.email ?? '', true),
+      validateText(String(body.password ?? ''), 'Mot de passe', 8, true, 200),
+      body.role != null && !VALID_ROLES.includes(body.role) ? 'Rôle invalide.' : null,
+      Array.isArray(body.permissions) && body.permissions.some((p: string) => !ALL_PERM_KEYS.includes(p as typeof ALL_PERM_KEYS[number]))
+        ? 'Permission invalide.'
+        : null,
+    ]);
+    if (vErr) return NextResponse.json({ error: vErr }, { status: 400 });
 
-    const existing = await prisma.user.findUnique({ where: { email: body.email } });
+    const cleanEmail = String(body.email).trim().toLowerCase();
+    const existing = await prisma.user.findUnique({ where: { email: cleanEmail } });
     if (existing) {
       return NextResponse.json({ error: 'Cet email est déjà utilisé' }, { status: 409 });
     }
@@ -72,11 +87,11 @@ export async function POST(request: NextRequest) {
     const user = await prisma.user.create({
       data: {
         name: body.name,
-        email: body.email,
+        email: cleanEmail,
         password: hashed,
         role: body.role ?? 'EMPLOYEE',
         phone: body.phone ?? null,
-        permissions: body.permissions ?? [],
+        permissions: Array.isArray(body.permissions) ? body.permissions : [],
       },
       select: {
         id: true, name: true, email: true, role: true,

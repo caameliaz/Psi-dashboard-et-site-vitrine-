@@ -87,7 +87,7 @@ export async function submitNewRequest(
   const lignesRemplies = lignes.filter((l: any) => l.ref);
   const vErr = firstError([
     validateEmail(item._email ?? ''),
-    validatePhone(item._telephone ?? ''),
+    validatePhone(item._telephone ?? '', true),
     ...lignesRemplies.map((l: any) => validateQuantity(l.qte)),
     ...lignesRemplies.map((l: any) => validatePositiveNumber(l.metrage ?? '', 'Métrage')),
   ]);

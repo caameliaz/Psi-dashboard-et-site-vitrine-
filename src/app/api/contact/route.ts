@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { auth } from '@/lib/auth';
 import { rateLimit } from '@/lib/rate-limit';
+import { validateEmail, validatePhone, validateText, firstError } from '@/lib/validation';
 
 // GET /api/contact — liste tous les messages de contact (admin + employé)
 export async function GET() {
@@ -28,6 +29,20 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
 
     const primaryPhone: string = body.phone ?? '';
+    const clientName: string = body.name ?? '';
+    const clientCompany: string = body.company ?? '';
+    const message: string = body.message ?? '';
+
+    // Validation serveur (le client peut contourner la validation du navigateur)
+    const vErr = firstError([
+      validateText(clientName, 'Nom', 2, true, 200),
+      validatePhone(primaryPhone, true),
+      validateEmail(body.email ?? ''),
+      validateText(clientCompany, 'Entreprise', 0, false, 200),
+      validateText(message, 'Message', 0, false, 3000),
+    ]);
+    if (vErr) return NextResponse.json({ error: vErr }, { status: 400 });
+
     let client = primaryPhone
       ? await prisma.client.findFirst({
           where: { phones: { some: { number: primaryPhone } } },
@@ -53,7 +68,7 @@ export async function POST(request: NextRequest) {
     const contactRequest = await prisma.contactRequest.create({
       data: {
         clientId: client.id,
-        message: body.message ?? '',
+        message,
       },
     });
 

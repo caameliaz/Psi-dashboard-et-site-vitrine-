@@ -556,7 +556,7 @@ function ProductsPageInner() {
                     onMouseLeave={(e) => { if (!isSelected) e.currentTarget.style.boxShadow = '0 2px 10px rgba(171,190,209,0.35)'; }}
                   >
                     {cat.photo ? (
-                      <img src={cat.photo} alt={cat.name} className="w-full h-full object-cover" />
+                      <img src={cat.photo} alt={cat.name} className="w-full h-full object-contain" />
                     ) : (
                       <div className="relative w-10 h-10">
                         <div className="absolute inset-0 rounded-full bg-[#E8F5E9] border-2 border-[#4CAF4F]" />

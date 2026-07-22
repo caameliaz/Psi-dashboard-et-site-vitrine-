@@ -313,6 +313,9 @@ model User {
   sessionVersion  Int                @default(0) // incrémenté pour invalider tous les cookies
   resetRequested  Boolean            @default(false) // l'utilisateur a demandé une réinit. de mot de passe
   resetRequestedAt DateTime?
+  twoFactorCode     String?          // code 2FA à 6 chiffres en attente de validation (usage unique)
+  twoFactorExpires  DateTime?        // expiration du code 2FA (5 min)
+  twoFactorAttempts Int      @default(0) // tentatives échouées sur le code courant (invalide après 5)
   recapDaily      Boolean            @default(true)  // reçoit le récap quotidien (20h) — désactivable dans le profil
   recapWeekly     Boolean            @default(true)  // reçoit le bilan hebdomadaire (jeudi 23h59)
   ordersCreated   Order[]            @relation("OrderCreatedBy")

@@ -8,6 +8,7 @@ import { renderPasswordResetRequestEmail } from '@/emails/passwordResetTemplate'
 import { renderPasswordResetSelfEmail } from '@/emails/passwordResetSelfTemplate';
 import { genPassword } from '@/lib/gen-password';
 import bcrypt from 'bcryptjs';
+import { validateEmail } from '@/lib/validation';
 
 // POST /api/password-reset — un utilisateur demande la réinitialisation de son mot de passe (PUBLIC).
 // Body : { email }.
@@ -21,7 +22,7 @@ export async function POST(request: NextRequest) {
   try {
     const { email } = await request.json();
     const clean = String(email ?? '').trim().toLowerCase();
-    if (!clean) return NextResponse.json({ error: 'Email requis' }, { status: 400 });
+    if (validateEmail(clean, true)) return NextResponse.json({ error: 'Email requis' }, { status: 400 });
 
     const user = await prisma.user.findFirst({ where: { email: { equals: clean, mode: 'insensitive' }, active: true } });
 

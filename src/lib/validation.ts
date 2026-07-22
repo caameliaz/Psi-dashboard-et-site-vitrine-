@@ -38,11 +38,12 @@ export function normalizeEmail(value: string): string {
   return value.trim().toLowerCase();
 }
 
-/** Texte obligatoire avec longueur minimale (nom, entreprise…). */
-export function validateText(value: string, label: string, min = 2, required = true): string | null {
+/** Texte obligatoire avec longueur min/max (nom, entreprise, message…). */
+export function validateText(value: string, label: string, min = 2, required = true, max = 500): string | null {
   const v = value.trim();
   if (!v) return required ? `${label} obligatoire.` : null;
   if (v.length < min) return `${label} : ${min} caractères minimum.`;
+  if (v.length > max) return `${label} : ${max} caractères maximum.`;
   return null;
 }
 
