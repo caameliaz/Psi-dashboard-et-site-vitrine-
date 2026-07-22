@@ -24,6 +24,7 @@ export function CommuneSelect({ wilaya, value, onChange, required, name }: Commu
   const menuRef = useRef<HTMLDivElement>(null);
   const [query, setQuery] = useState('');
   const ref = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const communes = communesForWilaya(wilaya);
@@ -56,7 +57,27 @@ export function CommuneSelect({ wilaya, value, onChange, required, name }: Commu
   }, []);
 
   useEffect(() => {
-    if (open && inputRef.current) inputRef.current.focus();
+    // Focus auto sur ORDINATEUR seulement : sur mobile ça ouvre le clavier,
+    // ce qui déclenche un scroll de la page (clavier virtuel) qui referme aussitôt le menu.
+    const estMobile = typeof window !== 'undefined' && window.matchMedia('(max-width: 767px)').matches;
+    if (open && !estMobile && inputRef.current) inputRef.current.focus();
+  }, [open]);
+
+  // Calcule la position du menu (fixed) par rapport au trigger, à chaque ouverture.
+  useEffect(() => {
+    if (!open) return;
+    const rect = triggerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const viewportH = window.innerHeight;
+    const spaceBelow = viewportH - rect.bottom;
+    const menuHeight = 280;
+    setDropUp(spaceBelow < menuHeight && rect.top > spaceBelow);
+    setCoords({
+      left: rect.left,
+      width: rect.width,
+      top: rect.bottom + 4,
+      bottom: viewportH - rect.top + 4,
+    });
   }, [open]);
 
   const pick = (c: string) => { onChange(c); setOpen(false); setQuery(''); };
@@ -67,6 +88,7 @@ export function CommuneSelect({ wilaya, value, onChange, required, name }: Commu
 
       {/* Dropdown : liste des communes de la wilaya */}
       <button
+        ref={triggerRef}
         type="button"
         onClick={() => { setOpen(!open); setQuery(''); }}
         className={`w-full flex items-center justify-between gap-2 px-4 py-2.5 rounded-xl border bg-white text-[14px] transition-all outline-none ${

@@ -35,6 +35,7 @@ export function WilayaSelect({ value, onChange, required, name }: WilayaSelectPr
   const menuRef = useRef<HTMLDivElement>(null);
   const [search, setSearch] = useState('');
   const ref = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
 
   const filtered = WILAYAS.filter((w) =>
@@ -75,6 +76,23 @@ export function WilayaSelect({ value, onChange, required, name }: WilayaSelectPr
     if (open && !estMobile && searchRef.current) searchRef.current.focus();
   }, [open]);
 
+  // Calcule la position du menu (fixed) par rapport au trigger, à chaque ouverture.
+  useEffect(() => {
+    if (!open) return;
+    const rect = triggerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const viewportH = window.innerHeight;
+    const spaceBelow = viewportH - rect.bottom;
+    const menuHeight = 280;
+    setDropUp(spaceBelow < menuHeight && rect.top > spaceBelow);
+    setCoords({
+      left: rect.left,
+      width: rect.width,
+      top: rect.bottom + 4,
+      bottom: viewportH - rect.top + 4,
+    });
+  }, [open]);
+
   return (
     <div ref={ref} className="relative">
       {/* Hidden input for form validation */}
@@ -87,6 +105,7 @@ export function WilayaSelect({ value, onChange, required, name }: WilayaSelectPr
 
       {/* Trigger */}
       <button
+        ref={triggerRef}
         type="button"
         onClick={() => { setOpen(!open); setSearch(''); }}
         className={`w-full flex items-center justify-between gap-2 px-4 py-2.5 rounded-xl border bg-white text-[14px] transition-all outline-none ${

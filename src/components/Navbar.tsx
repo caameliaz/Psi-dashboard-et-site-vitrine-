@@ -2,9 +2,9 @@
 
 import Link from 'next/link';
 import { useState, useEffect, useRef } from 'react';
-import { useCartStore } from '@/store/cartStore';
 import { usePathname, useRouter } from 'next/navigation';
 import { useTranslation } from '@/lib/i18n';
+import { CartDropdown } from './CartDropdown';
 
 const NAV_LINKS = [
   { key: 'nav.home',         href: '/',        sectionId: 'hero' },
@@ -16,7 +16,6 @@ const NAV_LINKS = [
 
 export function Navbar() {
   const { t, lang, setLang } = useTranslation();
-  const totalItems = useCartStore((state) => state.getTotalItems());
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
   const router = useRouter();
@@ -148,18 +147,7 @@ export function Navbar() {
           </div>
 
           {/* Panier */}
-          <Link href="/cart" className={`relative p-2 rounded-lg transition-colors ${pathname === '/cart' ? 'bg-[#F0FDF4]' : 'hover:bg-[#F5F7FA]'}`}>
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
-              <path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z" stroke={pathname === '/cart' ? '#4CAF4F' : '#4D4D4D'} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-              <line x1="3" y1="6" x2="21" y2="6" stroke={pathname === '/cart' ? '#4CAF4F' : '#4D4D4D'} strokeWidth="1.5" strokeLinecap="round"/>
-              <path d="M16 10a4 4 0 01-8 0" stroke={pathname === '/cart' ? '#4CAF4F' : '#4D4D4D'} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-            {totalItems > 0 && (
-              <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] bg-[#4CAF4F] rounded-full text-white text-[10px] font-bold flex items-center justify-center px-1 shadow-sm">
-                {totalItems}
-              </span>
-            )}
-          </Link>
+          <CartDropdown variant="desktop" />
 
           {/* CTA */}
           <Link href="/quote" className="bg-[#4CAF4F] text-white text-[15px] font-semibold px-7 py-2.5 rounded-lg flex items-center gap-2 hover:bg-[#43A047] shadow-[0_4px_14px_rgba(76,175,79,0.4)] hover:shadow-[0_6px_20px_rgba(76,175,79,0.5)] transition-all shrink-0">
@@ -172,18 +160,7 @@ export function Navbar() {
 
         {/* ── Mobile icons ── */}
         <div className="flex md:hidden items-center gap-2">
-          <Link href="/cart" className="relative p-2">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
-              <path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z" stroke="#4D4D4D" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-              <line x1="3" y1="6" x2="21" y2="6" stroke="#4D4D4D" strokeWidth="1.5" strokeLinecap="round"/>
-              <path d="M16 10a4 4 0 01-8 0" stroke="#4D4D4D" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-            {totalItems > 0 && (
-              <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] bg-[#4CAF4F] rounded-full text-white text-[10px] font-bold flex items-center justify-center px-1">
-                {totalItems}
-              </span>
-            )}
-          </Link>
+          <CartDropdown variant="mobile" />
           <button onClick={() => setOpen(!open)} className="p-3 hover:bg-[#F5F7FA] rounded-lg transition-colors">
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
               {open
