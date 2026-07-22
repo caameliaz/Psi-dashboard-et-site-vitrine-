@@ -1,14 +1,4 @@
-Ce qu'il faut retester (ce qu'on a modifié aujourd'hui)
--les photoooos
-#	Où	Quoi vérifier
-1	Commandes → + Nouveau	Catégorie seule sur sa ligne, puis Référence + Métrage, puis Qté + Prix à droite
-2	Wilaya / Commune	Le menu s'ouvre, reste ouvert, se laisse défiler
-3	Détail commande → Modifier	Catégorie présente, liste des réfs défilable jusqu'en bas
-4	Détail commande	Boutons Confirmer/Annuler à droite
-5	Clients	Boutons en haut, recherche, puis 3 filtres sur une ligne · pas d'« Importer Excel »
-6	Notification (fais une action depuis un autre compte)	Le toast n'est pas décalé
-7	Produits	Références qui ne débordent plus
-8	Dashboard	Cartes et graphiques lisibles
+
 
 
 # 2️⃣ TUTO — Déployer sur Vercel (à faire UNE fois)

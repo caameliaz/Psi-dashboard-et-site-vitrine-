@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { requirePermission, hasPermission } from '@/lib/permissions';
 import { createAudit, statusLabel } from '@/lib/audit';
+import { createNotif } from '@/lib/notifications';
 import { notifyStatusChange, notifyAssignment } from '@/lib/notify-activity';
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -54,6 +55,30 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
       return NextResponse.json({ error: "Vous n'avez pas la permission de ré-assigner le client" }, { status: 403 });
     }
 
+    // Modification des produits du devis (comme pour les commandes).
+    // ⚠️ QuoteItem n'a PAS de unitPrice : le prix d'un devis est global (proposedPrice).
+    if (body.items && Array.isArray(body.items)) {
+      const current = await prisma.quote.findUnique({ where: { id }, select: { status: true } });
+      if (current && (current.status === 'LIVRE' || current.status === 'ANNULE')) {
+        return NextResponse.json({ error: 'Impossible de modifier un devis livré ou annulé' }, { status: 409 });
+      }
+      // Une référence LIBRE n'a pas de productId : son libellé est dans `description`.
+      const validItems = (body.items as { productId?: string; description?: string; quantity?: number; metrage?: number }[])
+        .filter((it) => (it.productId || (it.description && it.description.trim() !== '')) && (it.quantity ?? 0) > 0);
+      await prisma.quoteItem.deleteMany({ where: { quoteId: id } });
+      if (validItems.length > 0) {
+        await prisma.quoteItem.createMany({
+          data: validItems.map((it) => ({
+            quoteId: id,
+            productId: it.productId || null,
+            description: it.productId ? null : (it.description ?? null),
+            quantity: it.quantity!,
+            metrage: it.metrage ?? null,
+          })),
+        });
+      }
+    }
+
     const quote = await prisma.quote.update({
       where: { id },
       data: {
@@ -77,6 +102,17 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
     const action = body.status !== undefined ? `Statut devis : ${statusLabel(body.status)}` : 'Devis modifié';
     const quoteLabel = quote.clientCompany || quote.clientName || quote.client?.name || '';
     createAudit({ userId: session.user.id, action, entity: 'DEVIS', entityId: id, detail: quoteLabel ? `${quote.ref} — ${quoteLabel}` : (quote.ref ?? id), quoteId: id });
+
+    // Modification des PRODUITS (sans changement de statut) → notification aussi.
+    if (body.items !== undefined && body.status === undefined) {
+      createNotif({
+        type: 'ACTION_AUTRE',
+        title: 'Devis modifié',
+        message: `${session.user.name ?? session.user.email ?? 'Un membre'} a modifié les produits du devis ${quote.ref ?? ''}${quoteLabel ? ` — ${quoteLabel}` : ''}`,
+        actorId: session.user.id,
+        quoteId: quote.id,
+      }).catch(() => {});
+    }
 
     if (body.status !== undefined) {
       notifyStatusChange({

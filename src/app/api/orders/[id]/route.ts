@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { requirePermission, hasPermission } from '@/lib/permissions';
 import { createAudit, statusLabel } from '@/lib/audit';
+import { createNotif } from '@/lib/notifications';
 import { notifyStatusChange, notifyAssignment } from '@/lib/notify-activity';
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -109,6 +110,18 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
     const action = body.status !== undefined ? `Statut commande : ${statusLabel(body.status)}` : 'Commande modifiée';
     const orderLabel = order.clientCompany || order.clientName || order.client?.name || '';
     createAudit({ userId: session.user.id, action, entity: 'COMMANDE', entityId: id, detail: orderLabel ? `${order.ref} — ${orderLabel}` : order.ref, orderId: id });
+
+    // Modification des PRODUITS (sans changement de statut) → on prévient quand même :
+    // admins + employé assigné, comme pour les autres actions sur la commande.
+    if (body.items !== undefined && body.status === undefined) {
+      createNotif({
+        type: 'ACTION_AUTRE',
+        title: 'Commande modifiée',
+        message: `${session.user.name ?? session.user.email ?? 'Un membre'} a modifié les produits de la commande ${order.ref}${orderLabel ? ` — ${orderLabel}` : ''}`,
+        actorId: session.user.id,
+        orderId: order.id,
+      }).catch(() => {});
+    }
 
     if (body.status !== undefined) {
       notifyStatusChange({

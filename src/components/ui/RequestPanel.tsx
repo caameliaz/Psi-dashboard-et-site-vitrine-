@@ -566,6 +566,8 @@ interface EditLine { categoryId: string; productId: string | null; designation: 
 function EditOrderModal({ item, onClose, onSaved }: {
   item: RequestDetail; onClose: () => void; onSaved: () => void;
 }) {
+  // Un DEVIS n'a pas de prix par ligne (son prix est global : proposedPrice)
+  const estDevis = item.type === 'Devis';
   const [products, setProducts] = useState<ProdOption[]>([]);
   const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
   const [lines, setLines] = useState<EditLine[]>([]);
@@ -595,7 +597,12 @@ function EditOrderModal({ item, onClose, onSaved }: {
       });
       setLines(init.length > 0 ? init : [{ categoryId: '', productId: null, designation: '', quantite: 1, prixUnitaire: 0, metrage: null }]);
     }).catch(() => {});
-  }, [item.items]);
+    // ⚠️ [] et NON [item.items] : `item.items` est un nouveau tableau à chaque
+    // rafraîchissement (toutes les 15s) → l'effet se relançait et `setLines`
+    // ÉCRASAIT la saisie en cours (une réf. libre ajoutée disparaissait).
+    // On initialise donc une seule fois, à l'ouverture de la fenêtre.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const setLine = (i: number, patch: Partial<EditLine>) =>
     setLines(prev => prev.map((l, idx) => idx === i ? { ...l, ...patch } : l));
@@ -618,10 +625,10 @@ function EditOrderModal({ item, onClose, onSaved }: {
         productId: l.productId ?? undefined,
         description: l.productId ? undefined : l.designation.trim(),
         quantity: l.quantite,
-        unitPrice: l.prixUnitaire,
+        ...(estDevis ? {} : { unitPrice: l.prixUnitaire }),
         metrage: l.metrage ?? undefined,
       }));
-    const res = await fetch(`/api/orders/${item.id}`, {
+    const res = await fetch(`/api/${estDevis ? 'quotes' : 'orders'}/${item.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ items }),
@@ -629,7 +636,7 @@ function EditOrderModal({ item, onClose, onSaved }: {
     setSaving(false);
     if (!res.ok) {
       const d = await res.json().catch(() => ({}));
-      alert(d.error ?? 'Impossible de modifier la commande.');
+      alert(d.error ?? `Impossible de modifier ${estDevis ? 'le devis' : 'la commande'}.`);
       return;
     }
     onSaved();
@@ -641,7 +648,7 @@ function EditOrderModal({ item, onClose, onSaved }: {
       {/* Marges réduites sur mobile → plus de hauteur utile pour la liste produits */}
       <div className="fixed inset-0 z-[160] flex items-center justify-center p-2 md:p-6 pointer-events-none">
         <div className="pointer-events-auto bg-white rounded-2xl shadow-2xl p-4 md:p-6 w-[560px] max-w-[96vw] max-h-[94vh] md:max-h-[88vh] flex flex-col">
-          <p className="text-[16px] font-bold text-[#0F172A] mb-1">Modifier la commande</p>
+          <p className="text-[16px] font-bold text-[#0F172A] mb-1">Modifier {estDevis ? 'le devis' : 'la commande'}</p>
           <p className="text-[12px] text-[#8A9BB5] mb-4">{item.ref} — {item.entreprise || item.client}</p>
 
           <div className="flex-1 overflow-y-auto -mx-1 px-1">
@@ -703,12 +710,14 @@ function EditOrderModal({ item, onClose, onSaved }: {
                         onChange={e => setLine(i, { quantite: Math.max(1, Number(e.target.value)) })}
                         className={inputCls + ' w-full text-center'} />
                     </div>
-                    <div className="w-[110px]">
-                      <span className="block text-[10px] font-bold text-[#ABBED1] uppercase tracking-wide mb-1">Prix unit. DA</span>
-                      <input type="number" min="0" value={l.prixUnitaire}
-                        onChange={e => setLine(i, { prixUnitaire: Number(e.target.value) })}
-                        className={inputCls + ' w-full text-right'} />
-                    </div>
+                    {!estDevis && (
+                      <div className="w-[110px]">
+                        <span className="block text-[10px] font-bold text-[#ABBED1] uppercase tracking-wide mb-1">Prix unit. DA</span>
+                        <input type="number" min="0" value={l.prixUnitaire}
+                          onChange={e => setLine(i, { prixUnitaire: Number(e.target.value) })}
+                          className={inputCls + ' w-full text-right'} />
+                      </div>
+                    )}
                     {lines.length > 1 ? (
                       <button onClick={() => setLines(prev => prev.filter((_, idx) => idx !== i))}
                         title="Retirer la ligne"
@@ -728,10 +737,16 @@ function EditOrderModal({ item, onClose, onSaved }: {
             </button>
           </div>
 
-          <div className="flex justify-between items-center py-3 mt-2 border-t border-[#F2F4F7]">
-            <span className="text-[13px] font-semibold text-[#374151]">Total</span>
-            <span className="text-[17px] font-extrabold text-[#4CAF4F]">{total.toLocaleString('fr-FR')} DA</span>
-          </div>
+          {estDevis ? (
+            <p className="text-[12px] text-[#8A9BB5] py-3 mt-2 border-t border-[#F2F4F7]">
+              Le prix d&apos;un devis se fixe globalement via « Modifier le prix ».
+            </p>
+          ) : (
+            <div className="flex justify-between items-center py-3 mt-2 border-t border-[#F2F4F7]">
+              <span className="text-[13px] font-semibold text-[#374151]">Total</span>
+              <span className="text-[17px] font-extrabold text-[#4CAF4F]">{total.toLocaleString('fr-FR')} DA</span>
+            </div>
+          )}
 
           <div className="flex gap-3">
             <button onClick={onClose} className="flex-1 px-4 py-2.5 rounded-xl border border-[#E2E8F0] text-[13px] font-semibold text-[#374151]">Annuler</button>
@@ -1136,7 +1151,7 @@ export function RequestPanel({ item, onClose, onStatusChange, onConfirmQuoteWith
                   <svg width={13} height={13} fill="none" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>
                   Notes{notes.length > 0 ? ` (${notes.length})` : ''}
                 </button>
-                {isCommande && !isArchived && canModifierStatuts && (
+                {!isArchived && canModifierStatuts && (
                   <button onClick={() => setShowEdit(true)}
                     className="flex items-center gap-1.5 px-3 h-9 rounded-full border text-[11px] font-bold transition-colors"
                     style={{ borderColor: '#4CAF4F40', color: '#4CAF4F' }}
@@ -1211,7 +1226,9 @@ export function RequestPanel({ item, onClose, onStatusChange, onConfirmQuoteWith
             // On ferme la modale de modification, PAS le détail : l'utilisateur
             // reste sur la commande qu'il vient d'éditer (le parent resynchronise).
             setShowEdit(false);
-            onStatusChange?.(item.ref, item.statut); // déclenche un refetch côté parent
+            // ⚠️ Rafraîchissement PUR : surtout pas onStatusChange, qui renvoie
+            // un PATCH de statut au serveur → fausse notif "statut modifié".
+            onReassigned?.();
           }}
         />
       )}
