@@ -102,3 +102,22 @@ fonctionner les emails `@psi.dz` (hébergés chez Icosnet, voir annexe).
 - Démarrage / tests : **0$**
 - Production réelle : **~20$/mois** (Vercel Pro) + éventuellement ~19$ (Neon payant) = **20 à 40$/mois**
 - Le **nombre de clients n'est jamais un problème** (la limite c'est le trafic/stockage, pas le nb de fiches).
+1️⃣ Brancher psi.dz sur Vercel
+Étape A — Vercel
+Settings → Domains → Add → tape psi.dz → puis recommence avec www.psi.dz.
+Vercel affiche alors les enregistrements DNS à créer.
+
+Étape B — cPanel (Zone Editor, comme pour Brevo)
+
+Généralement :
+
+Type	Name	Valeur
+A	psi.dz	76.76.21.21 (Vercel te donnera l'IP exacte)
+CNAME	www.psi.dz	cname.vercel-dns.com
+⚠️ Deux points critiques :
+
+Ne touche AUCUN enregistrement MX → tes emails @psi.dz cesseraient de fonctionner
+Il existe déjà un enregistrement A sur psi.dz pointant vers 197.140.11.7 (le site actuel d'Icosnet). Il faut le modifier (Edit), pas en créer un second
+Étape C — Une fois propagé : Vercel → NEXTAUTH_URL = https://psi.dz → Redeploy
+
+⏱️ Propagation : 15 min à 24h. Vercel installe le HTTPS tout seul.

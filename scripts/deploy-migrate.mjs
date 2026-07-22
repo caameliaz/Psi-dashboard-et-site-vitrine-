@@ -38,6 +38,11 @@ await reveillerBase();
 for (let essai = 1; essai <= 3; essai++) {
   try {
     execSync('npx prisma migrate deploy', { stdio: 'inherit' });
+    // ⚠️ Indispensable : Vercel réutilise un cache de build entre déploiements.
+    // Sans cette régénération, le client Prisma reste celui d'AVANT l'ajout de
+    // nouveaux champs → erreurs "does not exist in type ...CreateInput".
+    console.log('[migrate] régénération du client Prisma…');
+    execSync('npx prisma generate', { stdio: 'inherit' });
     process.exit(0);
   } catch {
     if (essai === 3) {
