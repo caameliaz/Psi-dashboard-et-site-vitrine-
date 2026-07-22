@@ -150,6 +150,7 @@ export async function POST(request: NextRequest) {
         clientName: clientName || client.name,
         clientCompany: clientCompany || client.company || null,
         clientWilaya: body.client?.wilaya || client.wilaya || null,
+        clientCommune: body.client?.commune || client.commune || null,
         source: source as any,
         createdById: session?.user?.id ?? null,
         // Assignation : valeur fournie, sinon le créateur (utilisateur connecté)

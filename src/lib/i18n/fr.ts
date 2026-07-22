@@ -200,7 +200,7 @@ export const fr = {
     decrease_qty_aria: 'Diminuer la quantité',
     increase_qty_aria: 'Augmenter la quantité',
     also_liked: 'Et ceux-ci, vous les avez vus ?',
-    discover: 'découvrez',
+    discover: 'Découvrez',
     prev_ref_aria: 'Référence précédente',
     next_ref_aria: 'Référence suivante',
     spec_width: 'Largeur',

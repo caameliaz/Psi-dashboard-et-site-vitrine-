@@ -43,12 +43,24 @@ function PushSection() {
             <p className="text-[13px] text-[#374151]">Recevez une notification sur cet appareil (même l&apos;app fermée) pour chaque nouvelle commande, devis ou assignation.</p>
             <p className="text-[11px] text-[#ABBED1] mt-1">Sur iPhone : ajoutez d&apos;abord le site à l&apos;écran d&apos;accueil. Ne marche qu&apos;en HTTPS (site en ligne).</p>
           </div>
-          <button
-            onClick={toggle}
-            disabled={busy || !supported}
-            className={`px-5 py-2.5 rounded-xl text-[13px] font-bold transition-colors flex-shrink-0 ${enabled ? 'border border-[#E2E8F0] text-[#EF4444] hover:bg-[#FEF2F2]' : 'text-white bg-[#4CAF4F] hover:bg-[#43A047]'} disabled:opacity-60`}>
-            {busy ? '…' : enabled ? 'Désactiver' : 'Activer les notifications'}
-          </button>
+          {enabled ? (
+            // Déjà activées : pastille "actives" + petit lien discret pour désactiver
+            // (plus de gros bouton rouge, qui alourdissait la page).
+            <div className="flex items-center gap-3 flex-shrink-0">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-bold bg-[#F0FDF4] text-[#166534] border border-[#BBF7D0]">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#4CAF4F]" /> Activées
+              </span>
+              <button onClick={toggle} disabled={busy}
+                className="text-[12px] font-semibold text-[#8A9BB5] hover:text-[#EF4444] transition-colors disabled:opacity-60">
+                {busy ? '…' : 'Désactiver'}
+              </button>
+            </div>
+          ) : (
+            <button onClick={toggle} disabled={busy || !supported}
+              className="px-5 py-2.5 rounded-xl text-[13px] font-bold text-white bg-[#4CAF4F] hover:bg-[#43A047] transition-colors flex-shrink-0 disabled:opacity-60">
+              {busy ? '…' : 'Activer les notifications'}
+            </button>
+          )}
         </div>
         {!supported && <p className="text-[12px] text-[#F59E0B] font-medium mt-3">Cet appareil/navigateur ne supporte pas les notifications push.</p>}
         {msg && <p className="text-[12px] text-[#374151] font-medium mt-3">{msg}</p>}

@@ -115,6 +115,10 @@ export async function submitNewRequest(
         name: item.client, company: item._entreprise || undefined, phone: item._telephone ? normalizePhone(item._telephone) : undefined,
         email: item._email ? normalizeEmail(item._email) : undefined, wilaya: item._wilaya || 'Non spécifié', commune: item._commune || undefined, message: '',
         items: lignes.filter((l: any) => l.ref).map((l: any) => ({ productId: l.productId ?? undefined, description: l.productId ? undefined : l.ref, quantity: l.qte, metrage: l.metrage ? Number(l.metrage) : undefined })),
+        // Prix déjà défini à la création (somme des lignes) → pas de re-saisie à la
+        // confirmation. Vaut 0 si aucun prix rempli (le prix sera demandé au moment
+        // de confirmer, comme avant).
+        proposedPrice: lignes.filter((l: any) => l.ref).reduce((acc: number, l: any) => acc + (Number(l.qte) || 0) * (Number(l.pu) || 0), 0) || undefined,
         assignedToId: item._assignedToId ?? undefined, source: 'AUTRE',
         invoiceNumber: item._invoiceNumber, paymentMethod: item._paymentMethod,
         paymentDate: item._paymentDate, vatEnabled: item._vatEnabled,
@@ -637,7 +641,7 @@ function RequestsPageInner() {
     await fetch(`/api/quotes/${item.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: 'VALIDE', proposedPrice }),
+      body: JSON.stringify({ status: 'VALIDE', proposedPrice, vatEnabled: item.vatEnabled }),
     });
     // On reste sur le détail : fetchAll resynchronise le panneau (montant + statut).
     await fetchAll(true);

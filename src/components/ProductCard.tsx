@@ -31,7 +31,7 @@ export function ProductCard({ product }: { product: Product }) {
             Réf. {product.reference}
           </h3>
           <p className="text-[11px] md:text-[14px] font-medium text-[#4D4D4D] leading-4 md:leading-5">
-            {product.width}mm × {product.length}m
+            {product.width}/{product.length} mm
           </p>
           <p className="text-[11px] md:text-[14px] text-[#717171] leading-4 md:leading-5">
             {product.usage}

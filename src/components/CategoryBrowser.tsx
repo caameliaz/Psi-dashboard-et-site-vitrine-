@@ -68,7 +68,9 @@ function CategoryCard({ category, products }: { category: Cat; products: Prod[] 
   };
 
   return (
-    <div className="flex flex-col gap-3">
+    // Carte délimitée : bordure grise + fond blanc, pour que chaque produit
+    // se distingue nettement du fond de page (surtout sur mobile).
+    <div className="flex flex-col gap-3 rounded-2xl border border-[#E4EBF5] bg-white p-3 pb-4 shadow-[0_2px_12px_rgba(171,190,209,0.18)] hover:shadow-[0_6px_24px_rgba(171,190,209,0.35)] transition-shadow">
       {/* Image catégorie — garde son propre container. Avec une vraie photo, elle se fond
           dans le fond de la page (pas de carte blanche/ombre) et reste entière (object-contain). */}
       <Link
@@ -132,8 +134,8 @@ function CategoryCard({ category, products }: { category: Cat; products: Prod[] 
                           : 'border-[#E0E0E0] bg-white text-[#374151] hover:border-[#4CAF4F]/60 hover:outline hover:outline-1 hover:outline-[#CBD5E1] hover:shadow-[0_4px_14px_rgba(171,190,209,0.5)]'
                       }`}
                     >
-                      {p.width}mm × {p.length}
-                      {p.metrage != null ? ` · ${p.metrage} m` : ''}
+                      {/* Format « 57/50 mm » — le métrage n'apparaît que dans la fiche détaillée */}
+                      {p.width}/{p.length} mm
                     </button>
                   );
                 })}

@@ -700,11 +700,11 @@ function ProductsPageInner() {
                         <div className="flex items-center gap-2 min-w-0">
                           {/* Code référence (auto PTT-001 si préfixe, sinon dimensions) */}
                           <span className="text-[11px] font-bold px-2 py-0.5 rounded-md bg-[#EEF2FF] text-[#4F46E5] tabular-nums flex-shrink-0">{r.reference}</span>
-                          <p className="text-[13px] font-bold text-[#0F172A] truncate">{r.name || `${r.width}mm × ${r.length}m`}</p>
+                          <p className="text-[13px] font-bold text-[#0F172A] truncate">{r.name || `${r.width}/${r.length} mm`}</p>
                         </div>
                         {/* Ligne 2 : dimensions + métrage, puis l'usage */}
                         <p className="text-[12px] text-[#8A9BB5] mt-0.5">
-                          {r.width}mm × {r.length}m{r.metrage != null ? ` · ${r.metrage} m` : ''}
+                          {r.width}/{r.length} mm{r.metrage != null ? ` · ${r.metrage} m` : ''}
                         </p>
                         {r.usage && (
                           <p className="text-[12px] text-[#ABBED1] truncate">{r.usage}</p>

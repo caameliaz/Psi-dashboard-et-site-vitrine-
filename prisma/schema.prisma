@@ -159,6 +159,7 @@ model Order {
   clientName      String?        // snapshot au moment de la création
   clientCompany   String?
   clientWilaya    String?
+  clientCommune   String?        // snapshot de la commune saisie POUR cette demande
   items           OrderItem[]
   status          RequestStatus  @default(EN_ATTENTE)
   source          OrderSource    @default(SITE)
@@ -210,6 +211,7 @@ model Quote {
   clientName       String?        // snapshot au moment de la création
   clientCompany    String?
   clientWilaya     String?
+  clientCommune    String?
   items            QuoteItem[]
   message          String         // description libre du client
   status           RequestStatus  @default(EN_ATTENTE)

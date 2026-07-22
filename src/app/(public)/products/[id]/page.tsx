@@ -119,8 +119,8 @@ export default function ProductDetailPage() {
                     : 'border-[#E0E0E0] bg-white text-[#374151] hover:border-[#4CAF4F]/60 hover:outline hover:outline-1 hover:outline-[#CBD5E1] hover:shadow-[0_4px_14px_rgba(171,190,209,0.5)]'
                 }`}
               >
-                {p.width}mm × {p.length}
-                {p.metrage != null ? ` · ${p.metrage} m` : ''}
+                {/* Format « 57/50 mm » — le métrage a sa propre ligne plus bas */}
+                {p.width}/{p.length} mm
               </button>
             );
           })}
@@ -182,7 +182,7 @@ export default function ProductDetailPage() {
     <div className="bg-white border border-[#E0E0E0] rounded-2xl shadow-[0_4px_24px_rgba(171,190,209,0.35)] p-6 flex flex-col gap-4">
       <div className="flex items-center justify-between text-[14px]">
         <span className="text-[#717171]">{t('product_detail.ref_label')}</span>
-        <span className="font-semibold text-[#263238]">{current.width}mm × {current.length}m</span>
+        <span className="font-semibold text-[#263238]">{current.width}/{current.length} mm</span>
       </div>
       {current.metrage != null && (
         <div className="flex items-center justify-between text-[14px]">

@@ -134,6 +134,7 @@ export async function POST(request: NextRequest) {
         clientName: clientName || client.name,
         clientCompany: clientCompany || client.company || null,
         clientWilaya: body.wilaya || client.wilaya || null,
+        clientCommune: body.commune || client.commune || null,
         message: body.message ?? '',
         source: source as any,
         createdById: session?.user?.id ?? null,
@@ -143,6 +144,8 @@ export async function POST(request: NextRequest) {
         paymentMethod: body.paymentMethod ?? null,
         paymentDate: body.paymentDate ? new Date(body.paymentDate) : null,
         vatEnabled: Boolean(body.vatEnabled),
+        // Prix déjà défini à la création (facultatif) → conservé, pas de re-saisie
+        proposedPrice: body.proposedPrice != null ? Number(body.proposedPrice) : null,
         items: {
           create: items.map((item: {
             productId?: string;

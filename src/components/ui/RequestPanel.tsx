@@ -481,10 +481,11 @@ export interface ConvertPrixData { totalOverride?: number; itemPrices?: { design
 
 function PriceModal({ item, onConfirm, onClose }: {
   item: RequestDetail;
-  onConfirm: (montant: string, prix: ConvertPrixData) => void;
+  onConfirm: (montant: string, prix: ConvertPrixData, tva: boolean) => void;
   onClose: () => void;
 }) {
   const [mode, setMode] = useState<'unitaire' | 'total'>('unitaire');
+  const [tva, setTva] = useState<boolean>(item.vatEnabled === true);
   const [totalGlobal, setTotalGlobal] = useState('');
   const [itemPrices, setItemPrices] = useState<{ designation: string; qty: number; pu: string }[]>(
     (item.items ?? []).map(i => ({ designation: i.designation, qty: i.quantite, pu: i.prixUnitaire > 0 ? String(i.prixUnitaire) : '' }))
@@ -497,10 +498,10 @@ function PriceModal({ item, onConfirm, onClose }: {
   const handleConfirm = () => {
     if (mode === 'total') {
       const t = parseFloat(totalGlobal) || 0;
-      onConfirm(t > 0 ? `${t.toLocaleString('fr-FR')} DA` : 'À définir', { totalOverride: t });
+      onConfirm(t > 0 ? `${t.toLocaleString('fr-FR')} DA` : 'À définir', { totalOverride: t }, tva);
     } else {
       onConfirm(totalCalc > 0 ? `${totalCalc.toLocaleString('fr-FR')} DA` : 'À définir',
-        { itemPrices: itemPrices.map(i => ({ designation: i.designation, unitPrice: parseFloat(i.pu) || 0 })) });
+        { itemPrices: itemPrices.map(i => ({ designation: i.designation, unitPrice: parseFloat(i.pu) || 0 })) }, tva);
     }
   };
 
@@ -552,6 +553,17 @@ function PriceModal({ item, onConfirm, onClose }: {
               </div>
             </div>
           )}
+
+          {/* TVA : avec ou sans taxes (comme dans les formulaires) */}
+          <button type="button" onClick={() => setTva(v => !v)}
+            className="flex items-center gap-2 w-full mb-4 px-3 py-2.5 rounded-xl border text-[13px] font-semibold transition-colors"
+            style={{ borderColor: tva ? '#4CAF4F' : '#E2E8F0', background: tva ? '#F0FDF4' : '#fff', color: tva ? '#166534' : '#8A9BB5' }}>
+            <span className="w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0"
+              style={{ borderColor: tva ? '#4CAF4F' : '#D1D5DB', background: tva ? '#4CAF4F' : '#fff' }}>
+              {tva && <svg width={9} height={9} viewBox="0 0 12 12" fill="none"><path d="M2 6L5 9L10 3" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+            </span>
+            TVA appliquée (19%)
+          </button>
 
           <div className="flex gap-3">
             <button onClick={onClose} className="flex-1 px-4 py-2.5 rounded-xl border border-[#E2E8F0] text-[13px] font-semibold text-[#374151]">Annuler</button>
@@ -1237,7 +1249,13 @@ export function RequestPanel({ item, onClose, onStatusChange, onConfirmQuoteWith
                     )}
                     {/* Devis en attente → Confirmer (fixe le prix via popup) */}
                     {!isCommande && item.statut === 'En attente' && onConfirmQuoteWithPrice && (
-                      <button onClick={() => setShowPriceModal(true)}
+                      <button onClick={() => {
+                        // Prix DÉJÀ défini à la création (montant ≠ "Sur devis") → on confirme
+                        // directement, sans redemander. Sinon on ouvre la saisie du prix.
+                        const aDejaUnPrix = item.montant && item.montant !== 'Sur devis' && item.montant !== '—';
+                        if (aDejaUnPrix) onStatusChange(item.ref, 'Confirmé');
+                        else setShowPriceModal(true);
+                      }}
                         className="px-4 py-2 rounded-lg text-[13px] font-bold border border-[#4CAF4F] text-[#4CAF4F] hover:bg-[#F0FDF4] transition-colors">
                         Confirmer
                       </button>
@@ -1337,8 +1355,8 @@ export function RequestPanel({ item, onClose, onStatusChange, onConfirmQuoteWith
         <PriceModal
           item={item}
           onClose={() => setShowPriceModal(false)}
-          onConfirm={(montant, prix) => {
-            onConfirmQuoteWithPrice({ ...item, montant, _prix: prix });
+          onConfirm={(montant, prix, tva) => {
+            onConfirmQuoteWithPrice({ ...item, montant, vatEnabled: tva, _prix: prix });
             setShowPriceModal(false);
             onClose();
           }}

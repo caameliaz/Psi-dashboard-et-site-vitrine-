@@ -30,6 +30,7 @@ import { initials } from '@/lib/utils';
 import { RequestPanel, TemplatePopover, type RequestDetail } from '@/components/ui/RequestPanel';
 import { Modal } from '@/components/ui/Modal';
 import { WilayaSelect } from '@/components/ui/WilayaSelect';
+import { CommuneSelect } from '@/components/ui/CommuneSelect';
 import { exportClientExcel, printClientDoc, type ClientExportData } from '@/lib/export-client';
 import { useSSE } from '@/lib/use-sse';
 import { RequirePerm } from '@/components/RequirePerm';
@@ -92,7 +93,11 @@ function ClientForm({ form, setForm, onSubmit, onClose, submitLabel, sectors }: 
       <div className="grid grid-cols-2 gap-3">
         <div>
           <label className={labelClass}>Wilaya</label>
-          <WilayaSelect value={form.wilaya} onChange={(v) => setForm({ ...form, wilaya: v })} />
+          <WilayaSelect value={form.wilaya} onChange={(v) => setForm({ ...form, wilaya: v, commune: '' })} />
+        </div>
+        <div>
+          <label className={labelClass}>Commune</label>
+          <CommuneSelect wilaya={form.wilaya} value={form.commune ?? ''} onChange={(v) => setForm({ ...form, commune: v })} />
         </div>
         <div>
           <label className={labelClass}>Secteur d'activité</label>
@@ -739,6 +744,7 @@ function ClientsPageInner() {
         email: addForm.email.trim() ? normalizeEmail(addForm.email) : null,
         wilaya: addForm.wilaya.trim(),
         sectorId: addForm.sectorId || null,
+        commune: addForm.commune?.trim() || null,
         address: addForm.adresse.trim() || null,
         phone: tel || null,
       }),
@@ -774,6 +780,7 @@ function ClientsPageInner() {
         email: editForm.email.trim() ? normalizeEmail(editForm.email) : null,
         wilaya: editForm.wilaya.trim(),
         sectorId: editForm.sectorId || null,
+        commune: editForm.commune?.trim() || null,
         address: editForm.adresse.trim() || null,
         phone: normalizePhone(editForm.telephone) || null,
       }),
