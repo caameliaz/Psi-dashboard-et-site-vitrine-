@@ -15,10 +15,10 @@ export default function ProductsPage() {
           <span className="text-[13px] font-semibold text-[#4CAF4F] uppercase tracking-widest">
             {t('products_page.badge')}
           </span>
-          <h1 className="text-[36px] md:text-[48px] font-bold text-[#263238] leading-tight">
+          <h1 className="text-[40px] md:text-[54px] font-bold text-[#263238] leading-tight">
             {t('products_page.title')}
           </h1>
-          <p className="text-[16px] md:text-[18px] text-[#717171] max-w-[520px] leading-relaxed">
+          <p className="text-[18px] md:text-[20px] text-[#717171] max-w-[560px] leading-relaxed">
             {t('products_page.subtitle')}
           </p>
           <div className="flex gap-3 mt-4">

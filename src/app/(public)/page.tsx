@@ -43,7 +43,7 @@ export default function Home() {
       <section
         id="hero"
         className="relative min-h-[70vh] bg-cover bg-center flex items-center"
-        style={{ backgroundImage: 'url(/photo%202.avif)' }}
+        style={{ backgroundImage: 'url(/imprimerie-chirat-production-30.webp)' }}
       >
         <div className="absolute inset-0 bg-gradient-to-r from-[rgba(38,50,56,0.90)] via-[rgba(38,50,56,0.75)] to-[rgba(38,50,56,0.45)]" />
 
@@ -77,10 +77,10 @@ export default function Home() {
         <div className="max-w-[1280px] mx-auto flex flex-col gap-10">
 
           <div className="flex flex-col items-center gap-3 text-center">
-            <h2 className="text-[24px] md:text-[30px] font-bold text-[#263238] leading-tight">
+            <h2 className="text-[28px] md:text-[36px] font-bold text-[#263238] leading-tight">
               {t('products_section.title')}
             </h2>
-            <p className="text-[16px] md:text-[18px] text-[#717171] max-w-[480px] leading-relaxed">
+            <p className="text-[18px] md:text-[20px] text-[#4CAF4F] max-w-[520px] leading-relaxed [font-family:var(--font-noto-serif)]">
               {t('products_section.subtitle')}
             </p>
           </div>
@@ -95,7 +95,7 @@ export default function Home() {
       <section id="contact" className="bg-[#F5F7FA] pt-16 px-6 md:px-12 mt-14 md:mt-20 mb-14 md:mb-20">
         <div className="max-w-[1280px] mx-auto flex flex-col gap-10">
           <div className="flex flex-col gap-3">
-            <h2 className="text-[22px] md:text-[28px] font-bold text-[#263238] italic leading-snug">
+            <h2 className="text-[26px] md:text-[34px] font-bold text-[#263238] italic leading-snug">
               <span className="text-[#4CAF4F] mr-2">»</span>
               {t('quality.title2')}
             </h2>
@@ -153,7 +153,7 @@ export default function Home() {
       ════════════════════════════════════════════════════════════ */}
       <section id="about" className="bg-white pt-8 pb-20 px-6 md:px-12">
         <div className="max-w-[1280px] mx-auto flex flex-col gap-8">
-          <h2 className="text-[24px] md:text-[30px] font-bold text-[#4D4D4D] leading-tight">
+          <h2 className="text-[28px] md:text-[36px] font-bold text-[#263238] leading-tight">
             {t('about.title')}
           </h2>
           <div className="flex flex-col lg:flex-row gap-10 lg:gap-16 items-start">
