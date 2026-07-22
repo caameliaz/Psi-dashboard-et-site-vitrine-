@@ -24,6 +24,12 @@ export async function runRecapCron(request: NextRequest, type: 'daily' | 'weekly
 
   try {
     const result = type === 'weekly' ? await sendWeeklyRecap() : await sendDailyRecap();
+    // Log explicite dans Vercel : on voit d'un coup d'œil si l'email est parti
+    // et, sinon, l'erreur exacte renvoyée par le serveur SMTP.
+    console.log(
+      `[CRON ${type}] envoyés=${result.sent} échecs=${result.failed.length}` +
+      (result.failed.length ? ` → ${result.failed.map((f) => `${f.email}: ${f.error}`).join(' | ')}` : ''),
+    );
     return NextResponse.json({ type, ...result });
   } catch (e) {
     console.error(`[CRON ${type}]`, e);
