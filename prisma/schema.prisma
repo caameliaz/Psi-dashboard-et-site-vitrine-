@@ -82,6 +82,7 @@ enum FieldType {
 // ─── CLIENT ──────────────────────────────────────────────────────────────────
 model Client {
   id        String           @id @default(cuid())
+  ref       String?          @unique // référence auto : CL0001, CL0002…
   name      String
   company   String?
   email     String?

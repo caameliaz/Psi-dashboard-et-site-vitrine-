@@ -1,0 +1,3 @@
+-- Référence client auto : CL0001, CL0002…
+ALTER TABLE "Client" ADD COLUMN "ref" TEXT;
+CREATE UNIQUE INDEX "Client_ref_key" ON "Client"("ref");

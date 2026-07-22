@@ -1043,8 +1043,15 @@ function ImportClientsModal({ onClose, onDone }: { onClose: () => void; onDone: 
   const norm = (s: string) => String(s ?? '').trim().toLowerCase();
 
   const pick = (obj: any, keys: string[]) => {
+    // 1) correspondance EXACTE de l'en-tête
     for (const k of Object.keys(obj)) {
       if (keys.includes(norm(k))) { const v = obj[k]; return v == null ? '' : String(v).trim(); }
+    }
+    // 2) sinon correspondance PARTIELLE : "N° téléphone", "Tel portable"… sont
+    //    reconnus tant que l'en-tête contient un des mots-clés attendus.
+    for (const k of Object.keys(obj)) {
+      const h = norm(k);
+      if (keys.some((key) => h.includes(key))) { const v = obj[k]; return v == null ? '' : String(v).trim(); }
     }
     return '';
   };
@@ -1063,7 +1070,7 @@ function ImportClientsModal({ onClose, onDone }: { onClose: () => void; onDone: 
         entreprise: pick(r, ['entreprise', 'société', 'societe', 'company']),
         categorie:  pick(r, ['catégorie', 'categorie', 'secteur', 'category']),
         commune:    pick(r, ['commune', 'ville']),
-        telephone:  pick(r, ['téléphone', 'telephone', 'tel', 'phone', 'tél']),
+        telephone:  pick(r, ['téléphone', 'telephone', 'tél', 'tel', 'phone', 'mobile', 'portable', 'numéro', 'numero', 'gsm']),
         commercial: pick(r, ['commercial', 'agent', 'responsable']),
         wilaya:     pick(r, ['wilaya']),
         email:      pick(r, ['email', 'mail', 'e-mail']),
