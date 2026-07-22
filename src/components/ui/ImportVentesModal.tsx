@@ -46,29 +46,42 @@ export function ImportVentesModal({ onClose, onDone }: { onClose: () => void; on
       const XLSX = await import('xlsx');
       const buf = await file.arrayBuffer();
       const wb = XLSX.read(buf, { type: 'array', cellDates: false });
-      const feuille = wb.Sheets[wb.SheetNames[0]];
+      // ⚠️ Le classeur peut contenir plusieurs feuilles (ex. "Détails1" + "RECAP").
+      // On cherche CELLE qui contient un vrai tableau de ventes, au lieu de
+      // prendre systématiquement la première.
+      const estEnteteLigne = (ligne: unknown[]) => {
+        const cells = (ligne ?? []).map((c) => norm(String(c ?? '')));
+        return cells.some((c) => c.includes('client')) && cells.some((c) => c.includes('date'));
+      };
+
+      let feuille = wb.Sheets[wb.SheetNames[0]];
+      for (const nom of wb.SheetNames) {
+        const test = XLSX.utils.sheet_to_json<unknown[]>(wb.Sheets[nom], { header: 1, defval: '' });
+        if (test.some(estEnteteLigne)) { feuille = wb.Sheets[nom]; break; }
+      }
       // ⚠️ Beaucoup d'exports Excel ont des lignes de titre AVANT les en-têtes
       // (ex. "Détails pour Somme de Montant" en ligne 1, en-têtes en ligne 3).
       // On lit donc la feuille en brut et on CHERCHE la ligne d'en-têtes.
       const grille = XLSX.utils.sheet_to_json<unknown[]>(feuille, { header: 1, defval: '' });
 
-      const estEntete = (ligne: unknown[]) => {
-        const cells = ligne.map((c) => norm(String(c ?? '')));
-        // La ligne d'en-têtes contient forcément un "client" et une "date"
-        return cells.some((c) => c.includes('client')) && cells.some((c) => c.includes('date'));
-      };
-
-      const idxEntete = grille.findIndex(estEntete);
+      const idxEntete = grille.findIndex(estEnteteLigne);
       if (idxEntete === -1) {
         setError("Colonnes introuvables. Le fichier doit contenir au moins « Date » et « Client ».");
         setRows([]);
         return;
       }
 
-      const entetes = (grille[idxEntete] as unknown[]).map((c) => String(c ?? '').trim());
+      const entetesTmp = (grille[idxEntete] as unknown[]).map((c) => String(c ?? '').trim());
+      const entetes = entetesTmp;
       const brut = grille
         .slice(idxEntete + 1)
-        .filter((l) => (l as unknown[]).some((c) => String(c ?? '').trim() !== '')) // ignore les lignes vides
+        // ⚠️ Un tableau Excel s'étend souvent sur des milliers de lignes vides
+        // (avec un simple 0 calculé). On ne garde que celles ayant un CLIENT.
+        .filter((l) => {
+          const cells = l as unknown[];
+          const iClient = entetesTmp.findIndex((h) => norm(h).includes('client'));
+          return iClient >= 0 && String(cells[iClient] ?? '').trim() !== '';
+        })
         .map((l) => {
           const obj: Record<string, unknown> = {};
           entetes.forEach((h, i) => { if (h) obj[h] = (l as unknown[])[i] ?? ''; });
