@@ -111,7 +111,13 @@ export async function sendEmail({ to, subject, html, text, attachments }: SendEm
     // par défaut Contact@psi.dz. Le compte technique qui envoie réellement reste
     // GMAIL_USER. Idéalement GMAIL_USER = Contact@psi.dz (compte Workspace) pour
     // que l'envoi parte VRAIMENT de cette adresse sans mention "via".
-    const fromAddress = process.env.EMAIL_FROM ?? process.env.SMTP_USER ?? 'Contact@psi.dz';
+    // ⚠️ TOUJOURS en minuscules : Brevo compare l'expéditeur à sa liste validée
+    // de façon EXACTE. "Contact@psi.dz" (C majuscule) n'était pas reconnu comme
+    // "contact@psi.dz" → Brevo remplaçait l'adresse par la sienne
+    // (contact@…@brevosend.com) et Gmail rejetait le message (usurpation).
+    const fromAddress = (process.env.EMAIL_FROM ?? process.env.SMTP_USER ?? 'contact@psi.dz')
+      .trim()
+      .toLowerCase();
     await getTransporter().sendMail({
       from: `PSI Paper Solutions Industry <${fromAddress}>`, // sans caractère spécial (mieux accepté par les serveurs)
       to,
