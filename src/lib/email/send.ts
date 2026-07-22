@@ -68,9 +68,13 @@ function smtpConfigured() {
   return Boolean((process.env.SMTP_USER ?? process.env.GMAIL_USER) && (process.env.SMTP_PASS ?? process.env.GMAIL_APP_PASSWORD));
 }
 
+// Une pièce jointe est fournie SOIT par chemin (`path`), SOIT par contenu
+// (`content`) — sur Vercel les fichiers de public/ ne sont pas lisibles sur
+// disque, on passe donc le contenu directement.
 export interface SendEmailAttachment {
   filename: string;
-  path: string;
+  path?: string;
+  content?: Buffer;
   cid?: string;
 }
 

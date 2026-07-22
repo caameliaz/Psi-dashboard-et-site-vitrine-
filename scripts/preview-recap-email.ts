@@ -17,7 +17,9 @@ import { LOGO_CID, logoAttachment } from '../src/emails/shared';
 const outDir = process.argv[2] ?? '.';
 fs.mkdirSync(outDir, { recursive: true });
 
-const logoDataUri = `data:image/jpeg;base64,${fs.readFileSync(logoAttachment.path).toString('base64')}`;
+// La pièce jointe expose `content` (Buffer) ou `path` selon l'environnement.
+const logoBytes = logoAttachment.content ?? fs.readFileSync(logoAttachment.path!);
+const logoDataUri = `data:image/jpeg;base64,${logoBytes.toString('base64')}`;
 const forBrowser = (html: string) => html.replaceAll(`cid:${LOGO_CID}`, logoDataUri);
 
 const adminUrl = 'http://localhost:3000/admin/requests';
