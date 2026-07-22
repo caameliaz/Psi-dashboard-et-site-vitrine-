@@ -90,6 +90,12 @@ export default function QuotePage() {
         return null;
       }).filter((x): x is NonNullable<typeof x> => x !== null);
 
+      if (items.length === 0 && !formData.message.trim()) {
+        setSubmitError(t('quote.error_empty'));
+        setLoading(false);
+        return;
+      }
+
       const res = await fetch('/api/quotes', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

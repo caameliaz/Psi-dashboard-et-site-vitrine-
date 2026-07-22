@@ -18,10 +18,6 @@ export default function CheckoutPage() {
   const getTotalPrice = useCartStore((state) => state.getTotalPrice);
   const totalPrice = getTotalPrice();
 
-  useEffect(() => {
-    if (items.length === 0) router.replace('/cart');
-  }, [items, router]);
-
   const [formData, setFormData] = useState({
     name: '',
     company: '',
@@ -34,6 +30,13 @@ export default function CheckoutPage() {
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [submitError, setSubmitError] = useState('');
+
+  useEffect(() => {
+    // Ne pas rediriger si le panier est vide PARCE QU'ON VIENT DE VALIDER la commande
+    // (clearCart() vide le panier juste avant d'afficher l'écran de confirmation) —
+    // sinon ça renvoie aussitôt vers /cart et l'écran "commande envoyée" ne s'affiche jamais.
+    if (items.length === 0 && !submitted) router.replace('/cart');
+  }, [items, submitted, router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

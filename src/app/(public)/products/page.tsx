@@ -21,11 +21,6 @@ export default function ProductsPage() {
           <p className="text-[18px] md:text-[20px] text-[#717171] max-w-[560px] leading-relaxed">
             {t('products_page.subtitle')}
           </p>
-          <div className="flex gap-3 mt-4">
-            <span className="bg-[#4CAF4F] text-white text-[13px] font-semibold px-5 py-2 rounded-full shadow-[0_4px_12px_rgba(76,175,79,0.3)]">
-              {t('products_page.tag')}
-            </span>
-          </div>
         </div>
       </div>
 

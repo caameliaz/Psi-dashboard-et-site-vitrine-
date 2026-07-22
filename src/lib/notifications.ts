@@ -57,11 +57,14 @@ export async function createNotif({
       resolvedAssignedTo = quote?.assignedToId ?? null;
     }
 
-    // Employés concernés : acteur + assigné (les autres ne reçoivent pas)
+    // Employés concernés : acteur + assigné (les autres ne reçoivent pas)…
+    // SAUF si la commande/le devis n'est assigné à PERSONNE : dans ce cas TOUS les
+    // employés actifs sont notifiés, pour que n'importe qui puisse la prendre en charge.
     const relevantEmployeeIds = [
       ...(actorId ? [actorId] : []),
       ...(resolvedAssignedTo ? [resolvedAssignedTo] : []),
     ];
+    const broadcastToAllEmployees = !adminOnly && !resolvedAssignedTo;
 
     users = await prisma.user.findMany({
       where: {
@@ -69,10 +72,15 @@ export async function createNotif({
         OR: [
           // Tous les admins reçoivent toutes les notifs
           { role: 'ADMIN' },
-          // Les employés : seulement s'ils sont l'acteur ou l'assigné
-          ...(relevantEmployeeIds.length > 0 && !adminOnly
-            ? [{ role: { not: 'ADMIN' as const }, id: { in: relevantEmployeeIds } }]
-            : []),
+          ...(adminOnly
+            ? []
+            : broadcastToAllEmployees
+              // Non assignée → tous les employés actifs
+              ? [{ role: { not: 'ADMIN' as const } }]
+              // Assignée → seulement l'acteur et/ou l'assigné
+              : relevantEmployeeIds.length > 0
+                ? [{ role: { not: 'ADMIN' as const }, id: { in: relevantEmployeeIds } }]
+                : []),
         ],
       },
       select: { id: true },

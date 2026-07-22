@@ -145,6 +145,7 @@ export const fr = {
     success_body: 'Merci pour votre demande de devis. Notre équipe vous contactera dans les plus brefs délais.',
     success_btn: "Retour à l'accueil",
     error: "Erreur lors de l'envoi. Veuillez réessayer.",
+    error_empty: 'Sélectionnez au moins une référence ou laissez un message.',
   },
   contact: {
     back: 'Retour',
