@@ -42,7 +42,10 @@ export async function POST(request: NextRequest) {
 
       const categorie = String(r.categorie ?? '').trim();
       const sectorId = categorie ? sectorMap.get(categorie.toLowerCase()) ?? null : null;
-      const phone = String(r.telephone ?? '').trim();
+      // ⚠️ Excel traite "0552023318" comme un NOMBRE et supprime le zéro de tête.
+      // Un mobile algérien fait 10 chiffres (0 + 9) : on restaure le 0 manquant.
+      let phone = String(r.telephone ?? '').trim().replace(/\s/g, '');
+      if (/^[567]\d{8}$/.test(phone)) phone = '0' + phone;
 
       // Note interne pour ne rien perdre (code client + commercial)
       const noteParts: string[] = [];
