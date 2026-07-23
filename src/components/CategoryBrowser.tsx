@@ -28,16 +28,16 @@ export function CategoryBrowser({ limit }: { limit?: number }) {
 
   return (
     <div className="flex flex-col gap-8">
-      {/* Grille centrée : avec 1 ou 2 catégories seulement, elles restaient
-          collées à gauche au lieu d'être centrées dans la page. */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 md:gap-6 justify-center mx-auto"
-        style={{ gridTemplateColumns: `repeat(auto-fit, minmax(280px, ${visibleCats.length < 3 ? '380px' : '1fr'}))` }}>
+      {/* Rangée horizontale qui passe à la ligne au besoin — se centre naturellement
+          quand il y a peu de catégories, au lieu de rester collée à gauche. */}
+      <div className="flex flex-wrap justify-center gap-5 md:gap-6">
         {visibleCats.map((cat) => (
-          <CategoryCard
-            key={cat.id}
-            category={cat}
-            products={products.filter(p => p.category?.id === cat.id && p.width > 0 && p.length > 0)}
-          />
+          <div key={cat.id} className="w-full sm:w-[calc(50%-12px)] lg:w-[400px]">
+            <CategoryCard
+              category={cat}
+              products={products.filter(p => p.category?.id === cat.id && p.width > 0 && p.length > 0)}
+            />
+          </div>
         ))}
       </div>
 
@@ -95,7 +95,7 @@ function CategoryCard({ category, products }: { category: Cat; products: Prod[] 
       {/* Titre + refs + bouton, alignés avec la largeur de la photo */}
       <div className="w-[95%] mx-auto flex flex-col gap-3">
         <Link href={`/products/${category.id}`}>
-          <h3 className="text-[15px] md:text-[16px] font-bold text-[#263238] leading-tight hover:text-[#4CAF4F] transition-colors">{category.name}</h3>
+          <h3 className="text-[15px] md:text-[16px] font-bold text-[#263238] leading-tight hover:text-[#4CAF4F] transition-colors truncate" title={category.name}>{category.name}</h3>
         </Link>
 
         {products.length === 0 ? (
@@ -156,7 +156,7 @@ function CategoryCard({ category, products }: { category: Cat; products: Prod[] 
 
             {/* Usage de la référence sélectionnée (à quoi ça sert) */}
             {current?.usage && (
-              <p className="text-[12px] text-[#717171] leading-relaxed line-clamp-2 min-h-[32px]">{current.usage}</p>
+              <p className="text-[12px] text-[#717171] leading-relaxed truncate" title={current.usage}>{current.usage}</p>
             )}
 
             {/* Ajouter au panier — prix mis à jour selon la réf choisie */}
