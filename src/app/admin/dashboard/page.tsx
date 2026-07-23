@@ -184,6 +184,7 @@ export default function DashboardPage() {
   const { isAdmin } = useRole();
   const { data: session } = useSession();
   const myId = (session?.user as { id?: string } | undefined)?.id ?? null;
+  const myName = (session?.user as { name?: string } | undefined)?.name ?? 'Moi';
   const [parCommercial, setParCommercial] = useState<{ id: string; name: string; ventes: number; commandes: number; devis: number }[]>([]);
   const [employesLivres, setEmployesLivres] = useState<{ name: string; commandes: number; devis: number; total: number }[]>([]);
   const [objectifs, setObjectifs] = useState<{ global: number; byUser: Record<string, number> }>({ global: 0, byUser: {} });
@@ -442,7 +443,8 @@ export default function DashboardPage() {
                     <select value={selectedCommercial} onChange={(e) => setSelectedCommercial(e.target.value)}
                       className="w-full appearance-none text-[11px] font-bold text-[#374151] border border-[#E2E8F0] rounded-lg pl-2.5 pr-7 py-1.5 bg-white cursor-pointer focus:outline-none focus:border-[#4CAF4F] focus:ring-2 focus:ring-[#4CAF4F]/25 transition-all">
                       <option value="">Toute l&apos;entreprise</option>
-                      {parCommercial.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                      {myId && <option value={myId}>Mes ventes</option>}
+                      {parCommercial.filter((c) => c.id !== myId).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                     </select>
                     <svg className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-[#8A9BB5]" width={12} height={12} viewBox="0 0 24 24" fill="none"><path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
                   </div>

@@ -495,6 +495,11 @@ function PriceModal({ item, onConfirm, onClose }: {
   const inputCls = "w-full px-3 py-2 rounded-xl border border-[#E2E8F0] text-[13px] text-[#0F172A] focus:outline-none focus:border-[#4CAF4F] focus:ring-[3px] focus:ring-[#4CAF4F]/15 transition-all";
   const hasItems = itemPrices.length > 0;
 
+  // Base HT selon le mode saisi, puis TTC répercuté par la case TVA (aperçu live)
+  const baseHt = mode === 'total' ? (parseFloat(totalGlobal) || 0) : totalCalc;
+  const montantTva = tva ? Math.round(baseHt * 0.19) : 0;
+  const ttc = baseHt + montantTva;
+
   const handleConfirm = () => {
     if (mode === 'total') {
       const t = parseFloat(totalGlobal) || 0;
@@ -564,6 +569,26 @@ function PriceModal({ item, onConfirm, onClose }: {
             </span>
             TVA appliquée (19%)
           </button>
+
+          {/* Aperçu du total — réagit à la case TVA */}
+          {baseHt > 0 && (
+            <div className="mb-4 px-3.5 py-3 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0]">
+              {tva && (
+                <>
+                  <div className="flex justify-between text-[12px] text-[#8A9BB5] mb-1">
+                    <span>Montant HT</span><span>{baseHt.toLocaleString('fr-FR')} DA</span>
+                  </div>
+                  <div className="flex justify-between text-[12px] text-[#8A9BB5] mb-2">
+                    <span>TVA 19%</span><span>{montantTva.toLocaleString('fr-FR')} DA</span>
+                  </div>
+                </>
+              )}
+              <div className="flex justify-between items-center">
+                <span className="text-[12px] font-bold text-[#374151]">{tva ? 'Total TTC' : 'Total'}</span>
+                <span className="text-[16px] font-extrabold text-[#4CAF4F]">{ttc.toLocaleString('fr-FR')} DA</span>
+              </div>
+            </div>
+          )}
 
           <div className="flex gap-3">
             <button onClick={onClose} className="flex-1 px-4 py-2.5 rounded-xl border border-[#E2E8F0] text-[13px] font-semibold text-[#374151]">Annuler</button>
