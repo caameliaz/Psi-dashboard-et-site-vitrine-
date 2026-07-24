@@ -171,7 +171,7 @@ export default function Home() {
                       <div className="w-12 h-12 md:w-14 md:h-14 flex items-center justify-center flex-shrink-0">
                         {item.icon}
                       </div>
-                      <h3 className="text-[21px] md:text-[26px] font-semibold text-[#263238] leading-tight">{t(item.titleKey)}</h3>
+                      <h3 className="text-[21px] md:text-[26px] font-semibold text-[#263238] [font-family:var(--font-playfair)] leading-tight">{t(item.titleKey)}</h3>
                     </div>
                     <p className="text-[15px] md:text-[17px] text-[#1A1A1A] leading-loose">{t(item.descKey)}</p>
                   </div>

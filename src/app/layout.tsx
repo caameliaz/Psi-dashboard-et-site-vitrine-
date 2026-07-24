@@ -1,10 +1,11 @@
 import type { Metadata, Viewport } from "next";
-import { Open_Sans, Noto_Serif } from "next/font/google";
+import { Open_Sans, Noto_Serif, Playfair_Display } from "next/font/google";
 import "./globals.css";
 import { SessionWrapper } from "@/components/SessionWrapper";
 
 const openSans = Open_Sans({ subsets: ["latin"], variable: "--font-open-sans" });
 const notoSerif = Noto_Serif({ subsets: ["latin"], variable: "--font-noto-serif" });
+const playfairDisplay = Playfair_Display({ subsets: ["latin"], variable: "--font-playfair" });
 
 export const metadata: Metadata = {
   title: "PSI - Thermal Paper Solutions",
@@ -23,7 +24,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="fr" className={`h-full antialiased ${openSans.variable} ${notoSerif.variable}`} suppressHydrationWarning>
+    <html lang="fr" className={`h-full antialiased ${openSans.variable} ${notoSerif.variable} ${playfairDisplay.variable}`} suppressHydrationWarning>
       <head>
         <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
       </head>
