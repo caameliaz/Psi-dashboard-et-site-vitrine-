@@ -56,14 +56,15 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
     }
 
     // Modification des produits du devis (comme pour les commandes).
-    // ⚠️ QuoteItem n'a PAS de unitPrice : le prix d'un devis est global (proposedPrice).
+    // Un devis peut porter un prix unitaire par ligne (facultatif) → conservé
+    // pour le détail, le PDF et l'Excel, en plus du total global (proposedPrice).
     if (body.items && Array.isArray(body.items)) {
       const current = await prisma.quote.findUnique({ where: { id }, select: { status: true } });
       if (current && (current.status === 'LIVRE' || current.status === 'ANNULE')) {
         return NextResponse.json({ error: 'Impossible de modifier un devis livré ou annulé' }, { status: 409 });
       }
       // Une référence LIBRE n'a pas de productId : son libellé est dans `description`.
-      const validItems = (body.items as { productId?: string; description?: string; quantity?: number; metrage?: number }[])
+      const validItems = (body.items as { productId?: string; description?: string; quantity?: number; metrage?: number; unitPrice?: number }[])
         .filter((it) => (it.productId || (it.description && it.description.trim() !== '')) && (it.quantity ?? 0) > 0);
       await prisma.quoteItem.deleteMany({ where: { quoteId: id } });
       if (validItems.length > 0) {
@@ -74,8 +75,32 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
             description: it.productId ? null : (it.description ?? null),
             quantity: it.quantity!,
             metrage: it.metrage ?? null,
+            unitPrice: it.unitPrice != null ? Number(it.unitPrice) : null,
           })),
         });
+      }
+    }
+
+    // Mise à jour des prix unitaires depuis la modale de confirmation, par
+    // désignation (référence produit ou description libre). N'altère pas les
+    // lignes elles-mêmes → le lien produit (catégorie) reste intact pour le PDF.
+    if (Array.isArray(body.itemPrices) && body.itemPrices.length > 0) {
+      const existing = await prisma.quoteItem.findMany({
+        where: { quoteId: id },
+        include: { product: { select: { reference: true } } },
+      });
+      for (const ip of body.itemPrices as { designation?: string; unitPrice?: number }[]) {
+        if (!ip?.designation) continue;
+        const cible = ip.designation.split(' · ')[0].trim();
+        const match = existing.find(
+          (qi) => (qi.product?.reference ?? qi.description ?? '').trim() === cible,
+        );
+        if (match) {
+          await prisma.quoteItem.update({
+            where: { id: match.id },
+            data: { unitPrice: ip.unitPrice != null ? Number(ip.unitPrice) : null },
+          });
+        }
       }
     }
 

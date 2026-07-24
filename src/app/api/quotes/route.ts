@@ -47,7 +47,7 @@ export async function POST(request: NextRequest) {
     const clientCompany: string = body.company ?? '';
 
     interface QuoteItemInput {
-      productId?: string; description?: string; width?: number; length?: number; metrage?: number; quantity: number;
+      productId?: string; description?: string; width?: number; length?: number; metrage?: number; quantity: number; unitPrice?: number;
     }
     const items: QuoteItemInput[] = Array.isArray(body.items) ? body.items : [];
 
@@ -147,20 +147,14 @@ export async function POST(request: NextRequest) {
         // Prix déjà défini à la création (facultatif) → conservé, pas de re-saisie
         proposedPrice: body.proposedPrice != null ? Number(body.proposedPrice) : null,
         items: {
-          create: items.map((item: {
-            productId?: string;
-            description?: string;
-            width?: number;
-            length?: number;
-            metrage?: number;
-            quantity: number;
-          }) => ({
+          create: items.map((item: QuoteItemInput) => ({
             productId: item.productId ?? null,
             description: item.description ?? null,
             width: item.width ?? null,
             length: item.length ?? null,
             metrage: item.metrage ?? null,
             quantity: item.quantity,
+            unitPrice: item.unitPrice != null ? Number(item.unitPrice) : null,
           })),
         },
       },

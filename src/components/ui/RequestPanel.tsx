@@ -610,11 +610,13 @@ interface EditLine { categoryId: string; productId: string | null; designation: 
 function EditOrderModal({ item, onClose, onSaved }: {
   item: RequestDetail; onClose: () => void; onSaved: () => void;
 }) {
-  // Un DEVIS n'a pas de prix par ligne (son prix est global : proposedPrice)
+  // Devis comme commande : chaque ligne peut porter un prix unitaire (facultatif
+  // pour un devis). La TVA se coche ici et est conservée sans avoir à confirmer.
   const estDevis = item.type === 'Devis';
   const [products, setProducts] = useState<ProdOption[]>([]);
   const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
   const [lines, setLines] = useState<EditLine[]>([]);
+  const [tva, setTva] = useState<boolean>(item.vatEnabled === true);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -675,13 +677,18 @@ function EditOrderModal({ item, onClose, onSaved }: {
         productId: l.productId ?? undefined,
         description: l.productId ? undefined : l.designation.trim(),
         quantity: l.quantite,
-        ...(estDevis ? {} : { unitPrice: l.prixUnitaire }),
+        unitPrice: l.prixUnitaire || undefined,
         metrage: l.metrage ?? undefined,
       }));
+    // Pour un devis : on enregistre aussi la TVA et le prix global (somme des lignes)
+    // SANS changer le statut → le devis peut être ajusté puis envoyé avant confirmation.
+    const extra = estDevis
+      ? { vatEnabled: tva, proposedPrice: total > 0 ? total : undefined }
+      : {};
     const res = await fetch(`/api/${estDevis ? 'quotes' : 'orders'}/${item.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ items }),
+      body: JSON.stringify({ items, ...extra }),
     });
     setSaving(false);
     if (!res.ok) {
@@ -760,14 +767,14 @@ function EditOrderModal({ item, onClose, onSaved }: {
                         onChange={e => setLine(i, { quantite: Math.max(1, Number(e.target.value)) })}
                         className={inputCls + ' w-full text-center'} />
                     </div>
-                    {!estDevis && (
-                      <div className="w-[110px]">
-                        <span className="block text-[10px] font-bold text-[#ABBED1] uppercase tracking-wide mb-1">Prix unit. DA</span>
-                        <input type="number" min="0" value={l.prixUnitaire}
-                          onChange={e => setLine(i, { prixUnitaire: Number(e.target.value) })}
-                          className={inputCls + ' w-full text-right'} />
-                      </div>
-                    )}
+                    <div className="w-[110px]">
+                      <span className="block text-[10px] font-bold text-[#ABBED1] uppercase tracking-wide mb-1">
+                        Prix unit. DA{estDevis && <span className="normal-case text-[#C7D2DE]"> (facult.)</span>}
+                      </span>
+                      <input type="number" min="0" value={l.prixUnitaire}
+                        onChange={e => setLine(i, { prixUnitaire: Number(e.target.value) })}
+                        className={inputCls + ' w-full text-right'} />
+                    </div>
                     {lines.length > 1 ? (
                       <button onClick={() => setLines(prev => prev.filter((_, idx) => idx !== i))}
                         title="Retirer la ligne"
@@ -787,16 +794,34 @@ function EditOrderModal({ item, onClose, onSaved }: {
             </button>
           </div>
 
-          {estDevis ? (
-            <p className="text-[12px] text-[#8A9BB5] py-3 mt-2 border-t border-[#F2F4F7]">
-              Le prix d&apos;un devis se fixe globalement via « Modifier le prix ».
-            </p>
-          ) : (
-            <div className="flex justify-between items-center py-3 mt-2 border-t border-[#F2F4F7]">
-              <span className="text-[13px] font-semibold text-[#374151]">Total</span>
-              <span className="text-[17px] font-extrabold text-[#4CAF4F]">{total.toLocaleString('fr-FR')} DA</span>
-            </div>
+          {estDevis && (
+            /* TVA : conservée à l'enregistrement, sans avoir à confirmer le devis */
+            <button type="button" onClick={() => setTva(v => !v)}
+              className="flex items-center gap-2 w-full mt-3 px-3 py-2.5 rounded-xl border text-[13px] font-semibold transition-colors"
+              style={{ borderColor: tva ? '#4CAF4F' : '#E2E8F0', background: tva ? '#F0FDF4' : '#fff', color: tva ? '#166534' : '#8A9BB5' }}>
+              <span className="w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0"
+                style={{ borderColor: tva ? '#4CAF4F' : '#D1D5DB', background: tva ? '#4CAF4F' : '#fff' }}>
+                {tva && <svg width={9} height={9} viewBox="0 0 12 12" fill="none"><path d="M2 6L5 9L10 3" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+              </span>
+              TVA appliquée (19%)
+            </button>
           )}
+
+          {/* Total : HT / TVA / TTC quand la TVA est cochée, sinon total simple */}
+          <div className="py-3 mt-2 border-t border-[#F2F4F7]">
+            {tva ? (
+              <>
+                <div className="flex justify-between text-[12px] text-[#8A9BB5] mb-1"><span>Total HT</span><span>{total.toLocaleString('fr-FR')} DA</span></div>
+                <div className="flex justify-between text-[12px] text-[#8A9BB5] mb-2"><span>TVA 19%</span><span>{Math.round(total * 0.19).toLocaleString('fr-FR')} DA</span></div>
+                <div className="flex justify-between items-center"><span className="text-[13px] font-semibold text-[#374151]">Total TTC</span><span className="text-[17px] font-extrabold text-[#4CAF4F]">{Math.round(total * 1.19).toLocaleString('fr-FR')} DA</span></div>
+              </>
+            ) : (
+              <div className="flex justify-between items-center">
+                <span className="text-[13px] font-semibold text-[#374151]">Total{estDevis && total === 0 ? ' (facultatif)' : ''}</span>
+                <span className="text-[17px] font-extrabold text-[#4CAF4F]">{total.toLocaleString('fr-FR')} DA</span>
+              </div>
+            )}
+          </div>
 
           <div className="flex gap-3">
             <button onClick={onClose} className="flex-1 px-4 py-2.5 rounded-xl border border-[#E2E8F0] text-[13px] font-semibold text-[#374151]">Annuler</button>
@@ -1273,15 +1298,11 @@ export function RequestPanel({ item, onClose, onStatusChange, onConfirmQuoteWith
                         Marquer Livré
                       </button>
                     )}
-                    {/* Devis en attente → Confirmer (fixe le prix via popup) */}
+                    {/* Devis en attente → Confirmer : la modale s'ouvre TOUJOURS,
+                        pré-remplie avec le prix (unitaire + TVA) déjà défini. On peut
+                        le garder tel quel ou l'ajuster avant de confirmer. */}
                     {!isCommande && item.statut === 'En attente' && onConfirmQuoteWithPrice && (
-                      <button onClick={() => {
-                        // Prix DÉJÀ défini à la création (montant ≠ "Sur devis") → on confirme
-                        // directement, sans redemander. Sinon on ouvre la saisie du prix.
-                        const aDejaUnPrix = item.montant && item.montant !== 'Sur devis' && item.montant !== '—';
-                        if (aDejaUnPrix) onStatusChange(item.ref, 'Confirmé');
-                        else setShowPriceModal(true);
-                      }}
+                      <button onClick={() => setShowPriceModal(true)}
                         className="px-4 py-2 rounded-lg text-[13px] font-bold border border-[#4CAF4F] text-[#4CAF4F] hover:bg-[#F0FDF4] transition-colors">
                         Confirmer
                       </button>

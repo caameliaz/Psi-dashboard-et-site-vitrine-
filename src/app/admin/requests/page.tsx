@@ -114,7 +114,7 @@ export async function submitNewRequest(
         clientId: item._clientId || undefined,
         name: item.client, company: item._entreprise || undefined, phone: item._telephone ? normalizePhone(item._telephone) : undefined,
         email: item._email ? normalizeEmail(item._email) : undefined, wilaya: item._wilaya || 'Non spécifié', commune: item._commune || undefined, message: '',
-        items: lignes.filter((l: any) => l.ref).map((l: any) => ({ productId: l.productId ?? undefined, description: l.productId ? undefined : l.ref, quantity: l.qte, metrage: l.metrage ? Number(l.metrage) : undefined })),
+        items: lignes.filter((l: any) => l.ref).map((l: any) => ({ productId: l.productId ?? undefined, description: l.productId ? undefined : l.ref, quantity: l.qte, unitPrice: l.pu || undefined, metrage: l.metrage ? Number(l.metrage) : undefined })),
         // Prix déjà défini à la création (somme des lignes) → pas de re-saisie à la
         // confirmation. Vaut 0 si aucun prix rempli (le prix sera demandé au moment
         // de confirmer, comme avant).
@@ -475,7 +475,7 @@ export function CreateForm({ defaultType, onClose, onSave, users, currentUserId,
         )}
         <div className="flex gap-3 px-6 py-4 border-t border-[#F2F4F7]">
           <button onClick={onClose} className="flex-1 px-4 py-2.5 rounded-xl border border-[#E2E8F0] text-[13px] font-semibold text-[#374151] hover:bg-[#F8FAFC] transition-colors">Annuler</button>
-          <button onClick={handleSave} disabled={saving || !entreprise.trim() || !telephone.trim() || !wilaya.trim() || !commune.trim() || lignes.every(l => !l.ref)}
+          <button onClick={handleSave} disabled={saving}
             className="flex-1 px-4 py-2.5 rounded-xl text-[13px] font-bold text-white disabled:opacity-40 transition-opacity"
             style={{ background: '#4CAF4F' }}>
             {saving ? 'Création…' : `Créer ${type === 'Commande' ? 'la commande' : 'le devis'}`}
@@ -655,10 +655,14 @@ function RequestsPageInner() {
         return acc + it.quantite * (p?.unitPrice ?? 0);
       }, 0);
     }
+    // Prix unitaires saisis dans la modale de confirmation → transmis par
+    // désignation. L'API les recolle sur les QuoteItem correspondants (sans
+    // toucher au lien produit), pour conserver le prix unitaire au PDF/Excel.
+    const itemPrices = prix?.itemPrices;
     await fetch(`/api/quotes/${item.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: 'VALIDE', proposedPrice, vatEnabled: item.vatEnabled }),
+      body: JSON.stringify({ status: 'VALIDE', proposedPrice, vatEnabled: item.vatEnabled, itemPrices }),
     });
     // On reste sur le détail : fetchAll resynchronise le panneau (montant + statut).
     await fetchAll(true);

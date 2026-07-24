@@ -89,3 +89,20 @@ Il existe déjà un enregistrement A sur psi.dz pointant vers 197.140.11.7 (le s
 Étape C — Une fois propagé : Vercel → NEXTAUTH_URL = https://psi.dz → Redeploy
 
 ⏱️ Propagation : 15 min à 24h. Vercel installe le HTTPS tout seul.
+
+
+
+#	Ce qui change	Où tester
+0	Message d'erreur rouge si un champ obligatoire est vide (bouton plus grisé)	Créer commande/devis en laissant l'entreprise ou le tél vide
+1	Le devis garde le prix unitaire saisi à la création + la TVA	Créer un devis avec prix → rouvrir le détail
+2	Les commandes avaient déjà tout ça (vérifié, rien à changer)	—
+3	Détail + Excel + PDF du devis affichent : prix unitaire par ligne, HT / TVA 19% / TTC	Devis avec prix → Exporter Excel & Imprimer
+4	« Modifier » un devis permet de changer prix unitaire + TVA sans confirmer (reste "En attente")	Devis → Modifier → changer prix → Enregistrer
+4b	À la confirmation, la modale pré-remplit le prix + TVA déjà définis — tu gardes ou tu changes	Devis avec prix → Confirmer (la popup s'ouvre pré-remplie)
+🔧 Plus tôt dans la session
+Ce qui change	Où tester
+WhatsApp : numéro 0xxxx → converti en 213xxxx (plus mal interprété)	Détail commande/devis + fiche client → bouton WhatsApp
+Message d'erreur si téléphone/email au mauvais format	Créer avec email sans @ ou tél trop court
+« Mes ventes » dans le filtre du dashboard	Dashboard → carte Ventes ce mois
+Aperçu TVA live dans la popup de prix devis	Confirmer un devis
+Bouton mobile : "Désactiver notifs" retiré une fois activé	Accueil mobile

@@ -104,6 +104,9 @@ export function quoteToDetail(q: any, fallback?: ClientFallback): RequestDetail 
     '';
   const items = toItems(q.items);
   const produits = items.map((i) => `${i.designation} × ${i.quantite}`).join(', ') || '—';
+  // Total : le prix global proposé prime ; sinon on somme les prix unitaires des lignes.
+  const totalLignes = items.reduce((acc, i) => acc + i.quantite * i.prixUnitaire, 0);
+  const totalDevis = q.proposedPrice != null ? Number(q.proposedPrice) : totalLignes;
 
   return {
     id: q.id,
@@ -119,7 +122,7 @@ export function quoteToDetail(q: any, fallback?: ClientFallback): RequestDetail 
     email: q.client?.email ?? fallback?.email ?? '',
     produits,
     items,
-    montant: q.proposedPrice ? `${Number(q.proposedPrice).toLocaleString('fr-FR')} DA` : 'Sur devis',
+    montant: totalDevis > 0 ? `${totalDevis.toLocaleString('fr-FR')} DA` : 'Sur devis',
     statut: DB_TO_UI[q.status] ?? q.status,
     assignedToId: q.assignedTo?.id ?? q.assignedToId ?? null,
     assignedToName: q.assignedTo?.name ?? null,
