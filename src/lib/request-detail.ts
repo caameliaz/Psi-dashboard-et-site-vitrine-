@@ -106,7 +106,11 @@ export function quoteToDetail(q: any, fallback?: ClientFallback): RequestDetail 
   const produits = items.map((i) => `${i.designation} × ${i.quantite}`).join(', ') || '—';
   // Total : le prix global proposé prime ; sinon on somme les prix unitaires des lignes.
   const totalLignes = items.reduce((acc, i) => acc + i.quantite * i.prixUnitaire, 0);
-  const totalDevis = q.proposedPrice != null ? Number(q.proposedPrice) : totalLignes;
+  let totalDevis = q.proposedPrice != null ? Number(q.proposedPrice) : totalLignes;
+  // Si la TVA est activée, on applique 19% au montant HT pour obtenir le TTC
+  if (q.vatEnabled) {
+    totalDevis = Math.round(totalDevis * 1.19);
+  }
 
   return {
     id: q.id,
