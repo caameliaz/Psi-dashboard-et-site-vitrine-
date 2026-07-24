@@ -20,10 +20,11 @@ export default function QuickOrderPage() {
     fetch('/api/users?assignable=true').then((r) => (r.ok ? r.json() : [])).then(setUsers).catch(() => {});
   }, []);
 
-  const handleSave = async (item: any) => {
+  const handleSave = async (item: any): Promise<boolean> => {
     const res = await submitNewRequest(item);
-    if (!res.ok) { alert(res.error ?? 'Erreur lors de la création'); return; }
+    if (!res.ok) { alert(res.error ?? 'Erreur lors de la création'); return false; }
     setDone(res.type);
+    return true;
   };
 
   if (done) {

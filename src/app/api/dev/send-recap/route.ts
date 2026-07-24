@@ -10,6 +10,12 @@ import { sendWeeklyRecap } from '@/lib/recaps/sendWeeklyRecap';
 // GET /api/dev/send-recap?type=daily
 // GET /api/dev/send-recap?type=weekly
 export async function GET(request: NextRequest) {
+  // ⚠️ Route de TEST uniquement : bloquée en production pour éviter tout envoi
+  // surprise à toute l'équipe. En ligne, seul le cron (20h) déclenche les récaps.
+  if (process.env.NODE_ENV === 'production') {
+    return NextResponse.json({ error: 'Indisponible en production' }, { status: 404 });
+  }
+
   const session = await auth();
   if (!session || session.user.role !== 'ADMIN') {
     return NextResponse.json({ error: 'Réservé aux administrateurs' }, { status: 403 });

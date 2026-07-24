@@ -36,6 +36,21 @@ export function normalizePhone(value: string): string {
   return value.trim().replace(/[\s.-]/g, '');
 }
 
+/**
+ * Convertit un téléphone en numéro WhatsApp (wa.me) : international SANS "+" ni "0".
+ * WhatsApp attend l'indicatif pays collé au numéro, sans le 0 national.
+ *   "0555 12 34 56"  → "213555123456"
+ *   "+213555123456"  → "213555123456"
+ *   "213555123456"   → "213555123456"
+ * Un numéro déjà international (autre pays) est conservé tel quel, sans son "+".
+ */
+export function toWhatsAppNumber(value: string): string {
+  const digits = value.replace(/[^\d+]/g, '').replace(/^\+/, '');
+  // 0 national algérien → indicatif 213
+  if (/^0\d{9}$/.test(digits)) return '213' + digits.slice(1);
+  return digits; // déjà 213..., ou autre indicatif international
+}
+
 /** Normalise un email pour le stockage : trim + minuscules. */
 export function normalizeEmail(value: string): string {
   return value.trim().toLowerCase();

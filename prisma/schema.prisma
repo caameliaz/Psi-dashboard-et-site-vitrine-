@@ -251,6 +251,7 @@ model QuoteItem {
   length      Int?
   metrage     Float?   // longueur en mètres (facultatif)
   quantity    Int
+  unitPrice   Float?   // prix unitaire proposé (facultatif ; conservé pour détail/PDF/Excel)
 }
 
 enum RequestStatus {

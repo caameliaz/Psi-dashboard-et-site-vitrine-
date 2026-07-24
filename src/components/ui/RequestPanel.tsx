@@ -6,6 +6,7 @@ import { useRole } from '@/lib/role-context';
 import { ClientAutocomplete } from './ClientAutocomplete';
 import { AdminSelect } from './AdminSelect';
 import { RefSelect } from './RefSelect';
+import { toWhatsAppNumber } from '@/lib/validation';
 
 interface Template { id: string; title: string; content: string; category: string; }
 
@@ -354,7 +355,7 @@ export function TemplatePopover({ item, mode, recipientEmail, onClose }: {
 
   const send = async () => {
     if (!preview || sending) return;
-    const phone = item.telephone.replace(/\s/g, '').replace('+', '');
+    const phone = toWhatsAppNumber(item.telephone);
     if (mode === 'wa') {
       window.open(`https://wa.me/${phone}?text=${encodeURIComponent(preview)}`, '_blank');
       onClose();
@@ -424,7 +425,7 @@ export function TemplatePopover({ item, mode, recipientEmail, onClose }: {
               {/* Option : ouvrir la conversation sans message pré-rempli */}
               <button onClick={() => {
                   if (mode === 'wa') {
-                    const phone = item.telephone.replace(/\s/g, '').replace('+', '');
+                    const phone = toWhatsAppNumber(item.telephone);
                     window.open(`https://wa.me/${phone}`, '_blank');
                   } else {
                     window.location.href = `mailto:${item.email ?? ''}`;
@@ -960,7 +961,7 @@ export function RequestPanel({ item, onClose, onStatusChange, onConfirmQuoteWith
   };
 
   const phoneDigits = item.telephone.replace(/\s/g, '');
-  const waPhone = phoneDigits.replace('+', '');
+  const waPhone = toWhatsAppNumber(item.telephone); // wa.me/Viber : international sans + ni 0
   const callHref = `tel:${phoneDigits}`;
   const openMail = () => {
     if (!item.email && !emailOverride) {

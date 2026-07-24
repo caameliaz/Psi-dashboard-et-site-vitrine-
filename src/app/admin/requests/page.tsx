@@ -135,7 +135,7 @@ export async function submitNewRequest(
 export function CreateForm({ defaultType, onClose, onSave, users, currentUserId, inline = false, prefill }: {
   defaultType: 'Commande' | 'Devis';
   onClose: () => void;
-  onSave: (item: any) => Promise<void>;
+  onSave: (item: any) => Promise<boolean>;
   users: { id: string; name: string }[];
   currentUserId?: string;
   inline?: boolean;
@@ -154,6 +154,7 @@ export function CreateForm({ defaultType, onClose, onSave, users, currentUserId,
   const [lignes, setLignes] = useState<Ligne[]>([emptyLigne()]);
   const [tva, setTva] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState('');
   const [assignedToId, setAssignedToId] = useState<string>(currentUserId ?? '');
   // Infos de facturation / règlement (toutes facultatives)
   const [invoiceNumber, setInvoiceNumber] = useState('');
@@ -190,14 +191,22 @@ export function CreateForm({ defaultType, onClose, onSave, users, currentUserId,
   const total = tva ? Math.round(ht * 1.19) : ht;
 
   const handleSave = async () => {
-    // Entreprise obligatoire (+ téléphone + au moins une ligne). Nom facultatif.
-    if (!entreprise.trim() || !telephone.trim() || !wilaya.trim() || !commune.trim() || lignes.every(l => !l.ref)) return;
+    setFormError('');
+    // Champs obligatoires : entreprise, téléphone, wilaya, commune, ≥ 1 ligne.
+    if (!entreprise.trim()) return setFormError('L’entreprise est obligatoire.');
+    if (!telephone.trim()) return setFormError('Le téléphone est obligatoire.');
+    if (!wilaya.trim()) return setFormError('La wilaya est obligatoire.');
+    if (!commune.trim()) return setFormError('La commune est obligatoire.');
+    if (lignes.every(l => !l.ref)) return setFormError('Ajoutez au moins un produit.');
+    // Format des données (téléphone / email) — message clair, pas d'envoi silencieux.
+    const vErr = firstError([validatePhone(telephone, true), validateEmail(email)]);
+    if (vErr) return setFormError(messageErreur(vErr));
     setSaving(true);
     const now = new Date();
     const produits = lignes.filter(l => l.ref).map(l => `${l.ref} × ${l.qte}`).join(', ');
     // Si pas de nom de contact saisi → on utilise l'entreprise comme nom (name requis en base)
     const contactName = client.trim() || entreprise.trim();
-    await onSave({
+    const ok = await onSave({
       ref: '',
       type,
       client: contactName,
@@ -226,7 +235,10 @@ export function CreateForm({ defaultType, onClose, onSave, users, currentUserId,
       _vatEnabled: vatEnabled,
     } as any);
     setSaving(false);
-    onClose();
+    // Échec (ex. erreur serveur, validation API) → on GARDE le formulaire ouvert
+    // avec la saisie, et on affiche l'erreur. On ne ferme que si tout a réussi.
+    if (ok) onClose();
+    else setFormError('La création a échoué. Vérifiez les données et réessayez.');
   };
 
   // inline = pleine page (quick-order mobile) ; sinon modal overlay (bouton dans la liste).
@@ -456,6 +468,11 @@ export function CreateForm({ defaultType, onClose, onSave, users, currentUserId,
         </div>
 
         {/* Footer */}
+        {formError && (
+          <div className="mx-6 mb-1 px-3.5 py-2.5 rounded-xl bg-[#FEF2F2] border border-[#FECACA] text-[12px] font-semibold text-[#B91C1C]">
+            {formError}
+          </div>
+        )}
         <div className="flex gap-3 px-6 py-4 border-t border-[#F2F4F7]">
           <button onClick={onClose} className="flex-1 px-4 py-2.5 rounded-xl border border-[#E2E8F0] text-[13px] font-semibold text-[#374151] hover:bg-[#F8FAFC] transition-colors">Annuler</button>
           <button onClick={handleSave} disabled={saving || !entreprise.trim() || !telephone.trim() || !wilaya.trim() || !commune.trim() || lignes.every(l => !l.ref)}
@@ -647,14 +664,15 @@ function RequestsPageInner() {
     await fetchAll(true);
   };
 
-  const handleSaveNew = async (item: any) => {
+  const handleSaveNew = async (item: any): Promise<boolean> => {
     const result = await submitNewRequest(item);
     if (!result.ok) {
       alert(result.error ?? 'Erreur lors de la création');
-      return;
+      return false;
     }
     await fetchAll(true);
     setActiveTab(result.type === 'Commande' ? 'commandes' : 'devis');
+    return true;
   };
 
   const counts = {

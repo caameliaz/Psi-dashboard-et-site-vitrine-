@@ -39,7 +39,7 @@ import { AdminSelect } from '@/components/ui/AdminSelect';
 import { orderToDetail, quoteToDetail } from '@/lib/request-detail';
 import { CreateForm, submitNewRequest } from '@/app/admin/requests/page';
 import { useSession } from 'next-auth/react';
-import { validateEmail, validatePhone, validateText, normalizeEmail, normalizePhone, firstError, messageErreur } from '@/lib/validation';
+import { validateEmail, validatePhone, validateText, normalizeEmail, normalizePhone, firstError, messageErreur, toWhatsAppNumber } from '@/lib/validation';
 
 function avatarColor(id: number | string) {
   const n = typeof id === 'string' ? id.charCodeAt(0) + id.charCodeAt(1) : id;
@@ -262,7 +262,7 @@ function ClientSlideIn({ client, onClose, onEdit, onDelete, onReactivate, onDele
     historique: client.historique.map((h) => ({ ref: h.ref, type: h.type, date: h.date, statut: h.statut, montant: h.montant, produits: h.produits })),
   };
 
-  const waHref = `https://wa.me/${client.telephone.replace(/\s/g, '').replace('+', '')}`;
+  const waHref = `https://wa.me/${toWhatsAppNumber(client.telephone)}`;
   const callHref = `tel:${client.telephone.replace(/\s/g, '')}`;
   const emailHref = client.email ? `mailto:${client.email}` : null;
 
@@ -1023,9 +1023,10 @@ function ClientsPageInner() {
               }}
               onSave={async (item) => {
                 const res = await submitNewRequest(item);
-                if (!res.ok) { alert(res.error ?? 'Échec de la création.'); return; }
+                if (!res.ok) { alert(res.error ?? 'Échec de la création.'); return false; }
                 setNewRequestFor(null);
                 await fetchClients(true); // met à jour l'historique de la fiche ouverte
+                return true;
               }}
             />
           </div>
