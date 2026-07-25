@@ -8,17 +8,33 @@ import { type Cat, type Prod } from '@/lib/hardcodedCatalog';
 
 // Grille de catégories : chaque card affiche une image, un nom
 // et un carrousel de références (produits de la catégorie) qu'on parcourt à la flèche.
-export function CategoryBrowser({ limit }: { limit?: number }) {
+export function CategoryBrowser({ 
+  limit, 
+  initialCategories, 
+  initialProducts 
+}: { 
+  limit?: number;
+  initialCategories?: Cat[];
+  initialProducts?: Prod[];
+}) {
   const { t } = useTranslation();
   const [cats, setCats] = useState<Cat[]>([]);
   const [products, setProducts] = useState<Prod[]>([]);
 
   useEffect(() => {
+    // Si les données sont passées en props, on les utilise directement (pas de fetch)
+    if (initialCategories && initialProducts) {
+      setCats(initialCategories);
+      setProducts(initialProducts);
+      return;
+    }
+    
+    // Sinon comportement actuel : fetch côté client (rétrocompatible)
     fetch('/api/categories').then(r => r.ok ? r.json() : []).then((data: any[]) =>
       setCats(data.map(c => ({ id: c.id, name: c.name, photo: c.photo ?? null, description: c.description ?? null })))
     ).catch(() => {});
     fetch('/api/products').then(r => r.ok ? r.json() : []).then(setProducts).catch(() => {});
-  }, []);
+  }, [initialCategories, initialProducts]);
 
   // Masque les catégories qui n'ont AUCUN produit actif (ex: catégorie entièrement désactivée)
   const catsWithProducts = cats.filter((c) =>
