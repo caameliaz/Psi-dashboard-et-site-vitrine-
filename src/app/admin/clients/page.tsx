@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { MobileNavbar } from '@/components/MobileNavbar';
 interface ClientRecord {
   id: string | number;
   _dbId?: string;
@@ -1032,6 +1033,8 @@ function ClientsPageInner() {
           </div>
         </div>
       )}
+
+      <MobileNavbar />
     </div>
   );
 }

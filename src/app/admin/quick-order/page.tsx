@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { CreateForm, submitNewRequest } from '@/app/admin/requests/page';
+import { MobileNavbar } from '@/components/MobileNavbar';
 
 // Commande rapide — affiche UNIQUEMENT le formulaire (pas de tableau autour).
 // Accessible depuis le bouton rond du menu mobile.
@@ -43,6 +44,7 @@ export default function QuickOrderPage() {
             Voir les commandes
           </button>
         </div>
+        <MobileNavbar />
       </div>
     );
   }
@@ -61,6 +63,7 @@ export default function QuickOrderPage() {
         users={users}
         currentUserId={currentUserId}
       />
+      <MobileNavbar />
     </div>
   );
 }

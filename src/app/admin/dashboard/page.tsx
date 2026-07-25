@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { StatusPill } from '@/components/ui/StatusPill';
@@ -12,6 +12,7 @@ import { exportDashboardExcel } from '@/lib/export-dashboard';
 import { useRole } from '@/lib/role-context';
 import { useSession } from 'next-auth/react';
 import { Modal } from '@/components/ui/Modal';
+import { MobileNavbar } from '@/components/MobileNavbar';
 
 // Graphiques Recharts chargés à la demande (ssr:false) → aucun poids ailleurs
 const WilayaBarChart = dynamic(() => import('@/components/ui/DashboardCharts').then((m) => m.WilayaBarChart), {
@@ -77,7 +78,7 @@ function PieChart({ data }: { data: { ref: string; qty: number; label: string; c
   const [hovered, setHovered] = useState<number | null>(null);
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
   const total = data.reduce((s, d) => s + d.qty, 0);
-  if (total === 0) return <p className="text-[12px] text-[#8A9BB5] py-4">Aucune commande</p>;
+  if (total === 0) return <p className="text-[11px] md:text-[12px] text-[#8A9BB5] py-4">Aucune commande</p>;
   const R = 70, stroke = 24, cx = 88, cy = 88, gap = 0.015;
   let angle = -Math.PI / 2;
   const slices = data.map((d) => {
@@ -98,8 +99,8 @@ function PieChart({ data }: { data: { ref: string; qty: number; label: string; c
   };
 
   return (
-    <div className="relative flex items-center gap-8" onMouseMove={handleMove}>
-      <svg width="176" height="176" viewBox="0 0 176 176">
+    <div className="relative flex flex-row-reverse md:flex-row items-center gap-3 md:gap-8 mt-10 md:mt-0 mr-4 md:mr-0" onMouseMove={handleMove}>
+      <svg width="176" height="176" viewBox="0 0 176 176" className="flex-shrink-0">
         {slices.map((s, i) => (
           <path key={i} d={s.path} fill="none" stroke={s.color} strokeWidth={stroke} strokeLinecap="butt"
             opacity={hovered === null || hovered === i ? 1 : 0.25}
@@ -108,28 +109,28 @@ function PieChart({ data }: { data: { ref: string; qty: number; label: string; c
         ))}
       </svg>
 
-      {/* Légende à droite — puce ronde + libellé, empilés */}
-      <div className="flex flex-col gap-4">
+      {/* Légende — empilées verticalement, texte plus grand sur mobile */}
+      <div className="flex flex-col gap-2 md:gap-4 w-full md:w-auto">
         {slices.map((s, i) => (
-          <div key={i} className="flex items-center gap-2.5 cursor-pointer"
+          <div key={i} className="flex items-center gap-2 md:gap-2.5 cursor-pointer"
             onMouseEnter={() => setHovered(i)} onMouseLeave={() => setHovered(null)}
             style={{ opacity: hovered === null || hovered === i ? 1 : 0.4, transition: 'opacity 0.15s' }}>
-            <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: s.color }} />
-            <span className="text-[13px] text-[#374151] whitespace-nowrap">{s.label}</span>
+            <span className="w-2.5 md:w-3 h-2.5 md:h-3 rounded-full flex-shrink-0" style={{ background: s.color }} />
+            <span className="text-[13px] md:text-[13px] text-[#374151] truncate">{s.label}</span>
           </div>
         ))}
       </div>
 
       {/* Carte blanche flottante qui suit la souris au survol d'un segment */}
       {hov && (
-        <div className="absolute z-10 pointer-events-none bg-white rounded-xl shadow-2xl border border-[#F2F4F7] px-4 py-3"
-          style={{ left: mousePos.x + 14, top: mousePos.y + 14, minWidth: 130 }}>
-          <div className="flex items-center gap-2 mb-1">
-            <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: hov.color }} />
-            <p className="text-[12px] font-bold text-[#0F172A] truncate">{hov.label}</p>
+        <div className="absolute z-10 pointer-events-none bg-white rounded-xl shadow-2xl border border-[#F2F4F7] px-3 md:px-4 py-2 md:py-3"
+          style={{ left: mousePos.x + 14, top: mousePos.y + 14, minWidth: 110 }}>
+          <div className="flex items-center gap-1.5 md:gap-2 mb-1">
+            <span className="w-2 md:w-2.5 h-2 md:h-2.5 rounded-full flex-shrink-0" style={{ background: hov.color }} />
+            <p className="text-[10px] md:text-[12px] font-bold text-[#0F172A] truncate">{hov.label}</p>
           </div>
-          <p className="text-[18px] font-extrabold leading-none" style={{ color: hov.color }}>{hov.pct}%</p>
-          <p className="text-[10px] text-[#8A9BB5] mt-1">{hov.qty} unités</p>
+          <p className="text-[16px] md:text-[18px] font-extrabold leading-none" style={{ color: hov.color }}>{hov.pct}%</p>
+          <p className="text-[9px] md:text-[10px] text-[#8A9BB5] mt-1">{hov.qty} unités</p>
         </div>
       )}
     </div>
@@ -280,14 +281,18 @@ export default function DashboardPage() {
     <div className="w-full">
 
       {/* Header */}
-      <div className="flex items-start justify-between mb-8">
-        <div>
-          <h1 className="text-[26px] font-bold text-[#0F172A] leading-tight">{greeting}</h1>
-          <p className="text-[13px] text-[#8A9BB5] mt-1 capitalize">{today} <span className="font-bold text-[#4CAF4F]">{clock}</span></p>
-        </div>
-        <div className="flex items-center gap-3 mt-1">
+      <div className="mb-6 md:mb-8">
+        {/* Mobile: Title left, Search right */}
+        <div className="flex items-start justify-between md:hidden mb-4">
+          <div>
+            <h1 className="text-[20px] font-bold text-[#0F172A] leading-tight">{greeting}</h1>
+            <p className="text-[12px] text-[#8A9BB5] mt-1 capitalize">
+              {todayShort} <span className="font-bold text-[#4CAF4F]">{clock}</span>
+            </p>
+          </div>
+          {/* Search bar - Mobile: compact, top right */}
           <div className="relative">
-            <svg className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" width={16} height={16} fill="none" viewBox="0 0 24 24">
+            <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" width={14} height={14} fill="none" viewBox="0 0 24 24">
               <circle cx="11" cy="11" r="7" stroke="#ABBED1" strokeWidth="2"/>
               <path d="M20 20l-3-3" stroke="#ABBED1" strokeWidth="2" strokeLinecap="round"/>
             </svg>
@@ -296,34 +301,138 @@ export default function DashboardPage() {
               placeholder="Rechercher…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="pl-9 pr-4 py-2.5 rounded-xl border border-[#E2E8F0] bg-white text-[13px] text-[#374151] placeholder-[#ABBED1] focus:outline-none focus:ring-2 focus:ring-[#4CAF4F]/30 focus:border-[#4CAF4F] transition-colors shadow-sm"
-              style={{ width: 220 }}
+              className="w-[130px] pl-8 pr-2 py-1.5 rounded-full border border-[#E2E8F0] bg-white text-[11px] text-[#374151] placeholder-[#ABBED1] focus:outline-none focus:ring-2 focus:ring-[#4CAF4F]/30 focus:border-[#4CAF4F] transition-colors shadow-sm"
             />
           </div>
-          <button
-            onClick={() => exportDashboardExcel({ stats, todayStats, sourceStats, evolution, topProduits, topWilayas, serie6Mois, parCommercial, employesLivres, objectifs })}
-            title="Exporter le tableau de bord en Excel"
-            className="hidden md:flex items-center gap-2 px-3.5 py-2.5 rounded-xl border border-[#E2E8F0] bg-white text-[13px] font-semibold text-[#16A34A] hover:bg-[#F8FAFC] transition-colors shadow-sm"
-          >
-            <svg width={15} height={15} fill="none" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/><path d="M14 2v6h6M9 13l6 6M15 13l-6 6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
-            Exporter
-          </button>
-          {isAdmin && (
+        </div>
+        
+        {/* Desktop: Standard layout */}
+        <div className="hidden md:flex md:items-start justify-between">
+          <div>
+            <h1 className="text-[26px] font-bold text-[#0F172A] leading-tight">{greeting}</h1>
+            <p className="text-[13px] text-[#8A9BB5] mt-1 capitalize">
+              {today} <span className="font-bold text-[#4CAF4F]">{clock}</span>
+            </p>
+          </div>
+          <div className="flex items-center gap-3 mt-1">
+            {/* Search bar - Desktop */}
+            <div className="relative">
+              <svg className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" width={16} height={16} fill="none" viewBox="0 0 24 24">
+                <circle cx="11" cy="11" r="7" stroke="#ABBED1" strokeWidth="2"/>
+                <path d="M20 20l-3-3" stroke="#ABBED1" strokeWidth="2" strokeLinecap="round"/>
+              </svg>
+              <input
+                type="text"
+                placeholder="Rechercher…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="w-[220px] pl-9 pr-4 py-2.5 rounded-xl border border-[#E2E8F0] bg-white text-[13px] text-[#374151] placeholder-[#ABBED1] focus:outline-none focus:ring-2 focus:ring-[#4CAF4F]/30 focus:border-[#4CAF4F] transition-colors shadow-sm"
+              />
+            </div>
             <button
-              onClick={() => setGoalsOpen(true)}
-              title="Définir les objectifs du mois"
-              className="hidden md:flex items-center gap-2 px-3.5 py-2.5 rounded-xl border border-[#E2E8F0] bg-white text-[13px] font-semibold text-[#4CAF4F] hover:bg-[#F8FAFC] transition-colors shadow-sm"
+              onClick={() => exportDashboardExcel({ stats, todayStats, sourceStats, evolution, topProduits, topWilayas, serie6Mois, parCommercial, employesLivres, objectifs })}
+              title="Exporter le tableau de bord en Excel"
+              className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl border border-[#E2E8F0] bg-white text-[13px] font-semibold text-[#16A34A] hover:bg-[#F8FAFC] transition-colors shadow-sm"
             >
-              <svg width={15} height={15} fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.6"/><circle cx="12" cy="12" r="5" stroke="currentColor" strokeWidth="1.6"/><circle cx="12" cy="12" r="1.4" fill="currentColor"/></svg>
-              Objectifs
+              <svg width={15} height={15} fill="none" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/><path d="M14 2v6h6M9 13l6 6M15 13l-6 6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              Exporter
             </button>
+            {isAdmin && (
+              <button
+                onClick={() => setGoalsOpen(true)}
+                title="Définir les objectifs du mois"
+                className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl border border-[#E2E8F0] bg-white text-[13px] font-semibold text-[#4CAF4F] hover:bg-[#F8FAFC] transition-colors shadow-sm"
+              >
+                <svg width={15} height={15} fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.6"/><circle cx="12" cy="12" r="5" stroke="currentColor" strokeWidth="1.6"/><circle cx="12" cy="12" r="1.4" fill="currentColor"/></svg>
+                Objectifs
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Layout responsive : Mobile = post-it pleine largeur + 2 colonnes dessous | Desktop = 3 colonnes */}
+      
+      {/* Post-it seul sur mobile */}
+      <div className="md:hidden">
+        <div className="relative pt-6 px-4 pb-4 flex flex-col"
+          style={{
+            background: '#FFFDE7',
+            boxShadow: '0 10px 22px -10px rgba(120,100,0,0.3), 0 2px 6px rgba(0,0,0,0.05)',
+            borderRadius: 18,
+          }}>
+          {/* Languette jaune en haut, façon onglet de post-it collé */}
+          <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-2/3"
+            style={{ width: 88, height: 22, background: '#FDE047', borderRadius: 6 }} />
+
+          <p className="text-[10px] font-bold text-[#B45309] uppercase tracking-widest mb-1">Aujourd&apos;hui</p>
+          <p className="text-[13px] font-extrabold text-[#0F172A] mb-3 capitalize">{todayShort}</p>
+
+          {loading ? <p className="text-[11px] text-[#8D6E00]">Chargement…</p> : (
+            <>
+              <div className="flex gap-3 items-stretch">
+                {/* Left side: 3 stats */}
+                <ul className="flex-1 space-y-2">
+                  {[
+                    { label: 'Commandes aujourd\'hui', value: todayStats.commandes, dot: '#4CAF4F' },
+                    { label: 'À traiter (en attente)',      value: todayStats.attente,   dot: '#FBC02D' },
+                    { label: 'Confirmés',                   value: todayStats.confirmes, dot: '#2184F3' },
+                  ].map((it) => (
+                    <li key={it.label} className="flex items-center justify-between">
+                      <span className="flex items-center gap-1.5 text-[11px] text-[#374151]">
+                        <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: it.dot }} />
+                        {it.label}
+                      </span>
+                      <span className="text-[14px] font-extrabold leading-none text-[#263238]">{it.value}</span>
+                    </li>
+                  ))}
+                </ul>
+                
+                {/* Vertical separator */}
+                <div className="w-px bg-[#FDE047]" />
+                
+                {/* Right side: devis en cours and livrées ce mois */}
+                <div className="flex flex-col gap-1.5 justify-center">
+                  <p className="flex items-center gap-1.5 text-[10px] font-bold text-[#8B5CF6]">
+                    <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none"><path d="M9 12h6M9 16h6M9 8h2M7 3h7l5 5v11a2 2 0 01-2 2H7a2 2 0 01-2-2V5a2 2 0 012-2z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                    {stats.devis} devis en cours
+                  </p>
+                  <p className="flex items-center gap-1.5 text-[10px] font-bold text-[#4CAF4F]">
+                    <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none"><path d="M4 16L10 10L14 14L20 6M20 6H14M20 6V12" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                    {stats.livrees} livrées ce mois
+                  </p>
+                </div>
+              </div>
+            </>
           )}
         </div>
       </div>
 
-      {/* 3 colonnes égales : post-it | camembert | source */}
-      <div className="grid grid-cols-3 gap-6" style={{ alignItems: 'stretch' }}>
+      {/* Top produits + Origine en 2 colonnes sur mobile */}
+      <div className="grid grid-cols-2 gap-3 mt-4 md:hidden">
+        {/* Camembert — Top produits */}
+        <div className="bg-white rounded-2xl border border-[#E2E8F0] p-2.5 shadow-sm flex flex-col">
+          <p className="text-[9px] font-bold text-[#ABBED1] uppercase tracking-widest mb-0.5">Top produits</p>
+          <p className="text-[11px] font-semibold text-[#0F172A]" style={{ marginBottom: '-45px' }}>Par produit</p>
+          {loading ? <p className="text-[11px] text-[#8A9BB5] py-4">Chargement…</p> : (
+            <div className="flex items-center justify-center flex-1">
+              <div className="scale-[0.55] origin-center -my-8">
+                <PieChart data={topProduits} />
+              </div>
+            </div>
+          )}
+        </div>
 
+        {/* Source — Origine */}
+        <div className="bg-white rounded-2xl border border-[#E2E8F0] p-2.5 shadow-sm flex flex-col">
+          <p className="text-[9px] font-bold text-[#ABBED1] uppercase tracking-widest mb-0.5">Origine</p>
+          <p className="text-[11px] font-semibold text-[#0F172A] mb-1.5">Source des demandes</p>
+          {loading ? <p className="text-[11px] text-[#8A9BB5]">Chargement…</p> : <SourceChart stats={sourceStats} />}
+        </div>
+      </div>
+
+      {/* 3 colonnes sur desktop : Post-it + Top produits + Origine */}
+      <div className="hidden md:grid md:grid-cols-3 gap-6" style={{ alignItems: 'stretch' }}>
         {/* Post-it — stats mois + aujourd'hui */}
         <div className="relative pt-8 px-5 pb-5 flex flex-col"
           style={{
@@ -342,7 +451,7 @@ export default function DashboardPage() {
             <>
               <ul className="space-y-3 mb-4">
                 {[
-                  { label: 'Commandes aujourd’hui', value: todayStats.commandes, dot: '#4CAF4F' },
+                  { label: 'Commandes aujourd\'hui', value: todayStats.commandes, dot: '#4CAF4F' },
                   { label: 'À traiter (en attente)',      value: todayStats.attente,   dot: '#FBC02D' },
                   { label: 'Confirmés',                   value: todayStats.confirmes, dot: '#2184F3' },
                 ].map((it) => (
@@ -358,11 +467,11 @@ export default function DashboardPage() {
               <hr style={{ borderColor: '#FDE047' }} className="mb-3" />
               <div className="flex flex-col gap-2">
                 <p className="flex items-center gap-1.5 text-[12px] font-bold text-[#8B5CF6]">
-                  <svg width={13} height={13} viewBox="0 0 24 24" fill="none"><path d="M9 12h6M9 16h6M9 8h2M7 3h7l5 5v11a2 2 0 01-2 2H7a2 2 0 01-2-2V5a2 2 0 012-2z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                  <svg className="w-[13px] h-[13px]" viewBox="0 0 24 24" fill="none"><path d="M9 12h6M9 16h6M9 8h2M7 3h7l5 5v11a2 2 0 01-2 2H7a2 2 0 01-2-2V5a2 2 0 012-2z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
                   {stats.devis} devis en cours
                 </p>
                 <p className="flex items-center gap-1.5 text-[12px] font-bold text-[#4CAF4F]">
-                  <svg width={13} height={13} viewBox="0 0 24 24" fill="none"><path d="M4 16L10 10L14 14L20 6M20 6H14M20 6V12" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                  <svg className="w-[13px] h-[13px]" viewBox="0 0 24 24" fill="none"><path d="M4 16L10 10L14 14L20 6M20 6H14M20 6V12" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
                   {stats.livrees} livrées ce mois
                 </p>
               </div>
@@ -370,51 +479,54 @@ export default function DashboardPage() {
           )}
         </div>
 
-        {/* Camembert — centré, sans infos larges à droite */}
-        <div className="bg-white rounded-2xl border border-[#E2E8F0] p-5 shadow-sm flex flex-col items-center justify-center">
-          <p className="text-[11px] font-bold text-[#ABBED1] uppercase tracking-widest mb-1 self-start">Top produits</p>
-          <p className="text-[13px] font-semibold text-[#0F172A] mb-4 self-start">Par produit</p>
-          {loading ? <p className="text-[12px] text-[#8A9BB5] py-4">Chargement…</p> : <PieChart data={topProduits} />}
+        {/* Camembert — Top produits */}
+        <div className="bg-white rounded-2xl border border-[#E2E8F0] p-5 shadow-sm flex flex-col">
+          <p className="text-[11px] font-bold text-[#ABBED1] uppercase tracking-widest mb-1">Top produits</p>
+          <p className="text-[13px] font-semibold text-[#0F172A] mb-4">Par produit</p>
+          {loading ? <p className="text-[12px] text-[#8A9BB5] py-4">Chargement…</p> : (
+            <div className="flex items-center justify-center flex-1">
+              <PieChart data={topProduits} />
+            </div>
+          )}
         </div>
 
-        {/* Source */}
+        {/* Source — Origine */}
         <div className="bg-white rounded-2xl border border-[#E2E8F0] p-5 shadow-sm flex flex-col">
           <p className="text-[11px] font-bold text-[#ABBED1] uppercase tracking-widest mb-1">Origine</p>
           <p className="text-[13px] font-semibold text-[#0F172A] mb-4">Source des demandes</p>
           {loading ? <p className="text-[12px] text-[#8A9BB5]">Chargement…</p> : <SourceChart stats={sourceStats} />}
         </div>
-
       </div>
 
-      {/* ── Cartes du mois : toggle Commandes/Devis + Ventes ─────────────── */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-8">
+      {/* ── Cartes du mois : 2 colonnes sur mobile et desktop ─────────────── */}
+      <div className="grid grid-cols-2 gap-3 md:gap-6 mt-6 md:mt-8">
         {/* Carte 1 : toggle Commandes ce mois / Devis ce mois */}
-        <div className="bg-white rounded-2xl border border-[#E4EBF5] p-5 shadow-sm">
-          <div className="flex items-center gap-1 mb-3 bg-[#F2F4F7] rounded-lg p-0.5 w-fit">
+        <div className="bg-white rounded-2xl border border-[#E4EBF5] p-3 md:p-5 shadow-sm">
+          <div className="flex items-center gap-1 mb-2 md:mb-3 bg-[#F2F4F7] rounded-lg p-0.5 w-fit">
             <button onClick={() => setMoisTab('commandes')}
-              className={`px-3 py-1.5 rounded-md text-[12px] font-bold transition-colors ${moisTab === 'commandes' ? 'bg-white text-[#0F172A] shadow-sm' : 'text-[#8A9BB5] hover:text-[#374151]'}`}>
-              Commandes ce mois
+              className={`px-2 md:px-3 py-1 md:py-1.5 rounded-md text-[10px] md:text-[12px] font-bold transition-colors ${moisTab === 'commandes' ? 'bg-white text-[#0F172A] shadow-sm' : 'text-[#8A9BB5] hover:text-[#374151]'}`}>
+              Commandes
             </button>
             <button onClick={() => setMoisTab('devis')}
-              className={`px-3 py-1.5 rounded-md text-[12px] font-bold transition-colors ${moisTab === 'devis' ? 'bg-white text-[#0F172A] shadow-sm' : 'text-[#8A9BB5] hover:text-[#374151]'}`}>
-              Devis ce mois
+              className={`px-2 md:px-3 py-1 md:py-1.5 rounded-md text-[10px] md:text-[12px] font-bold transition-colors ${moisTab === 'devis' ? 'bg-white text-[#0F172A] shadow-sm' : 'text-[#8A9BB5] hover:text-[#374151]'}`}>
+              Devis
             </button>
           </div>
           {moisTab === 'commandes' ? (
             <>
-              <div className="flex items-end gap-3">
-                <span className="text-[32px] font-extrabold text-[#0F172A] leading-none">{stats.commandes}</span>
-                <span className={`flex items-center gap-1 text-[13px] font-bold pb-1 ${evolution >= 0 ? 'text-[#4CAF4F]' : 'text-[#EF4444]'}`}>
+              <div className="flex items-end gap-2 md:gap-3">
+                <span className="text-[24px] md:text-[32px] font-extrabold text-[#0F172A] leading-none">{stats.commandes}</span>
+                <span className={`flex items-center gap-1 text-[11px] md:text-[13px] font-bold pb-0.5 md:pb-1 ${evolution >= 0 ? 'text-[#4CAF4F]' : 'text-[#EF4444]'}`}>
                   {evolution >= 0 ? '▲' : '▼'} {Math.abs(evolution)}%
                 </span>
               </div>
-              <p className="text-[12px] text-[#8A9BB5] mt-1">vs mois précédent</p>
+              <p className="text-[10px] md:text-[12px] text-[#8A9BB5] mt-1">vs mois précédent</p>
             </>
           ) : (
             <>
-              <div className="flex items-end gap-3">
-                <span className="text-[32px] font-extrabold text-[#8B5CF6] leading-none">{stats.devisMois}</span>
-                <span className={`flex items-center gap-1 text-[13px] font-bold pb-1 ${stats.evolutionDevis >= 0 ? 'text-[#4CAF4F]' : 'text-[#EF4444]'}`}>
+              <div className="flex items-end gap-2 md:gap-3">
+                <span className="text-[24px] md:text-[32px] font-extrabold text-[#8B5CF6] leading-none">{stats.devisMois}</span>
+                <span className={`flex items-center gap-1 text-[11px] md:text-[13px] font-bold pb-0.5 md:pb-1 ${stats.evolutionDevis >= 0 ? 'text-[#4CAF4F]' : 'text-[#EF4444]'}`}>
                   {stats.evolutionDevis >= 0 ? '▲' : '▼'} {Math.abs(stats.evolutionDevis)}%
                 </span>
               </div>
@@ -437,7 +549,7 @@ export default function DashboardPage() {
           return (
             <div className="bg-white rounded-2xl border border-[#E4EBF5] p-5 shadow-sm">
               <div className="flex items-center justify-between mb-2 gap-2">
-                <p className="text-[11px] font-bold text-[#ABBED1] uppercase tracking-widest">Ventes ce mois</p>
+                <p className="text-[9px] md:text-[11px] font-bold text-[#ABBED1] uppercase tracking-widest">Ventes ce mois</p>
                 {isAdmin && (
                   <div className="relative max-w-[58%]">
                     <select value={selectedCommercial} onChange={(e) => setSelectedCommercial(e.target.value)}
@@ -450,17 +562,24 @@ export default function DashboardPage() {
                   </div>
                 )}
               </div>
-              <div className="flex items-end gap-2">
-                <span className="text-[32px] font-extrabold text-[#4CAF4F] leading-none">{Number(ventes).toLocaleString('fr-FR')}</span>
-                <span className="text-[15px] font-bold text-[#4CAF4F] pb-1">DA</span>
+              <div>
+                <div className="flex items-end gap-2 md:gap-3">
+                  <span className="text-[20px] md:text-[32px] font-extrabold text-[#4CAF4F] leading-none">{Number(ventes).toLocaleString('fr-FR')}</span>
+                  <span className="text-[10px] md:text-[15px] font-bold text-[#4CAF4F] pb-0.5 md:pb-1">DA</span>
+                  {isTotal && (
+                    <span className={`hidden md:flex items-center gap-1 text-[10px] md:text-[13px] font-bold pb-1 ml-1 ${stats.evolutionVentes >= 0 ? 'text-[#4CAF4F]' : 'text-[#EF4444]'}`}>
+                      {stats.evolutionVentes >= 0 ? '▲' : '▼'} {Math.abs(stats.evolutionVentes)}%
+                    </span>
+                  )}
+                </div>
                 {isTotal && (
-                  <span className={`flex items-center gap-1 text-[13px] font-bold pb-1 ml-1 ${stats.evolutionVentes >= 0 ? 'text-[#4CAF4F]' : 'text-[#EF4444]'}`}>
+                  <span className={`md:hidden flex items-center gap-1 text-[10px] font-bold mt-1 ${stats.evolutionVentes >= 0 ? 'text-[#4CAF4F]' : 'text-[#EF4444]'}`}>
                     {stats.evolutionVentes >= 0 ? '▲' : '▼'} {Math.abs(stats.evolutionVentes)}%
                   </span>
                 )}
               </div>
               {objectif > 0 ? (
-                <div className="mt-3">
+                <div className="mt-3" style={{ marginTop: '12px' }}>
                   <div className="flex items-center justify-between mb-1">
                     <span className="text-[11px] font-bold text-[#8A9BB5] uppercase tracking-wide">Objectif : {Number(objectif).toLocaleString('fr-FR')} DA</span>
                     <span className={`text-[11px] font-bold ${atteint ? 'text-[#16A34A]' : 'text-[#8A9BB5]'}`}>
@@ -472,7 +591,7 @@ export default function DashboardPage() {
                   </div>
                 </div>
               ) : (
-                <p className="text-[12px] text-[#8A9BB5] mt-1">commandes + devis livrés {isTotal ? 'ce mois' : 'gérés'}</p>
+                <p className="text-[12px] text-[#8A9BB5]" style={{ marginTop: '12px' }}>commandes + devis livrés {isTotal ? 'ce mois' : 'gérés'}</p>
               )}
             </div>
           );
@@ -485,8 +604,8 @@ export default function DashboardPage() {
         <TrendLineChart data={serie6Mois} />
       </div>
 
-      {/* Tableau dernières demandes */}
-      <div className="bg-white rounded-2xl border border-[#E2E8F0] overflow-hidden shadow-sm mt-8">
+      {/* Tableau dernières demandes - Caché sur mobile */}
+      <div className="hidden md:block bg-white rounded-2xl border border-[#E2E8F0] overflow-hidden shadow-sm mt-8">
         <div className="flex items-center justify-between px-6 py-4 border-b border-[#F2F4F7]">
           <h2 className="text-[15px] font-bold text-[#0F172A]">Dernières demandes</h2>
           <a href="/admin/requests" className="text-[12px] font-semibold text-[#4CAF4F] hover:text-[#388E3C] transition-colors">Voir tout ↗</a>
@@ -584,6 +703,8 @@ export default function DashboardPage() {
           onSaved={() => { setGoalsOpen(false); fetchData(true); }}
         />
       )}
+
+      <MobileNavbar />
     </div>
   );
 }

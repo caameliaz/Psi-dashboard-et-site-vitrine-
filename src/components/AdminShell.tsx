@@ -6,6 +6,7 @@ import { Sidebar } from '@/components/Sidebar';
 import { TopBar } from '@/components/ui/TopBar';
 import { DesktopOnly } from '@/components/DesktopOnly';
 import { notifBell } from '@/lib/notif-bell-store';
+import Image from 'next/image';
 
 // Cloche mobile — même source de données que la cloche du dashboard PC
 // (store partagé notifBell, alimenté par TopBar).
@@ -56,7 +57,7 @@ function DesktopBellButton() {
 
 // Pages réservées au desktop (lourdes / peu utiles sur le terrain).
 // Sur mobile, elles affichent un message + retour au menu.
-const DESKTOP_ONLY = ['/admin/dashboard', '/admin/products', '/admin/content', '/admin/templates', '/admin/users', '/admin/history', '/admin/profile'];
+const DESKTOP_ONLY = ['/admin/products', '/admin/content', '/admin/templates', '/admin/users', '/admin/history', '/admin/profile'];
 
 // Enveloppe les pages admin : sidebar + contenu, SAUF sur la page de login.
 // Responsive : sur mobile la sidebar devient un drawer ouvert par un hamburger.
@@ -91,7 +92,13 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
                 <path d="M3 6h18M3 12h18M3 18h18" stroke="#374151" strokeWidth="2" strokeLinecap="round" />
               </svg>
             </button>
-            <span className="text-[14px] font-bold text-[#0F172A]">PSI</span>
+            <Image 
+              src="/Logo PSI-new.jpeg" 
+              alt="PSI" 
+              width={65} 
+              height={65}
+              className="object-contain -mt-1"
+            />
             <MobileBellButton />
           </header>
 
