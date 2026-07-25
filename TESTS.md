@@ -106,3 +106,116 @@ Message d'erreur si téléphone/email au mauvais format	Créer avec email sans @
 « Mes ventes » dans le filtre du dashboard	Dashboard → carte Ventes ce mois
 Aperçu TVA live dans la popup de prix devis	Confirmer un devis
 Bouton mobile : "Désactiver notifs" retiré une fois activé	Accueil mobile
+
+
+
+apres la premiere commande entreprise se remplit automatiquement quand on commande et quon la laisse vide 
+-devis se cree a adrar aoulef quand on laisse wilaya vide
+-ajouter * a entreprise pour montrer que cest obligatoire au lieu de nom 
+-ajouter * au produit souhaite 
+
+
+
+dashboard:
+-message rouge saffiche quand on cree un devis sans champ obligatoire1
+
+on peut pas ajouter de message avec le devis comme pour le site public 
+
+en general:
+apres la premiere commande le client se cree automatiquement et toutes les commandes 
+effectues apres ne creent plus de client et sajoute au client cree précédemment
+
+
+
+-quand on modifie devis et ajoute tva le prix affiche dans le detail produit reste le prix ht
+mettre un message dalerte quand montant global ne corresponds pas avec le prix unitaire de chaque produit
+-devis devient automatiquement confirme apres avoir modifie prix unitaire et ou tva ou prix en general
+le filtre en haut commande et devis doivent montrer toutes les commandes et devis (le compteur doit compter toutes les commandes et devis aussi pas seulement ceux livres ou en attente)
+
+ui:
+image rouleau pour caisse a changer et trop grande dans section et ceux ci vous les avez vu
+adapter la taille du container gris du preview des images dans la page produit admin
+
+
+---
+
+## Session du 25 janvier 2026 - Corrections TVA, Prix et UX
+
+### 1. ✅ Fix TVA dans affichage détail devis/commande
+**Fichier** : `src/components/ui/RequestPanel.tsx`
+**Problème** : Quand on modifiait un devis et ajoutait la TVA, le prix affiché restait en HT
+**Solution** : 
+- Utiliser `item.vatEnabled` au lieu de `item.tva` 
+- Calculer dynamiquement HT depuis `item.items`
+- Afficher HT + Total TTC si TVA activée
+**Lignes modifiées** : Affichage total (ligne ~1195), Export Excel (ligne ~99), Export PDF (ligne ~203)
+
+### 2. ✅ Permettre modification prix sans changer statut
+**Fichier** : `src/app/admin/requests/page.tsx`  
+**Problème** : Modifier le prix d'un devis le passait automatiquement en "Confirmé"
+**Solution** : Ne changer le statut en "Confirmé" que si le devis est "En attente"
+**Code** :
+```typescript
+const payload: any = { proposedPrice, vatEnabled: item.vatEnabled, itemPrices };
+if (item.statut === 'En attente') {
+  payload.status = 'VALIDE';
+}
+```
+
+### 3. ✅ Pré-remplir modale prix avec valeurs existantes
+**Fichier** : `src/components/ui/RequestPanel.tsx` (PriceModal)
+**Problème** : Mode "Total global" était vide au lieu d'afficher le prix actuel
+**Solution** : Calculer le HT initial et pré-remplir `totalGlobal`
+```typescript
+const totalHtInitial = (item.items ?? []).reduce((acc, i) => acc + i.quantite * i.prixUnitaire, 0);
+const [totalGlobal, setTotalGlobal] = useState(totalHtInitial > 0 ? String(totalHtInitial) : '');
+```
+
+### 4. ✅ Génération automatique numéro de facture
+**Fichiers** : 
+- `src/app/admin/requests/page.tsx` (ajout bouton 🔄)
+- `src/app/api/invoices/next-number/route.ts` (nouvelle API)
+
+**Fonctionnalité** : Bouton à côté du champ "N° facture" qui génère automatiquement le prochain numéro au format `F2026-XXX`
+**API** : Cherche le dernier numéro de l'année dans commandes + devis, incrémente de 1
+
+### 5. ✅ Optimisation chargement homepage
+**Fichiers** :
+- `src/app/(public)/page.tsx` (server component)
+- `src/components/HomeClient.tsx` (nouveau - client component)
+- `src/components/CategoryBrowser.tsx` (props optionnelles)
+
+**Problème** : Produits mettaient 3s à charger (fetch côté client)
+**Solution** : 
+- Homepage = server component qui fetch en parallèle (content, categories, products)
+- Passe les données à `HomeClient` (client component pour animations)
+- `CategoryBrowser` accepte props optionnelles → pas de fetch si données fournies
+- Backward compatible : `/products` continue de fetcher côté client
+
+### 6. ❌ Scroll + bordure rouge sur erreur formulaire (ANNULÉ)
+**Fichier** : `src/app/admin/requests/page.tsx`
+**Statut** : Modification annulée (causait erreur de build)
+**Raison** : Problème d'encodage caractères spéciaux, restauré via `git restore`
+
+---
+
+## Fichiers modifiés (prêts pour push) :
+1. ✅ `src/components/ui/RequestPanel.tsx` - Fix TVA + affichage prix
+2. ✅ `src/app/admin/requests/page.tsx` - Fix statut + génération n° facture
+3. ✅ `src/app/(public)/page.tsx` - Server component
+4. ✅ `src/components/HomeClient.tsx` - Nouveau fichier
+5. ✅ `src/components/CategoryBrowser.tsx` - Props optionnelles
+6. ✅ `src/app/api/invoices/next-number/route.ts` - Nouvelle API
+7. ✅ `src/app/(public)/quote/page.tsx` - Fix champ entreprise required
+
+## Build Status : ✅ PASS
+```
+✓ Compiled successfully
+✓ Generating static pages (56/56)
+✓ Finalizing page optimization
+```
+
+## Prêt pour production : ✅ OUI
+
+Site public
+-devis se cree sans entreprise

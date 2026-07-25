@@ -96,7 +96,7 @@ async function exportExcel(item: RequestDetail) {
         });
 
   const ht = lignesData.reduce((acc, l) => acc + l.quantite * l.pu, 0);
-  const hasTva = item.tva === true; // renseigné depuis vatEnabled (base) — plus de valeur implicite
+  const hasTva = item.vatEnabled === true;
   const ttc = hasTva ? Math.round(ht * 1.19) : ht;
 
   const rows: (string | number)[][] = [];
@@ -200,7 +200,7 @@ async function printDoc(item: RequestDetail) {
         });
 
   const ht = lignesData.reduce((acc, l) => acc + l.quantite * l.pu, 0);
-  const hasTva = item.tva === true; // renseigné depuis vatEnabled (base) — plus de valeur implicite
+  const hasTva = item.vatEnabled === true;
   const ttc = hasTva ? Math.round(ht * 1.19) : ht;
 
   const rows = lignesData.map(l => {
@@ -487,10 +487,13 @@ function PriceModal({ item, onConfirm, onClose }: {
 }) {
   const [mode, setMode] = useState<'unitaire' | 'total'>('unitaire');
   const [tva, setTva] = useState<boolean>(item.vatEnabled === true);
-  const [totalGlobal, setTotalGlobal] = useState('');
   const [itemPrices, setItemPrices] = useState<{ designation: string; qty: number; pu: string }[]>(
     (item.items ?? []).map(i => ({ designation: i.designation, qty: i.quantite, pu: i.prixUnitaire > 0 ? String(i.prixUnitaire) : '' }))
   );
+  
+  // Calcule le total HT actuel depuis les items pour pré-remplir le mode "Total global"
+  const totalHtInitial = (item.items ?? []).reduce((acc, i) => acc + i.quantite * i.prixUnitaire, 0);
+  const [totalGlobal, setTotalGlobal] = useState(totalHtInitial > 0 ? String(totalHtInitial) : '');
 
   const totalCalc = itemPrices.reduce((acc, i) => acc + i.qty * (parseFloat(i.pu) || 0), 0);
   const inputCls = "w-full px-3 py-2 rounded-xl border border-[#E2E8F0] text-[13px] text-[#0F172A] focus:outline-none focus:border-[#4CAF4F] focus:ring-[3px] focus:ring-[#4CAF4F]/15 transition-all";
@@ -1189,24 +1192,41 @@ export function RequestPanel({ item, onClose, onStatusChange, onConfirmQuoteWith
                 </div>
               )}
 
-              {/* Total — toujours tout en bas */}
-              <div className="flex items-center justify-between px-4 py-4 rounded-xl" style={{ background: isCommande ? '#F0FDF4' : '#F5F3FF' }}>
-                <span className="text-[13px] font-semibold" style={{ color: isCommande ? '#166534' : '#5B21B6' }}>
-                  {isCommande ? 'Total commande' : 'Montant estimé'}
-                </span>
-                <div className="flex items-center gap-3">
-                  <span className="text-[22px] font-extrabold" style={{ color: isCommande ? '#4CAF4F' : '#8B5CF6' }}>
-                    {item.montant}
-                  </span>
-                  {/* Devis non archivé + permission → modifier le prix (rouvre le popup) */}
-                  {!isCommande && !isArchived && canModifierStatuts && onConfirmQuoteWithPrice && (
-                    <button onClick={() => setShowPriceModal(true)} title="Modifier le prix"
-                      className="w-7 h-7 flex items-center justify-center rounded-lg text-[#8B5CF6] hover:bg-[#EDE9FE] transition-colors">
-                      <svg width={14} height={14} fill="none" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/><path d="M18.5 2.5a2.1 2.1 0 013 3L12 15l-4 1 1-4 9.5-9.5z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>
-                    </button>
-                  )}
-                </div>
-              </div>
+              {/* Total — toujours tout en bas, avec détail TVA si applicable */}
+              {(() => {
+                const hasTva = item.vatEnabled === true;
+                const hasItems = item.items && item.items.length > 0;
+                const ht = hasItems ? (item.items || []).reduce((acc, it) => acc + it.quantite * it.prixUnitaire, 0) : 0;
+                const total = hasItems && hasTva ? Math.round(ht * 1.19) : ht;
+                
+                return (
+                  <div className="rounded-xl border border-[#F2F4F7] px-4 py-3 flex flex-col gap-2">
+                    {hasItems && hasTva && (
+                      <div className="flex items-center justify-between pb-2 border-b border-[#F2F4F7]">
+                        <span className="text-[12px] text-[#8A9BB5]">HT</span>
+                        <span className="text-[13px] font-semibold text-[#374151]">{ht.toLocaleString('fr-FR')} DA</span>
+                      </div>
+                    )}
+                    <div className="flex items-center justify-between pt-1">
+                      <span className="text-[10px] font-bold uppercase tracking-wide" style={{ color: isCommande ? '#166534' : '#5B21B6' }}>
+                        {hasItems && hasTva ? 'Total TTC' : (isCommande ? 'Total HT' : 'Montant estimé')}
+                      </span>
+                      <div className="flex items-center gap-3">
+                        <span className="text-[22px] font-extrabold" style={{ color: isCommande ? '#4CAF4F' : '#8B5CF6' }}>
+                          {hasItems && total > 0 ? `${total.toLocaleString('fr-FR')} DA` : item.montant}
+                        </span>
+                        {/* Devis non archivé + permission → modifier le prix (rouvre le popup) */}
+                        {!isCommande && !isArchived && canModifierStatuts && onConfirmQuoteWithPrice && (
+                          <button onClick={() => setShowPriceModal(true)} title="Modifier le prix"
+                            className="w-7 h-7 flex items-center justify-center rounded-lg text-[#8B5CF6] hover:bg-[#EDE9FE] transition-colors">
+                            <svg width={14} height={14} fill="none" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/><path d="M18.5 2.5a2.1 2.1 0 013 3L12 15l-4 1 1-4 9.5-9.5z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
 
             </div>
           </div>
