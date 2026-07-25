@@ -8,6 +8,7 @@ import { WilayaSelect } from '@/components/ui/WilayaSelect';
 import { CommuneSelect } from '@/components/ui/CommuneSelect';
 import { ClientAutocomplete } from '@/components/ui/ClientAutocomplete';
 import { RefSelect } from '@/components/ui/RefSelect';
+import { MobileNavbar } from '@/components/MobileNavbar';
 import { exportTableauExcel } from '@/lib/export-tableau';
 import { exportVentesExcel } from '@/lib/export-ventes';
 import { useSSE } from '@/lib/use-sse';
@@ -907,6 +908,8 @@ function RequestsPageInner() {
           prefill={createPrefill}
         />
       )}
+
+      <MobileNavbar />
     </div>
   );
 }
