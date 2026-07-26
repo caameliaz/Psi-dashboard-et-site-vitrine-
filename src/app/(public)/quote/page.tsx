@@ -7,7 +7,7 @@ import { WilayaSelect } from '@/components/ui/WilayaSelect';
 import { CommuneSelect } from '@/components/ui/CommuneSelect';
 import { useCartStore } from '@/store/cartStore';
 import { useTranslation } from '@/lib/i18n';
-import { validateEmail, validatePhone, firstError } from '@/lib/validation';
+import { validateEmail, validatePhone } from '@/lib/validation';
 
 const WHATSAPP_NUMBER = '213770150656';
 const PHONE = '+213770150656';
@@ -37,6 +37,8 @@ export default function QuotePage() {
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [submitError, setSubmitError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [productsError, setProductsError] = useState('');
 
   const WHATSAPP_MSG = encodeURIComponent(t('common.whatsapp_msg'));
 
@@ -62,16 +64,79 @@ export default function QuotePage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Vérifie le format des coordonnées avant d'envoyer
-    const vErr = firstError([
-      validatePhone(formData.phone, true),
-      validateEmail(formData.email),
-    ]);
-    // vErr est une CLÉ de traduction (ex. 'errors.phone_invalid') → message traduit
-    if (vErr) { setSubmitError(vErr.startsWith('errors.') ? t(vErr) : vErr); return; }
+    
+    // Réinitialise les erreurs
+    setFieldErrors({});
+    setSubmitError('');
+    setProductsError('');
+    
+    // Validation des champs obligatoires
+    const errors: Record<string, string> = {};
+    
+    if (!formData.company.trim()) {
+      errors.company = "Nom de l'entreprise requis";
+    }
+    if (!formData.phone.trim()) {
+      errors.phone = 'Numéro de téléphone requis';
+    } else {
+      // Vérifie le format du téléphone s'il est fourni
+      const phoneErr = validatePhone(formData.phone, true);
+      if (phoneErr) {
+        errors.phone = phoneErr.startsWith('errors.') ? t(phoneErr) : phoneErr;
+      }
+    }
+    if (!formData.wilaya.trim()) {
+      errors.wilaya = 'Wilaya requise';
+    }
+    if (!formData.commune.trim()) {
+      errors.commune = 'Commune requise';
+    }
+    
+    // Vérifie le format de l'email s'il est fourni
+    if (formData.email.trim()) {
+      const emailErr = validateEmail(formData.email);
+      if (emailErr) {
+        errors.email = emailErr.startsWith('errors.') ? t(emailErr) : emailErr;
+      }
+    }
+    
+    // Si des erreurs existent, on les affiche et on arrête
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors);
+      // Scroll vers le premier champ en erreur
+      const firstErrorField = Object.keys(errors)[0];
+      // Pour les selects custom (wilaya, commune), on cherche le conteneur parent
+      const element = document.querySelector(`[name="${firstErrorField}"]`)?.closest('div') || 
+                      document.querySelector(`[name="${firstErrorField}"]`);
+      if (element) {
+        element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        // Focus sur le champ si c'est un input classique
+        const inputElement = element as HTMLElement;
+        if (inputElement.tagName === 'INPUT' || inputElement.tagName === 'TEXTAREA') {
+          (inputElement as HTMLInputElement).focus();
+        }
+      }
+      return;
+    }
 
     setLoading(true);
     setSubmitError('');
+    
+    // Vérifie qu'au moins un produit a été sélectionné OU qu'un message a été saisi
+    const hasProducts = lines.some(l => l.categoryId || l.dimChoice);
+    const hasMessage = formData.message.trim().length > 0;
+    
+    if (!hasProducts && !hasMessage) {
+      setProductsError('Décrivez-nous ici vos besoins ou choisissez un produit de notre catalogue');
+      setLoading(false);
+      // Scroll vers le champ message
+      const messageField = document.querySelector('[name="message"]');
+      if (messageField) {
+        messageField.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+      return;
+    }
+    
     try {
       const items = lines.map((l) => {
         const qty = l.quantity ? Number(l.quantity) : 1;
@@ -90,12 +155,6 @@ export default function QuotePage() {
         }
         return null;
       }).filter((x): x is NonNullable<typeof x> => x !== null);
-
-      if (items.length === 0 && !formData.message.trim()) {
-        setSubmitError(t('quote.error_empty'));
-        setLoading(false);
-        return;
-      }
 
       const res = await fetch('/api/quotes', {
         method: 'POST',
@@ -178,44 +237,49 @@ export default function QuotePage() {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                 <div>
-                  <label className={labelClass}>{t('quote.name_label')}</label>
-                  <input type="text" name="name" value={formData.name} onChange={handleChange} placeholder={t('quote.name_ph')} required className={inputClass} />
+                  <label className={labelClass}>{t('quote.name_label')} *</label>
+                  <input type="text" name="name" value={formData.name} onChange={handleChange} placeholder={t('quote.name_ph')} className={inputClass} />
+                  {fieldErrors.name && <p className="text-[13px] text-[#EF4444] font-medium mt-1.5 flex items-center gap-1.5"><svg width="14" height="14" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" stroke="currentColor" strokeWidth="1.5"/><path d="M8 4v5M8 11v1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>{fieldErrors.name}</p>}
                 </div>
                 <div>
-                  <label className={labelClass}>{t('quote.company_label')}</label>
-                  <input type="text" name="company" value={formData.company} onChange={handleChange} placeholder={t('quote.company_ph')} required className={inputClass} />
+                  <label className={labelClass}>{t('quote.company_label')} *</label>
+                  <input type="text" name="company" value={formData.company} onChange={handleChange} placeholder={t('quote.company_ph')} className={inputClass} />
+                  {fieldErrors.company && <p className="text-[13px] text-[#EF4444] font-medium mt-1.5 flex items-center gap-1.5"><svg width="14" height="14" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" stroke="currentColor" strokeWidth="1.5"/><path d="M8 4v5M8 11v1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>{fieldErrors.company}</p>}
                 </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                 <div>
-                  <label className={labelClass}>{t('quote.phone_label')}</label>
-                  <input type="tel" name="phone" value={formData.phone} onChange={handleChange} placeholder={t('quote.phone_ph')} required className={inputClass} />
+                  <label className={labelClass}>{t('quote.phone_label')} *</label>
+                  <input type="tel" name="phone" value={formData.phone} onChange={handleChange} placeholder={t('quote.phone_ph')} className={inputClass} />
+                  {fieldErrors.phone && <p className="text-[13px] text-[#EF4444] font-medium mt-1.5 flex items-center gap-1.5"><svg width="14" height="14" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" stroke="currentColor" strokeWidth="1.5"/><path d="M8 4v5M8 11v1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>{fieldErrors.phone}</p>}
                 </div>
                 <div>
-                  <label className={labelClass}>{t('quote.wilaya_label')}</label>
+                  <label className={labelClass}>{t('quote.wilaya_label')} *</label>
                   <WilayaSelect
                     name="wilaya"
                     value={formData.wilaya}
                     onChange={(v) => setFormData({ ...formData, wilaya: v, commune: '' })}
-                    required
                   />
+                  {fieldErrors.wilaya && <p className="text-[13px] text-[#EF4444] font-medium mt-1.5 flex items-center gap-1.5"><svg width="14" height="14" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" stroke="currentColor" strokeWidth="1.5"/><path d="M8 4v5M8 11v1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>{fieldErrors.wilaya}</p>}
                 </div>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className={labelClass}>{t('quote.commune_label')}</label>
+                  <label className={labelClass}>{t('quote.commune_label')} *</label>
                   <CommuneSelect
                     name="commune"
                     wilaya={formData.wilaya}
                     value={formData.commune}
                     onChange={(v) => setFormData({ ...formData, commune: v })}
                   />
+                  {fieldErrors.commune && <p className="text-[13px] text-[#EF4444] font-medium mt-1.5 flex items-center gap-1.5"><svg width="14" height="14" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" stroke="currentColor" strokeWidth="1.5"/><path d="M8 4v5M8 11v1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>{fieldErrors.commune}</p>}
                 </div>
                 <div>
                   <label className={labelClass}>{t('quote.email_label')}</label>
                   <input type="email" name="email" value={formData.email} onChange={handleChange} placeholder={t('quote.email_ph')} className={inputClass} />
+                  {fieldErrors.email && <p className="text-[13px] text-[#EF4444] font-medium mt-1.5 flex items-center gap-1.5"><svg width="14" height="14" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" stroke="currentColor" strokeWidth="1.5"/><path d="M8 4v5M8 11v1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>{fieldErrors.email}</p>}
                 </div>
               </div>
 
@@ -293,6 +357,7 @@ export default function QuotePage() {
                   rows={4}
                   className={inputClass + ' resize-none'}
                 />
+                {productsError && <p className="text-[13px] text-[#EF4444] font-medium mt-1.5 flex items-center gap-1.5"><svg width="14" height="14" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" stroke="currentColor" strokeWidth="1.5"/><path d="M8 4v5M8 11v1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>{productsError}</p>}
               </div>
 
               {submitError && (

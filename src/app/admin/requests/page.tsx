@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useState, useEffect, useCallback } from 'react';
 import { StatusPill } from '@/components/ui/StatusPill';
@@ -156,6 +156,7 @@ export function CreateForm({ defaultType, onClose, onSave, users, currentUserId,
   const [tva, setTva] = useState(false);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [assignedToId, setAssignedToId] = useState<string>(currentUserId ?? '');
   // Infos de facturation / règlement (toutes facultatives)
   const [invoiceNumber, setInvoiceNumber] = useState('');
@@ -193,15 +194,16 @@ export function CreateForm({ defaultType, onClose, onSave, users, currentUserId,
 
   const handleSave = async () => {
     setFormError('');
+    setFieldErrors({});
     // Champs obligatoires : entreprise, téléphone, wilaya, commune, ≥ 1 ligne.
-    if (!entreprise.trim()) return setFormError('L’entreprise est obligatoire.');
-    if (!telephone.trim()) return setFormError('Le téléphone est obligatoire.');
-    if (!wilaya.trim()) return setFormError('La wilaya est obligatoire.');
-    if (!commune.trim()) return setFormError('La commune est obligatoire.');
+    if (!entreprise.trim()) { setFieldErrors({ entreprise: "Nom de l'entreprise requis" }); setTimeout(() => document.querySelector('[placeholder="Nom entreprise"]')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100); return; }
+    if (!telephone.trim()) { setFieldErrors({ telephone: 'Numéro de téléphone requis' }); setTimeout(() => document.querySelector('[placeholder="+213 5XX XXX XXX"]')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100); return; }
+    if (!wilaya.trim()) { setFieldErrors({ wilaya: 'Wilaya requise' }); setTimeout(() => document.querySelector('[name="wilaya"]')?.closest('div')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100); return; }
+    if (!commune.trim()) { setFieldErrors({ commune: 'Commune requise' }); setTimeout(() => document.querySelector('[name="commune"]')?.closest('div')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100); return; }
     if (lignes.every(l => !l.ref)) return setFormError('Ajoutez au moins un produit.');
     // Format des données (téléphone / email) — message clair, pas d'envoi silencieux.
     const vErr = firstError([validatePhone(telephone, true), validateEmail(email)]);
-    if (vErr) return setFormError(messageErreur(vErr));
+    if (vErr) { const errMsg = messageErreur(vErr); if (errMsg.includes('téléphone') || errMsg.includes('phone')) { setFieldErrors({ telephone: errMsg }); setTimeout(() => document.querySelector('[placeholder="+213 5XX XXX XXX"]')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100); return; } else if (errMsg.includes('email')) { setFieldErrors({ email: errMsg }); setTimeout(() => document.querySelector('[placeholder="client@email.com"]')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100); return; } else { return setFormError(errMsg); } }
     setSaving(true);
     const now = new Date();
     const produits = lignes.filter(l => l.ref).map(l => `${l.ref} × ${l.qte}`).join(', ');
@@ -290,6 +292,8 @@ export function CreateForm({ defaultType, onClose, onSave, users, currentUserId,
                   setCommune(c.commune ?? '');
                 }}
               />
+              {fieldErrors.entreprise && <p className="text-[11px] text-[#EF4444] font-medium mt-1 flex items-center gap-1"><svg width="12" height="12" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" stroke="currentColor" strokeWidth="1.5"/><path d="M8 4v5M8 11v1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>{fieldErrors.entreprise}</p>}
+
             </div>
             <div><label className={lc}>Nom du contact</label><input value={client} onChange={e => setClient(e.target.value)} placeholder="Prénom Nom" className={ic} /></div>
             <div><label className={lc}>Téléphone *</label><input type="tel" inputMode="tel" value={telephone} onChange={e => setTelephone(e.target.value.replace(/[^\d+ ]/g, ''))} placeholder="+213 5XX XXX XXX" className={ic} /></div>
@@ -917,3 +921,7 @@ function RequestsPageInner() {
 export default function RequestsPage() {
   return <RequirePerm perm="voir_commandes"><RequestsPageInner /></RequirePerm>;
 }
+
+
+
+
