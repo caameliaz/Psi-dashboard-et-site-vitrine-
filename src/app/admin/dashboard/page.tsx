@@ -673,7 +673,7 @@ export default function DashboardPage() {
           }}
           onConfirmQuoteWithPrice={async (item) => {
             if (item.id) {
-              // Fixe le prix du devis (proposedPrice) au moment de la confirmation
+              // Enregistre le prix du devis SANS changer son statut
               const prix = item._prix;
               let proposedPrice = 0;
               if (prix?.totalOverride !== undefined) {
@@ -684,13 +684,14 @@ export default function DashboardPage() {
                   return acc + it.quantite * (p?.unitPrice ?? 0);
                 }, 0);
               }
+              // ⚠️ On n'envoie PAS le statut — juste le prix
               await fetch(`/api/quotes/${item.id}`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ status: 'VALIDE', proposedPrice }),
+                body: JSON.stringify({ proposedPrice, vatEnabled: item.vatEnabled }),
               });
             }
-            setSelectedRequest(null);
+            // On garde le panneau ouvert — pas de setSelectedRequest(null)
             fetchData(true);
           }}
         />

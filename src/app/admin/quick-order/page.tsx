@@ -60,7 +60,7 @@ export default function QuickOrderPage() {
         <CreateForm
           inline
           defaultType="Commande"
-          onClose={() => router.push('/admin/mobile')}
+          onClose={() => router.push('/admin/dashboard')}
           onSave={handleSave}
           users={users}
           currentUserId={currentUserId}
@@ -73,7 +73,7 @@ export default function QuickOrderPage() {
           <CreateForm
             inline
             defaultType="Commande"
-            onClose={() => router.push('/admin/mobile')}
+            onClose={() => router.push('/admin/dashboard')}
             onSave={handleSave}
             users={users}
             currentUserId={currentUserId}

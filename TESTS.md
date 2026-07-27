@@ -129,7 +129,7 @@ effectues apres ne creent plus de client et sajoute au client cree précédemmen
 
 
 mettre un message dalerte quand montant global ne corresponds pas avec le prix unitaire de chaque produit
--devis devient automatiquement confirme apres avoir modifie prix unitaire et ou tva ou prix en general
+
 le filtre en haut commande et devis doivent montrer toutes les commandes et devis (le compteur doit compter toutes les commandes et devis aussi pas seulement ceux livres ou en attente)
 
 ui:
