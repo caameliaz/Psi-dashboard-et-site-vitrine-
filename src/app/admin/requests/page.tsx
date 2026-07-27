@@ -220,13 +220,6 @@ export function CreateForm({ defaultType, onClose, onSave, users, currentUserId,
     if (!wilaya.trim()) { setFieldErrors({ wilaya: 'Wilaya requise' }); setTimeout(() => document.querySelector('[name="wilaya"]')?.closest('div')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100); return; }
     if (!commune.trim()) { setFieldErrors({ commune: 'Commune requise' }); setTimeout(() => document.querySelector('[name="commune"]')?.closest('div')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100); return; }
     
-    // Validation des produits - au moins 1 ligne remplie
-    if (lignes.every(l => !l.ref)) {
-      setFieldErrors({ produits: 'Ajoutez au moins un produit' });
-      setTimeout(() => document.querySelector('[data-products-section]')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100);
-      return;
-    }
-    
     // Format des données (téléphone / email) — message clair, pas d'envoi silencieux.
     const vErr = firstError([validatePhone(telephone, true), validateEmail(email)]);
     if (vErr) { const errMsg = messageErreur(vErr); if (errMsg.includes('téléphone') || errMsg.includes('phone')) { setFieldErrors({ telephone: errMsg }); setTimeout(() => document.querySelector('[placeholder="+213 5XX XXX XXX"]')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100); return; } else if (errMsg.includes('email')) { setFieldErrors({ email: errMsg }); setTimeout(() => document.querySelector('[placeholder="client@email.com"]')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100); return; } else { return setFormError(errMsg); } }
@@ -475,17 +468,6 @@ export function CreateForm({ defaultType, onClose, onSave, users, currentUserId,
               <svg width={14} height={14} viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"/></svg>
               Ajouter une ligne
             </button>
-            
-            {/* Erreur inline pour les produits */}
-            {fieldErrors.produits && (
-              <p className="text-[11px] text-[#EF4444] font-medium mt-2 flex items-center gap-1">
-                <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
-                  <circle cx="8" cy="8" r="7" stroke="currentColor" strokeWidth="1.5"/>
-                  <path d="M8 4v5M8 11v1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-                </svg>
-                {fieldErrors.produits}
-              </p>
-            )}
           </div>
 
           {/* Message complémentaire pour les devis */}

@@ -1022,8 +1022,8 @@ export function RequestPanel({ item, onClose, onStatusChange, onConfirmQuoteWith
       {/* Overlay fond - position fixed garantie */}
       <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0, 0, 0, 0.4)', backdropFilter: 'blur(4px)', zIndex: 130 }} onClick={onClose} />
       
-      {/* Modale - ancrée en haut avec espace fixe */}
-      <div className="max-w-[600px] top-[14vh] md:top-[5vh]" style={{ position: 'fixed', left: '50%', transform: 'translateX(-50%)', zIndex: 140, width: '100%', padding: '0 1rem' }}>
+      {/* Modale - ancrée en haut avec espacement fixe */}
+      <div className="max-w-[600px] top-[13vh] md:top-[5vh]" style={{ position: 'fixed', left: '50%', transform: 'translateX(-50%)', zIndex: 140, width: '100%', padding: '0 1rem' }}>
         <div className="pointer-events-auto bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden w-full max-h-[80vh] md:max-h-[90vh]">
 
           {/* ── Header avec infos principales ── */}
