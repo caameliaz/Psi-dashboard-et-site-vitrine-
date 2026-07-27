@@ -1020,11 +1020,11 @@ export function RequestPanel({ item, onClose, onStatusChange, onConfirmQuoteWith
   return (
     <>
       {/* Overlay fond - position fixed garantie */}
-      <div style={{ position: 'fixed', top: 10, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0, 0, 0, 0.4)', backdropFilter: 'blur(4px)', zIndex: 130 }} onClick={onClose} />
+      <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0, 0, 0, 0.4)', backdropFilter: 'blur(4px)', zIndex: 130 }} onClick={onClose} />
       
-      {/* Modale - centrage absolu avec transform */}
-      <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', zIndex: 140, width: '100%', maxWidth: '600px', padding: '0 1rem' }}>
-        <div className="pointer-events-auto bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden w-full max-h-[80vh]">
+      {/* Modale - ancrée en haut avec espace fixe */}
+      <div className="max-w-[600px] top-[14vh] md:top-[5vh]" style={{ position: 'fixed', left: '50%', transform: 'translateX(-50%)', zIndex: 140, width: '100%', padding: '0 1rem' }}>
+        <div className="pointer-events-auto bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden w-full max-h-[80vh] md:max-h-[90vh]">
 
           {/* ── Header avec infos principales ── */}
           <div className="flex items-center justify-between px-6 py-3 border-b border-[#F2F4F7] flex-shrink-0">
