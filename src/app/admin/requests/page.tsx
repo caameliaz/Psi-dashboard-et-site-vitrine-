@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useState, useEffect, useCallback } from 'react';
 import { StatusPill } from '@/components/ui/StatusPill';
@@ -17,6 +17,17 @@ import { RequirePerm } from '@/components/RequirePerm';
 import { ImportVentesModal } from '@/components/ui/ImportVentesModal';
 import { orderToDetail, quoteToDetail, DB_TO_UI, UI_TO_DB } from '@/lib/request-detail';
 import { validateEmail, validatePhone, validateQuantity, validatePositiveNumber, normalizeEmail, normalizePhone, firstError, messageErreur } from '@/lib/validation';
+
+// Hook pour bloquer le scroll du body quand une modale est ouverte
+function useLockBodyScroll() {
+  useEffect(() => {
+    const originalStyle = window.getComputedStyle(document.body).overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = originalStyle;
+    };
+  }, []);
+}
 
 const ARCHIVED = ['Livré', 'Annulé'];
 
@@ -114,7 +125,8 @@ export async function submitNewRequest(
         // id transmis quand le devis est créé depuis une fiche client → pas de doublon
         clientId: item._clientId || undefined,
         name: item.client, company: item._entreprise || undefined, phone: item._telephone ? normalizePhone(item._telephone) : undefined,
-        email: item._email ? normalizeEmail(item._email) : undefined, wilaya: item._wilaya || 'Non spécifié', commune: item._commune || undefined, message: '',
+        email: item._email ? normalizeEmail(item._email) : undefined, wilaya: item._wilaya || 'Non spécifié', commune: item._commune || undefined, 
+        message: item._message || '',
         items: lignes.filter((l: any) => l.ref).map((l: any) => ({ productId: l.productId ?? undefined, description: l.productId ? undefined : l.ref, quantity: l.qte, unitPrice: l.pu || undefined, metrage: l.metrage ? Number(l.metrage) : undefined })),
         // Prix déjà défini à la création (somme des lignes) → pas de re-saisie à la
         // confirmation. Vaut 0 si aucun prix rempli (le prix sera demandé au moment
@@ -142,6 +154,12 @@ export function CreateForm({ defaultType, onClose, onSave, users, currentUserId,
   inline?: boolean;
   prefill?: { clientId?: string; client?: string; entreprise?: string; telephone?: string; email?: string; wilaya?: string; commune?: string };
 }) {
+  // Bloquer le scroll du body quand la modale est ouverte (sauf en mode inline - pleine page)
+  if (!inline) {
+    // eslint-disable-next-line react-hooks/rules-of-hooks
+    useLockBodyScroll();
+  }
+  
   const ic = "w-full px-3 py-2 rounded-xl border border-[#E2E8F0] text-[13px] text-[#263238] focus:outline-none focus:border-[#4CAF4F] focus:ring-[2px] focus:ring-[#4CAF4F]/15 transition-all bg-white";
   const lc = "block text-[11px] font-bold text-[#8A9BB5] uppercase tracking-wide mb-1";
 
@@ -152,10 +170,12 @@ export function CreateForm({ defaultType, onClose, onSave, users, currentUserId,
   const [email, setEmail] = useState(prefill?.email ?? '');
   const [wilaya, setWilaya] = useState(prefill?.wilaya ?? '');
   const [commune, setCommune] = useState(prefill?.commune ?? '');
+  const [message, setMessage] = useState(''); // Message complémentaire pour les devis
   const [lignes, setLignes] = useState<Ligne[]>([emptyLigne()]);
   const [tva, setTva] = useState(false);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [assignedToId, setAssignedToId] = useState<string>(currentUserId ?? '');
   // Infos de facturation / règlement (toutes facultatives)
   const [invoiceNumber, setInvoiceNumber] = useState('');
@@ -193,15 +213,16 @@ export function CreateForm({ defaultType, onClose, onSave, users, currentUserId,
 
   const handleSave = async () => {
     setFormError('');
+    setFieldErrors({});
     // Champs obligatoires : entreprise, téléphone, wilaya, commune, ≥ 1 ligne.
-    if (!entreprise.trim()) return setFormError('L’entreprise est obligatoire.');
-    if (!telephone.trim()) return setFormError('Le téléphone est obligatoire.');
-    if (!wilaya.trim()) return setFormError('La wilaya est obligatoire.');
-    if (!commune.trim()) return setFormError('La commune est obligatoire.');
-    if (lignes.every(l => !l.ref)) return setFormError('Ajoutez au moins un produit.');
+    if (!entreprise.trim()) { setFieldErrors({ entreprise: "Nom de l'entreprise requis" }); setTimeout(() => document.querySelector('[placeholder="Nom entreprise"]')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100); return; }
+    if (!telephone.trim()) { setFieldErrors({ telephone: 'Numéro de téléphone requis' }); setTimeout(() => document.querySelector('[placeholder="+213 5XX XXX XXX"]')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100); return; }
+    if (!wilaya.trim()) { setFieldErrors({ wilaya: 'Wilaya requise' }); setTimeout(() => document.querySelector('[name="wilaya"]')?.closest('div')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100); return; }
+    if (!commune.trim()) { setFieldErrors({ commune: 'Commune requise' }); setTimeout(() => document.querySelector('[name="commune"]')?.closest('div')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100); return; }
+    
     // Format des données (téléphone / email) — message clair, pas d'envoi silencieux.
     const vErr = firstError([validatePhone(telephone, true), validateEmail(email)]);
-    if (vErr) return setFormError(messageErreur(vErr));
+    if (vErr) { const errMsg = messageErreur(vErr); if (errMsg.includes('téléphone') || errMsg.includes('phone')) { setFieldErrors({ telephone: errMsg }); setTimeout(() => document.querySelector('[placeholder="+213 5XX XXX XXX"]')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100); return; } else if (errMsg.includes('email')) { setFieldErrors({ email: errMsg }); setTimeout(() => document.querySelector('[placeholder="client@email.com"]')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100); return; } else { return setFormError(errMsg); } }
     setSaving(true);
     const now = new Date();
     const produits = lignes.filter(l => l.ref).map(l => `${l.ref} × ${l.qte}`).join(', ');
@@ -227,6 +248,7 @@ export function CreateForm({ defaultType, onClose, onSave, users, currentUserId,
       _email: email.trim(),
       _telephone: telephone.trim(),
       _entreprise: entreprise.trim(),
+      _message: message.trim(), // Ajout du message
       // Rattache la demande au client d'origine (créée depuis sa fiche)
       _clientId: prefill?.clientId,
       _assignedToId: assignedToId || undefined,
@@ -247,16 +269,7 @@ export function CreateForm({ defaultType, onClose, onSave, users, currentUserId,
   // remonte tout à chaque frappe et le clavier mobile se ferme.
   const formBody = (
     <>
-
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-[#F2F4F7]">
-          <h3 className="text-[15px] font-bold text-[#0F172A]">{type === 'Commande' ? 'Nouvelle commande' : 'Nouvelle demande de devis'}</h3>
-          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-[#F2F4F7] text-[#ABBED1]">
-            <svg width={14} height={14} viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"/></svg>
-          </button>
-        </div>
-
-        <div className="flex-1 overflow-y-auto px-6 py-5 flex flex-col gap-5">
+        <div className="flex-1 overflow-y-auto px-6 pt-6 pb-5 flex flex-col gap-5">
 
           {/* Type toggle */}
           <div className="flex gap-2">
@@ -290,14 +303,32 @@ export function CreateForm({ defaultType, onClose, onSave, users, currentUserId,
                   setCommune(c.commune ?? '');
                 }}
               />
+              {fieldErrors.entreprise && <p className="text-[11px] text-[#EF4444] font-medium mt-1 flex items-center gap-1"><svg width="12" height="12" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" stroke="currentColor" strokeWidth="1.5"/><path d="M8 4v5M8 11v1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>{fieldErrors.entreprise}</p>}
+
             </div>
             <div><label className={lc}>Nom du contact</label><input value={client} onChange={e => setClient(e.target.value)} placeholder="Prénom Nom" className={ic} /></div>
-            <div><label className={lc}>Téléphone *</label><input type="tel" inputMode="tel" value={telephone} onChange={e => setTelephone(e.target.value.replace(/[^\d+ ]/g, ''))} placeholder="+213 5XX XXX XXX" className={ic} /></div>
-            <div><label className={lc}>Email</label><input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="client@email.com" className={ic} /></div>
+            <div>
+              <label className={lc}>Téléphone *</label>
+              <input type="tel" inputMode="tel" value={telephone} onChange={e => setTelephone(e.target.value.replace(/[^\d+ ]/g, ''))} placeholder="+213 5XX XXX XXX" className={ic} />
+              {fieldErrors.telephone && <p className="text-[11px] text-[#EF4444] font-medium mt-1 flex items-center gap-1"><svg width="12" height="12" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" stroke="currentColor" strokeWidth="1.5"/><path d="M8 4v5M8 11v1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>{fieldErrors.telephone}</p>}
+            </div>
+            <div>
+              <label className={lc}>Email</label>
+              <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="client@email.com" className={ic} />
+              {fieldErrors.email && <p className="text-[11px] text-[#EF4444] font-medium mt-1 flex items-center gap-1"><svg width="12" height="12" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" stroke="currentColor" strokeWidth="1.5"/><path d="M8 4v5M8 11v1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>{fieldErrors.email}</p>}
+            </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <div><label className={lc}>Wilaya *</label><WilayaSelect value={wilaya} onChange={(v) => { setWilaya(v); setCommune(''); }} /></div>
-            <div><label className={lc}>Commune *</label><CommuneSelect wilaya={wilaya} value={commune} onChange={setCommune} /></div>
+            <div>
+              <label className={lc}>Wilaya *</label>
+              <WilayaSelect value={wilaya} onChange={(v) => { setWilaya(v); setCommune(''); }} />
+              {fieldErrors.wilaya && <p className="text-[11px] text-[#EF4444] font-medium mt-1 flex items-center gap-1"><svg width="12" height="12" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" stroke="currentColor" strokeWidth="1.5"/><path d="M8 4v5M8 11v1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>{fieldErrors.wilaya}</p>}
+            </div>
+            <div>
+              <label className={lc}>Commune *</label>
+              <CommuneSelect wilaya={wilaya} value={commune} onChange={setCommune} />
+              {fieldErrors.commune && <p className="text-[11px] text-[#EF4444] font-medium mt-1 flex items-center gap-1"><svg width="12" height="12" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" stroke="currentColor" strokeWidth="1.5"/><path d="M8 4v5M8 11v1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>{fieldErrors.commune}</p>}
+            </div>
           </div>
           <div>
             <label className={lc}>Commercial</label>
@@ -344,9 +375,9 @@ export function CreateForm({ defaultType, onClose, onSave, users, currentUserId,
           </div>
 
           {/* Lignes produits */}
-          <div>
+          <div data-products-section>
             <div className="flex items-center justify-between mb-2">
-              <label className={lc}>Produits</label>
+              <label className={lc}>Produits *</label>
             </div>
 
             {/* En-têtes colonnes — masqués sur mobile (chaque ligne devient une carte
@@ -438,6 +469,21 @@ export function CreateForm({ defaultType, onClose, onSave, users, currentUserId,
               Ajouter une ligne
             </button>
           </div>
+
+          {/* Message complémentaire pour les devis */}
+          {type === 'Devis' && (
+            <div>
+              <label className={lc}>Message complémentaire <span className="text-[#ABBED1] font-normal normal-case">(facultatif)</span></label>
+              <textarea
+                value={message}
+                onChange={e => setMessage(e.target.value)}
+                placeholder="Détails supplémentaires, demandes spécifiques..."
+                rows={3}
+                className={ic + ' resize-none'}
+              />
+              <p className="text-[10px] text-[#ABBED1] mt-1">Ce message sera visible dans le détail du devis</p>
+            </div>
+          )}
 
           {/* TVA + Total */}
           <div className="rounded-xl border border-[#F2F4F7] px-4 py-3 flex flex-col gap-2">
@@ -557,6 +603,27 @@ function RequestsPageInner() {
     return () => clearInterval(id);
   }, [fetchAll]);
 
+  // ── Gestion du bouton retour du navigateur pour fermer le panneau de détail ──
+  useEffect(() => {
+    // Quand un détail est ouvert, ajoute une entrée dans l'historique
+    if (selected) {
+      window.history.pushState({ detailOpen: true }, '');
+    }
+
+    // Écoute le bouton retour du navigateur
+    const handlePopState = (e: PopStateEvent) => {
+      // Si un détail est ouvert, on le ferme au lieu de changer de page
+      if (selected) {
+        e.preventDefault();
+        setSelected(null);
+        // Empêche la navigation en arrière en ajoutant une entrée forward
+        window.history.pushState({ detailOpen: false }, '');
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [selected]);
   // Ouverture directe d'un détail via ?open=<id> (depuis l'historique / une notif)
   useEffect(() => {
     const openId = new URLSearchParams(window.location.search).get('open');
@@ -639,8 +706,8 @@ function RequestsPageInner() {
     setSelected(prev => prev ? { ...prev, assignedToId, assignedToName: users.find(u => u.id === assignedToId)?.name ?? null } : prev);
   };
 
-  // Confirme un devis en fixant son prix (proposedPrice). Le prix est saisi
-  // dans le popup au moment du passage "En attente → Confirmé".
+  // Enregistre le prix d'un devis SANS changer son statut. Le prix peut être
+  // saisi avant confirmation. Le statut change uniquement quand on clique "Confirmer".
   const handleConfirmQuoteWithPrice = async (
     item: RequestDetail & { _prix?: { totalOverride?: number; itemPrices?: { designation: string; unitPrice: number }[] } }
   ) => {
@@ -660,10 +727,12 @@ function RequestsPageInner() {
     // désignation. L'API les recolle sur les QuoteItem correspondants (sans
     // toucher au lien produit), pour conserver le prix unitaire au PDF/Excel.
     const itemPrices = prix?.itemPrices;
+    // ⚠️ On n'envoie PAS le statut ici — juste le prix et la TVA.
+    // Le statut change uniquement via le bouton "Confirmer" (handleStatusChange).
     await fetch(`/api/quotes/${item.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: 'VALIDE', proposedPrice, vatEnabled: item.vatEnabled, itemPrices }),
+      body: JSON.stringify({ proposedPrice, vatEnabled: item.vatEnabled, itemPrices }),
     });
     // On reste sur le détail : fetchAll resynchronise le panneau (montant + statut).
     await fetchAll(true);
@@ -848,7 +917,7 @@ function RequestsPageInner() {
               const src         = row.source ?? 'SITE';
               const srcCfg      = src === 'SITE' ? SOURCE_COLOR.SITE : SOURCE_COLOR.OTHER;
               return (
-                <tr key={i} onClick={() => setSelected(row)} className="cursor-pointer transition-colors"
+                <tr key={i} onClick={() => { setSelected(row); setShowCreate(false); }} className="cursor-pointer transition-colors"
                   style={{ background: rowBg, borderTop: '1px solid #F2F4F7' }}
                   onMouseEnter={(e) => (e.currentTarget.style.background = rowBgHover)}
                   onMouseLeave={(e) => (e.currentTarget.style.background = rowBg)}>
@@ -880,7 +949,7 @@ function RequestsPageInner() {
         </table>
       </div>
 
-      {selected && (
+      {selected && !showCreate && (
         <RequestPanel
           item={selected}
           onClose={() => setSelected(null)}
@@ -917,3 +986,7 @@ function RequestsPageInner() {
 export default function RequestsPage() {
   return <RequirePerm perm="voir_commandes"><RequestsPageInner /></RequirePerm>;
 }
+
+
+
+

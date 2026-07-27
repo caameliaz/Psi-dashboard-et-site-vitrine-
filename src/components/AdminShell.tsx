@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { Sidebar } from '@/components/Sidebar';
 import { TopBar } from '@/components/ui/TopBar';
 import { DesktopOnly } from '@/components/DesktopOnly';
@@ -63,8 +63,12 @@ const DESKTOP_ONLY = ['/admin/products', '/admin/content', '/admin/templates', '
 // Responsive : sur mobile la sidebar devient un drawer ouvert par un hamburger.
 export function AdminShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
   const isLogin = pathname === '/admin/login';
   const [mobileOpen, setMobileOpen] = useState(false);
+  
+  // Fond blanc sur la page quick-order en mobile, fond gris partout ailleurs
+  const isQuickOrder = pathname === '/admin/quick-order';
 
   if (isLogin) {
     return <>{children}</>;
@@ -76,20 +80,20 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
     <>
       {/* Gère les toasts + le panneau de notifications (pas de barre visible) — toujours monté */}
       <TopBar />
-      <div className="flex min-h-screen" style={{ background: '#F5F8FC' }}>
+      <div className="flex min-h-screen" style={{ background: isQuickOrder ? '#FFFFFF' : '#F5F8FC' }}>
         {/* Sidebar : fixe sur desktop, drawer sur mobile */}
         <Sidebar mobileOpen={mobileOpen} onCloseMobile={() => setMobileOpen(false)} />
 
         <div className="flex-1 min-w-0 flex flex-col">
-          {/* Header mobile (hamburger + cloche) — caché sur desktop */}
+          {/* Header mobile (bouton retour + cloche) — caché sur desktop */}
           <header className="md:hidden sticky top-0 z-30 flex items-center justify-between px-4 h-14 bg-white border-b border-[#E4EBF5]">
             <button
-              onClick={() => setMobileOpen(true)}
-              aria-label="Ouvrir le menu"
+              onClick={() => router.back()}
+              aria-label="Retour"
               className="w-10 h-10 flex items-center justify-center rounded-lg hover:bg-[#F2F4F7] transition-colors"
             >
               <svg width={22} height={22} viewBox="0 0 24 24" fill="none">
-                <path d="M3 6h18M3 12h18M3 18h18" stroke="#374151" strokeWidth="2" strokeLinecap="round" />
+                <path d="M19 12H5M5 12l7 7M5 12l7-7" stroke="#374151" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
             </button>
             <Image 
@@ -106,7 +110,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
           <DesktopBellButton />
 
           {/* pt/pr en plus sur desktop pour réserver la place de la cloche flottante */}
-          <main className="flex-1 min-w-0 p-4 md:p-8 md:pt-14">
+          <main className={`flex-1 min-w-0 ${isQuickOrder ? 'p-0 md:p-8 md:pt-14' : 'p-4 md:p-8 md:pt-14'}`}>
             {isDesktopOnly ? <DesktopOnly>{children}</DesktopOnly> : children}
           </main>
         </div>

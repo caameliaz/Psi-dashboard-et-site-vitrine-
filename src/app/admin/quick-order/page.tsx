@@ -54,16 +54,34 @@ export default function QuickOrderPage() {
   if (!mounted) return null;
 
   return (
-    <div className="w-full">
-      <CreateForm
-        inline
-        defaultType="Commande"
-        onClose={() => router.push('/admin/mobile')}
-        onSave={handleSave}
-        users={users}
-        currentUserId={currentUserId}
-      />
+    <>
+      {/* Mobile: formulaire pleine largeur sans container */}
+      <div className="md:hidden w-full -ml-1 -mt-4">
+        <CreateForm
+          inline
+          defaultType="Commande"
+          onClose={() => router.push('/admin/dashboard')}
+          onSave={handleSave}
+          users={users}
+          currentUserId={currentUserId}
+        />
+      </div>
+
+      {/* Desktop: formulaire centré avec container */}
+      <div className="hidden md:block">
+        <div className="w-full max-w-[560px] mx-auto bg-white rounded-2xl border border-[#E2E8F0] flex flex-col overflow-hidden">
+          <CreateForm
+            inline
+            defaultType="Commande"
+            onClose={() => router.push('/admin/dashboard')}
+            onSave={handleSave}
+            users={users}
+            currentUserId={currentUserId}
+          />
+        </div>
+      </div>
+
       <MobileNavbar />
-    </div>
+    </>
   );
 }

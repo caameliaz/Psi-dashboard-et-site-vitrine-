@@ -499,8 +499,9 @@ function ClientSlideIn({ client, onClose, onEdit, onDelete, onReactivate, onDele
             let proposedPrice = 0;
             if (prix?.totalOverride !== undefined) proposedPrice = prix.totalOverride;
             else if (prix?.itemPrices) proposedPrice = (it.items ?? []).reduce((acc, x) => { const p = prix.itemPrices!.find((y) => y.designation === x.designation); return acc + x.quantite * (p?.unitPrice ?? 0); }, 0);
-            await fetch(`/api/quotes/${it.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'VALIDE', proposedPrice }) });
-            setSelectedRequest(null);
+            // ⚠️ On n'envoie PAS le statut — juste le prix
+            await fetch(`/api/quotes/${it.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ proposedPrice, vatEnabled: it.vatEnabled }) });
+            // On garde le panneau ouvert — pas de setSelectedRequest(null)
             onRefresh?.();
           }}
         />

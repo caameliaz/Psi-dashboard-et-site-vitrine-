@@ -102,10 +102,10 @@ export function firstError(errors: (string | null)[]): string | null {
  * (Le site public passe par t() et gère aussi l'arabe.)
  */
 const MESSAGES_FR: Record<string, string> = {
-  'errors.email_invalid': 'Email invalide (exemple : nom@entreprise.dz).',
-  'errors.email_required': 'Email obligatoire.',
-  'errors.phone_invalid': 'Téléphone invalide : 0X XX XX XX XX (10 chiffres) ou +213 suivi de 9 chiffres.',
-  'errors.phone_required': 'Téléphone obligatoire.',
+  'errors.email_invalid': 'Format email invalide',
+  'errors.email_required': 'Email requis',
+  'errors.phone_invalid': 'Numéro de téléphone invalide',
+  'errors.phone_required': 'Numéro de téléphone requis',
   'errors.quantity_invalid': 'Quantité invalide.',
   'errors.quantity_integer': 'La quantité doit être un nombre entier.',
   'errors.quantity_positive': 'La quantité doit être supérieure à 0.',

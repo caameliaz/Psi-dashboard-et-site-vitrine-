@@ -1,12 +1,24 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { StatusPill } from './StatusPill';
 import { useRole } from '@/lib/role-context';
 import { ClientAutocomplete } from './ClientAutocomplete';
 import { AdminSelect } from './AdminSelect';
 import { RefSelect } from './RefSelect';
 import { toWhatsAppNumber } from '@/lib/validation';
+
+// Hook pour bloquer le scroll du body quand le panneau est ouvert
+function useLockBodyScroll() {
+  useEffect(() => {
+    const originalStyle = window.getComputedStyle(document.body).overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = originalStyle;
+    };
+  }, []);
+}
 
 interface Template { id: string; title: string; content: string; category: string; }
 
@@ -597,7 +609,7 @@ function PriceModal({ item, onConfirm, onClose }: {
           <div className="flex gap-3">
             <button onClick={onClose} className="flex-1 px-4 py-2.5 rounded-xl border border-[#E2E8F0] text-[13px] font-semibold text-[#374151]">Annuler</button>
             <button onClick={handleConfirm} className="flex-1 px-4 py-2.5 rounded-xl text-[13px] font-bold text-white" style={{ background: '#4CAF4F' }}>
-              Confirmer le devis
+              Enregistrer le prix
             </button>
           </div>
         </div>
@@ -924,6 +936,9 @@ function ContactDropdown({ title, color, hoverColor, children, options }: {
 }
 
 export function RequestPanel({ item, onClose, onStatusChange, onConfirmQuoteWithPrice, users, onAssign, onReassigned }: RequestPanelProps) {
+  // Bloquer le scroll du body quand le panneau est ouvert
+  useLockBodyScroll();
+  
   const { can, isAdmin } = useRole();
   const canModifierStatuts = can('modifier_statuts');
   const canAssign = can('assign_commandes');
@@ -1004,14 +1019,53 @@ export function RequestPanel({ item, onClose, onStatusChange, onConfirmQuoteWith
 
   return (
     <>
-      <div className="fixed inset-0 z-[130] bg-black/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="fixed inset-0 z-[140] flex items-center justify-center p-2 md:p-6 pointer-events-none">
-        <div className="pointer-events-auto bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden w-full md:w-[600px] max-w-full md:max-w-[94vw] max-h-[96vh] md:max-h-[92vh]">
+      {/* Overlay fond - position fixed garantie */}
+      <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0, 0, 0, 0.4)', backdropFilter: 'blur(4px)', zIndex: 130 }} onClick={onClose} />
+      
+      {/* Modale - ancrée en haut avec espacement fixe */}
+      <div className="max-w-[600px] top-[13vh] md:top-[5vh]" style={{ position: 'fixed', left: '50%', transform: 'translateX(-50%)', zIndex: 140, width: '100%', padding: '0 1rem' }}>
+        <div className="pointer-events-auto bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden w-full max-h-[80vh] md:max-h-[90vh]">
 
-          {/* ── Header ── */}
-          <div className="flex items-center justify-between px-6 py-4 border-b border-[#F2F4F7] flex-shrink-0">
-            <StatusPill status={item.statut} />
-            <div className="flex items-center gap-2">
+          {/* ── Header avec infos principales ── */}
+          <div className="flex items-center justify-between px-6 py-3 border-b border-[#F2F4F7] flex-shrink-0">
+            <div className="flex-1 min-w-0">
+              {/* Mobile : tout compact sur 2 lignes */}
+              <div className="md:hidden">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <p className="text-[16px] font-extrabold text-[#0F172A] font-mono leading-none">{item.ref}</p>
+                  <span className="text-[11px] font-semibold" style={{ color: isCommande ? '#4CAF4F' : '#8B5CF6' }}>{item.type}</span>
+                  {item.source && (
+                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full border whitespace-nowrap"
+                      style={{ background: item.source === 'SITE' ? SOURCE_COLOR.SITE.bg : SOURCE_COLOR.OTHER.bg, color: item.source === 'SITE' ? SOURCE_COLOR.SITE.color : SOURCE_COLOR.OTHER.color, borderColor: item.source === 'SITE' ? SOURCE_COLOR.SITE.border : SOURCE_COLOR.OTHER.border }}>
+                      {getSourceLabel(item.source)}
+                    </span>
+                  )}
+                  <StatusPill status={item.statut} small />
+                </div>
+                <p className="text-[11px] text-[#8A9BB5] mt-0.5">{item.date}{item.heure ? ` · ${item.heure}` : ''}</p>
+              </div>
+
+              {/* Desktop : organisation sur 2 lignes */}
+              <div className="hidden md:block">
+                {/* Ligne 1 : Numéro + Type */}
+                <div className="flex items-center gap-2">
+                  <p className="text-[18px] font-extrabold text-[#0F172A] font-mono leading-none">{item.ref}</p>
+                  <span className="text-[11px] font-semibold" style={{ color: isCommande ? '#4CAF4F' : '#8B5CF6' }}>{item.type}</span>
+                </div>
+                {/* Ligne 2 : Source + Statut + Date/Heure */}
+                <div className="flex items-center gap-2 mt-1">
+                  {item.source && (
+                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full border whitespace-nowrap"
+                      style={{ background: item.source === 'SITE' ? SOURCE_COLOR.SITE.bg : SOURCE_COLOR.OTHER.bg, color: item.source === 'SITE' ? SOURCE_COLOR.SITE.color : SOURCE_COLOR.OTHER.color, borderColor: item.source === 'SITE' ? SOURCE_COLOR.SITE.border : SOURCE_COLOR.OTHER.border }}>
+                      {getSourceLabel(item.source)}
+                    </span>
+                  )}
+                  <StatusPill status={item.statut} small />
+                  <span className="text-[11px] text-[#8A9BB5]">{item.date}{item.heure ? ` · ${item.heure}` : ''}</span>
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 flex-shrink-0 ml-3">
               {/* Imprimer / Excel — cachés sur mobile (usage bureau) */}
               <div className="hidden md:flex items-center gap-2">
                 <IconBtn onClick={() => printDoc(item)} title="Imprimer en PDF" color="#374151" hoverColor="#4CAF4F">
@@ -1031,39 +1085,6 @@ export function RequestPanel({ item, onClose, onStatusChange, onConfirmQuoteWith
           {/* ── Corps scrollable ── */}
           <div className="flex-1 overflow-y-auto no-scrollbar">
             <div className="px-4 md:px-8 py-6 flex flex-col gap-6">
-
-              {/* En-tête style facture */}
-              <div className="flex items-start justify-between gap-3 flex-wrap">
-                <div>
-                  <div className="flex items-center gap-2 mb-1">
-                    <img src="/Logo PSI-new.jpeg" alt="PSI" className="h-9 w-9 object-contain rounded-lg" />
-                    <div>
-                      <p className="text-[15px] font-extrabold text-[#0F172A] leading-none">PSI</p>
-                      <p className="text-[10px] text-[#ABBED1] leading-none mt-0.5">Paper Solutions Industry</p>
-                    </div>
-                  </div>
-                  <p className="text-[11px] text-[#ABBED1] mt-1">Centre El Qods, Niveau M1 — Chéraga, Alger</p>
-                  <p className="text-[11px] text-[#ABBED1]">Contact@psi.dz</p>
-                </div>
-                <div className="text-right flex-shrink-0">
-                  <p className="text-[18px] md:text-[22px] font-extrabold text-[#0F172A] font-mono leading-none">{item.ref}</p>
-                  <p className="text-[12px] text-[#8A9BB5] mt-1">{item.date}{item.heure ? ` · ${item.heure}` : ''}</p>
-                  <div className="flex items-center justify-end flex-wrap gap-1.5 mt-1.5">
-                    <span className="text-[11px] font-semibold" style={{ color: isCommande ? '#4CAF4F' : '#8B5CF6' }}>{item.type}</span>
-                    {item.source && (() => {
-                      const sc = item.source === 'SITE' ? SOURCE_COLOR.SITE : SOURCE_COLOR.OTHER;
-                      return (
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border whitespace-nowrap"
-                          style={{ background: sc.bg, color: sc.color, borderColor: sc.border }}>
-                          {getSourceLabel(item.source)}
-                        </span>
-                      );
-                    })()}
-                  </div>
-                </div>
-              </div>
-
-              <div className="h-px bg-[#F2F4F7]" />
 
               {/* Infos client */}
               <div>
@@ -1318,11 +1339,9 @@ export function RequestPanel({ item, onClose, onStatusChange, onConfirmQuoteWith
                         Marquer Livré
                       </button>
                     )}
-                    {/* Devis en attente → Confirmer : la modale s'ouvre TOUJOURS,
-                        pré-remplie avec le prix (unitaire + TVA) déjà défini. On peut
-                        le garder tel quel ou l'ajuster avant de confirmer. */}
-                    {!isCommande && item.statut === 'En attente' && onConfirmQuoteWithPrice && (
-                      <button onClick={() => setShowPriceModal(true)}
+                    {/* Devis en attente → Confirmer directement sans ouvrir la modale */}
+                    {!isCommande && item.statut === 'En attente' && (
+                      <button onClick={() => onStatusChange(item.ref, 'Confirmé')}
                         className="px-4 py-2 rounded-lg text-[13px] font-bold border border-[#4CAF4F] text-[#4CAF4F] hover:bg-[#F0FDF4] transition-colors">
                         Confirmer
                       </button>
@@ -1425,7 +1444,7 @@ export function RequestPanel({ item, onClose, onStatusChange, onConfirmQuoteWith
           onConfirm={(montant, prix, tva) => {
             onConfirmQuoteWithPrice({ ...item, montant, vatEnabled: tva, _prix: prix });
             setShowPriceModal(false);
-            onClose();
+            // On garde le panneau ouvert — l'utilisateur confirme ensuite via le bouton "Confirmer"
           }}
         />
       )}

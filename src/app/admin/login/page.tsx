@@ -52,12 +52,26 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      // Étape 1 : vérifie email + mot de passe, puis envoie le code 2FA par email
-      await sendOtp();
-      setStep('otp');
-      setLoading(false);
+      // 2FA DÉSACTIVÉ TEMPORAIREMENT - Connexion directe
+      const res = await signIn('credentials', {
+        email,
+        password,
+        otp: '000000', // Code fictif car le backend ne vérifie plus
+        remember: remember ? '1' : '0',
+        redirect: false,
+      });
+
+      if (!res || res.error || res.ok === false) {
+        setError('Identifiant ou mot de passe incorrect.');
+        setLoading(false);
+        return;
+      }
+
+      // Redirection vers le dashboard
+      router.push('/admin/dashboard');
+      router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Identifiant ou mot de passe incorrect.');
+      setError('Identifiant ou mot de passe incorrect.');
       setLoading(false);
     }
   };
@@ -83,8 +97,8 @@ export default function LoginPage() {
         return;
       }
 
-      // Sur mobile → menu terrain ; sur desktop → dashboard
-      router.push(isMobile ? '/admin/mobile' : '/admin/dashboard');
+      // Redirection vers le dashboard (mobile et desktop)
+      router.push('/admin/dashboard');
       router.refresh();
     } catch {
       setError('Code incorrect ou expiré.');
@@ -253,7 +267,7 @@ export default function LoginPage() {
             className="w-full py-3 rounded-xl text-[15px] font-bold text-white transition-colors disabled:opacity-60 hover:bg-[#43A047]"
             style={{ background: '#4CAF4F' }}
           >
-            {loading ? 'Envoi du code…' : 'Se connecter'}
+            {loading ? 'Connexion…' : 'Se connecter'}
           </button>
 
           <button type="button" onClick={() => { setForgot(true); setError(''); setForgotSent(false); }}

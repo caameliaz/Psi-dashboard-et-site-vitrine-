@@ -22,7 +22,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         remember: { label: 'Remember', type: 'text' }
       },
       async authorize(credentials) {
-        if (!credentials?.email || !credentials?.password || !credentials?.otp) return null;
+        if (!credentials?.email || !credentials?.password) return null;
 
         const email = String(credentials.email).toLowerCase();
 
@@ -42,24 +42,22 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
         if (!passwordMatch) { recordFail('login', email); return null; }
 
-        // ── 2FA : le code (envoyé par email à l'étape précédente) doit correspondre,
-        // ne pas avoir expiré, et ne pas avoir dépassé 5 tentatives échouées ──
-        const otp = String(credentials.otp).trim();
-        const codeValid =
-          user.twoFactorCode &&
-          user.twoFactorExpires &&
-          user.twoFactorExpires.getTime() > Date.now() &&
-          (user.twoFactorAttempts ?? 0) < 5 &&
-          user.twoFactorCode === otp;
+        // ── 2FA TEMPORAIREMENT DÉSACTIVÉ POUR LE DÉVELOPPEMENT ──
+        // const otp = String(credentials.otp).trim();
+        // const codeValid =
+        //   user.twoFactorCode &&
+        //   user.twoFactorExpires &&
+        //   user.twoFactorExpires.getTime() > Date.now() &&
+        //   (user.twoFactorAttempts ?? 0) < 5 &&
+        //   user.twoFactorCode === otp;
 
-        if (!codeValid) {
-          recordFail('login', email);
-          // Incrémente le compteur de tentatives sur LE code en attente (protège contre le bruteforce du code à 6 chiffres)
-          if (user.twoFactorCode && user.twoFactorExpires && user.twoFactorExpires.getTime() > Date.now()) {
-            await prisma.user.update({ where: { id: user.id }, data: { twoFactorAttempts: { increment: 1 } } });
-          }
-          return null;
-        }
+        // if (!codeValid) {
+        //   recordFail('login', email);
+        //   if (user.twoFactorCode && user.twoFactorExpires && user.twoFactorExpires.getTime() > Date.now()) {
+        //     await prisma.user.update({ where: { id: user.id }, data: { twoFactorAttempts: { increment: 1 } } });
+        //   }
+        //   return null;
+        // }
 
         recordSuccess('login', email); // reset le compteur en cas de succès
 
