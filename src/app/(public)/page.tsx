@@ -5,7 +5,7 @@ import { prisma } from '@/lib/prisma';
 // Fetch des données côté serveur pour performance (accès direct DB)
 async function getContent() {
   try {
-    const items = await prisma.content.findMany();
+    const items = await prisma.siteContent.findMany();
     return Object.fromEntries(items.map(i => [i.key, i.value]));
   } catch {
     return {};
