@@ -1,14 +1,12 @@
 import { HomeClient } from '@/components/HomeClient';
 import type { Cat, Prod } from '@/lib/hardcodedCatalog';
+import { prisma } from '@/lib/prisma';
 
-const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
-
-// Fetch des données côté serveur pour performance
+// Fetch des données côté serveur pour performance (accès direct DB)
 async function getContent() {
   try {
-    const res = await fetch(`${baseUrl}/api/content`, { cache: 'no-store' });
-    if (!res.ok) return {};
-    return await res.json();
+    const items = await prisma.content.findMany();
+    return Object.fromEntries(items.map(i => [i.key, i.value]));
   } catch {
     return {};
   }
@@ -16,10 +14,10 @@ async function getContent() {
 
 async function getCategories(): Promise<Cat[]> {
   try {
-    const res = await fetch(`${baseUrl}/api/categories`, { cache: 'no-store' });
-    if (!res.ok) return [];
-    const data = await res.json();
-    return data.map((c: any) => ({ 
+    const cats = await prisma.category.findMany({
+      orderBy: { name: 'asc' },
+    });
+    return cats.map((c: any) => ({ 
       id: c.id, 
       name: c.name, 
       photo: c.photo ?? null, 
@@ -32,9 +30,12 @@ async function getCategories(): Promise<Cat[]> {
 
 async function getProducts(): Promise<Prod[]> {
   try {
-    const res = await fetch(`${baseUrl}/api/products`, { cache: 'no-store' });
-    if (!res.ok) return [];
-    return await res.json();
+    const products = await prisma.product.findMany({
+      where: { active: true },
+      include: { category: true },
+      orderBy: { createdAt: 'desc' },
+    });
+    return products as any;
   } catch {
     return [];
   }
