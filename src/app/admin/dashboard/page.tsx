@@ -284,7 +284,7 @@ export default function DashboardPage() {
     }
     const q = search.toLowerCase();
     const matches = recentRequests.filter((r) => {
-      const itemsText = (r.items ?? []).map(i => i.description || '').join(' ').toLowerCase();
+      const itemsText = (r.items ?? []).map(i => i.designation || '').join(' ').toLowerCase();
       return r.client.toLowerCase().includes(q) 
         || r.entreprise.toLowerCase().includes(q) 
         || (r.ref ?? '').toLowerCase().includes(q)
