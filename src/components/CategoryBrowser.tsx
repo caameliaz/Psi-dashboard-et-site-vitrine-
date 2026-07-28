@@ -23,7 +23,7 @@ export function CategoryBrowser({
 
   useEffect(() => {
     // Si les données sont passées en props, on les utilise directement (pas de fetch)
-    if (initialCategories && initialProducts) {
+    if (initialCategories?.length && initialProducts?.length) {
       setCats(initialCategories);
       setProducts(initialProducts);
       return;
