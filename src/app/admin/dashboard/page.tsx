@@ -178,6 +178,8 @@ export default function DashboardPage() {
   const [sortAsc, setSortAsc] = useState(true);
   const [selectedRequest, setSelectedRequest] = useState<RequestDetail | null>(null);
   const [search, setSearch] = useState('');
+  const [searchResults, setSearchResults] = useState<RequestDetail[]>([]);
+  const [showDropdown, setShowDropdown] = useState(false);
 
   const [recentRequests, setRecentRequests] = useState<RequestDetail[]>([]);
   const [stats, setStats]       = useState({ commandes: 0, devisMois: 0, ventesMois: 0, ventesPrevMois: 0, evolutionVentes: 0, evolutionDevis: 0, devis: 0, clients: 0, livrees: 0 });
@@ -273,6 +275,33 @@ export default function DashboardPage() {
       return sortAsc ? (va as string).localeCompare(vb as string) : (vb as string).localeCompare(va as string);
     });
 
+  // Autocomplete searchbar dashboard
+  useEffect(() => {
+    if (search.trim().length === 0) {
+      setSearchResults([]);
+      setShowDropdown(false);
+      return;
+    }
+    const q = search.toLowerCase();
+    const matches = recentRequests.filter((r) => {
+      const itemsText = (r.items ?? []).map(i => i.description || '').join(' ').toLowerCase();
+      return r.client.toLowerCase().includes(q) 
+        || r.entreprise.toLowerCase().includes(q) 
+        || (r.ref ?? '').toLowerCase().includes(q)
+        || r.telephone?.toLowerCase().includes(q)
+        || itemsText.includes(q);
+    });
+    const sorted_matches = matches.sort((a, b) => {
+      const aExact = (a.ref ?? '').toLowerCase() === q || a.client.toLowerCase() === q || a.entreprise.toLowerCase() === q;
+      const bExact = (b.ref ?? '').toLowerCase() === q || b.client.toLowerCase() === q || b.entreprise.toLowerCase() === q;
+      if (aExact && !bExact) return -1;
+      if (!aExact && bExact) return 1;
+      return 0;
+    });
+    setSearchResults(sorted_matches.slice(0, 5));
+    setShowDropdown(sorted_matches.length > 0);
+  }, [search, recentRequests]);
+
   const SortIcon = ({ col }: { col: SortKey }) => (
     <span className="ml-1 inline-block opacity-40 text-[10px]">{sortKey === col ? (sortAsc ? '▲' : '▼') : '⇅'}</span>
   );
@@ -301,8 +330,31 @@ export default function DashboardPage() {
               placeholder="Rechercher…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-[130px] pl-8 pr-2 py-1.5 rounded-full border border-[#E2E8F0] bg-white text-[11px] text-[#374151] placeholder-[#ABBED1] focus:outline-none focus:ring-2 focus:ring-[#4CAF4F]/30 focus:border-[#4CAF4F] transition-colors shadow-sm"
+              onFocus={() => search.length > 0 && searchResults.length > 0 && setShowDropdown(true)}
+              onBlur={() => setTimeout(() => setShowDropdown(false), 200)}
+              className="w-[45vw] pl-8 pr-2 py-1.5 rounded-full border border-[#E2E8F0] bg-white text-[11px] text-[#374151] placeholder-[#ABBED1] focus:outline-none focus:ring-2 focus:ring-[#4CAF4F]/30 focus:border-[#4CAF4F] transition-colors shadow-sm"
             />
+            {showDropdown && searchResults.length > 0 && (
+              <div className="absolute top-full right-0 mt-1 bg-white border border-[#E2E8F0] rounded-lg shadow-lg z-50 max-h-[300px] overflow-y-auto w-[45vw]">
+                {searchResults.map((result) => {
+                  const isCommande = result.type === 'Commande';
+                  return (
+                    <button
+                      key={result.id}
+                      onClick={() => { setSelectedRequest(result); setShowDropdown(false); }}
+                      className="w-full px-3 py-2.5 flex items-center gap-3 hover:bg-[#F8FAFC] transition-colors text-left border-b border-[#F2F4F7] last:border-0"
+                    >
+                      <span className="text-[11px] font-mono font-bold" style={{ color: isCommande ? '#4CAF4F' : '#8B5CF6' }}>{result.ref}</span>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-[12px] font-semibold text-[#0F172A] truncate">{result.entreprise}</div>
+                        <div className="text-[11px] text-[#8A9BB5] truncate">{result.client}</div>
+                      </div>
+                      <StatusPill status={result.statut} />
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
         
@@ -326,8 +378,31 @@ export default function DashboardPage() {
                 placeholder="Rechercher…"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="w-[220px] pl-9 pr-4 py-2.5 rounded-xl border border-[#E2E8F0] bg-white text-[13px] text-[#374151] placeholder-[#ABBED1] focus:outline-none focus:ring-2 focus:ring-[#4CAF4F]/30 focus:border-[#4CAF4F] transition-colors shadow-sm"
+                onFocus={() => search.length > 0 && searchResults.length > 0 && setShowDropdown(true)}
+                onBlur={() => setTimeout(() => setShowDropdown(false), 200)}
+                className="w-[280px] pl-9 pr-4 py-2.5 rounded-xl border border-[#E2E8F0] bg-white text-[13px] text-[#374151] placeholder-[#ABBED1] focus:outline-none focus:ring-2 focus:ring-[#4CAF4F]/30 focus:border-[#4CAF4F] transition-colors shadow-sm"
               />
+              {showDropdown && searchResults.length > 0 && (
+                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-[#E2E8F0] rounded-lg shadow-lg z-50 max-h-[300px] overflow-y-auto">
+                  {searchResults.map((result) => {
+                    const isCommande = result.type === 'Commande';
+                    return (
+                      <button
+                        key={result.id}
+                        onClick={() => { setSelectedRequest(result); setShowDropdown(false); }}
+                        className="w-full px-3 py-2.5 flex items-center gap-3 hover:bg-[#F8FAFC] transition-colors text-left border-b border-[#F2F4F7] last:border-0"
+                      >
+                        <span className="text-[11px] font-mono font-bold" style={{ color: isCommande ? '#4CAF4F' : '#8B5CF6' }}>{result.ref}</span>
+                        <div className="flex-1 min-w-0">
+                          <div className="text-[12px] font-semibold text-[#0F172A] truncate">{result.entreprise}</div>
+                          <div className="text-[11px] text-[#8A9BB5] truncate">{result.client}</div>
+                        </div>
+                        <StatusPill status={result.statut} />
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
             <button
               onClick={() => exportDashboardExcel({ stats, todayStats, sourceStats, evolution, topProduits, topWilayas, serie6Mois, parCommercial, employesLivres, objectifs })}
