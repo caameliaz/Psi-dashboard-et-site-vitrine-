@@ -14,6 +14,7 @@
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.11.2",
+    "@google-analytics/data": "^6.1.0",
     "@prisma/client": "^6.19.3",
     "@trigger.dev/sdk": "^4.5.4",
     "bcryptjs": "^2.4.3",
