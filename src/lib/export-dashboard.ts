@@ -8,6 +8,7 @@ export interface DashboardExportData {
   topProduits: { ref: string; qty: number; label: string }[];
   topWilayas: { wilaya: string; count: number }[];
   serie6Mois: { mois: string; commandes: number; devis: number }[];
+  serie6MoisVentes: { mois: string; ventes: number }[];
   parCommercial: { id: string; name: string; ventes: number; commandes: number; devis: number }[];
   employesLivres: { name: string; commandes: number; devis: number; total: number }[];
   objectifs: { global: number; byUser: Record<string, number> };
@@ -81,6 +82,10 @@ export async function exportDashboardExcel(d: DashboardExportData) {
   if (d.serie6Mois.length)
     section('ÉVOLUTION 6 MOIS', ['Mois', 'Commandes', 'Devis'],
       d.serie6Mois.map((m) => [m.mois, m.commandes, m.devis]));
+
+  if (d.serie6MoisVentes.length)
+    section('ÉVOLUTION VENTES 6 MOIS', ['Mois', 'Ventes (DA)'],
+      d.serie6MoisVentes.map((m) => [m.mois, m.ventes]));
 
   if (d.parCommercial.length)
     section('VENTES PAR COMMERCIAL', ['Commercial', 'Ventes (DA)', 'Commandes', 'Devis'],

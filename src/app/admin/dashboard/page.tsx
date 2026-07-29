@@ -13,13 +13,23 @@ import { useRole } from '@/lib/role-context';
 import { useSession } from 'next-auth/react';
 import { Modal } from '@/components/ui/Modal';
 import { MobileNavbar } from '@/components/MobileNavbar';
+import { DateRangePicker } from '@/components/ui/DateRangePicker';
 
 // Graphiques Recharts chargés à la demande (ssr:false) → aucun poids ailleurs
 const WilayaBarChart = dynamic(() => import('@/components/ui/DashboardCharts').then((m) => m.WilayaBarChart), {
   ssr: false, loading: () => <ChartSkeleton title="Commandes par wilaya" />,
 });
+const ConversionRateChart = dynamic(() => import('@/components/ui/DashboardCharts').then((m) => m.ConversionRateChart), {
+  ssr: false, loading: () => <ChartSkeleton title="Taux de conversion" />,
+});
 const TrendLineChart = dynamic(() => import('@/components/ui/DashboardCharts').then((m) => m.TrendLineChart), {
   ssr: false, loading: () => <ChartSkeleton title="Évolution sur 6 mois" />,
+});
+const SalesLineChart = dynamic(() => import('@/components/ui/DashboardCharts').then((m) => m.SalesLineChart), {
+  ssr: false, loading: () => <div className="h-[200px] flex items-center justify-center text-[11px] text-[#ABBED1]">Chargement…</div>,
+});
+const CategoryPageViewsChart = dynamic(() => import('@/components/ui/DashboardCharts').then((m) => m.CategoryPageViewsChart), {
+  ssr: false, loading: () => <div className="h-[180px] flex items-center justify-center text-[11px] text-[#ABBED1]">Chargement…</div>,
 });
 
 function ChartSkeleton({ title }: { title: string }) {
@@ -198,8 +208,29 @@ export default function DashboardPage() {
   const [sourceStats, setSourceStats] = useState({ site: 0, manuel: 0 });
   const [evolution, setEvolution] = useState(0);
   const [topWilayas, setTopWilayas] = useState<{ wilaya: string; count: number }[]>([]);
+  const [conversionRates, setConversionRates] = useState<{ label: string; rate: number }[]>([]);
   const [serie6Mois, setSerie6Mois] = useState<{ mois: string; commandes: number; devis: number }[]>([]);
+  const [serie6MoisVentes, setSerie6MoisVentes] = useState<{ mois: string; ventes: number }[]>([]);
+  const [analyticsData, setAnalyticsData] = useState<{ monthly: { total: number; byCategory: { category: string; views: number; color: string }[] }; weekly: { week: string; categories: { category: string; views: number; color: string }[] }[] }>({ monthly: { total: 0, byCategory: [] }, weekly: [] });
   const [loading, setLoading]   = useState(true);
+
+  // États filtrés pour chaque container (indépendants)
+  const [filteredTopProduits, setFilteredTopProduits] = useState<{ ref: string; qty: number; label: string; color: string }[] | null>(null);
+  const [filteredAnalyticsData, setFilteredAnalyticsData] = useState<{ monthly: { total: number; byCategory: { category: string; views: number; color: string }[] }; weekly: { week: string; categories: { category: string; views: number; color: string }[] }[] } | null>(null);
+  const [filteredCommandesMois, setFilteredCommandesMois] = useState<number | null>(null);
+  const [filteredDevisMois, setFilteredDevisMois] = useState<number | null>(null);
+  const [filteredSerie6MoisVentes, setFilteredSerie6MoisVentes] = useState<{ mois: string; ventes: number }[] | null>(null);
+  const [filteredVentesMois, setFilteredVentesMois] = useState<number | null>(null);
+  const [filteredTopWilayas, setFilteredTopWilayas] = useState<{ wilaya: string; count: number }[] | null>(null);
+  const [filteredConversionRates, setFilteredConversionRates] = useState<{ label: string; rate: number }[] | null>(null);
+
+  // Date filtering states for each container
+  const [topProduitsDateRange, setTopProduitsDateRange] = useState<{ start: string | null; end: string | null }>({ start: null, end: null });
+  const [visitesDateRange, setVisitesDateRange] = useState<{ start: string | null; end: string | null }>({ start: null, end: null });
+  const [commandesDevisDateRange, setCommandesDevisDateRange] = useState<{ start: string | null; end: string | null }>({ start: null, end: null });
+  const [ventesDateRange, setVentesDateRange] = useState<{ start: string | null; end: string | null }>({ start: null, end: null });
+  const [wilayaDateRange, setWilayaDateRange] = useState<{ start: string | null; end: string | null }>({ start: null, end: null });
+  const [conversionDateRange, setConversionDateRange] = useState<{ start: string | null; end: string | null }>({ start: null, end: null });
 
   useEffect(() => {
     const update = () => {
@@ -215,47 +246,182 @@ export default function DashboardPage() {
   }, []);
 
   // silent = refetch temps réel (SSE) → pas de spinner, mise à jour en douceur
-  const fetchData = useCallback(async (silent = false) => {
+  const fetchData = useCallback(async (silent = false, dateParams?: { containerId: string; startDate: string | null; endDate: string | null }) => {
+    console.log('🔍 fetchData appelé avec:', { silent, dateParams });
     if (!silent) setLoading(true);
     try {
-      const res = await fetch('/api/stats');
-      if (!res.ok) return;
-      const data = await res.json();
-      setStats(data.stats);
-      setTodayStats(data.todayStats);
-      setSourceStats(data.sourceStats);
-      setEvolution(data.evolutionCommandes ?? 0);
-      setTopWilayas(data.topWilayas ?? []);
-      setSerie6Mois(data.serie6Mois ?? []);
-      setParCommercial(data.parCommercial ?? []);
-      setEmployesLivres(data.employesLivres ?? []);
-      setObjectifs(data.objectifs ?? { global: 0, byUser: {} });
-      setTopProduits(
-        (data.topProduits as { ref: string; qty: number; label: string }[]).map((p, i) => ({
-          ...p, color: TOP_COLORS[i] ?? '#8A9BB5',
-        }))
-      );
-      const allDetails = [
-        ...(data.recentOrders as Order[]).map((o) => orderToDetail(o)),
-        ...(data.recentQuotes as Quote[]).map((q) => quoteToDetail(q)),
-      ].sort((a, b) => {
-        const da = a.date.split('/').reverse().join('') + (a.heure ?? '');
-        const db = b.date.split('/').reverse().join('') + (b.heure ?? '');
-        return db.localeCompare(da);
-      }).slice(0, 5);
-      setRecentRequests(allDetails);
+      // Build query string with optional date parameters
+      const buildUrl = (baseUrl: string, startDate?: string | null, endDate?: string | null) => {
+        const url = new URL(baseUrl, window.location.origin);
+        if (startDate && endDate) {
+          url.searchParams.set('startDate', startDate);
+          url.searchParams.set('endDate', endDate);
+        }
+        return url.toString();
+      };
+
+      // Determine which URLs to fetch based on the container being filtered
+      let statsUrl = '/api/stats';
+      let analyticsUrl = '/api/analytics';
+
+      if (dateParams?.startDate && dateParams?.endDate) {
+        console.log('✅ Filtrage détecté pour:', dateParams.containerId);
+        // Container-specific filtering
+        const baseUrl = buildUrl('/api/stats', dateParams.startDate, dateParams.endDate);
+        const baseAnalyticsUrl = buildUrl('/api/analytics', dateParams.startDate, dateParams.endDate);
+
+        if (dateParams.containerId === 'topProduits') {
+          console.log('📊 Appel API pour topProduits:', baseUrl);
+          // Fetch only for top products
+          const res = await fetch(baseUrl, { credentials: 'include' });
+          if (res.ok) {
+            const data = await res.json();
+            const filtered = (data.topProduits as { ref: string; qty: number; label: string }[]).map((p, i) => ({
+              ...p, color: TOP_COLORS[i] ?? '#8A9BB5',
+            }));
+            console.log('📊 Données filtrées topProduits:', filtered);
+            setFilteredTopProduits(filtered);
+          }
+          setLoading(false);
+          return;
+        } else if (dateParams.containerId === 'visites') {
+          console.log('📊 Appel API pour visites:', baseAnalyticsUrl);
+          // Fetch only for visits
+          const res = await fetch(baseAnalyticsUrl, { credentials: 'include' });
+          if (res.ok) {
+            const data = await res.json();
+            console.log('📊 Données filtrées visites:', data);
+            setFilteredAnalyticsData(data);
+          }
+          setLoading(false);
+          return;
+        } else if (dateParams.containerId === 'commandesDevis') {
+          console.log('📊 Appel API pour commandesDevis:', baseUrl);
+          // Fetch only for commandes/devis counts (not the graph)
+          const res = await fetch(baseUrl, { credentials: 'include' });
+          if (res.ok) {
+            const data = await res.json();
+            console.log('📊 Données filtrées commandesDevis:', { commandes: data.stats?.commandes, devis: data.stats?.devisMois });
+            setFilteredCommandesMois(data.stats?.commandes ?? null);
+            setFilteredDevisMois(data.stats?.devisMois ?? null);
+          }
+          setLoading(false);
+          return;
+        } else if (dateParams.containerId === 'ventes') {
+          console.log('📊 Appel API pour ventes:', baseUrl);
+          // Fetch only for ventes
+          const res = await fetch(baseUrl, { credentials: 'include' });
+          if (res.ok) {
+            const data = await res.json();
+            console.log('📊 Données filtrées ventes:', data.serie6MoisVentes);
+            setFilteredSerie6MoisVentes(data.serie6MoisVentes ?? []);
+            setFilteredVentesMois(data.stats?.ventesMois ?? null); // NOUVEAU: montant total
+          }
+          setLoading(false);
+          return;
+        } else if (dateParams.containerId === 'wilaya') {
+          console.log('📊 Appel API pour wilaya:', baseUrl);
+          // Fetch only for wilaya - returns data for the selected period
+          const res = await fetch(baseUrl, { credentials: 'include' });
+          if (res.ok) {
+            const data = await res.json();
+            console.log('📊 Données filtrées wilaya:', data.topWilayas);
+            // Calculate the total to show in graph
+            const total = (data.topWilayas as { wilaya: string; count: number }[]).reduce((sum, w) => sum + w.count, 0);
+            console.log('📊 Total commandes dans la période wilaya:', total);
+            setFilteredTopWilayas(data.topWilayas ?? []);
+          }
+          setLoading(false);
+          return;
+        } else if (dateParams.containerId === 'conversion') {
+          console.log('📊 Appel API pour conversion:', baseUrl);
+          // Fetch only for conversion - returns data for the selected period
+          const res = await fetch(baseUrl, { credentials: 'include' });
+          if (res.ok) {
+            const data = await res.json();
+            console.log('📊 Données filtrées conversion:', data.conversionRates);
+            setFilteredConversionRates(data.conversionRates ?? []);
+          }
+          setLoading(false);
+          return;
+        }
+      } else if (dateParams?.containerId && !dateParams.startDate && !dateParams.endDate) {
+        console.log('🔄 Réinitialisation du filtre pour:', dateParams.containerId);
+        // Reset filter for specific container
+        if (dateParams.containerId === 'topProduits') setFilteredTopProduits(null);
+        else if (dateParams.containerId === 'visites') setFilteredAnalyticsData(null);
+        else if (dateParams.containerId === 'commandesDevis') { setFilteredCommandesMois(null); setFilteredDevisMois(null); }
+        else if (dateParams.containerId === 'ventes') { setFilteredSerie6MoisVentes(null); setFilteredVentesMois(null); }
+        else if (dateParams.containerId === 'wilaya') setFilteredTopWilayas(null);
+        else if (dateParams.containerId === 'conversion') setFilteredConversionRates(null);
+        setLoading(false);
+        return;
+      }
+
+      console.log('📥 Chargement initial de toutes les données');
+      // Default: fetch all data (no filter)
+      const [statsRes, analyticsRes] = await Promise.all([
+        fetch(statsUrl, { credentials: 'include' }),
+        fetch(analyticsUrl, { credentials: 'include' }),
+      ]);
+      
+      if (statsRes.ok) {
+        const data = await statsRes.json();
+        setStats(data.stats);
+        setTodayStats(data.todayStats);
+        setSourceStats(data.sourceStats);
+        setEvolution(data.evolutionCommandes ?? 0);
+        setTopWilayas(data.topWilayas ?? []);
+        setConversionRates(data.conversionRates ?? []);
+        setSerie6Mois(data.serie6Mois ?? []);
+        setSerie6MoisVentes(data.serie6MoisVentes ?? []);
+        setParCommercial(data.parCommercial ?? []);
+        setEmployesLivres(data.employesLivres ?? []);
+        setObjectifs(data.objectifs ?? { global: 0, byUser: {} });
+        setTopProduits(
+          (data.topProduits as { ref: string; qty: number; label: string }[]).map((p, i) => ({
+            ...p, color: TOP_COLORS[i] ?? '#8A9BB5',
+          }))
+        );
+        const allDetails = [
+          ...(data.recentOrders as Order[]).map((o) => orderToDetail(o)),
+          ...(data.recentQuotes as Quote[]).map((q) => quoteToDetail(q)),
+        ].sort((a, b) => {
+          const da = a.date.split('/').reverse().join('') + (a.heure ?? '');
+          const db = b.date.split('/').reverse().join('') + (b.heure ?? '');
+          return db.localeCompare(da);
+        }).slice(0, 5);
+        setRecentRequests(allDetails);
+      }
+      
+      if (analyticsRes.ok) {
+        const analyticsDataRes = await analyticsRes.json();
+        setAnalyticsData(analyticsDataRes);
+      }
     } finally {
       if (!silent) setLoading(false);
     }
   }, []);
 
   useEffect(() => { fetchData(); }, [fetchData]);
-  useSSE(useCallback(() => { fetchData(true); }, [fetchData]));
+  
+  // Ne rafraîchir automatiquement QUE si aucun filtre n'est actif
+  const hasAnyFilter = filteredTopProduits !== null || filteredAnalyticsData !== null || 
+                       filteredCommandesMois !== null || filteredDevisMois !== null ||
+                       filteredSerie6MoisVentes !== null || filteredVentesMois !== null ||
+                       filteredTopWilayas !== null || filteredConversionRates !== null;
+  
+  useSSE(useCallback(() => { 
+    if (!hasAnyFilter) fetchData(true); 
+  }, [fetchData, hasAnyFilter]));
+  
   // Filet de sécurité : rafraîchit les stats toutes les 15s en silence (marche même si le SSE ne pousse pas)
+  // MAIS seulement si aucun filtre n'est actif
   useEffect(() => {
+    if (hasAnyFilter) return; // Ne pas rafraîchir si un filtre est actif
     const id = setInterval(() => fetchData(true), 15000);
     return () => clearInterval(id);
-  }, [fetchData]);
+  }, [fetchData, hasAnyFilter]);
 
   const handleSort = (key: SortKey) => {
     if (sortKey === key) setSortAsc((a) => !a);
@@ -405,7 +571,7 @@ export default function DashboardPage() {
               )}
             </div>
             <button
-              onClick={() => exportDashboardExcel({ stats, todayStats, sourceStats, evolution, topProduits, topWilayas, serie6Mois, parCommercial, employesLivres, objectifs })}
+              onClick={() => exportDashboardExcel({ stats, todayStats, sourceStats, evolution, topProduits, topWilayas, serie6Mois, serie6MoisVentes, parCommercial, employesLivres, objectifs })}
               title="Exporter le tableau de bord en Excel"
               className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl border border-[#E2E8F0] bg-white text-[13px] font-semibold text-[#16A34A] hover:bg-[#F8FAFC] transition-colors shadow-sm"
             >
@@ -487,22 +653,41 @@ export default function DashboardPage() {
       <div className="grid grid-cols-2 gap-3 mt-4 md:hidden">
         {/* Camembert — Top produits */}
         <div className="bg-white rounded-2xl border border-[#E2E8F0] p-2.5 shadow-sm flex flex-col">
-          <p className="text-[9px] font-bold text-[#ABBED1] uppercase tracking-widest mb-0.5">Top produits</p>
+          <div className="flex items-center justify-between mb-0.5">
+            <p className="text-[9px] font-bold text-[#ABBED1] uppercase tracking-widest">Top produits</p>
+            <div className="scale-75 origin-right">
+              <DateRangePicker onDateChange={(start, end) => {
+                setTopProduitsDateRange({ start, end });
+                fetchData(false, { containerId: 'topProduits', startDate: start, endDate: end });
+              }} />
+            </div>
+          </div>
           <p className="text-[11px] font-semibold text-[#0F172A]" style={{ marginBottom: '-45px' }}>Par produit</p>
           {loading ? <p className="text-[11px] text-[#8A9BB5] py-4">Chargement…</p> : (
             <div className="flex items-center justify-center flex-1">
               <div className="scale-[0.55] origin-center -my-8">
-                <PieChart data={topProduits} />
+                <PieChart data={filteredTopProduits || topProduits} />
               </div>
             </div>
           )}
         </div>
 
-        {/* Source — Origine */}
+        {/* Source — Visites du site */}
         <div className="bg-white rounded-2xl border border-[#E2E8F0] p-2.5 shadow-sm flex flex-col">
-          <p className="text-[9px] font-bold text-[#ABBED1] uppercase tracking-widest mb-0.5">Origine</p>
-          <p className="text-[11px] font-semibold text-[#0F172A] mb-1.5">Source des demandes</p>
-          {loading ? <p className="text-[11px] text-[#8A9BB5]">Chargement…</p> : <SourceChart stats={sourceStats} />}
+          <div className="flex items-center justify-between mb-0.5">
+            <p className="text-[9px] font-bold text-[#ABBED1] uppercase tracking-widest">Site public</p>
+            <div className="scale-75 origin-right">
+              <DateRangePicker onDateChange={(start, end) => {
+                setVisitesDateRange({ start, end });
+                fetchData(false, { containerId: 'visites', startDate: start, endDate: end });
+              }} />
+            </div>
+          </div>
+          <div className="flex items-end gap-2 mb-1.5">
+            <span className="text-[18px] font-extrabold text-[#0F172A] leading-none">{(filteredAnalyticsData || analyticsData).monthly.total.toLocaleString('fr-FR')}</span>
+            <span className="text-[9px] font-semibold text-[#8A9BB5] pb-0.5">visites ce mois</span>
+          </div>
+          {loading ? <p className="text-[11px] text-[#8A9BB5]">Chargement…</p> : <CategoryPageViewsChart data={(filteredAnalyticsData || analyticsData).weekly} />}
         </div>
       </div>
 
@@ -556,41 +741,74 @@ export default function DashboardPage() {
 
         {/* Camembert — Top produits */}
         <div className="bg-white rounded-2xl border border-[#E2E8F0] p-5 shadow-sm flex flex-col">
-          <p className="text-[11px] font-bold text-[#ABBED1] uppercase tracking-widest mb-1">Top produits</p>
+          <div className="flex items-center justify-between mb-1">
+            <p className="text-[11px] font-bold text-[#ABBED1] uppercase tracking-widest">Top produits {filteredTopProduits === null && 'ce mois'}</p>
+            <DateRangePicker onDateChange={(start, end) => {
+              setTopProduitsDateRange({ start, end });
+              fetchData(false, { containerId: 'topProduits', startDate: start, endDate: end });
+            }} />
+          </div>
           <p className="text-[13px] font-semibold text-[#0F172A] mb-4">Par produit</p>
           {loading ? <p className="text-[12px] text-[#8A9BB5] py-4">Chargement…</p> : (
             <div className="flex items-center justify-center flex-1">
-              <PieChart data={topProduits} />
+              <PieChart data={filteredTopProduits || topProduits} />
             </div>
           )}
         </div>
 
-        {/* Source — Origine */}
+        {/* Site public — Visites */}
         <div className="bg-white rounded-2xl border border-[#E2E8F0] p-5 shadow-sm flex flex-col">
-          <p className="text-[11px] font-bold text-[#ABBED1] uppercase tracking-widest mb-1">Origine</p>
-          <p className="text-[13px] font-semibold text-[#0F172A] mb-4">Source des demandes</p>
-          {loading ? <p className="text-[12px] text-[#8A9BB5]">Chargement…</p> : <SourceChart stats={sourceStats} />}
+          <div className="flex items-center justify-between mb-1">
+            <p className="text-[11px] font-bold text-[#ABBED1] uppercase tracking-widest">Site public</p>
+            <DateRangePicker onDateChange={(start, end) => {
+              setVisitesDateRange({ start, end });
+              fetchData(false, { containerId: 'visites', startDate: start, endDate: end });
+            }} />
+          </div>
+          <div className="flex items-end gap-2 md:gap-3 mb-4">
+            <span className="text-[28px] font-extrabold text-[#0F172A] leading-none">{(filteredAnalyticsData || analyticsData).monthly.total.toLocaleString('fr-FR')}</span>
+            <span className="text-[12px] font-semibold text-[#8A9BB5] pb-1">
+              {filteredAnalyticsData !== null ? 'visites' : 'visites ce mois'}
+            </span>
+          </div>
+          {loading ? <p className="text-[12px] text-[#8A9BB5]">Chargement…</p> : <CategoryPageViewsChart data={(filteredAnalyticsData || analyticsData).weekly} />}
         </div>
       </div>
 
       {/* ── Cartes du mois : 2 colonnes sur mobile et desktop ─────────────── */}
       <div className="grid grid-cols-2 gap-3 md:gap-6 mt-6 md:mt-8">
-        {/* Carte 1 : toggle Commandes ce mois / Devis ce mois */}
+        {/* Carte 1 : toggle Commandes ce mois / Devis ce mois + Graphique évolution */}
         <div className="bg-white rounded-2xl border border-[#E4EBF5] p-3 md:p-5 shadow-sm">
-          <div className="flex items-center gap-1 mb-2 md:mb-3 bg-[#F2F4F7] rounded-lg p-0.5 w-fit">
-            <button onClick={() => setMoisTab('commandes')}
-              className={`px-2 md:px-3 py-1 md:py-1.5 rounded-md text-[10px] md:text-[12px] font-bold transition-colors ${moisTab === 'commandes' ? 'bg-white text-[#0F172A] shadow-sm' : 'text-[#8A9BB5] hover:text-[#374151]'}`}>
-              Commandes
-            </button>
-            <button onClick={() => setMoisTab('devis')}
-              className={`px-2 md:px-3 py-1 md:py-1.5 rounded-md text-[10px] md:text-[12px] font-bold transition-colors ${moisTab === 'devis' ? 'bg-white text-[#0F172A] shadow-sm' : 'text-[#8A9BB5] hover:text-[#374151]'}`}>
-              Devis
-            </button>
+          <div className="flex items-center justify-between gap-2 mb-2 md:mb-3">
+            <div className="flex items-center gap-2 min-w-0">
+              <p className="text-[9px] md:text-[11px] font-bold text-[#ABBED1] uppercase tracking-widest flex-shrink-0">
+                {filteredCommandesMois === null && filteredDevisMois === null
+                  ? (moisTab === 'commandes' ? 'Commandes ce mois' : 'Devis ce mois')
+                  : (moisTab === 'commandes' ? 'Commandes' : 'Devis')
+                }
+              </p>
+              <div className="flex items-center gap-1 bg-[#F2F4F7] rounded-lg p-0.5 w-fit">
+                <button onClick={() => setMoisTab('commandes')}
+                  className={`px-2 md:px-3 py-1 md:py-1.5 rounded-md text-[10px] md:text-[12px] font-bold transition-colors ${moisTab === 'commandes' ? 'bg-white text-[#0F172A] shadow-sm' : 'text-[#8A9BB5] hover:text-[#374151]'}`}>
+                  Commandes
+                </button>
+                <button onClick={() => setMoisTab('devis')}
+                  className={`px-2 md:px-3 py-1 md:py-1.5 rounded-md text-[10px] md:text-[12px] font-bold transition-colors ${moisTab === 'devis' ? 'bg-white text-[#0F172A] shadow-sm' : 'text-[#8A9BB5] hover:text-[#374151]'}`}>
+                  Devis
+                </button>
+              </div>
+            </div>
+            <DateRangePicker onDateChange={(start, end) => {
+              setCommandesDevisDateRange({ start, end });
+              fetchData(false, { containerId: 'commandesDevis', startDate: start, endDate: end });
+            }} />
           </div>
           {moisTab === 'commandes' ? (
             <>
               <div className="flex items-end gap-2 md:gap-3">
-                <span className="text-[24px] md:text-[32px] font-extrabold text-[#0F172A] leading-none">{stats.commandes}</span>
+                <span className="text-[24px] md:text-[32px] font-extrabold text-[#0F172A] leading-none">
+                  {filteredCommandesMois !== null ? filteredCommandesMois : stats.commandes}
+                </span>
                 <span className={`flex items-center gap-1 text-[11px] md:text-[13px] font-bold pb-0.5 md:pb-1 ${evolution >= 0 ? 'text-[#4CAF4F]' : 'text-[#EF4444]'}`}>
                   {evolution >= 0 ? '▲' : '▼'} {Math.abs(evolution)}%
                 </span>
@@ -600,7 +818,9 @@ export default function DashboardPage() {
           ) : (
             <>
               <div className="flex items-end gap-2 md:gap-3">
-                <span className="text-[24px] md:text-[32px] font-extrabold text-[#8B5CF6] leading-none">{stats.devisMois}</span>
+                <span className="text-[24px] md:text-[32px] font-extrabold text-[#8B5CF6] leading-none">
+                  {filteredDevisMois !== null ? filteredDevisMois : stats.devisMois}
+                </span>
                 <span className={`flex items-center gap-1 text-[11px] md:text-[13px] font-bold pb-0.5 md:pb-1 ${stats.evolutionDevis >= 0 ? 'text-[#4CAF4F]' : 'text-[#EF4444]'}`}>
                   {stats.evolutionDevis >= 0 ? '▲' : '▼'} {Math.abs(stats.evolutionDevis)}%
                 </span>
@@ -608,6 +828,11 @@ export default function DashboardPage() {
               <p className="text-[12px] text-[#8A9BB5] mt-1">devis créés · vs mois précédent</p>
             </>
           )}
+          
+          {/* Graphique d'évolution sur 6 mois */}
+          <div className="mt-4 md:mt-6">
+            <TrendLineChart data={serie6Mois} />
+          </div>
         </div>
 
         {/* Carte 2 : Ventes ce mois (avec sélecteur commercial pour admin + objectif) */}
@@ -616,7 +841,7 @@ export default function DashboardPage() {
           const activeId = isAdmin ? selectedCommercial : (myId ?? '');
           const isTotal = isAdmin && selectedCommercial === '';
           const ventes = isTotal
-            ? stats.ventesMois
+            ? (filteredVentesMois !== null ? filteredVentesMois : stats.ventesMois)
             : (parCommercial.find((c) => c.id === activeId)?.ventes ?? 0);
           const objectif = isTotal ? objectifs.global : (activeId ? (objectifs.byUser[activeId] ?? 0) : 0);
           const pct = objectif > 0 ? Math.min(100, Math.round((ventes / objectif) * 100)) : 0;
@@ -624,30 +849,38 @@ export default function DashboardPage() {
           return (
             <div className="bg-white rounded-2xl border border-[#E4EBF5] p-5 shadow-sm">
               <div className="flex items-center justify-between mb-2 gap-2">
-                <p className="text-[9px] md:text-[11px] font-bold text-[#ABBED1] uppercase tracking-widest">Ventes ce mois</p>
-                {isAdmin && (
-                  <div className="relative max-w-[58%]">
-                    <select value={selectedCommercial} onChange={(e) => setSelectedCommercial(e.target.value)}
-                      className="w-full appearance-none text-[11px] font-bold text-[#374151] border border-[#E2E8F0] rounded-lg pl-2.5 pr-7 py-1.5 bg-white cursor-pointer focus:outline-none focus:border-[#4CAF4F] focus:ring-2 focus:ring-[#4CAF4F]/25 transition-all">
-                      <option value="">Toute l&apos;entreprise</option>
-                      {myId && <option value={myId}>Mes ventes</option>}
-                      {parCommercial.filter((c) => c.id !== myId).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                    </select>
-                    <svg className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-[#8A9BB5]" width={12} height={12} viewBox="0 0 24 24" fill="none"><path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                  </div>
-                )}
+                <div className="flex items-center gap-2 min-w-0">
+                  <p className="text-[9px] md:text-[11px] font-bold text-[#ABBED1] uppercase tracking-widest flex-shrink-0">
+                    {filteredVentesMois !== null ? 'Ventes' : 'Ventes ce mois'}
+                  </p>
+                  {isAdmin && (
+                    <div className="relative max-w-[140px]">
+                      <select value={selectedCommercial} onChange={(e) => setSelectedCommercial(e.target.value)}
+                        className="w-full appearance-none text-[11px] font-bold text-[#374151] border border-[#E2E8F0] rounded-lg pl-2.5 pr-7 py-1.5 bg-white cursor-pointer focus:outline-none focus:border-[#4CAF4F] focus:ring-2 focus:ring-[#4CAF4F]/25 transition-all">
+                        <option value="">Toute l&apos;entreprise</option>
+                        {myId && <option value={myId}>Mes ventes</option>}
+                        {parCommercial.filter((c) => c.id !== myId).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                      </select>
+                      <svg className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-[#8A9BB5]" width={12} height={12} viewBox="0 0 24 24" fill="none"><path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                    </div>
+                  )}
+                </div>
+                <DateRangePicker onDateChange={(start, end) => {
+                  setVentesDateRange({ start, end });
+                  fetchData(false, { containerId: 'ventes', startDate: start, endDate: end });
+                }} />
               </div>
               <div>
                 <div className="flex items-end gap-2 md:gap-3">
                   <span className="text-[20px] md:text-[32px] font-extrabold text-[#4CAF4F] leading-none">{Number(ventes).toLocaleString('fr-FR')}</span>
                   <span className="text-[10px] md:text-[15px] font-bold text-[#4CAF4F] pb-0.5 md:pb-1">DA</span>
-                  {isTotal && (
+                  {isTotal && filteredVentesMois === null && (
                     <span className={`hidden md:flex items-center gap-1 text-[10px] md:text-[13px] font-bold pb-1 ml-1 ${stats.evolutionVentes >= 0 ? 'text-[#4CAF4F]' : 'text-[#EF4444]'}`}>
                       {stats.evolutionVentes >= 0 ? '▲' : '▼'} {Math.abs(stats.evolutionVentes)}%
                     </span>
                   )}
                 </div>
-                {isTotal && (
+                {isTotal && filteredVentesMois === null && (
                   <span className={`md:hidden flex items-center gap-1 text-[10px] font-bold mt-1 ${stats.evolutionVentes >= 0 ? 'text-[#4CAF4F]' : 'text-[#EF4444]'}`}>
                     {stats.evolutionVentes >= 0 ? '▲' : '▼'} {Math.abs(stats.evolutionVentes)}%
                   </span>
@@ -666,17 +899,57 @@ export default function DashboardPage() {
                   </div>
                 </div>
               ) : (
-                <p className="text-[12px] text-[#8A9BB5]" style={{ marginTop: '12px' }}>commandes + devis livrés {isTotal ? 'ce mois' : 'gérés'}</p>
+                <p className="text-[12px] text-[#8A9BB5]" style={{ marginTop: '12px' }}>
+                  commandes + devis livrés {isTotal ? (filteredVentesMois !== null ? '' : 'ce mois') : 'gérés'}
+                </p>
+              )}
+              
+              {/* Graphique d'évolution des ventes sur 6 mois */}
+              {isTotal && (
+                <div className="mt-4 md:mt-6">
+                  <SalesLineChart data={filteredSerie6MoisVentes || serie6MoisVentes} />
+                </div>
               )}
             </div>
           );
         })()}
       </div>
 
-      {/* Ligne : graphiques barres wilaya + courbe 6 mois */}
+      {/* Ligne : Source + Wilaya (gauche) + Conversion (droite) */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-8">
-        <WilayaBarChart data={topWilayas} />
-        <TrendLineChart data={serie6Mois} />
+        {/* Colonne gauche : Source + Wilaya empilés */}
+        <div className="flex flex-col gap-6">
+          {/* Source Chart */}
+          <div className="relative">
+            <div className="bg-white rounded-2xl border border-[#E4EBF5] p-5 shadow-sm">
+              <p className="text-[11px] font-bold text-[#ABBED1] uppercase tracking-widest mb-1">Origine</p>
+              <p className="text-[13px] font-semibold text-[#0F172A] mb-4">Source des demandes</p>
+              {loading ? <p className="text-[12px] text-[#8A9BB5]">Chargement…</p> : <SourceChart stats={sourceStats} />}
+            </div>
+          </div>
+
+          {/* Wilaya Chart */}
+          <div className="relative">
+            <div className="absolute top-5 right-5 z-10">
+              <DateRangePicker onDateChange={(start, end) => {
+                setWilayaDateRange({ start, end });
+                fetchData(false, { containerId: 'wilaya', startDate: start, endDate: end });
+              }} />
+            </div>
+            <WilayaBarChart data={filteredTopWilayas || topWilayas} />
+          </div>
+        </div>
+        
+        {/* Colonne droite : Conversion */}
+        <div className="relative">
+          <div className="absolute top-5 right-5 z-10">
+            <DateRangePicker onDateChange={(start, end) => {
+              setConversionDateRange({ start, end });
+              fetchData(false, { containerId: 'conversion', startDate: start, endDate: end });
+            }} />
+          </div>
+          <ConversionRateChart data={filteredConversionRates || conversionRates} />
+        </div>
       </div>
 
       {/* Tableau dernières demandes - Caché sur mobile */}
