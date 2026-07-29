@@ -2,13 +2,11 @@
 
 import Script from 'next/script'
 
-export default function GoogleAnalytics() {
-  const gaId = process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID
+interface GoogleAnalyticsProps {
+  gaId: string
+}
 
-  if (!gaId) {
-    return null
-  }
-
+export default function GoogleAnalytics({ gaId }: GoogleAnalyticsProps) {
   return (
     <>
       <Script
