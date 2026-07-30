@@ -372,13 +372,17 @@ export default function DashboardPage() {
       console.log('📥 Chargement initial de toutes les données');
       // Default: fetch all data (no filter)
       const [statsRes, analyticsRes] = await Promise.all([
-        fetch(statsUrl, { credentials: 'include' }),
-        fetch(analyticsUrl, { credentials: 'include' }),
+        fetch(statsUrl, { credentials: 'include' }).catch(err => { console.error('❌ Erreur fetch stats:', err); throw err; }),
+        fetch(analyticsUrl, { credentials: 'include' }).catch(err => { console.error('❌ Erreur fetch analytics:', err); throw err; }),
       ]);
       
       if (statsRes.ok) {
         const data = await statsRes.json();
+        console.log('✅ Stats chargées avec succès');
         setStats(data.stats);
+      } else {
+        console.error('❌ Stats API error:', statsRes.status, await statsRes.text());
+      }
         setTodayStats(data.todayStats);
         setSourceStats(data.sourceStats);
         setEvolution(data.evolutionCommandes ?? 0);
