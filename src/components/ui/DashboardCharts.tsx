@@ -109,7 +109,7 @@ export function CategoryPageViewsChart({ data }: { data: { week: string; categor
     return <p className="text-[11px] md:text-[12px] text-[#8A9BB5] py-4 text-center">Aucune donnée</p>;
   }
 
-  // Préparer les données pour le graphique empilé
+  // Préparer les données pour le graphique empilé HORIZONTAL
   const chartData = data.map((item) => {
     const row: Record<string, string | number> = { week: item.week };
     item.categories.forEach((cat) => {
@@ -123,19 +123,19 @@ export function CategoryPageViewsChart({ data }: { data: { week: string; categor
 
   return (
     <>
-      <ResponsiveContainer width="100%" height={180}>
-        <BarChart data={chartData} margin={{ left: -12, right: 12, top: 6 }} barCategoryGap="15%">
-          <CartesianGrid stroke="#F2F4F7" />
-          <XAxis dataKey="week" tick={{ fontSize: 11, fill: '#8A9BB5' }} />
-          <YAxis tick={{ fontSize: 11, fill: '#8A9BB5' }} allowDecimals={false} />
+      <ResponsiveContainer width="100%" height={160}>
+        <BarChart data={chartData} layout="vertical" margin={{ left: 10, right: 12, top: 6, bottom: 0 }}>
+          <CartesianGrid stroke="#F2F4F7" horizontal={false} />
+          <XAxis type="number" tick={{ fontSize: 11, fill: '#8A9BB5' }} allowDecimals={false} />
+          <YAxis type="category" dataKey="week" tick={{ fontSize: 11, fill: '#374151' }} width={50} />
           <Tooltip {...tooltipStyle()} cursor={{ fill: '#F8FAFC' }} />
           {categories.map((cat, index) => (
             <Bar 
               key={cat.category} 
               dataKey={cat.category} 
               stackId="a" 
-              fill={cat.color} 
-              radius={index === categories.length - 1 ? [4, 4, 0, 0] : [0, 0, 0, 0]} 
+              fill={cat.color}
+              radius={index === categories.length - 1 ? [0, 4, 4, 0] : [0, 0, 0, 0]}
             />
           ))}
         </BarChart>

@@ -4,7 +4,7 @@ import { styleBandRow, styleHeaderRow, styleDataRows, styleSectionTitle, styleFi
 // Export "tableau" : UNE LIGNE PAR PRODUIT.
 // Les infos de la commande/devis (réf, client, wilaya, date…) sont RÉPÉTÉES sur
 // chaque ligne produit → aucune cellule vide, l'Excel reste filtrable/triable.
-const NUM_COLS = 13;
+const NUM_COLS = 16;
 const pad = (r: (string | number)[]) => { while (r.length < NUM_COLS) r.push(''); return r; };
 
 const montantToNum = (s: string) =>
@@ -34,25 +34,32 @@ export async function exportTableauExcel(
   const headerRowIdx = allRows.length;
   push([
     'Référence', 'Type', 'Date', 'Client', 'Entreprise', 'Téléphone', 'Wilaya', 'Commune',
-    'Statut', 'Catégorie', 'Produit', 'Métrage (m)', 'Qté',
+    'Statut', 'Catégorie', 'Produit', 'Métrage (m)', 'Qté', 'Prix unitaire (DA)', 'Total ligne (DA)', 'Total commande (DA)',
   ]);
   const dataStart = allRows.length;
 
   let totalGlobal = 0;
   items.forEach((r) => {
     const dateStr = r.date + (r.heure ? ` ${r.heure}` : '');
-    totalGlobal += montantToNum(r.montant);
+    const montantCommande = montantToNum(r.montant);
+    totalGlobal += montantCommande;
     const lignes = (r.items && r.items.length > 0)
       ? r.items
       : [{ designation: r.produits, categorie: '—', quantite: 0, prixUnitaire: 0, metrage: null }];
     lignes.forEach((l) => {
+      const qty = l.quantite || 0;
+      const pu = l.prixUnitaire || 0;
+      const totalLigne = qty * pu;
       // Toutes les infos de la commande répétées → pas de cellule vide
       push([
         r.ref, r.type, dateStr, r.client, r.entreprise || '—', r.telephone || '—',
         r.wilaya || '—', r.commune || '—', r.statut,
         l.categorie || '—', l.designation || '—',
         l.metrage != null ? l.metrage : '—',
-        l.quantite || 0,
+        qty,
+        pu,
+        totalLigne,
+        montantCommande,
       ]);
     });
   });
@@ -93,6 +100,9 @@ export async function exportTableauExcel(
     { wch: 30 }, // Produit
     { wch: 12 }, // Métrage
     { wch: 8 },  // Qté
+    { wch: 16 }, // Prix unitaire
+    { wch: 16 }, // Total ligne
+    { wch: 18 }, // Total commande
   ];
 
   const lastCol = NUM_COLS - 1;

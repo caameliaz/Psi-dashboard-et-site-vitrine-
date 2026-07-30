@@ -1,10 +1,20 @@
 import { styleBandRow, styleHeaderRow, styleDataRows, styleSectionTitle } from '@/lib/xlsx-style';
 
 export interface DashboardExportData {
-  stats: { commandes: number; devisMois: number; ventesMois: number; clients: number; livrees: number };
+  stats: { 
+    commandes: number; 
+    devisMois: number; 
+    ventesMois: number; 
+    ventesPrevMois: number;
+    evolutionVentes: number;
+    evolutionDevis: number;
+    clients: number; 
+    livrees: number;
+  };
   todayStats: { commandes: number; attente: number; confirmes: number };
   sourceStats: { site: number; manuel: number };
   evolution: number;
+  devisEnAttente: { count: number; montant: number };
   topProduits: { ref: string; qty: number; label: string }[];
   topWilayas: { wilaya: string; count: number }[];
   serie6Mois: { mois: string; commandes: number; devis: number }[];
@@ -54,10 +64,15 @@ export async function exportDashboardExcel(d: DashboardExportData) {
     ['Commandes ce mois', d.stats.commandes],
     ['Devis ce mois', d.stats.devisMois],
     ['Ventes ce mois (DA)', d.stats.ventesMois],
+    ['Ventes mois précédent (DA)', d.stats.ventesPrevMois],
+    ['Évolution ventes (%)', d.stats.evolutionVentes],
+    ['Évolution devis (%)', d.stats.evolutionDevis],
+    ['Évolution commandes (%)', d.evolution],
     ['Objectif du mois (DA)', d.objectifs.global],
     ['Clients ce mois', d.stats.clients],
     ['Ventes livrées ce mois (nb)', d.stats.livrees],
-    ['Évolution commandes (%)', d.evolution],
+    ['Devis en attente (nb)', d.devisEnAttente.count],
+    ['Devis en attente (DA)', d.devisEnAttente.montant],
   ]);
 
   section("AUJOURD'HUI", ['Indicateur', 'Valeur'], [

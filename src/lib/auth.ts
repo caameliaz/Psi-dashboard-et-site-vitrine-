@@ -42,22 +42,22 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
         if (!passwordMatch) { recordFail('login', email); return null; }
 
-        // ── 2FA TEMPORAIREMENT DÉSACTIVÉ POUR LE DÉVELOPPEMENT ──
-        // const otp = String(credentials.otp).trim();
-        // const codeValid =
-        //   user.twoFactorCode &&
-        //   user.twoFactorExpires &&
-        //   user.twoFactorExpires.getTime() > Date.now() &&
-        //   (user.twoFactorAttempts ?? 0) < 5 &&
-        //   user.twoFactorCode === otp;
+        // ── 2FA ACTIVÉ ──
+        const otp = String(credentials.otp).trim();
+        const codeValid =
+          user.twoFactorCode &&
+          user.twoFactorExpires &&
+          user.twoFactorExpires.getTime() > Date.now() &&
+          (user.twoFactorAttempts ?? 0) < 5 &&
+          user.twoFactorCode === otp;
 
-        // if (!codeValid) {
-        //   recordFail('login', email);
-        //   if (user.twoFactorCode && user.twoFactorExpires && user.twoFactorExpires.getTime() > Date.now()) {
-        //     await prisma.user.update({ where: { id: user.id }, data: { twoFactorAttempts: { increment: 1 } } });
-        //   }
-        //   return null;
-        // }
+        if (!codeValid) {
+          recordFail('login', email);
+          if (user.twoFactorCode && user.twoFactorExpires && user.twoFactorExpires.getTime() > Date.now()) {
+            await prisma.user.update({ where: { id: user.id }, data: { twoFactorAttempts: { increment: 1 } } });
+          }
+          return null;
+        }
 
         recordSuccess('login', email); // reset le compteur en cas de succès
 

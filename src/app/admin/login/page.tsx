@@ -31,6 +31,8 @@ export default function LoginPage() {
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data.error || 'Identifiant ou mot de passe incorrect.');
+    // Code envoyé avec succès → passer à l'étape OTP
+    setStep('otp');
   };
 
   const handleForgot = async (e: React.FormEvent) => {
@@ -52,36 +54,14 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      // 2FA DÉSACTIVÉ TEMPORAIREMENT - Connexion directe
-      const res = await signIn('credentials', {
-        email,
-        password,
-        otp: '000000', // Code fictif car le backend ne vérifie plus
-        remember: remember ? '1' : '0',
-        redirect: false,
-      });
-
-      if (!res || res.error || res.ok === false) {
-        setError('Identifiant ou mot de passe incorrect.');
+      // 2FA ACTIVÉ - envoi du code OTP
+      if (step === 'credentials') {
+        await sendOtp();
         setLoading(false);
         return;
       }
-
-      // Redirection vers le dashboard
-      router.push('/admin/dashboard');
-      router.refresh();
-    } catch (err) {
-      setError('Identifiant ou mot de passe incorrect.');
-      setLoading(false);
-    }
-  };
-
-  const handleVerifyOtp = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
-    setLoading(true);
-
-    try {
+      
+      // Vérification du code OTP (step === 'otp')
       const res = await signIn('credentials', {
         email,
         password,
@@ -97,13 +77,19 @@ export default function LoginPage() {
         return;
       }
 
-      // Redirection vers le dashboard (mobile et desktop)
+      // Redirection vers le dashboard
       router.push('/admin/dashboard');
       router.refresh();
-    } catch {
-      setError('Code incorrect ou expiré.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Une erreur est survenue.');
       setLoading(false);
     }
+  };
+
+  const handleVerifyOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    // Utilise handleSubmit avec step === 'otp'
+    await handleSubmit(e);
   };
 
   const handleResend = async () => {

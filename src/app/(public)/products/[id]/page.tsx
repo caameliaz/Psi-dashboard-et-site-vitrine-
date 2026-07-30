@@ -69,6 +69,13 @@ export default function ProductDetailPage() {
 
   useEffect(() => { setIndex(0); setQty(1); }, [id]);
 
+  // Mettre à jour le titre de la page dynamiquement
+  useEffect(() => {
+    if (category) {
+      document.title = `${category.name} - PSI`;
+    }
+  }, [category]);
+
   if (!category) {
     return <div className="min-h-[50vh] flex items-center justify-center text-[#717171]">{t('common.loading')}</div>;
   }

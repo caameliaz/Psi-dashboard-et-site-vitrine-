@@ -4,6 +4,9 @@ const credentials = process.env.GA4_CREDENTIALS ? JSON.parse(process.env.GA4_CRE
 
 let analyticsDataClient: any | null = null;
 
+// Palette de couleurs pour les catégories
+const CATEGORY_COLORS = ['#7C6BAF', '#EF4444', '#F59E0B', '#10B981', '#3B82F6', '#8B5CF6'];
+
 // Initialiser le client GA4
 function getAnalyticsClient() {
   if (!analyticsDataClient && credentials) {
@@ -36,69 +39,113 @@ export interface PageViewsByWeek {
 export async function getMonthlyPageViews(): Promise<{ total: number; byCategory: CategoryPageViews[] }> {
   const client = getAnalyticsClient();
   
-  if (!client || !propertyId) {
-    // Données de test si GA4 n'est pas configuré
+  // Import dynamique de prisma uniquement côté serveur
+  const { prisma } = await import('@/lib/prisma');
+  
+  // Récupérer les vraies catégories depuis la DB
+  const categories = await prisma.category.findMany({
+    orderBy: { order: 'asc' },
+    select: { id: true, name: true },
+  });
+  
+  if (!client || !propertyId || categories.length === 0) {
+    console.warn('GA4 non configuré - client, propertyId manquant ou aucune catégorie');
     return {
-      total: 1250,
-      byCategory: [
-        { category: 'Impression', views: 720, color: '#7C6BAF' },
-        { category: 'Étiquettes', views: 530, color: '#EF4444' },
-      ],
+      total: 0,
+      byCategory: categories.map((cat, index) => ({
+        category: cat.name,
+        views: 0,
+        color: CATEGORY_COLORS[index % CATEGORY_COLORS.length],
+      })),
     };
   }
 
   try {
-    const now = new Date();
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    // UTILISER UNIQUEMENT LES DONNÉES TEMPS RÉEL (instantané)
+    console.log('📊 Appel runRealtimeReport avec hostName + unifiedScreenName...');
     
-    const [response] = await client.runReport({
+    const [realtimeResponse] = await client.runRealtimeReport({
       property: `properties/${propertyId}`,
-      dateRanges: [
-        {
-          startDate: startOfMonth.toISOString().split('T')[0],
-          endDate: 'today',
-        },
+      dimensions: [
+        { name: 'unifiedScreenName' }, // Titre de la page (on va le parser pour extraire la catégorie)
       ],
-      dimensions: [{ name: 'pagePath' }],
       metrics: [{ name: 'screenPageViews' }],
     });
 
+    console.log('📊 Réponse temps réel:', { 
+      rowCount: realtimeResponse.rows?.length ?? 0,
+      allRows: realtimeResponse.rows?.map((r: any) => ({
+        screenName: r.dimensionValues?.[0]?.value,
+        views: r.metricValues?.[0]?.value,
+      })),
+    });
+
     // Mapper les pages aux catégories
-    const byCategory: Record<string, number> = {
-      Impression: 0,
-      Étiquettes: 0,
-    };
+    const byCategoryMap: Record<string, number> = {};
+    const categoryNames: Record<string, string> = {};
+    categories.forEach(cat => {
+      byCategoryMap[cat.id] = 0;
+      categoryNames[cat.name] = cat.id;
+    });
 
     let total = 0;
-    response.rows?.forEach((row: any) => {
-      const path = row.dimensionValues?.[0]?.value ?? '';
+    let totalCategories = 0;
+    const matchedScreens: string[] = [];
+    const unmatchedScreens: string[] = [];
+    
+    realtimeResponse.rows?.forEach((row: any) => {
+      const screenName = row.dimensionValues?.[0]?.value ?? '';
       const views = parseInt(row.metricValues?.[0]?.value ?? '0', 10);
+      
+      // TOTAL = TOUTES les pages
       total += views;
 
-      // Déterminer la catégorie selon le path
-      if (path.includes('/impression') || path.includes('/produits/impression')) {
-        byCategory.Impression += views;
-      } else if (path.includes('/etiquettes') || path.includes('/produits/etiquettes')) {
-        byCategory.Étiquettes += views;
+      // Essayer de matcher le nom de catégorie dans le titre de la page
+      let matched = false;
+      for (const [catName, catId] of Object.entries(categoryNames)) {
+        if (screenName.includes(catName)) {
+          byCategoryMap[catId] += views;
+          totalCategories += views;
+          matchedScreens.push(`"${screenName}" → ${catName} (${catId})`);
+          matched = true;
+          break;
+        }
       }
+      
+      if (!matched) {
+        unmatchedScreens.push(screenName);
+      }
+    });
+
+    console.log('📊 Matching détaillé:', {
+      categoriesDB: categories.map(c => ({ id: c.id, name: c.name })),
+      matchedScreens,
+      unmatchedScreens,
+    });
+
+    console.log('📊 Résultat temps réel:', { 
+      totalSite: total, 
+      totalCategories, 
+      byCategoryMap 
     });
 
     return {
       total,
-      byCategory: [
-        { category: 'Impression', views: byCategory.Impression, color: '#7C6BAF' },
-        { category: 'Étiquettes', views: byCategory.Étiquettes, color: '#EF4444' },
-      ],
+      byCategory: categories.map((cat, index) => ({
+        category: cat.name,
+        views: byCategoryMap[cat.id],
+        color: CATEGORY_COLORS[index % CATEGORY_COLORS.length],
+      })),
     };
   } catch (error) {
-    console.error('Erreur GA4:', error);
-    // Retourner des données de test en cas d'erreur
+    console.error('❌ Erreur GA4 temps réel:', error);
     return {
-      total: 1250,
-      byCategory: [
-        { category: 'Impression', views: 720, color: '#7C6BAF' },
-        { category: 'Étiquettes', views: 530, color: '#EF4444' },
-      ],
+      total: 0,
+      byCategory: categories.map((cat, index) => ({
+        category: cat.name,
+        views: 0,
+        color: CATEGORY_COLORS[index % CATEGORY_COLORS.length],
+      })),
     };
   }
 }
@@ -107,80 +154,92 @@ export async function getMonthlyPageViews(): Promise<{ total: number; byCategory
 export async function getWeeklyPageViews(): Promise<PageViewsByWeek[]> {
   const client = getAnalyticsClient();
   
-  if (!client || !propertyId) {
-    // Données de test si GA4 n'est pas configuré
+  // Import dynamique de prisma uniquement côté serveur
+  const { prisma } = await import('@/lib/prisma');
+  
+  // Récupérer les vraies catégories depuis la DB
+  const categories = await prisma.category.findMany({
+    orderBy: { order: 'asc' },
+    select: { id: true, name: true },
+  });
+  
+  if (!client || !propertyId || categories.length === 0) {
+    console.warn('GA4 non configuré - client, propertyId manquant ou aucune catégorie');
     const weeks = ['Sem 1', 'Sem 2', 'Sem 3', 'Sem 4'];
-    return weeks.map((week, i) => ({
+    return weeks.map((week) => ({
       week,
-      categories: [
-        { category: 'Impression', views: 150 + i * 20, color: '#7C6BAF' },
-        { category: 'Étiquettes', views: 120 + i * 15, color: '#EF4444' },
-      ],
-      total: 270 + i * 35,
+      categories: categories.map((cat, index) => ({
+        category: cat.name,
+        views: 0,
+        color: CATEGORY_COLORS[index % CATEGORY_COLORS.length],
+      })),
+      total: 0,
     }));
   }
 
   try {
-    const now = new Date();
-    const fourWeeksAgo = new Date(now);
-    fourWeeksAgo.setDate(now.getDate() - 28);
+    // UTILISER LES DONNÉES TEMPS RÉEL - on va simuler 4 semaines avec les données actuelles
+    console.log('📊 Appel runRealtimeReport pour weekly...');
     
-    const [response] = await client.runReport({
+    const [realtimeResponse] = await client.runRealtimeReport({
       property: `properties/${propertyId}`,
-      dateRanges: [
-        {
-          startDate: fourWeeksAgo.toISOString().split('T')[0],
-          endDate: 'today',
-        },
-      ],
-      dimensions: [{ name: 'week' }, { name: 'pagePath' }],
+      dimensions: [{ name: 'unifiedScreenName' }],
       metrics: [{ name: 'screenPageViews' }],
     });
 
-    // Grouper par semaine et catégorie
-    const weeklyData: Record<string, Record<string, number>> = {};
+    console.log('📊 Réponse temps réel weekly:', { rowCount: realtimeResponse.rows?.length ?? 0 });
+
+    // Mapper par catégorie en utilisant le nom de la catégorie dans le titre
+    const byCategoryMap: Record<string, number> = {};
+    const categoryNames: Record<string, string> = {};
+    categories.forEach(cat => {
+      byCategoryMap[cat.id] = 0;
+      categoryNames[cat.name] = cat.id;
+    });
+
+    let total = 0;
     
-    response.rows?.forEach((row: any) => {
-      const week = row.dimensionValues?.[0]?.value ?? '';
-      const path = row.dimensionValues?.[1]?.value ?? '';
+    realtimeResponse.rows?.forEach((row: any) => {
+      const screenName = row.dimensionValues?.[0]?.value ?? '';
       const views = parseInt(row.metricValues?.[0]?.value ?? '0', 10);
+      total += views;
 
-      if (!weeklyData[week]) {
-        weeklyData[week] = { Impression: 0, Étiquettes: 0 };
-      }
-
-      if (path.includes('/impression') || path.includes('/produits/impression')) {
-        weeklyData[week].Impression += views;
-      } else if (path.includes('/etiquettes') || path.includes('/produits/etiquettes')) {
-        weeklyData[week].Étiquettes += views;
+      // Matcher le nom de catégorie dans le titre
+      for (const [catName, catId] of Object.entries(categoryNames)) {
+        if (screenName.includes(catName)) {
+          byCategoryMap[catId] += views;
+          break;
+        }
       }
     });
 
-    // Convertir en tableau et trier par date
-    const result: PageViewsByWeek[] = Object.entries(weeklyData)
-      .sort(([a], [b]) => a.localeCompare(b))
-      .slice(-4) // Garder les 4 dernières semaines
-      .map(([week, data], index) => ({
-        week: `Sem ${index + 1}`,
-        categories: [
-          { category: 'Impression', views: data.Impression, color: '#7C6BAF' },
-          { category: 'Étiquettes', views: data.Étiquettes, color: '#EF4444' },
-        ],
-        total: data.Impression + data.Étiquettes,
-      }));
-
-    return result.length > 0 ? result : getWeeklyPageViews(); // Fallback aux données de test
-  } catch (error) {
-    console.error('Erreur GA4:', error);
-    // Données de test en cas d'erreur
+    // Créer 4 semaines fictives avec les données actuelles (temps réel n'a pas d'historique)
+    // On met toutes les données dans la semaine 4 (la plus récente)
     const weeks = ['Sem 1', 'Sem 2', 'Sem 3', 'Sem 4'];
-    return weeks.map((week, i) => ({
+    const result = weeks.map((week, index) => ({
       week,
-      categories: [
-        { category: 'Impression', views: 150 + i * 20, color: '#7C6BAF' },
-        { category: 'Étiquettes', views: 120 + i * 15, color: '#EF4444' },
-      ],
-      total: 270 + i * 35,
+      categories: categories.map((cat, catIndex) => ({
+        category: cat.name,
+        views: index === 3 ? byCategoryMap[cat.id] : 0, // Toutes les vues dans Sem 4
+        color: CATEGORY_COLORS[catIndex % CATEGORY_COLORS.length],
+      })),
+      total: index === 3 ? total : 0,
+    }));
+
+    console.log('📊 Résultat weekly temps réel:', result);
+
+    return result;
+  } catch (error) {
+    console.error('❌ Erreur GA4 weekly temps réel:', error);
+    const weeks = ['Sem 1', 'Sem 2', 'Sem 3', 'Sem 4'];
+    return weeks.map((week) => ({
+      week,
+      categories: categories.map((cat, index) => ({
+        category: cat.name,
+        views: 0,
+        color: CATEGORY_COLORS[index % CATEGORY_COLORS.length],
+      })),
+      total: 0,
     }));
   }
 }

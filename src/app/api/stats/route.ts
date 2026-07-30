@@ -34,11 +34,23 @@ export async function GET(request: NextRequest) {
       start6MonthsAgo.setMonth(start6MonthsAgo.getMonth() - 5);
     } else {
       // Utiliser les valeurs par défaut (mois courant)
-      startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-      endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
-      startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-      startOfPrevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-      start6MonthsAgo = new Date(now.getFullYear(), now.getMonth() - 5, 1);
+      startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+      // Pour le dernier jour du mois: mois + 1, jour 0 donne le dernier jour du mois précédent
+      // Donc on doit faire: année, mois + 1, 1 moins 1 milliseconde
+      const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1, 0, 0, 0, 0);
+      endDate = new Date(nextMonth.getTime() - 1); // Dernier millisecond du mois courant
+      startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+      startOfPrevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1, 0, 0, 0, 0);
+      start6MonthsAgo = new Date(now.getFullYear(), now.getMonth() - 5, 1, 0, 0, 0, 0);
+      
+      console.log('📊 CALCUL DATES (mois courant):', {
+        now: now.toISOString(),
+        nowMonth: now.getMonth(),
+        nowYear: now.getFullYear(),
+        startOfMonth: startOfMonth.toISOString(),
+        endDate: endDate.toISOString(),
+        nextMonth: nextMonth.toISOString(),
+      });
     }
 
     const [
@@ -101,10 +113,12 @@ export async function GET(request: NextRequest) {
       // Confirmés (statut VALIDE) : commandes + devis
       prisma.order.count({ where: { status: 'VALIDE' } }),
       prisma.quote.count({ where: { status: 'VALIDE' } }),
-      // Top produits dans l'intervalle filtré
+      // Top produits - DEPUIS TOUJOURS si pas de filtre, sinon dans l'intervalle filtré
       prisma.orderItem.groupBy({
         by: ['productId'],
-        where: { order: { createdAt: { gte: startOfMonth, lte: endDate } } },
+        where: startDateParam && endDateParam 
+          ? { order: { createdAt: { gte: startOfMonth, lte: endDate } } }
+          : {}, // Pas de filtre de date = tous les produits vendus depuis toujours
         _sum: { quantity: true },
         orderBy: { _sum: { quantity: 'desc' } },
         take: 6,
@@ -125,11 +139,11 @@ export async function GET(request: NextRequest) {
       // Ventes livrées des 6 derniers mois (pour la courbe des ventes)
       prisma.order.findMany({
         where: { status: 'LIVRE', createdAt: { gte: start6MonthsAgo } },
-        select: { createdAt: true, items: { select: { quantity: true, unitPrice: true } } },
+        select: { createdAt: true, assignedToId: true, items: { select: { quantity: true, unitPrice: true } } },
       }),
       prisma.quote.findMany({
         where: { status: 'LIVRE', createdAt: { gte: start6MonthsAgo } },
-        select: { createdAt: true, proposedPrice: true },
+        select: { createdAt: true, assignedToId: true, proposedPrice: true },
       }),
       prisma.order.findMany({
         take: 5,
@@ -241,7 +255,7 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // Série 6 mois : ventes (montant) par mois
+    // Série 6 mois : ventes (montant) par mois - IMPORTANT: chaque mois est INDÉPENDANT, pas cumulatif
     const serieVentes: { mois: string; ventes: number }[] = [];
     for (let i = 5; i >= 0; i--) {
       const d = new Date(referenceDate.getFullYear(), referenceDate.getMonth() - i, 1);
@@ -261,6 +275,67 @@ export async function GET(request: NextRequest) {
         }
       });
     }
+    
+    console.log('📊 Série ventes 6 mois (NON cumulatif):', {
+      data: serieVentes,
+      note: 'Chaque mois = ventes de CE mois uniquement, pas un cumul',
+    });
+
+    // Série 6 mois : ventes PAR EMPLOYÉ (pour le graphique individuel)
+    const serieVentesByUser: Record<string, { mois: string; ventes: number }[]> = {};
+    
+    // Initialiser pour chaque employé ayant des ventes
+    const allUserIds = new Set<string>();
+    ordersLivresFor6Months.forEach(o => { if (o.assignedToId) allUserIds.add(o.assignedToId); });
+    quotesLivresFor6Months.forEach(q => { if (q.assignedToId) allUserIds.add(q.assignedToId); });
+    
+    console.log('📊 Employés avec ventes sur 6 mois:', {
+      totalOrders: ordersLivresFor6Months.length,
+      totalQuotes: quotesLivresFor6Months.length,
+      userIds: Array.from(allUserIds),
+      sampleOrders: ordersLivresFor6Months.slice(0, 3).map(o => ({ assignedToId: o.assignedToId, createdAt: o.createdAt })),
+    });
+    
+    allUserIds.forEach(userId => {
+      serieVentesByUser[userId] = [];
+      for (let i = 5; i >= 0; i--) {
+        const d = new Date(referenceDate.getFullYear(), referenceDate.getMonth() - i, 1);
+        serieVentesByUser[userId].push({ mois: MOIS[d.getMonth()], ventes: 0 });
+      }
+    });
+    
+    // Remplir les données par mois et par employé
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(referenceDate.getFullYear(), referenceDate.getMonth() - i, 1);
+      const key = `${d.getFullYear()}-${d.getMonth()}`;
+      const idx = 5 - i;
+      
+      ordersLivresFor6Months.forEach((o) => {
+        const od = new Date(o.createdAt);
+        if (`${od.getFullYear()}-${od.getMonth()}` === key && o.assignedToId) {
+          if (serieVentesByUser[o.assignedToId]) {
+            serieVentesByUser[o.assignedToId][idx].ventes += orderAmount(o.items);
+          }
+        }
+      });
+      
+      quotesLivresFor6Months.forEach((q) => {
+        const qd = new Date(q.createdAt);
+        if (`${qd.getFullYear()}-${qd.getMonth()}` === key && q.assignedToId) {
+          if (serieVentesByUser[q.assignedToId]) {
+            serieVentesByUser[q.assignedToId][idx].ventes += q.proposedPrice ?? 0;
+          }
+        }
+      });
+    }
+    
+    console.log('📊 Séries ventes par employé calculées:', {
+      nbEmployes: Object.keys(serieVentesByUser).length,
+      sample: Object.entries(serieVentesByUser).slice(0, 1).map(([uid, data]) => ({
+        userId: uid,
+        data: data.slice(0, 3), // 3 premiers mois
+      })),
+    });
 
     // ── Ventes livrées ce mois : total + ventilation par commercial (assigné) ──
 
@@ -276,6 +351,17 @@ export async function GET(request: NextRequest) {
     let ventesMois = 0;
     ordersLivrees.forEach((o) => { const a = orderAmount(o.items); ventesMois += a; bump(o.assignedToId, a, 'order'); });
     quotesLivres.forEach((q) => { const a = q.proposedPrice ?? 0; ventesMois += a; bump(q.assignedToId, a, 'quote'); });
+
+    console.log('📊 Calcul ventesMois:', {
+      periode: `${startOfMonth.toISOString().split('T')[0]} → ${endDate.toISOString().split('T')[0]}`,
+      nbOrdersLivrees: ordersLivrees.length,
+      nbQuotesLivres: quotesLivres.length,
+      ventesMois,
+      sampleOrders: ordersLivrees.slice(0, 2).map(o => ({ 
+        createdAt: o.createdAt, 
+        montant: orderAmount(o.items) 
+      })),
+    });
 
     const livreesMois = ordersLivrees.length;
     const devisLivresMois = quotesLivres.length;
@@ -411,6 +497,7 @@ export async function GET(request: NextRequest) {
       topWilayas,                // [{ wilaya, count }]
       serie6Mois: serie,         // [{ mois, commandes, devis }]
       serie6MoisVentes: serieVentes, // [{ mois, ventes }] — montant des ventes par mois
+      serie6MoisVentesByUser: serieVentesByUser, // Record<userId, [{ mois, ventes }]> — montant des ventes par mois PAR employé
       conversionRates,           // [{ productId, reference, label, rate, total, delivered }] — taux de conversion par produit
       topProduits: topProduitsFinal,
       sourceStats: sourceCounts,

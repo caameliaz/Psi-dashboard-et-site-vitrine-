@@ -199,6 +199,7 @@ export default function DashboardPage() {
   const myId = (session?.user as { id?: string } | undefined)?.id ?? null;
   const myName = (session?.user as { name?: string } | undefined)?.name ?? 'Moi';
   const [parCommercial, setParCommercial] = useState<{ id: string; name: string; ventes: number; commandes: number; devis: number }[]>([]);
+  const [filteredParCommercial, setFilteredParCommercial] = useState<{ id: string; name: string; ventes: number; commandes: number; devis: number }[] | null>(null);
   const [employesLivres, setEmployesLivres] = useState<{ name: string; commandes: number; devis: number; total: number }[]>([]);
   const [objectifs, setObjectifs] = useState<{ global: number; byUser: Record<string, number> }>({ global: 0, byUser: {} });
   const [selectedCommercial, setSelectedCommercial] = useState<string>(''); // '' = total entreprise
@@ -207,10 +208,12 @@ export default function DashboardPage() {
   const [topProduits, setTopProduits] = useState<{ ref: string; qty: number; label: string; color: string }[]>([]);
   const [sourceStats, setSourceStats] = useState({ site: 0, manuel: 0 });
   const [evolution, setEvolution] = useState(0);
+  const [devisEnAttente, setDevisEnAttente] = useState({ count: 0, montant: 0 });
   const [topWilayas, setTopWilayas] = useState<{ wilaya: string; count: number }[]>([]);
   const [conversionRates, setConversionRates] = useState<{ label: string; rate: number }[]>([]);
   const [serie6Mois, setSerie6Mois] = useState<{ mois: string; commandes: number; devis: number }[]>([]);
   const [serie6MoisVentes, setSerie6MoisVentes] = useState<{ mois: string; ventes: number }[]>([]);
+  const [serie6MoisVentesByUser, setSerie6MoisVentesByUser] = useState<Record<string, { mois: string; ventes: number }[]>>({});
   const [analyticsData, setAnalyticsData] = useState<{ monthly: { total: number; byCategory: { category: string; views: number; color: string }[] }; weekly: { week: string; categories: { category: string; views: number; color: string }[] }[] }>({ monthly: { total: 0, byCategory: [] }, weekly: [] });
   const [loading, setLoading]   = useState(true);
 
@@ -221,6 +224,7 @@ export default function DashboardPage() {
   const [filteredDevisMois, setFilteredDevisMois] = useState<number | null>(null);
   const [filteredSerie6MoisVentes, setFilteredSerie6MoisVentes] = useState<{ mois: string; ventes: number }[] | null>(null);
   const [filteredVentesMois, setFilteredVentesMois] = useState<number | null>(null);
+  const [filteredSerie6MoisVentesByUser, setFilteredSerie6MoisVentesByUser] = useState<Record<string, { mois: string; ventes: number }[]> | null>(null);
   const [filteredTopWilayas, setFilteredTopWilayas] = useState<{ wilaya: string; count: number }[] | null>(null);
   const [filteredConversionRates, setFilteredConversionRates] = useState<{ label: string; rate: number }[] | null>(null);
 
@@ -313,9 +317,16 @@ export default function DashboardPage() {
           const res = await fetch(baseUrl, { credentials: 'include' });
           if (res.ok) {
             const data = await res.json();
-            console.log('📊 Données filtrées ventes:', data.serie6MoisVentes);
+            console.log('📊 Données filtrées ventes complètes:', {
+              serie6MoisVentes: data.serie6MoisVentes?.slice(0, 2),
+              serie6MoisVentesByUser: data.serie6MoisVentesByUser ? Object.keys(data.serie6MoisVentesByUser) : 'undefined',
+              ventesMois: data.stats?.ventesMois,
+              parCommercial: data.parCommercial?.slice(0, 1),
+            });
             setFilteredSerie6MoisVentes(data.serie6MoisVentes ?? []);
-            setFilteredVentesMois(data.stats?.ventesMois ?? null); // NOUVEAU: montant total
+            setFilteredVentesMois(data.stats?.ventesMois ?? null);
+            setFilteredSerie6MoisVentesByUser(data.serie6MoisVentesByUser ?? {}); // Aussi filtrer par employé
+            setFilteredParCommercial(data.parCommercial ?? []); // Aussi les ventes par commercial
           }
           setLoading(false);
           return;
@@ -351,7 +362,7 @@ export default function DashboardPage() {
         if (dateParams.containerId === 'topProduits') setFilteredTopProduits(null);
         else if (dateParams.containerId === 'visites') setFilteredAnalyticsData(null);
         else if (dateParams.containerId === 'commandesDevis') { setFilteredCommandesMois(null); setFilteredDevisMois(null); }
-        else if (dateParams.containerId === 'ventes') { setFilteredSerie6MoisVentes(null); setFilteredVentesMois(null); }
+        else if (dateParams.containerId === 'ventes') { setFilteredSerie6MoisVentes(null); setFilteredVentesMois(null); setFilteredSerie6MoisVentesByUser(null); setFilteredParCommercial(null); }
         else if (dateParams.containerId === 'wilaya') setFilteredTopWilayas(null);
         else if (dateParams.containerId === 'conversion') setFilteredConversionRates(null);
         setLoading(false);
@@ -371,10 +382,12 @@ export default function DashboardPage() {
         setTodayStats(data.todayStats);
         setSourceStats(data.sourceStats);
         setEvolution(data.evolutionCommandes ?? 0);
+        setDevisEnAttente(data.devisEnAttente ?? { count: 0, montant: 0 });
         setTopWilayas(data.topWilayas ?? []);
         setConversionRates(data.conversionRates ?? []);
         setSerie6Mois(data.serie6Mois ?? []);
         setSerie6MoisVentes(data.serie6MoisVentes ?? []);
+        setSerie6MoisVentesByUser(data.serie6MoisVentesByUser ?? {});
         setParCommercial(data.parCommercial ?? []);
         setEmployesLivres(data.employesLivres ?? []);
         setObjectifs(data.objectifs ?? { global: 0, byUser: {} });
@@ -409,6 +422,7 @@ export default function DashboardPage() {
   const hasAnyFilter = filteredTopProduits !== null || filteredAnalyticsData !== null || 
                        filteredCommandesMois !== null || filteredDevisMois !== null ||
                        filteredSerie6MoisVentes !== null || filteredVentesMois !== null ||
+                       filteredSerie6MoisVentesByUser !== null || filteredParCommercial !== null ||
                        filteredTopWilayas !== null || filteredConversionRates !== null;
   
   useSSE(useCallback(() => { 
@@ -571,7 +585,7 @@ export default function DashboardPage() {
               )}
             </div>
             <button
-              onClick={() => exportDashboardExcel({ stats, todayStats, sourceStats, evolution, topProduits, topWilayas, serie6Mois, serie6MoisVentes, parCommercial, employesLivres, objectifs })}
+              onClick={() => exportDashboardExcel({ stats, todayStats, sourceStats, evolution, devisEnAttente, topProduits, topWilayas, serie6Mois, serie6MoisVentes, parCommercial, employesLivres, objectifs })}
               title="Exporter le tableau de bord en Excel"
               className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl border border-[#E2E8F0] bg-white text-[13px] font-semibold text-[#16A34A] hover:bg-[#F8FAFC] transition-colors shadow-sm"
             >
@@ -675,7 +689,7 @@ export default function DashboardPage() {
         {/* Source — Visites du site */}
         <div className="bg-white rounded-2xl border border-[#E2E8F0] p-2.5 shadow-sm flex flex-col">
           <div className="flex items-center justify-between mb-0.5">
-            <p className="text-[9px] font-bold text-[#ABBED1] uppercase tracking-widest">Site public</p>
+            <p className="text-[9px] font-bold text-[#ABBED1] uppercase tracking-widest">Visites ce mois</p>
             <div className="scale-75 origin-right">
               <DateRangePicker onDateChange={(start, end) => {
                 setVisitesDateRange({ start, end });
@@ -742,7 +756,7 @@ export default function DashboardPage() {
         {/* Camembert — Top produits */}
         <div className="bg-white rounded-2xl border border-[#E2E8F0] p-5 shadow-sm flex flex-col">
           <div className="flex items-center justify-between mb-1">
-            <p className="text-[11px] font-bold text-[#ABBED1] uppercase tracking-widest">Top produits {filteredTopProduits === null && 'ce mois'}</p>
+            <p className="text-[11px] font-bold text-[#ABBED1] uppercase tracking-widest">Top produits</p>
             <DateRangePicker onDateChange={(start, end) => {
               setTopProduitsDateRange({ start, end });
               fetchData(false, { containerId: 'topProduits', startDate: start, endDate: end });
@@ -756,10 +770,10 @@ export default function DashboardPage() {
           )}
         </div>
 
-        {/* Site public — Visites */}
+        {/* Visites ce mois */}
         <div className="bg-white rounded-2xl border border-[#E2E8F0] p-5 shadow-sm flex flex-col">
           <div className="flex items-center justify-between mb-1">
-            <p className="text-[11px] font-bold text-[#ABBED1] uppercase tracking-widest">Site public</p>
+            <p className="text-[11px] font-bold text-[#ABBED1] uppercase tracking-widest">Visites ce mois</p>
             <DateRangePicker onDateChange={(start, end) => {
               setVisitesDateRange({ start, end });
               fetchData(false, { containerId: 'visites', startDate: start, endDate: end });
@@ -840,9 +854,20 @@ export default function DashboardPage() {
           // Montant + objectif affichés selon la sélection (admin) ou soi-même (employé)
           const activeId = isAdmin ? selectedCommercial : (myId ?? '');
           const isTotal = isAdmin && selectedCommercial === '';
+          
+          // Debug pour voir les données disponibles
+          console.log('📊 Ventes graphique:', { 
+            activeId, 
+            isTotal, 
+            selectedCommercial,
+            hasUserData: !!serie6MoisVentesByUser[activeId],
+            availableUsers: Object.keys(serie6MoisVentesByUser),
+            userData: serie6MoisVentesByUser[activeId]?.slice(0, 2), // 2 premiers mois
+          });
+          
           const ventes = isTotal
             ? (filteredVentesMois !== null ? filteredVentesMois : stats.ventesMois)
-            : (parCommercial.find((c) => c.id === activeId)?.ventes ?? 0);
+            : (filteredParCommercial?.find((c) => c.id === activeId)?.ventes ?? parCommercial.find((c) => c.id === activeId)?.ventes ?? 0);
           const objectif = isTotal ? objectifs.global : (activeId ? (objectifs.byUser[activeId] ?? 0) : 0);
           const pct = objectif > 0 ? Math.min(100, Math.round((ventes / objectif) * 100)) : 0;
           const atteint = objectif > 0 && ventes >= objectif;
@@ -905,11 +930,39 @@ export default function DashboardPage() {
               )}
               
               {/* Graphique d'évolution des ventes sur 6 mois */}
-              {isTotal && (
-                <div className="mt-4 md:mt-6">
-                  <SalesLineChart data={filteredSerie6MoisVentes || serie6MoisVentes} />
-                </div>
-              )}
+              {(() => {
+                // Déterminer les données à afficher
+                let graphData: { mois: string; ventes: number }[] = [];
+                
+                if (isTotal) {
+                  // Total entreprise: utiliser données filtrées si filtre date actif
+                  graphData = filteredSerie6MoisVentes || serie6MoisVentes;
+                } else {
+                  // Employé individuel
+                  if (filteredVentesMois !== null) {
+                    // Filtre date actif: utiliser données filtrées
+                    graphData = (filteredSerie6MoisVentesByUser && filteredSerie6MoisVentesByUser[activeId]) || [];
+                  } else {
+                    // Pas de filtre date: utiliser données non-filtrées
+                    graphData = serie6MoisVentesByUser[activeId] || [];
+                  }
+                }
+                
+                console.log('📊 GRAPH DEBUG:', {
+                  isTotal,
+                  activeId,
+                  hasDateFilter: filteredVentesMois !== null,
+                  graphDataLength: graphData.length,
+                  graphData: graphData.slice(0, 2),
+                  filteredVentesMois,
+                });
+                
+                return (graphData.length > 0 || isTotal) ? (
+                  <div className="mt-4 md:mt-6">
+                    <SalesLineChart data={graphData} />
+                  </div>
+                ) : null;
+              })()}
             </div>
           );
         })()}
