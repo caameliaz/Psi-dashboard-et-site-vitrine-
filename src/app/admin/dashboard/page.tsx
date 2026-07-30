@@ -380,9 +380,6 @@ export default function DashboardPage() {
         const data = await statsRes.json();
         console.log('✅ Stats chargées avec succès');
         setStats(data.stats);
-      } else {
-        console.error('❌ Stats API error:', statsRes.status, await statsRes.text());
-      }
         setTodayStats(data.todayStats);
         setSourceStats(data.sourceStats);
         setEvolution(data.evolutionCommandes ?? 0);
@@ -409,11 +406,20 @@ export default function DashboardPage() {
           return db.localeCompare(da);
         }).slice(0, 5);
         setRecentRequests(allDetails);
+      } else {
+        console.error('❌ Stats API error:', statsRes.status, await statsRes.text());
       }
       
       if (analyticsRes.ok) {
         const analyticsDataRes = await analyticsRes.json();
+        console.log('✅ Analytics chargées:', { 
+          monthly: analyticsDataRes.monthly,
+          weeklyLength: analyticsDataRes.weekly?.length,
+          weeklySample: analyticsDataRes.weekly?.slice(0, 2),
+        });
         setAnalyticsData(analyticsDataRes);
+      } else {
+        console.error('❌ Analytics API error:', analyticsRes.status);
       }
     } finally {
       if (!silent) setLoading(false);

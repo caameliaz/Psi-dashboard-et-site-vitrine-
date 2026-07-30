@@ -34,22 +34,25 @@ export async function GET(request: NextRequest) {
       start6MonthsAgo.setMonth(start6MonthsAgo.getMonth() - 5);
     } else {
       // Utiliser les valeurs par défaut (mois courant)
-      startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
-      // Pour le dernier jour du mois: mois + 1, jour 0 donne le dernier jour du mois précédent
-      // Donc on doit faire: année, mois + 1, 1 moins 1 milliseconde
-      const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1, 0, 0, 0, 0);
-      endDate = new Date(nextMonth.getTime() - 1); // Dernier millisecond du mois courant
-      startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
-      startOfPrevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1, 0, 0, 0, 0);
-      start6MonthsAgo = new Date(now.getFullYear(), now.getMonth() - 5, 1, 0, 0, 0, 0);
+      // ATTENTION: new Date(year, month, day) crée une date en heure locale, pas UTC
+      // Il faut utiliser UTC pour éviter les décalages
+      const year = now.getUTCFullYear();
+      const month = now.getUTCMonth();
       
-      console.log('📊 CALCUL DATES (mois courant):', {
+      startOfMonth = new Date(Date.UTC(year, month, 1, 0, 0, 0, 0));
+      const nextMonthDate = new Date(Date.UTC(year, month + 1, 1, 0, 0, 0, 0));
+      endDate = new Date(nextMonthDate.getTime() - 1); // Dernier millisecond du mois courant
+      startOfToday = new Date(Date.UTC(year, month, now.getUTCDate(), 0, 0, 0, 0));
+      startOfPrevMonth = new Date(Date.UTC(year, month - 1, 1, 0, 0, 0, 0));
+      start6MonthsAgo = new Date(Date.UTC(year, month - 5, 1, 0, 0, 0, 0));
+      
+      console.log('📊 CALCUL DATES (mois courant UTC):', {
         now: now.toISOString(),
-        nowMonth: now.getMonth(),
-        nowYear: now.getFullYear(),
+        nowMonthUTC: now.getUTCMonth(),
+        nowYearUTC: now.getUTCFullYear(),
         startOfMonth: startOfMonth.toISOString(),
         endDate: endDate.toISOString(),
-        nextMonth: nextMonth.toISOString(),
+        nextMonthDate: nextMonthDate.toISOString(),
       });
     }
 

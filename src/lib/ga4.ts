@@ -35,6 +35,11 @@ export interface PageViewsByWeek {
   total: number;
 }
 
+// Formater une date en YYYY-MM-DD
+function formatDate(date: Date): string {
+  return date.toISOString().split('T')[0];
+}
+
 // Récupérer les vues de pages par catégorie pour le mois en cours
 export async function getMonthlyPageViews(): Promise<{ total: number; byCategory: CategoryPageViews[] }> {
   const client = getAnalyticsClient();
@@ -61,72 +66,75 @@ export async function getMonthlyPageViews(): Promise<{ total: number; byCategory
   }
 
   try {
-    // UTILISER UNIQUEMENT LES DONNÉES TEMPS RÉEL (instantané)
-    console.log('📊 Appel runRealtimeReport avec hostName + unifiedScreenName...');
+    // Utiliser runReport avec pagePath
+    const now = new Date();
+    const startOfMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+    const today = formatDate(now);
+    const startDate = formatDate(startOfMonth);
     
-    const [realtimeResponse] = await client.runRealtimeReport({
+    console.log('📊 Appel runReport mensuel:', {
+      startDate,
+      endDate: today,
+    });
+    
+    const [response] = await client.runReport({
       property: `properties/${propertyId}`,
-      dimensions: [
-        { name: 'unifiedScreenName' }, // Titre de la page (on va le parser pour extraire la catégorie)
+      dateRanges: [
+        {
+          startDate,
+          endDate: today,
+        },
       ],
+      dimensions: [{ name: 'pagePath' }],
       metrics: [{ name: 'screenPageViews' }],
     });
 
-    console.log('📊 Réponse temps réel:', { 
-      rowCount: realtimeResponse.rows?.length ?? 0,
-      allRows: realtimeResponse.rows?.map((r: any) => ({
-        screenName: r.dimensionValues?.[0]?.value,
-        views: r.metricValues?.[0]?.value,
-      })),
-    });
-
-    // Mapper les pages aux catégories
+    // Mapper les catégories par ID pour recherche rapide
+    const categoryIds = new Set(categories.map(c => c.id));
+    
+    // Initialiser le map
     const byCategoryMap: Record<string, number> = {};
-    const categoryNames: Record<string, string> = {};
     categories.forEach(cat => {
       byCategoryMap[cat.id] = 0;
-      categoryNames[cat.name] = cat.id;
     });
 
     let total = 0;
-    let totalCategories = 0;
-    const matchedScreens: string[] = [];
-    const unmatchedScreens: string[] = [];
+    const allRows: Array<{ pagePath: string; views: number }> = [];
+    const matchedPaths: Array<{ path: string; categoryId: string }> = [];
+    const unmatchedPaths: string[] = [];
     
-    realtimeResponse.rows?.forEach((row: any) => {
-      const screenName = row.dimensionValues?.[0]?.value ?? '';
+    // Regex pour extraire l'ID de catégorie du pagePath
+    const categoryIdRegex = /\/products\/([a-zA-Z0-9]+)/;
+    
+    response.rows?.forEach((row: any) => {
+      const pagePath = row.dimensionValues?.[0]?.value ?? '';
       const views = parseInt(row.metricValues?.[0]?.value ?? '0', 10);
       
-      // TOTAL = TOUTES les pages
       total += views;
+      allRows.push({ pagePath, views });
 
-      // Essayer de matcher le nom de catégorie dans le titre de la page
-      let matched = false;
-      for (const [catName, catId] of Object.entries(categoryNames)) {
-        if (screenName.includes(catName)) {
-          byCategoryMap[catId] += views;
-          totalCategories += views;
-          matchedScreens.push(`"${screenName}" → ${catName} (${catId})`);
-          matched = true;
-          break;
+      // Extraire l'ID de catégorie du pagePath
+      const match = pagePath.match(categoryIdRegex);
+      if (match && match[1]) {
+        const categoryId = match[1];
+        if (categoryIds.has(categoryId)) {
+          byCategoryMap[categoryId] += views;
+          matchedPaths.push({ path: pagePath, categoryId });
+        } else {
+          unmatchedPaths.push(pagePath);
         }
-      }
-      
-      if (!matched) {
-        unmatchedScreens.push(screenName);
+      } else {
+        unmatchedPaths.push(pagePath);
       }
     });
 
-    console.log('📊 Matching détaillé:', {
-      categoriesDB: categories.map(c => ({ id: c.id, name: c.name })),
-      matchedScreens,
-      unmatchedScreens,
-    });
-
-    console.log('📊 Résultat temps réel:', { 
-      totalSite: total, 
-      totalCategories, 
-      byCategoryMap 
+    console.log('📊 Résultat runReport mensuel:', {
+      totalSite: total,
+      totalCategories: Object.values(byCategoryMap).reduce((a, b) => a + b, 0),
+      byCategoryMap,
+      allRows: allRows.slice(0, 5),
+      matchedPaths: matchedPaths.slice(0, 5),
+      unmatchedPaths: unmatchedPaths.slice(0, 5),
     });
 
     return {
@@ -138,7 +146,7 @@ export async function getMonthlyPageViews(): Promise<{ total: number; byCategory
       })),
     };
   } catch (error) {
-    console.error('❌ Erreur GA4 temps réel:', error);
+    console.error('❌ Erreur GA4 runReport mensuel:', error);
     return {
       total: 0,
       byCategory: categories.map((cat, index) => ({
@@ -178,59 +186,148 @@ export async function getWeeklyPageViews(): Promise<PageViewsByWeek[]> {
   }
 
   try {
-    // UTILISER LES DONNÉES TEMPS RÉEL - on va simuler 4 semaines avec les données actuelles
-    console.log('📊 Appel runRealtimeReport pour weekly...');
+    // Utiliser runReport avec week et pagePath
+    const today = formatDate(new Date());
     
-    const [realtimeResponse] = await client.runRealtimeReport({
+    console.log('📊 Appel runReport hebdomadaire:', {
+      startDate: '28daysAgo',
+      endDate: today,
+    });
+    
+    const [response] = await client.runReport({
       property: `properties/${propertyId}`,
-      dimensions: [{ name: 'unifiedScreenName' }],
+      dateRanges: [
+        {
+          startDate: '28daysAgo',
+          endDate: today,
+        },
+      ],
+      dimensions: [
+        { name: 'week' },
+        { name: 'pagePath' },
+      ],
       metrics: [{ name: 'screenPageViews' }],
     });
 
-    console.log('📊 Réponse temps réel weekly:', { rowCount: realtimeResponse.rows?.length ?? 0 });
-
-    // Mapper par catégorie en utilisant le nom de la catégorie dans le titre
-    const byCategoryMap: Record<string, number> = {};
-    const categoryNames: Record<string, string> = {};
-    categories.forEach(cat => {
-      byCategoryMap[cat.id] = 0;
-      categoryNames[cat.name] = cat.id;
+    // DEBUG: Afficher la structure des catégories
+    console.log('📊 DEBUG categoriesDB:', {
+      count: categories.length,
+      sampleIds: categories.slice(0, 3).map(c => ({ id: c.id, type: typeof c.id, name: c.name })),
     });
 
-    let total = 0;
+    // Mapper les catégories par ID
+    const categoryIds = new Set(categories.map(c => c.id));
     
-    realtimeResponse.rows?.forEach((row: any) => {
-      const screenName = row.dimensionValues?.[0]?.value ?? '';
-      const views = parseInt(row.metricValues?.[0]?.value ?? '0', 10);
-      total += views;
+    // Collecter les numéros de semaine ISO uniques reçus de GA4
+    const weekNumbers = new Set<number>();
+    response.rows?.forEach((row: any) => {
+      const weekNum = parseInt(row.dimensionValues?.[0]?.value ?? '0', 10);
+      if (weekNum > 0) weekNumbers.add(weekNum);
+    });
+    
+    // Convertir en tableau trié (ordre chronologique)
+    const sortedWeeks = Array.from(weekNumbers).sort((a, b) => a - b);
+    
+    console.log('📊 DEBUG semaines GA4:', {
+      weekNumbers: Array.from(weekNumbers),
+      sortedWeeks,
+      note: 'Numéros ISO de semaine reçus de GA4',
+    });
+    
+    // Mapper les semaines ISO aux labels Sem 1-4
+    const weekMapping: Record<number, string> = {};
+    sortedWeeks.forEach((weekNum, index) => {
+      weekMapping[weekNum] = `Sem ${index + 1}`;
+    });
+    
+    console.log('📊 DEBUG mapping semaines:', weekMapping);
+    
+    // Générer les labels de semaine basés sur les semaines reçues
+    const weeks = sortedWeeks.map((_, index) => `Sem ${index + 1}`);
+    // Compléter jusqu'à 4 semaines si nécessaire
+    while (weeks.length < 4) {
+      weeks.unshift(`Sem ${weeks.length + 1}`);
+    }
+    
+    // Initialiser la structure par semaine
+    const byWeekAndCategory: Record<string, Record<string, number>> = {};
+    
+    weeks.forEach(week => {
+      byWeekAndCategory[week] = {};
+      categories.forEach(cat => {
+        byWeekAndCategory[week][cat.id] = 0;
+      });
+    });
 
-      // Matcher le nom de catégorie dans le titre
-      for (const [catName, catId] of Object.entries(categoryNames)) {
-        if (screenName.includes(catName)) {
-          byCategoryMap[catId] += views;
-          break;
-        }
+    const allRows: Array<{ week: string; pagePath: string; views: number }> = [];
+    const matchedPaths: Array<{ week: string; path: string; categoryId: string }> = [];
+    const unmatchedPaths: Array<{ week: string; path: string; reason: string }> = [];
+    
+    // Regex pour extraire l'ID de catégorie
+    const categoryIdRegex = /\/products\/([a-zA-Z0-9]+)/;
+    
+    response.rows?.forEach((row: any) => {
+      const weekNumISO = parseInt(row.dimensionValues?.[0]?.value ?? '0', 10);
+      const pagePath = row.dimensionValues?.[1]?.value ?? '';
+      const views = parseInt(row.metricValues?.[0]?.value ?? '0', 10);
+      
+      // Convertir le numéro ISO en label Sem 1-4
+      const weekLabel = weekMapping[weekNumISO] ?? 'Inconnu';
+      
+      allRows.push({ week: weekLabel, pagePath, views });
+
+      // Extraire l'ID de catégorie du pagePath
+      const match = pagePath.match(categoryIdRegex);
+      
+      if (!match || !match[1]) {
+        unmatchedPaths.push({ week: weekLabel, path: pagePath, reason: 'Regex no match' });
+        return;
+      }
+      
+      const categoryId = match[1];
+      
+      // DEBUG avant la comparaison
+      const isInSet = categoryIds.has(categoryId);
+      if (!isInSet) {
+        console.log('📊 DEBUG ID non trouvé:', {
+          extractedId: categoryId,
+          extractedIdType: typeof categoryId,
+          categoryIdsArray: Array.from(categoryIds).slice(0, 3),
+          categoryIdsTypes: Array.from(categoryIds).slice(0, 3).map(id => typeof id),
+          isInSet,
+        });
+      }
+      
+      if (categoryIds.has(categoryId) && byWeekAndCategory[weekLabel]) {
+        byWeekAndCategory[weekLabel][categoryId] += views;
+        matchedPaths.push({ week: weekLabel, path: pagePath, categoryId });
+      } else {
+        unmatchedPaths.push({ 
+          week: weekLabel, 
+          path: pagePath, 
+          reason: !categoryIds.has(categoryId) ? 'ID not in DB' : 'Week label invalid' 
+        });
       }
     });
 
-    // Créer 4 semaines fictives avec les données actuelles (temps réel n'a pas d'historique)
-    // On met toutes les données dans la semaine 4 (la plus récente)
-    const weeks = ['Sem 1', 'Sem 2', 'Sem 3', 'Sem 4'];
-    const result = weeks.map((week, index) => ({
+    console.log('📊 Résultat runReport hebdomadaire:', {
+      allRows: allRows.slice(0, 5),
+      matchedPaths: matchedPaths.slice(0, 5),
+      unmatchedPaths: unmatchedPaths.slice(0, 5),
+      byWeekAndCategory,
+    });
+
+    return weeks.map((week) => ({
       week,
-      categories: categories.map((cat, catIndex) => ({
+      categories: categories.map((cat, index) => ({
         category: cat.name,
-        views: index === 3 ? byCategoryMap[cat.id] : 0, // Toutes les vues dans Sem 4
-        color: CATEGORY_COLORS[catIndex % CATEGORY_COLORS.length],
+        views: byWeekAndCategory[week]?.[cat.id] ?? 0,
+        color: CATEGORY_COLORS[index % CATEGORY_COLORS.length],
       })),
-      total: index === 3 ? total : 0,
+      total: Object.values(byWeekAndCategory[week] ?? {}).reduce((a, b) => a + b, 0),
     }));
-
-    console.log('📊 Résultat weekly temps réel:', result);
-
-    return result;
   } catch (error) {
-    console.error('❌ Erreur GA4 weekly temps réel:', error);
+    console.error('❌ Erreur GA4 runReport hebdomadaire:', error);
     const weeks = ['Sem 1', 'Sem 2', 'Sem 3', 'Sem 4'];
     return weeks.map((week) => ({
       week,
@@ -243,4 +340,3 @@ export async function getWeeklyPageViews(): Promise<PageViewsByWeek[]> {
     }));
   }
 }
-
