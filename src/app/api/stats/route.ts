@@ -94,7 +94,7 @@ export async function GET(request: NextRequest) {
       // Commandes LIVRÉES dans l'intervalle (montant via items + assigné) — pour ventes + par commercial + employés
       prisma.order.findMany({
         where: { status: 'LIVRE', createdAt: { gte: startOfMonth, lte: endDate } },
-        select: { assignedToId: true, items: { select: { quantity: true, unitPrice: true } } },
+        select: { assignedToId: true, createdAt: true, items: { select: { quantity: true, unitPrice: true } } },
       }),
       // Devis LIVRÉS dans l'intervalle (proposedPrice + assigné)
       prisma.quote.findMany({
