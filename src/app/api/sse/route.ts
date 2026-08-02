@@ -4,6 +4,7 @@ import { auth } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
+export const maxDuration = 60; // Vercel Pro: garde la connexion jusqu'à 60s (gratuit = 10s max)
 
 export async function GET(request: NextRequest) {
   const session = await auth();

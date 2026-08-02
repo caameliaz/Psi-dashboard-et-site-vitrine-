@@ -674,9 +674,9 @@ function ClientsPageInner() {
   useEffect(() => { fetchSectors(); fetchUsers(); }, [fetchSectors, fetchUsers]);
   // Temps réel : rafraîchit la liste + l'historique client en silence sur événement SSE
   useSSE(useCallback(() => { fetchClients(true); }, [fetchClients]));
-  // Filet de sécurité : rafraîchit toutes les 15s en silence
+  // Filet de sécurité : rafraîchit toutes les 2 MINUTES en silence (réduit de 15s à 120s)
   useEffect(() => {
-    const id = setInterval(() => fetchClients(true), 15000);
+    const id = setInterval(() => fetchClients(true), 120000); // 2 minutes au lieu de 15 secondes
     return () => clearInterval(id);
   }, [fetchClients]);
 

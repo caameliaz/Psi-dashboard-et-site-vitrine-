@@ -298,7 +298,7 @@ export function TopBar() {
   // Filet de sécurité : polling toutes les 15s → garantit la réception des notifs
   // (ex: nouvelle commande/devis depuis le SITE) même si le SSE ne pousse pas (prod serverless).
   useEffect(() => {
-    const id = setInterval(() => refreshNotifs(true), 15000);
+    const id = setInterval(() => refreshNotifs(true), 120000); // 2 minutes au lieu de 15 secondes
     return () => clearInterval(id);
   }, [refreshNotifs]);
 

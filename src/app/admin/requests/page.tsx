@@ -597,9 +597,9 @@ function RequestsPageInner() {
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
   useSSE(useCallback(() => { fetchAll(true); }, [fetchAll]));
-  // Filet de sécurité : rafraîchit la liste toutes les 15s en silence (nouveaux devis/commandes du site)
+  // Filet de sécurité : rafraîchit la liste toutes les 2 MINUTES en silence (réduit de 15s à 120s)
   useEffect(() => {
-    const id = setInterval(() => fetchAll(true), 15000);
+    const id = setInterval(() => fetchAll(true), 120000); // 2 minutes au lieu de 15 secondes
     return () => clearInterval(id);
   }, [fetchAll]);
 

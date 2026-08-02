@@ -201,6 +201,7 @@ export default function DashboardPage() {
   const [parCommercial, setParCommercial] = useState<{ id: string; name: string; ventes: number; commandes: number; devis: number }[]>([]);
   const [filteredParCommercial, setFilteredParCommercial] = useState<{ id: string; name: string; ventes: number; commandes: number; devis: number }[] | null>(null);
   const [employesLivres, setEmployesLivres] = useState<{ name: string; commandes: number; devis: number; total: number }[]>([]);
+  const [allUsers, setAllUsers] = useState<{ id: string; name: string }[]>([]); // TOUS les users pour le dropdown
   const [objectifs, setObjectifs] = useState<{ global: number; byUser: Record<string, number> }>({ global: 0, byUser: {} });
   const [selectedCommercial, setSelectedCommercial] = useState<string>(''); // '' = total entreprise
   const [goalsOpen, setGoalsOpen] = useState(false);
@@ -428,6 +429,16 @@ export default function DashboardPage() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
   
+  // Charger TOUS les users au démarrage (pour le dropdown)
+  useEffect(() => {
+    if (isAdmin) {
+      fetch('/api/users', { credentials: 'include' })
+        .then(res => res.ok ? res.json() : [])
+        .then(users => setAllUsers(users))
+        .catch(err => console.error('❌ Erreur chargement users:', err));
+    }
+  }, [isAdmin]);
+  
   // Ne rafraîchir automatiquement QUE si aucun filtre n'est actif
   const hasAnyFilter = filteredTopProduits !== null || filteredAnalyticsData !== null || 
                        filteredCommandesMois !== null || filteredDevisMois !== null ||
@@ -439,11 +450,11 @@ export default function DashboardPage() {
     if (!hasAnyFilter) fetchData(true); 
   }, [fetchData, hasAnyFilter]));
   
-  // Filet de sécurité : rafraîchit les stats toutes les 15s en silence (marche même si le SSE ne pousse pas)
+  // Filet de sécurité : rafraîchit les stats toutes les 2 MINUTES en silence (réduit de 15s à 120s)
   // MAIS seulement si aucun filtre n'est actif
   useEffect(() => {
     if (hasAnyFilter) return; // Ne pas rafraîchir si un filtre est actif
-    const id = setInterval(() => fetchData(true), 15000);
+    const id = setInterval(() => fetchData(true), 120000); // 2 minutes au lieu de 15 secondes
     return () => clearInterval(id);
   }, [fetchData, hasAnyFilter]);
 
@@ -894,7 +905,7 @@ export default function DashboardPage() {
                         className="w-full appearance-none text-[11px] font-bold text-[#374151] border border-[#E2E8F0] rounded-lg pl-2.5 pr-7 py-1.5 bg-white cursor-pointer focus:outline-none focus:border-[#4CAF4F] focus:ring-2 focus:ring-[#4CAF4F]/25 transition-all">
                         <option value="">Toute l&apos;entreprise</option>
                         {myId && <option value={myId}>Mes ventes</option>}
-                        {parCommercial.filter((c) => c.id !== myId).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                        {allUsers.filter((u) => u.id !== myId).map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
                       </select>
                       <svg className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-[#8A9BB5]" width={12} height={12} viewBox="0 0 24 24" fill="none"><path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
                     </div>

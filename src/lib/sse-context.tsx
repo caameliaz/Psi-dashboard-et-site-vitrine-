@@ -17,6 +17,8 @@ export function SSEProvider({ children }: { children: ReactNode }) {
   const listeners = useRef(new Set<(p: SSEPayload) => void>());
   const esRef = useRef<EventSource | null>(null);
   const retryRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const retryDelayRef = useRef(3000); // Délai initial: 3s
+  const retryCountRef = useRef(0); // Compteur de tentatives
 
   const connect = useCallback(() => {
     if (esRef.current) {
@@ -26,6 +28,11 @@ export function SSEProvider({ children }: { children: ReactNode }) {
 
     const es = new EventSource('/api/sse');
     esRef.current = es;
+
+    es.onopen = () => {
+      retryDelayRef.current = 3000;
+      retryCountRef.current = 0;
+    };
 
     es.onmessage = (e) => {
       try {
@@ -37,8 +44,20 @@ export function SSEProvider({ children }: { children: ReactNode }) {
     es.onerror = () => {
       es.close();
       esRef.current = null;
-      // Reconnect après 3s
-      retryRef.current = setTimeout(connect, 3000);
+      
+      // ✅ Backoff exponentiel: 3s → 6s → 12s → 24s → 48s → 60s (max)
+      retryCountRef.current += 1;
+      
+      // Après 10 tentatives (environ 5 minutes), arrêter complètement
+      if (retryCountRef.current > 10) {
+        console.warn('🔴 SSE: Trop de tentatives échouées, abandon du SSE');
+        return;
+      }
+      
+      retryDelayRef.current = Math.min(retryDelayRef.current * 2, 60000);
+      console.log(`🔄 SSE reconnect dans ${retryDelayRef.current / 1000}s (tentative ${retryCountRef.current})`);
+      
+      retryRef.current = setTimeout(connect, retryDelayRef.current);
     };
   }, []);
 
