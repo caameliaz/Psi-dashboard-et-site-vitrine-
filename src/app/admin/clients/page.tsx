@@ -33,7 +33,6 @@ import { Modal } from '@/components/ui/Modal';
 import { WilayaSelect } from '@/components/ui/WilayaSelect';
 import { CommuneSelect } from '@/components/ui/CommuneSelect';
 import { exportClientExcel, printClientDoc, type ClientExportData } from '@/lib/export-client';
-import { useSSE } from '@/lib/use-sse';
 import { RequirePerm } from '@/components/RequirePerm';
 import { useRole } from '@/lib/role-context';
 import { AdminSelect } from '@/components/ui/AdminSelect';
@@ -672,12 +671,31 @@ function ClientsPageInner() {
 
   useEffect(() => { fetchClients(); }, [fetchClients]);
   useEffect(() => { fetchSectors(); fetchUsers(); }, [fetchSectors, fetchUsers]);
-  // Temps réel : rafraîchit la liste + l'historique client en silence sur événement SSE
-  useSSE(useCallback(() => { fetchClients(true); }, [fetchClients]));
-  // Filet de sécurité : rafraîchit toutes les 2 MINUTES en silence (réduit de 15s à 120s)
+  
+  // Polling adaptatif : 20s si onglet actif, 60s si inactif
   useEffect(() => {
-    const id = setInterval(() => fetchClients(true), 120000); // 2 minutes au lieu de 15 secondes
-    return () => clearInterval(id);
+    let intervalId: NodeJS.Timeout;
+    
+    const startPolling = (interval: number) => {
+      if (intervalId) clearInterval(intervalId);
+      intervalId = setInterval(() => fetchClients(true), interval);
+    };
+
+    const handleVisibilityChange = () => {
+      const interval = document.hidden ? 60000 : 20000;
+      startPolling(interval);
+    };
+
+    // Démarrer avec l'intervalle approprié
+    startPolling(document.hidden ? 60000 : 20000);
+
+    // Écouter les changements de visibilité
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      clearInterval(intervalId);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, [fetchClients]);
 
   // Ouverture directe d'une fiche via ?open=<clientId> (depuis l'historique / une notif)

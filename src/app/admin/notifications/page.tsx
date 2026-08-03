@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { useSSE } from '@/lib/use-sse';
 
 type NotifType = 'SITE_COMMANDE' | 'SITE_DEVIS' | 'ACTION_AUTRE' | 'ACTION_PERSO' | 'ANNULATION';
 
@@ -94,8 +93,32 @@ export default function NotificationsPage() {
   }, []);
 
   useEffect(() => { fetchNotifs(); }, [fetchNotifs]);
-  // Temps réel : nouvelle notif → apparaît sans refresh ni spinner
-  useSSE(useCallback(() => { fetchNotifs(true); }, [fetchNotifs]));
+  
+  // Polling adaptatif : 10s si onglet actif, 20s si inactif
+  useEffect(() => {
+    let intervalId: NodeJS.Timeout;
+    
+    const startPolling = (interval: number) => {
+      if (intervalId) clearInterval(intervalId);
+      intervalId = setInterval(() => fetchNotifs(true), interval);
+    };
+
+    const handleVisibilityChange = () => {
+      const interval = document.hidden ? 20000 : 10000;
+      startPolling(interval);
+    };
+
+    // Démarrer avec l'intervalle approprié
+    startPolling(document.hidden ? 20000 : 10000);
+
+    // Écouter les changements de visibilité
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      clearInterval(intervalId);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [fetchNotifs]);
 
   const markRead = async (id: string) => {
     setNotifs((p) => p.map((n) => n.id === id ? { ...n, read: true } : n));
