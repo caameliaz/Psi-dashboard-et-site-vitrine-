@@ -275,7 +275,7 @@ export function TopBar() {
   // Premier chargement (sans toaster l'existant)
   useEffect(() => { refreshNotifs(false, true); }, [refreshNotifs]);
 
-  // Polling adaptatif : 10s si onglet actif, 20s si inactif
+  // Polling adaptatif : 7s si onglet actif, 20s si inactif
   useEffect(() => {
     let intervalId: NodeJS.Timeout;
     
@@ -285,12 +285,12 @@ export function TopBar() {
     };
 
     const handleVisibilityChange = () => {
-      const interval = document.hidden ? 20000 : 10000;
+      const interval = document.hidden ? 20000 : 7000;
       startPolling(interval);
     };
 
     // Démarrer avec l'intervalle approprié
-    startPolling(document.hidden ? 20000 : 10000);
+    startPolling(document.hidden ? 20000 : 7000);
 
     // Écouter les changements de visibilité
     document.addEventListener('visibilitychange', handleVisibilityChange);
