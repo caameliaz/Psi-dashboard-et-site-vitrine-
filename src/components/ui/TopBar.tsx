@@ -290,11 +290,31 @@ export function TopBar() {
   // Premier chargement (sans toaster l'existant)
   useEffect(() => { refreshNotifs(false, true); }, [refreshNotifs]);
 
-  // Filet de sécurité : polling toutes les 15s → garantit la réception des notifs
+  // Filet de sécurité : polling adaptatif → 15s si onglet actif, 25s si inactif
   // (ex: nouvelle commande/devis depuis le SITE) même si le SSE ne pousse pas (prod serverless).
   useEffect(() => {
-    const id = setInterval(() => refreshNotifs(true), 15000);
-    return () => clearInterval(id);
+    let intervalId: NodeJS.Timeout;
+    
+    const startPolling = (interval: number) => {
+      if (intervalId) clearInterval(intervalId);
+      intervalId = setInterval(() => refreshNotifs(true), interval);
+    };
+
+    const handleVisibilityChange = () => {
+      const interval = document.hidden ? 25000 : 15000;
+      startPolling(interval);
+    };
+
+    // Démarrer avec l'intervalle approprié
+    startPolling(document.hidden ? 25000 : 15000);
+
+    // Écouter les changements de visibilité
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      clearInterval(intervalId);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, [refreshNotifs]);
 
   // Exposer le count et le toggle au store (pour Sidebar)
