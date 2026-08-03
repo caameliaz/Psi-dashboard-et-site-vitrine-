@@ -4,7 +4,6 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { StatusPill } from '@/components/ui/StatusPill';
 import { RequestPanel, type RequestDetail } from '@/components/ui/RequestPanel';
 import { orderToDetail, quoteToDetail, DB_TO_UI } from '@/lib/request-detail';
-import { useSSE } from '@/lib/use-sse';
 import dynamic from 'next/dynamic';
 import type { Order, Quote } from '@/types';
 import { notifBell } from '@/lib/notif-bell-store';
@@ -191,6 +190,7 @@ export default function DashboardPage() {
 
   const [recentRequests, setRecentRequests] = useState<RequestDetail[]>([]);
   const [stats, setStats]       = useState({ commandes: 0, devisMois: 0, ventesMois: 0, ventesPrevMois: 0, evolutionVentes: 0, evolutionDevis: 0, devis: 0, clients: 0, livrees: 0 });
+  const [devisEnAttente, setDevisEnAttente] = useState({ count: 0, montant: 0 });
   const [moisTab, setMoisTab]   = useState<'commandes' | 'devis'>('commandes');
   const { isAdmin } = useRole();
   const { data: session } = useSession();
@@ -409,16 +409,33 @@ export default function DashboardPage() {
                        filteredSerie6MoisVentes !== null || filteredVentesMois !== null ||
                        filteredTopWilayas !== null || filteredConversionRates !== null;
   
-  useSSE(useCallback(() => { 
-    if (!hasAnyFilter) fetchData(true); 
-  }, [fetchData, hasAnyFilter]));
-  
-  // Filet de sécurité : rafraîchit les stats toutes les 15s en silence (marche même si le SSE ne pousse pas)
+  // Polling adaptatif : 20s si onglet actif, 60s si inactif
   // MAIS seulement si aucun filtre n'est actif
   useEffect(() => {
     if (hasAnyFilter) return; // Ne pas rafraîchir si un filtre est actif
-    const id = setInterval(() => fetchData(true), 15000);
-    return () => clearInterval(id);
+    
+    let intervalId: NodeJS.Timeout;
+    
+    const startPolling = (interval: number) => {
+      if (intervalId) clearInterval(intervalId);
+      intervalId = setInterval(() => fetchData(true), interval);
+    };
+
+    const handleVisibilityChange = () => {
+      const interval = document.hidden ? 60000 : 20000;
+      startPolling(interval);
+    };
+
+    // Démarrer avec l'intervalle approprié
+    startPolling(document.hidden ? 60000 : 20000);
+
+    // Écouter les changements de visibilité
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      clearInterval(intervalId);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, [fetchData, hasAnyFilter]);
 
   const handleSort = (key: SortKey) => {
@@ -496,7 +513,7 @@ export default function DashboardPage() {
               />
             </div>
             <button
-              onClick={() => exportDashboardExcel({ stats, todayStats, sourceStats, evolution, topProduits, topWilayas, serie6Mois, serie6MoisVentes, parCommercial, employesLivres, objectifs })}
+              onClick={() => exportDashboardExcel({ stats, todayStats, sourceStats, evolution, topProduits, topWilayas, serie6Mois, serie6MoisVentes, parCommercial, employesLivres, objectifs, devisEnAttente })}
               title="Exporter le tableau de bord en Excel"
               className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl border border-[#E2E8F0] bg-white text-[13px] font-semibold text-[#16A34A] hover:bg-[#F8FAFC] transition-colors shadow-sm"
             >

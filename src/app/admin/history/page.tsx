@@ -6,7 +6,6 @@ import { initials } from '@/lib/utils';
 import { StatusPill } from '@/components/ui/StatusPill';
 import { RequestPanel, type RequestDetail } from '@/components/ui/RequestPanel';
 import { AdminSelect } from '@/components/ui/AdminSelect';
-import { useSSE } from '@/lib/use-sse';
 import { RequirePerm } from '@/components/RequirePerm';
 import { orderToDetail, quoteToDetail } from '@/lib/request-detail';
 
@@ -98,8 +97,32 @@ function HistoryPageInner() {
   }, []);
 
   useEffect(() => { fetchHistory(); }, [fetchHistory]);
-  // Temps réel : nouvelle action → apparaît sans refresh ni spinner
-  useSSE(useCallback(() => { fetchHistory(true); }, [fetchHistory]));
+  
+  // Polling adaptatif : 20s si onglet actif, 60s si inactif
+  useEffect(() => {
+    let intervalId: NodeJS.Timeout;
+    
+    const startPolling = (interval: number) => {
+      if (intervalId) clearInterval(intervalId);
+      intervalId = setInterval(() => fetchHistory(true), interval);
+    };
+
+    const handleVisibilityChange = () => {
+      const interval = document.hidden ? 60000 : 20000;
+      startPolling(interval);
+    };
+
+    // Démarrer avec l'intervalle approprié
+    startPolling(document.hidden ? 60000 : 20000);
+
+    // Écouter les changements de visibilité
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      clearInterval(intervalId);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [fetchHistory]);
 
   const users = Array.from(new Set(history.map((h) => h.user)));
 

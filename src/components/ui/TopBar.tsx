@@ -3,7 +3,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
-import { useSSEContext } from '@/lib/sse-context';
 import { AdminSelect } from '@/components/ui/AdminSelect';
 import { notifBell } from '@/lib/notif-bell-store';
 
@@ -197,7 +196,6 @@ export function TopBar() {
   const [filterUser, setFilterUser] = useState('all');
   const notifIds = useRef(new Set<string>());
 
-  const { subscribe } = useSSEContext();
   const router = useRouter();
   const unread = notifs.filter((n) => !n.read).length;
 
@@ -274,24 +272,10 @@ export function TopBar() {
 
   const fetchNotifs = useCallback(() => refreshNotifs(false), [refreshNotifs]);
 
-  // Temps réel instantané via SSE (quand il fonctionne)
-  useEffect(() => {
-    return subscribe(async (payload) => {
-      // Toast simple pour l'acteur lui-même : jamais persisté, pas de refetch.
-      if (payload.event === 'self-toast') {
-        const n = payload.notif;
-        if (n) setToasts((prev) => [...prev, { id: n.id, type: n.type as NotifType, title: n.title, message: n.message }]);
-        return;
-      }
-      refreshNotifs(true); // fetch + toast des nouvelles
-    });
-  }, [subscribe, refreshNotifs]);
-
   // Premier chargement (sans toaster l'existant)
   useEffect(() => { refreshNotifs(false, true); }, [refreshNotifs]);
 
-  // Filet de sécurité : polling adaptatif → 15s si onglet actif, 25s si inactif
-  // (ex: nouvelle commande/devis depuis le SITE) même si le SSE ne pousse pas (prod serverless).
+  // Polling adaptatif : 10s si onglet actif, 20s si inactif
   useEffect(() => {
     let intervalId: NodeJS.Timeout;
     
@@ -301,12 +285,12 @@ export function TopBar() {
     };
 
     const handleVisibilityChange = () => {
-      const interval = document.hidden ? 25000 : 15000;
+      const interval = document.hidden ? 20000 : 10000;
       startPolling(interval);
     };
 
     // Démarrer avec l'intervalle approprié
-    startPolling(document.hidden ? 25000 : 15000);
+    startPolling(document.hidden ? 20000 : 10000);
 
     // Écouter les changements de visibilité
     document.addEventListener('visibilitychange', handleVisibilityChange);

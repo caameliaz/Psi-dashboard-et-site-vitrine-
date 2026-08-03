@@ -11,7 +11,6 @@ import { RefSelect } from '@/components/ui/RefSelect';
 import { MobileNavbar } from '@/components/MobileNavbar';
 import { exportTableauExcel } from '@/lib/export-tableau';
 import { exportVentesExcel } from '@/lib/export-ventes';
-import { useSSE } from '@/lib/use-sse';
 import { useSession } from 'next-auth/react';
 import { RequirePerm } from '@/components/RequirePerm';
 import { ImportVentesModal } from '@/components/ui/ImportVentesModal';
@@ -596,11 +595,31 @@ function RequestsPageInner() {
   }, [filterPeriode]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
-  useSSE(useCallback(() => { fetchAll(true); }, [fetchAll]));
-  // Filet de sécurité : rafraîchit la liste toutes les 2 MINUTES en silence (réduit de 15s à 120s)
+  
+  // Polling adaptatif : 20s si onglet actif, 60s si inactif
   useEffect(() => {
-    const id = setInterval(() => fetchAll(true), 120000); // 2 minutes au lieu de 15 secondes
-    return () => clearInterval(id);
+    let intervalId: NodeJS.Timeout;
+    
+    const startPolling = (interval: number) => {
+      if (intervalId) clearInterval(intervalId);
+      intervalId = setInterval(() => fetchAll(true), interval);
+    };
+
+    const handleVisibilityChange = () => {
+      const interval = document.hidden ? 60000 : 20000;
+      startPolling(interval);
+    };
+
+    // Démarrer avec l'intervalle approprié
+    startPolling(document.hidden ? 60000 : 20000);
+
+    // Écouter les changements de visibilité
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      clearInterval(intervalId);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, [fetchAll]);
 
   // ── Gestion du bouton retour du navigateur pour fermer le panneau de détail ──
