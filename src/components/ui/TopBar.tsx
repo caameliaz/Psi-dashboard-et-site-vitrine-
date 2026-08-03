@@ -258,17 +258,12 @@ export function TopBar() {
       if (firstLoad) {
         mapped.forEach((n) => notifIds.current.add(n.id));
       } else if (showToast) {
-        const now = Date.now();
+        // Toaster uniquement les notifs jamais vues (basé sur l'ID, pas l'âge)
         mapped
           .filter((n) => !notifIds.current.has(n.id))
           .forEach((n) => {
             notifIds.current.add(n.id);
-            // Ne toaster que les notifs VRAIMENT récentes (< 30s) → évite de re-toaster
-            // d'anciennes notifs au polling. Les nouvelles (site public) sont toujours <30s.
-            const age = now - new Date(n.createdAt).getTime();
-            if (age < 30000) {
-              setToasts((prev) => [...prev, { id: n.id, type: n.type, title: n.title, message: n.message }]);
-            }
+            setToasts((prev) => [...prev, { id: n.id, type: n.type, title: n.title, message: n.message }]);
           });
       } else {
         mapped.forEach((n) => notifIds.current.add(n.id));
@@ -298,7 +293,7 @@ export function TopBar() {
   // Filet de sécurité : polling toutes les 15s → garantit la réception des notifs
   // (ex: nouvelle commande/devis depuis le SITE) même si le SSE ne pousse pas (prod serverless).
   useEffect(() => {
-    const id = setInterval(() => refreshNotifs(true), 120000); // 2 minutes au lieu de 15 secondes
+    const id = setInterval(() => refreshNotifs(true), 15000);
     return () => clearInterval(id);
   }, [refreshNotifs]);
 

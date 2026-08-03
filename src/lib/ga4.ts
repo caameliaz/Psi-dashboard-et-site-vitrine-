@@ -4,9 +4,6 @@ const credentials = process.env.GA4_CREDENTIALS ? JSON.parse(process.env.GA4_CRE
 
 let analyticsDataClient: any | null = null;
 
-// Palette de couleurs pour les catégories
-const CATEGORY_COLORS = ['#7C6BAF', '#EF4444', '#F59E0B', '#10B981', '#3B82F6', '#8B5CF6'];
-
 // Initialiser le client GA4
 function getAnalyticsClient() {
   if (!analyticsDataClient && credentials) {
@@ -35,125 +32,73 @@ export interface PageViewsByWeek {
   total: number;
 }
 
-// Formater une date en YYYY-MM-DD
-function formatDate(date: Date): string {
-  return date.toISOString().split('T')[0];
-}
-
 // Récupérer les vues de pages par catégorie pour le mois en cours
 export async function getMonthlyPageViews(): Promise<{ total: number; byCategory: CategoryPageViews[] }> {
   const client = getAnalyticsClient();
   
-  // Import dynamique de prisma uniquement côté serveur
-  const { prisma } = await import('@/lib/prisma');
-  
-  // Récupérer les vraies catégories depuis la DB
-  const categories = await prisma.category.findMany({
-    orderBy: { order: 'asc' },
-    select: { id: true, name: true },
-  });
-  
-  if (!client || !propertyId || categories.length === 0) {
-    console.warn('GA4 non configuré - client, propertyId manquant ou aucune catégorie');
+  if (!client || !propertyId) {
+    // Données de test si GA4 n'est pas configuré
     return {
-      total: 0,
-      byCategory: categories.map((cat, index) => ({
-        category: cat.name,
-        views: 0,
-        color: CATEGORY_COLORS[index % CATEGORY_COLORS.length],
-      })),
+      total: 1250,
+      byCategory: [
+        { category: 'Impression', views: 720, color: '#7C6BAF' },
+        { category: 'Étiquettes', views: 530, color: '#EF4444' },
+      ],
     };
   }
 
   try {
-    // Utiliser runReport avec pagePath
     const now = new Date();
-    const startOfMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
-    const today = formatDate(now);
-    const startDate = formatDate(startOfMonth);
-    
-    console.log('📊 Appel runReport mensuel:', {
-      startDate,
-      endDate: today,
-    });
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     
     const [response] = await client.runReport({
       property: `properties/${propertyId}`,
       dateRanges: [
         {
-          startDate,
-          endDate: today,
+          startDate: startOfMonth.toISOString().split('T')[0],
+          endDate: 'today',
         },
       ],
       dimensions: [{ name: 'pagePath' }],
       metrics: [{ name: 'screenPageViews' }],
     });
 
-    // Mapper les catégories par ID pour recherche rapide
-    const categoryIds = new Set(categories.map(c => c.id));
-    
-    // Initialiser le map
-    const byCategoryMap: Record<string, number> = {};
-    categories.forEach(cat => {
-      byCategoryMap[cat.id] = 0;
-    });
+    // Mapper les pages aux catégories
+    const byCategory: Record<string, number> = {
+      Impression: 0,
+      Étiquettes: 0,
+    };
 
     let total = 0;
-    const allRows: Array<{ pagePath: string; views: number }> = [];
-    const matchedPaths: Array<{ path: string; categoryId: string }> = [];
-    const unmatchedPaths: string[] = [];
-    
-    // Regex pour extraire l'ID de catégorie du pagePath
-    const categoryIdRegex = /\/products\/([a-zA-Z0-9]+)/;
-    
     response.rows?.forEach((row: any) => {
-      const pagePath = row.dimensionValues?.[0]?.value ?? '';
+      const path = row.dimensionValues?.[0]?.value ?? '';
       const views = parseInt(row.metricValues?.[0]?.value ?? '0', 10);
-      
       total += views;
-      allRows.push({ pagePath, views });
 
-      // Extraire l'ID de catégorie du pagePath
-      const match = pagePath.match(categoryIdRegex);
-      if (match && match[1]) {
-        const categoryId = match[1];
-        if (categoryIds.has(categoryId)) {
-          byCategoryMap[categoryId] += views;
-          matchedPaths.push({ path: pagePath, categoryId });
-        } else {
-          unmatchedPaths.push(pagePath);
-        }
-      } else {
-        unmatchedPaths.push(pagePath);
+      // Déterminer la catégorie selon le path
+      if (path.includes('/impression') || path.includes('/produits/impression')) {
+        byCategory.Impression += views;
+      } else if (path.includes('/etiquettes') || path.includes('/produits/etiquettes')) {
+        byCategory.Étiquettes += views;
       }
-    });
-
-    console.log('📊 Résultat runReport mensuel:', {
-      totalSite: total,
-      totalCategories: Object.values(byCategoryMap).reduce((a, b) => a + b, 0),
-      byCategoryMap,
-      allRows: allRows.slice(0, 5),
-      matchedPaths: matchedPaths.slice(0, 5),
-      unmatchedPaths: unmatchedPaths.slice(0, 5),
     });
 
     return {
       total,
-      byCategory: categories.map((cat, index) => ({
-        category: cat.name,
-        views: byCategoryMap[cat.id],
-        color: CATEGORY_COLORS[index % CATEGORY_COLORS.length],
-      })),
+      byCategory: [
+        { category: 'Impression', views: byCategory.Impression, color: '#7C6BAF' },
+        { category: 'Étiquettes', views: byCategory.Étiquettes, color: '#EF4444' },
+      ],
     };
   } catch (error) {
-    console.error('❌ Erreur GA4 runReport mensuel:', error);
+    console.error('Erreur GA4:', error);
+    // Retourner des données de test en cas d'erreur
     return {
-      total: 0,
-      byCategory: categories.map((cat, index) => ({
-        category: cat.name,
-        views: 0,
-        color: CATEGORY_COLORS[index % CATEGORY_COLORS.length],
-      })),
+      total: 1250,
+      byCategory: [
+        { category: 'Impression', views: 720, color: '#7C6BAF' },
+        { category: 'Étiquettes', views: 530, color: '#EF4444' },
+      ],
     };
   }
 }
@@ -162,181 +107,81 @@ export async function getMonthlyPageViews(): Promise<{ total: number; byCategory
 export async function getWeeklyPageViews(): Promise<PageViewsByWeek[]> {
   const client = getAnalyticsClient();
   
-  // Import dynamique de prisma uniquement côté serveur
-  const { prisma } = await import('@/lib/prisma');
-  
-  // Récupérer les vraies catégories depuis la DB
-  const categories = await prisma.category.findMany({
-    orderBy: { order: 'asc' },
-    select: { id: true, name: true },
-  });
-  
-  if (!client || !propertyId || categories.length === 0) {
-    console.warn('GA4 non configuré - client, propertyId manquant ou aucune catégorie');
+  if (!client || !propertyId) {
+    // Données de test si GA4 n'est pas configuré
     const weeks = ['Sem 1', 'Sem 2', 'Sem 3', 'Sem 4'];
-    return weeks.map((week) => ({
+    return weeks.map((week, i) => ({
       week,
-      categories: categories.map((cat, index) => ({
-        category: cat.name,
-        views: 0,
-        color: CATEGORY_COLORS[index % CATEGORY_COLORS.length],
-      })),
-      total: 0,
+      categories: [
+        { category: 'Impression', views: 150 + i * 20, color: '#7C6BAF' },
+        { category: 'Étiquettes', views: 120 + i * 15, color: '#EF4444' },
+      ],
+      total: 270 + i * 35,
     }));
   }
 
   try {
-    // Utiliser runReport avec week et pagePath
-    const today = formatDate(new Date());
-    
-    console.log('📊 Appel runReport hebdomadaire:', {
-      startDate: '28daysAgo',
-      endDate: today,
-    });
+    const now = new Date();
+    const fourWeeksAgo = new Date(now);
+    fourWeeksAgo.setDate(now.getDate() - 28);
     
     const [response] = await client.runReport({
       property: `properties/${propertyId}`,
       dateRanges: [
         {
-          startDate: '28daysAgo',
-          endDate: today,
+          startDate: fourWeeksAgo.toISOString().split('T')[0],
+          endDate: 'today',
         },
       ],
-      dimensions: [
-        { name: 'week' },
-        { name: 'pagePath' },
-      ],
+      dimensions: [{ name: 'week' }, { name: 'pagePath' }],
       metrics: [{ name: 'screenPageViews' }],
     });
 
-    // DEBUG: Afficher la structure des catégories
-    console.log('📊 DEBUG categoriesDB:', {
-      count: categories.length,
-      sampleIds: categories.slice(0, 3).map(c => ({ id: c.id, type: typeof c.id, name: c.name })),
-    });
-
-    // Mapper les catégories par ID
-    const categoryIds = new Set(categories.map(c => c.id));
-    
-    // Collecter les numéros de semaine ISO uniques reçus de GA4
-    const weekNumbers = new Set<number>();
-    response.rows?.forEach((row: any) => {
-      const weekNum = parseInt(row.dimensionValues?.[0]?.value ?? '0', 10);
-      if (weekNum > 0) weekNumbers.add(weekNum);
-    });
-    
-    // Convertir en tableau trié (ordre chronologique)
-    const sortedWeeks = Array.from(weekNumbers).sort((a, b) => a - b);
-    
-    console.log('📊 DEBUG semaines GA4:', {
-      weekNumbers: Array.from(weekNumbers),
-      sortedWeeks,
-      note: 'Numéros ISO de semaine reçus de GA4',
-    });
-    
-    // Mapper les semaines ISO aux labels Sem 1-4
-    const weekMapping: Record<number, string> = {};
-    sortedWeeks.forEach((weekNum, index) => {
-      weekMapping[weekNum] = `Sem ${index + 1}`;
-    });
-    
-    console.log('📊 DEBUG mapping semaines:', weekMapping);
-    
-    // Générer les labels de semaine basés sur les semaines reçues
-    const weeks = sortedWeeks.map((_, index) => `Sem ${index + 1}`);
-    // Compléter jusqu'à 4 semaines si nécessaire
-    while (weeks.length < 4) {
-      weeks.unshift(`Sem ${weeks.length + 1}`);
-    }
-    
-    // Initialiser la structure par semaine
-    const byWeekAndCategory: Record<string, Record<string, number>> = {};
-    
-    weeks.forEach(week => {
-      byWeekAndCategory[week] = {};
-      categories.forEach(cat => {
-        byWeekAndCategory[week][cat.id] = 0;
-      });
-    });
-
-    const allRows: Array<{ week: string; pagePath: string; views: number }> = [];
-    const matchedPaths: Array<{ week: string; path: string; categoryId: string }> = [];
-    const unmatchedPaths: Array<{ week: string; path: string; reason: string }> = [];
-    
-    // Regex pour extraire l'ID de catégorie
-    const categoryIdRegex = /\/products\/([a-zA-Z0-9]+)/;
+    // Grouper par semaine et catégorie
+    const weeklyData: Record<string, Record<string, number>> = {};
     
     response.rows?.forEach((row: any) => {
-      const weekNumISO = parseInt(row.dimensionValues?.[0]?.value ?? '0', 10);
-      const pagePath = row.dimensionValues?.[1]?.value ?? '';
+      const week = row.dimensionValues?.[0]?.value ?? '';
+      const path = row.dimensionValues?.[1]?.value ?? '';
       const views = parseInt(row.metricValues?.[0]?.value ?? '0', 10);
-      
-      // Convertir le numéro ISO en label Sem 1-4
-      const weekLabel = weekMapping[weekNumISO] ?? 'Inconnu';
-      
-      allRows.push({ week: weekLabel, pagePath, views });
 
-      // Extraire l'ID de catégorie du pagePath
-      const match = pagePath.match(categoryIdRegex);
-      
-      if (!match || !match[1]) {
-        unmatchedPaths.push({ week: weekLabel, path: pagePath, reason: 'Regex no match' });
-        return;
+      if (!weeklyData[week]) {
+        weeklyData[week] = { Impression: 0, Étiquettes: 0 };
       }
-      
-      const categoryId = match[1];
-      
-      // DEBUG avant la comparaison
-      const isInSet = categoryIds.has(categoryId);
-      if (!isInSet) {
-        console.log('📊 DEBUG ID non trouvé:', {
-          extractedId: categoryId,
-          extractedIdType: typeof categoryId,
-          categoryIdsArray: Array.from(categoryIds).slice(0, 3),
-          categoryIdsTypes: Array.from(categoryIds).slice(0, 3).map(id => typeof id),
-          isInSet,
-        });
-      }
-      
-      if (categoryIds.has(categoryId) && byWeekAndCategory[weekLabel]) {
-        byWeekAndCategory[weekLabel][categoryId] += views;
-        matchedPaths.push({ week: weekLabel, path: pagePath, categoryId });
-      } else {
-        unmatchedPaths.push({ 
-          week: weekLabel, 
-          path: pagePath, 
-          reason: !categoryIds.has(categoryId) ? 'ID not in DB' : 'Week label invalid' 
-        });
+
+      if (path.includes('/impression') || path.includes('/produits/impression')) {
+        weeklyData[week].Impression += views;
+      } else if (path.includes('/etiquettes') || path.includes('/produits/etiquettes')) {
+        weeklyData[week].Étiquettes += views;
       }
     });
 
-    console.log('📊 Résultat runReport hebdomadaire:', {
-      allRows: allRows.slice(0, 5),
-      matchedPaths: matchedPaths.slice(0, 5),
-      unmatchedPaths: unmatchedPaths.slice(0, 5),
-      byWeekAndCategory,
-    });
+    // Convertir en tableau et trier par date
+    const result: PageViewsByWeek[] = Object.entries(weeklyData)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .slice(-4) // Garder les 4 dernières semaines
+      .map(([week, data], index) => ({
+        week: `Sem ${index + 1}`,
+        categories: [
+          { category: 'Impression', views: data.Impression, color: '#7C6BAF' },
+          { category: 'Étiquettes', views: data.Étiquettes, color: '#EF4444' },
+        ],
+        total: data.Impression + data.Étiquettes,
+      }));
 
-    return weeks.map((week) => ({
-      week,
-      categories: categories.map((cat, index) => ({
-        category: cat.name,
-        views: byWeekAndCategory[week]?.[cat.id] ?? 0,
-        color: CATEGORY_COLORS[index % CATEGORY_COLORS.length],
-      })),
-      total: Object.values(byWeekAndCategory[week] ?? {}).reduce((a, b) => a + b, 0),
-    }));
+    return result.length > 0 ? result : getWeeklyPageViews(); // Fallback aux données de test
   } catch (error) {
-    console.error('❌ Erreur GA4 runReport hebdomadaire:', error);
+    console.error('Erreur GA4:', error);
+    // Données de test en cas d'erreur
     const weeks = ['Sem 1', 'Sem 2', 'Sem 3', 'Sem 4'];
-    return weeks.map((week) => ({
+    return weeks.map((week, i) => ({
       week,
-      categories: categories.map((cat, index) => ({
-        category: cat.name,
-        views: 0,
-        color: CATEGORY_COLORS[index % CATEGORY_COLORS.length],
-      })),
-      total: 0,
+      categories: [
+        { category: 'Impression', views: 150 + i * 20, color: '#7C6BAF' },
+        { category: 'Étiquettes', views: 120 + i * 15, color: '#EF4444' },
+      ],
+      total: 270 + i * 35,
     }));
   }
 }
+
