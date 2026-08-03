@@ -29,7 +29,7 @@ export function WilayaBarChart({ data }: { data: { wilaya: string; count: number
   return (
     <div className={CARD}>
       <h3 className="text-[14px] font-bold text-[#0F172A] mb-1">Commandes par wilaya</h3>
-      <p className="text-[11px] text-[#8A9BB5] mb-4">Top {clean.length}</p>
+      <p className="text-[11px] text-[#8A9BB5] mb-4">Top {clean.length} (ce mois)</p>
       <ResponsiveContainer width="100%" height={Math.max(180, clean.length * 30)}>
         <BarChart data={clean} layout="vertical" margin={{ left: 8, right: 16 }}>
           <CartesianGrid horizontal={false} stroke="#F2F4F7" />
@@ -186,13 +186,13 @@ export function VisitsBarChart({ data }: { data: { category: string; visits: num
 
 export function ConversionRateChart({ data }: { data: { label: string; rate: number }[] }) {
   if (!data || data.length === 0) {
-    return <div className={CARD}><h3 className="text-[14px] font-bold text-[#0F172A] mb-3">Taux de conversion</h3><p className="text-[12px] text-[#8A9BB5] py-8 text-center">Aucune donnée</p></div>;
+    return <div className={CARD}><h3 className="text-[14px] font-bold text-[#0F172A] mb-3">Taux de conversion</h3><p className="text-[12px] text-[#8A9BB5] py-8 text-center">Aucune donnée pour ce mois</p></div>;
   }
   
   return (
     <div className={CARD}>
       <h3 className="text-[14px] font-bold text-[#0F172A] mb-1">Taux de conversion</h3>
-      <p className="text-[11px] text-[#8A9BB5] mb-4">Devis → Ventes (ce mois)</p>
+      <p className="text-[11px] text-[#8A9BB5] mb-4">Devis → Ventes</p>
       <ResponsiveContainer width="100%" height={Math.max(400, data.length * 45)}>
         <BarChart data={data} margin={{ left: 8, right: 8, top: 6, bottom: 20 }}>
           <CartesianGrid stroke="#F2F4F7" vertical={false} />
