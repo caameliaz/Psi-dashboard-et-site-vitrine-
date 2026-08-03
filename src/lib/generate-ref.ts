@@ -26,15 +26,39 @@ function wilayaCode(wilaya: string | null | undefined): string {
 }
 
 export async function generateOrderRef(wilaya: string | null | undefined): Promise<string> {
-  const count = await prisma.order.count();
   const wCode = wilayaCode(wilaya);
-  const num = String(count + 1).padStart(4, '0');
-  return `CMD-${wCode}-${num}`;
+  
+  // Retry jusqu'à 5 fois pour éviter les collisions
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const count = await prisma.order.count();
+    const num = String(count + 1 + attempt).padStart(4, '0');
+    const ref = `CMD-${wCode}-${num}`;
+    
+    // Vérifier si la référence existe déjà
+    const exists = await prisma.order.findUnique({ where: { ref } });
+    if (!exists) return ref;
+  }
+  
+  // Fallback : utiliser un timestamp si toutes les tentatives échouent
+  const timestamp = Date.now().toString().slice(-4);
+  return `CMD-${wCode}-${timestamp}`;
 }
 
 export async function generateQuoteRef(wilaya: string | null | undefined): Promise<string> {
-  const count = await prisma.quote.count();
   const wCode = wilayaCode(wilaya);
-  const num = String(count + 1).padStart(4, '0');
-  return `DEV-${wCode}-${num}`;
+  
+  // Retry jusqu'à 5 fois pour éviter les collisions
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const count = await prisma.quote.count();
+    const num = String(count + 1 + attempt).padStart(4, '0');
+    const ref = `DEV-${wCode}-${num}`;
+    
+    // Vérifier si la référence existe déjà
+    const exists = await prisma.quote.findUnique({ where: { ref } });
+    if (!exists) return ref;
+  }
+  
+  // Fallback : utiliser un timestamp si toutes les tentatives échouent
+  const timestamp = Date.now().toString().slice(-4);
+  return `DEV-${wCode}-${timestamp}`;
 }

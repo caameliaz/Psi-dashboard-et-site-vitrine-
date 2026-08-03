@@ -195,6 +195,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(quote, { status: 201 });
   } catch (error) {
     console.error('Error creating quote:', error);
+    // Log détaillé pour debug
+    if (error instanceof Error) {
+      console.error('Error message:', error.message);
+      console.error('Error stack:', error.stack);
+    }
     return NextResponse.json({ error: 'Failed to create quote' }, { status: 500 });
   }
 }
