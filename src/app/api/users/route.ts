@@ -2,7 +2,6 @@ import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import bcrypt from 'bcryptjs';
-import { sendWelcomeEmail } from '@/lib/email/send';
 
 // GET /api/users — liste de tous les users (id + name) pour les dropdowns
 export async function GET() {
@@ -74,7 +73,21 @@ export async function POST(req: Request) {
     // Envoyer email de bienvenue si email fourni
     if (email) {
       try {
-        await sendWelcomeEmail(email, name.trim(), password);
+        const { renderWelcomeEmail } = await import('@/emails/accountCreatedTemplate');
+        const { sendEmail } = await import('@/lib/email/send');
+        const { logoAttachment } = await import('@/emails/shared');
+        const mail = renderWelcomeEmail({
+          name: name.trim(),
+          email: email.trim(),
+          password,
+          role,
+        });
+        await sendEmail({
+          to: email.trim(),
+          subject: mail.subject,
+          html: mail.html,
+          attachments: [logoAttachment],
+        });
       } catch (emailError) {
         console.error('[users] Erreur envoi email bienvenue:', emailError);
         // Ne pas bloquer la creation si l'email echoue
