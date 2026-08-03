@@ -20,6 +20,12 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
   try {
     const body = await request.json();
 
+    // Récupérer l'ancien email avant la modification
+    const oldUser = await prisma.user.findUnique({
+      where: { id },
+      select: { email: true },
+    });
+
     const data: Record<string, unknown> = {};
     if (body.name !== undefined) data.name = body.name;
     if (body.email !== undefined) data.email = body.email;
@@ -49,6 +55,18 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
       : body.permissions !== undefined && Object.keys(body).length === 1 ? 'Autorisations modifiées'
       : 'Utilisateur modifié';
     createAudit({ userId: session.user.id, action, entity: 'UTILISATEUR', entityId: id, detail: user.name });
+
+    // Envoi d'email de bienvenue si l'email a changé (ou a été ajouté)
+    if (body.email !== undefined && oldUser?.email !== body.email) {
+      const { renderWelcomeEmailNoPassword } = await import('@/emails/accountCreatedTemplate');
+      const mail = renderWelcomeEmailNoPassword({
+        name: user.name ?? 'Utilisateur',
+        email: user.email ?? body.email,
+        role: user.role,
+      });
+      sendEmail({ to: user.email ?? body.email, subject: mail.subject, html: mail.html, attachments: [logoAttachment] })
+        .catch(() => {});
+    }
 
     // Réinitialisation de mot de passe → le nouveau est envoyé par email AUX ADMINS,
     // pour qu'ils puissent le transmettre sans avoir à le recopier de l'écran.
