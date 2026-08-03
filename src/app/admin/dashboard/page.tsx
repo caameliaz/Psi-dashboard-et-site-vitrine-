@@ -334,11 +334,13 @@ export default function DashboardPage() {
         } else if (dateParams.containerId === 'conversion') {
           console.log('📊 Appel API pour conversion:', baseUrl);
           // Fetch only for conversion - returns data for the selected period
+          // NOTE: sourceStats is NOT updated here to keep it independent from conversion filtering
           const res = await fetch(baseUrl, { credentials: 'include' });
           if (res.ok) {
             const data = await res.json();
             console.log('📊 Données filtrées conversion:', data.conversionRates);
             setFilteredConversionRates(data.conversionRates ?? []);
+            // Do NOT update sourceStats - it should always show current month data
           }
           setLoading(false);
           return;
