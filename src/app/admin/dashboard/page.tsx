@@ -796,7 +796,7 @@ export default function DashboardPage() {
                   {evolution >= 0 ? '▲' : '▼'} {Math.abs(evolution)}%
                 </span>
               </div>
-              <p className="text-[10px] md:text-[12px] text-[#8A9BB5] mt-1">vs mois précédent</p>
+              <p className="text-[8px] md:text-[12px] text-[#8A9BB5] mt-1">vs mois précédent</p>
             </>
           ) : (
             <>
@@ -808,12 +808,12 @@ export default function DashboardPage() {
                   {stats.evolutionDevis >= 0 ? '▲' : '▼'} {Math.abs(stats.evolutionDevis)}%
                 </span>
               </div>
-              <p className="text-[12px] text-[#8A9BB5] mt-1">devis créés · vs mois précédent</p>
+              <p className="text-[8px] md:text-[12px] text-[#8A9BB5] mt-1">devis créés · vs mois précédent</p>
             </>
           )}
           
           {/* Graphique d'évolution sur 6 mois */}
-          <div className="mt-4 md:mt-6">
+          <div className="mt-2 md:mt-6">
             <TrendLineChart data={serie6Mois} />
           </div>
         </div>
@@ -918,7 +918,7 @@ export default function DashboardPage() {
               
               {/* Graphique d'évolution des ventes sur 6 mois */}
               {isTotal && (
-                <div className="mt-4 md:mt-6">
+                <div className="mt-2 md:mt-6">
                   <SalesLineChart data={filteredSerie6MoisVentes || serie6MoisVentes} />
                 </div>
               )}
