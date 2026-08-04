@@ -47,7 +47,7 @@ function readLogo(): Buffer | null {
     path.join(process.cwd(), '.next', 'server', 'public', 'Logo PSI-new.jpeg'),
   ];
   for (const c of candidats) {
-    try { return fs.readFileSync(c); } catch { /* essaie le suivant */ }
+    try { return fs.readFileSync(/*turbopackIgnore: true*/ c); } catch { /* essaie le suivant */ }
   }
   return null;
 }

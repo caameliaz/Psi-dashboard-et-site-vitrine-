@@ -245,6 +245,7 @@ function CreateUserForm({ onSubmit, onClose, customRoles, onAddCustomRole, onDel
 }) {
   const [data, setData] = useState<AddFormData>({ nom: '', email: '', role: 'Employe', motdepasse: genPassword(), permissions: [...EMPLOYE_PERMS] });
   const [showRoleCreator, setShowRoleCreator] = useState(false);
+  const [error, setError] = useState('');
 
   const inputClass = "w-full px-3 py-2.5 rounded-xl border border-[#E2E8F0] text-sm text-[#0F172A] focus:outline-none focus:border-[#4CAF4F] focus:ring-[3px] focus:ring-[#4CAF4F]/15 transition-all bg-white";
 
@@ -374,12 +375,26 @@ function CreateUserForm({ onSubmit, onClose, customRoles, onAddCustomRole, onDel
         <div className="flex gap-3 pt-1">
           <button onClick={onClose} className="flex-1 px-4 py-2.5 rounded-xl border border-[#E2E8F0] text-[13px] font-semibold text-[#374151] hover:bg-[#F8FAFC] transition-colors">Annuler</button>
           <button
-            onClick={() => { if (data.nom.trim() && data.email.trim()) onSubmit(data); }}
+            onClick={() => {
+              setError('');
+              if (!data.nom.trim()) {
+                setError('⚠️ Veuillez renseigner le nom');
+                return;
+              }
+              if (data.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email)) {
+                setError('⚠️ Format d\'email invalide');
+                return;
+              }
+              onSubmit(data);
+            }}
             className="flex-1 px-4 py-2.5 rounded-xl text-[13px] font-bold text-white"
             style={{ background: '#4CAF4F' }}>
             Créer le compte
           </button>
         </div>
+        {error && (
+          <p className="text-[12px] font-semibold text-[#EF4444] mt-2 text-center">{error}</p>
+        )}
       </div>
 
       {showRoleCreator && (
