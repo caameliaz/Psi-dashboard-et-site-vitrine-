@@ -830,9 +830,7 @@ export default function DashboardPage() {
           
           {/* Graphique d'évolution sur 6 mois */}
           <div className="mt-2 md:mt-6">
-            <div className="h-[120px] md:h-auto">
-              <TrendLineChart data={serie6Mois} />
-            </div>
+            <TrendLineChart data={serie6Mois} />
           </div>
         </div>
 
@@ -937,9 +935,7 @@ export default function DashboardPage() {
               {/* Graphique d'évolution des ventes sur 6 mois */}
               {isTotal && (
                 <div className="mt-2 md:mt-6">
-                  <div className="h-[120px] md:h-auto">
-                    <SalesLineChart data={filteredSerie6MoisVentes || serie6MoisVentes} />
-                  </div>
+                  <SalesLineChart data={filteredSerie6MoisVentes || serie6MoisVentes} />
                 </div>
               )}
             </div>

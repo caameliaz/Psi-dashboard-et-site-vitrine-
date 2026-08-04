@@ -51,8 +51,8 @@ export function TrendLineChart({ data }: { data: { mois: string; commandes: numb
   }
   return (
     <>
-      <ResponsiveContainer width="100%" height={200}>
-        <LineChart data={data} margin={{ left: -12, right: 12, top: 6 }}>
+      <ResponsiveContainer width="100%" height={150}>
+        <LineChart data={data} margin={{ left: -12, right: 12, top: 6, bottom: 0 }}>
           <CartesianGrid stroke="#F2F4F7" />
           <XAxis dataKey="mois" tick={{ fontSize: 11, fill: '#8A9BB5' }} />
           <YAxis tick={{ fontSize: 11, fill: '#8A9BB5' }} allowDecimals={false} />
@@ -61,7 +61,7 @@ export function TrendLineChart({ data }: { data: { mois: string; commandes: numb
           <Line type="monotone" dataKey="devis" name="Devis" stroke="#8B5CF6" strokeWidth={2.5} dot={{ r: 3 }} activeDot={{ r: 5 }} />
         </LineChart>
       </ResponsiveContainer>
-      <div className="flex flex-col md:flex-row md:items-center gap-1 md:gap-5 mt-2 md:justify-center">
+      <div className="flex flex-col md:flex-row md:items-center gap-1 md:gap-5 mt-1 md:mt-2 md:justify-center">
         <span className="text-[9px] md:text-[11px] font-semibold text-[#8A9BB5] text-center md:text-left">Évolution 6 mois</span>
         <div className="flex items-center gap-3 justify-center">
           <span className="flex items-center gap-1 text-[10px] md:text-[11px] text-[#374151]"><span className="w-2.5 md:w-3 h-1 md:h-1.5 rounded-full" style={{ background: '#4CAF4F' }} />Cmd</span>
@@ -86,8 +86,8 @@ export function SalesLineChart({ data }: { data: { mois: string; ventes: number 
 
   return (
     <>
-      <ResponsiveContainer width="100%" height={200}>
-        <LineChart data={data} margin={{ left: -12, right: 12, top: 6 }}>
+      <ResponsiveContainer width="100%" height={150}>
+        <LineChart data={data} margin={{ left: -12, right: 12, top: 6, bottom: 0 }}>
           <CartesianGrid stroke="#F2F4F7" />
           <XAxis dataKey="mois" tick={{ fontSize: 11, fill: '#8A9BB5' }} />
           <YAxis tick={{ fontSize: 11, fill: '#8A9BB5' }} tickFormatter={formatDA} />
@@ -95,10 +95,10 @@ export function SalesLineChart({ data }: { data: { mois: string; ventes: number 
           <Line type="monotone" dataKey="ventes" name="Ventes" stroke="#4CAF4F" strokeWidth={2.5} dot={{ r: 3 }} activeDot={{ r: 5 }} />
         </LineChart>
       </ResponsiveContainer>
-      <div className="flex items-center gap-5 mt-2 justify-center">
-        <span className="text-[11px] font-semibold text-[#8A9BB5]">Évolution sur 6 mois</span>
-        <span className="flex items-center gap-1.5 text-[11px] text-[#374151]">
-          <span className="w-3 h-1.5 rounded-full" style={{ background: '#4CAF4F' }} />
+      <div className="flex flex-col md:flex-row md:items-center gap-1 md:gap-5 mt-1 md:mt-2 md:justify-center">
+        <span className="text-[9px] md:text-[11px] font-semibold text-[#8A9BB5] text-center md:text-left">Évolution 6 mois</span>
+        <span className="flex items-center gap-1 text-[10px] md:text-[11px] text-[#374151] justify-center">
+          <span className="w-2.5 md:w-3 h-1 md:h-1.5 rounded-full" style={{ background: '#4CAF4F' }} />
           Ventes (DA)
         </span>
       </div>
