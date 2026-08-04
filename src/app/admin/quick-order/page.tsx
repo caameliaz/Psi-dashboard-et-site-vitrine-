@@ -24,6 +24,8 @@ export default function QuickOrderPage() {
   const handleSave = async (item: any): Promise<boolean> => {
     const res = await submitNewRequest(item);
     if (!res.ok) { alert(res.error ?? 'Erreur lors de la création'); return false; }
+    // Scroll to top pour voir l'écran de confirmation
+    window.scrollTo({ top: 0, behavior: 'smooth' });
     setDone(res.type);
     return true;
   };
