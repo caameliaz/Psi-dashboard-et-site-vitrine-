@@ -136,7 +136,7 @@ export default function CheckoutPage() {
 
               <div>
                 <label className={labelClass}>{t('checkout.company_label')}</label>
-                <input type="text" name="company" value={formData.company} onChange={handleChange} placeholder={t('checkout.company_ph')} className={inputClass} />
+                <input type="text" name="company" value={formData.company} onChange={handleChange} placeholder={t('checkout.company_ph')} required className={inputClass} />
               </div>
 
               <div>

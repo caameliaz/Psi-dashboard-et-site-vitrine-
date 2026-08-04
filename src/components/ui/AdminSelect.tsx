@@ -50,7 +50,7 @@ export function AdminSelect({ value, onChange, options, className = '' }: AdminS
       </button>
 
       {open && (
-        <div className="absolute left-0 top-[calc(100%+6px)] z-[100] bg-white border border-[#E2E8F0] rounded-xl shadow-[0_8px_32px_rgba(171,190,209,0.45)] overflow-hidden min-w-full">
+        <div className="absolute left-0 top-[calc(100%+6px)] z-[9999] bg-white border border-[#E2E8F0] rounded-xl shadow-[0_8px_32px_rgba(171,190,209,0.45)] overflow-hidden min-w-full">
           {options.map((opt) => (
             <button
               key={opt.value}

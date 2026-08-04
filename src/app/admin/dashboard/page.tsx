@@ -212,6 +212,9 @@ export default function DashboardPage() {
   const [analyticsData, setAnalyticsData] = useState<{ monthly: { total: number; byCategory: { category: string; views: number; color: string }[] }; weekly: { week: string; categories: { category: string; views: number; color: string }[] }[] }>({ monthly: { total: 0, byCategory: [] }, weekly: [] });
   const [loading, setLoading]   = useState(true);
 
+  // Fetch tous les users actifs pour le dropdown des ventes
+  const [allUsers, setAllUsers] = useState<{ id: string; name: string }[]>([]);
+
   // États filtrés pour chaque container (indépendants)
   const [filteredTopProduits, setFilteredTopProduits] = useState<{ ref: string; qty: number; label: string; color: string }[] | null>(null);
   const [filteredAnalyticsData, setFilteredAnalyticsData] = useState<{ monthly: { total: number; byCategory: { category: string; views: number; color: string }[] }; weekly: { week: string; categories: { category: string; views: number; color: string }[] }[] } | null>(null);
@@ -241,6 +244,14 @@ export default function DashboardPage() {
     update();
     const iv = setInterval(update, 1000);
     return () => clearInterval(iv);
+  }, []);
+
+  // Fetch tous les users actifs pour le dropdown commercial
+  useEffect(() => {
+    fetch('/api/users?assignable=true')
+      .then((r) => r.ok ? r.json() : [])
+      .then((data: { id: string; name: string }[]) => setAllUsers(data))
+      .catch(() => {});
   }, []);
 
   // silent = refetch temps réel (SSE) → pas de spinner, mise à jour en douceur
@@ -599,7 +610,7 @@ export default function DashboardPage() {
       <div className="grid grid-cols-2 gap-3 mt-4 md:hidden">
         {/* Camembert — Top produits */}
         <div className="bg-white rounded-2xl border border-[#E2E8F0] p-2.5 shadow-sm flex flex-col">
-          <div className="flex items-center justify-between mb-0.5">
+          <div className="flex items-center justify-between mb-1">
             <p className="text-[9px] font-bold text-[#ABBED1] uppercase tracking-widest">Top produits</p>
             <div className="scale-75 origin-right">
               <DateRangePicker onDateChange={(start, end) => {
@@ -608,10 +619,10 @@ export default function DashboardPage() {
               }} />
             </div>
           </div>
-          <p className="text-[11px] font-semibold text-[#0F172A]" style={{ marginBottom: '-45px' }}>Par produit</p>
+          <p className="text-[11px] font-semibold text-[#0F172A] mb-2">Par produit</p>
           {loading ? <p className="text-[11px] text-[#8A9BB5] py-4">Chargement…</p> : (
-            <div className="flex items-center justify-center flex-1">
-              <div className="scale-[0.55] origin-center -my-8">
+            <div className="flex items-center justify-center flex-1 min-h-[120px]">
+              <div className="scale-[0.65] origin-center">
                 <PieChart data={filteredTopProduits || topProduits} />
               </div>
             </div>
@@ -725,9 +736,35 @@ export default function DashboardPage() {
       <div className="grid grid-cols-2 gap-3 md:gap-6 mt-6 md:mt-8">
         {/* Carte 1 : toggle Commandes ce mois / Devis ce mois + Graphique évolution */}
         <div className="bg-white rounded-2xl border border-[#E4EBF5] p-3 md:p-5 shadow-sm">
-          <div className="flex items-center justify-between gap-2 mb-2 md:mb-3">
+          {/* Mobile: titre + boutons sur une ligne, DateRangePicker en dessous */}
+          <div className="md:hidden">
+            <div className="flex items-center gap-2 mb-2">
+              <p className="text-[9px] font-bold text-[#ABBED1] uppercase tracking-widest truncate">
+                {moisTab === 'commandes' ? 'Commandes' : 'Devis'}
+              </p>
+              <div className="flex items-center gap-0.5 bg-[#F2F4F7] rounded-lg p-0.5">
+                <button onClick={() => setMoisTab('commandes')}
+                  className={`px-1.5 py-0.5 rounded-md text-[9px] font-bold transition-colors ${moisTab === 'commandes' ? 'bg-white text-[#0F172A] shadow-sm' : 'text-[#8A9BB5]'}`}>
+                  Cmd
+                </button>
+                <button onClick={() => setMoisTab('devis')}
+                  className={`px-1.5 py-0.5 rounded-md text-[9px] font-bold transition-colors ${moisTab === 'devis' ? 'bg-white text-[#0F172A] shadow-sm' : 'text-[#8A9BB5]'}`}>
+                  Devis
+                </button>
+              </div>
+            </div>
+            <div className="mb-3">
+              <DateRangePicker onDateChange={(start, end) => {
+                setCommandesDevisDateRange({ start, end });
+                fetchData(false, { containerId: 'commandesDevis', startDate: start, endDate: end });
+              }} />
+            </div>
+          </div>
+
+          {/* Desktop: layout original */}
+          <div className="hidden md:flex md:items-center md:justify-between md:gap-2 md:mb-3">
             <div className="flex items-center gap-2 min-w-0">
-              <p className="text-[9px] md:text-[11px] font-bold text-[#ABBED1] uppercase tracking-widest flex-shrink-0">
+              <p className="text-[11px] font-bold text-[#ABBED1] uppercase tracking-widest flex-shrink-0">
                 {filteredCommandesMois === null && filteredDevisMois === null
                   ? (moisTab === 'commandes' ? 'Commandes ce mois' : 'Devis ce mois')
                   : (moisTab === 'commandes' ? 'Commandes' : 'Devis')
@@ -735,11 +772,11 @@ export default function DashboardPage() {
               </p>
               <div className="flex items-center gap-1 bg-[#F2F4F7] rounded-lg p-0.5 w-fit">
                 <button onClick={() => setMoisTab('commandes')}
-                  className={`px-2 md:px-3 py-1 md:py-1.5 rounded-md text-[10px] md:text-[12px] font-bold transition-colors ${moisTab === 'commandes' ? 'bg-white text-[#0F172A] shadow-sm' : 'text-[#8A9BB5] hover:text-[#374151]'}`}>
+                  className={`px-3 py-1.5 rounded-md text-[12px] font-bold transition-colors ${moisTab === 'commandes' ? 'bg-white text-[#0F172A] shadow-sm' : 'text-[#8A9BB5] hover:text-[#374151]'}`}>
                   Commandes
                 </button>
                 <button onClick={() => setMoisTab('devis')}
-                  className={`px-2 md:px-3 py-1 md:py-1.5 rounded-md text-[10px] md:text-[12px] font-bold transition-colors ${moisTab === 'devis' ? 'bg-white text-[#0F172A] shadow-sm' : 'text-[#8A9BB5] hover:text-[#374151]'}`}>
+                  className={`px-3 py-1.5 rounded-md text-[12px] font-bold transition-colors ${moisTab === 'devis' ? 'bg-white text-[#0F172A] shadow-sm' : 'text-[#8A9BB5] hover:text-[#374151]'}`}>
                   Devis
                 </button>
               </div>
@@ -793,10 +830,38 @@ export default function DashboardPage() {
           const pct = objectif > 0 ? Math.min(100, Math.round((ventes / objectif) * 100)) : 0;
           const atteint = objectif > 0 && ventes >= objectif;
           return (
-            <div className="bg-white rounded-2xl border border-[#E4EBF5] p-5 shadow-sm">
-              <div className="flex items-center justify-between mb-2 gap-2">
+            <div className="bg-white rounded-2xl border border-[#E4EBF5] p-3 md:p-5 shadow-sm">
+              {/* Mobile: titre + sélecteur sur une ligne, DateRangePicker en dessous */}
+              <div className="md:hidden">
+                <div className="flex items-center gap-2 mb-2">
+                  <p className="text-[9px] font-bold text-[#ABBED1] uppercase tracking-widest truncate">
+                    {filteredVentesMois !== null ? 'Ventes' : 'Ventes'}
+                  </p>
+                  {isAdmin && (
+                    <div className="relative max-w-[100px]">
+                      <select value={selectedCommercial} onChange={(e) => setSelectedCommercial(e.target.value)}
+                        className="w-full appearance-none text-[9px] font-bold text-[#374151] border border-[#E2E8F0] rounded-lg pl-2 pr-5 py-1 bg-white cursor-pointer focus:outline-none focus:border-[#4CAF4F] transition-all">
+                        <option value="">Tous</option>
+                        {myId && <option value={myId}>Moi</option>}
+                        {parCommercial.filter((c) => c.id !== myId).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                        {allUsers.filter((u) => u.id !== myId && !parCommercial.find((c) => c.id === u.id)).map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+                      </select>
+                      <svg className="absolute right-1 top-1/2 -translate-y-1/2 pointer-events-none text-[#8A9BB5]" width={10} height={10} viewBox="0 0 24 24" fill="none"><path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                    </div>
+                  )}
+                </div>
+                <div className="mb-3">
+                  <DateRangePicker onDateChange={(start, end) => {
+                    setVentesDateRange({ start, end });
+                    fetchData(false, { containerId: 'ventes', startDate: start, endDate: end });
+                  }} />
+                </div>
+              </div>
+
+              {/* Desktop: layout original */}
+              <div className="hidden md:flex md:items-center md:justify-between md:mb-2 md:gap-2">
                 <div className="flex items-center gap-2 min-w-0">
-                  <p className="text-[9px] md:text-[11px] font-bold text-[#ABBED1] uppercase tracking-widest flex-shrink-0">
+                  <p className="text-[11px] font-bold text-[#ABBED1] uppercase tracking-widest flex-shrink-0">
                     {filteredVentesMois !== null ? 'Ventes' : 'Ventes ce mois'}
                   </p>
                   {isAdmin && (
@@ -806,6 +871,7 @@ export default function DashboardPage() {
                         <option value="">Toute l&apos;entreprise</option>
                         {myId && <option value={myId}>Mes ventes</option>}
                         {parCommercial.filter((c) => c.id !== myId).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                        {allUsers.filter((u) => u.id !== myId && !parCommercial.find((c) => c.id === u.id)).map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
                       </select>
                       <svg className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-[#8A9BB5]" width={12} height={12} viewBox="0 0 24 24" fill="none"><path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
                     </div>
@@ -906,14 +972,14 @@ export default function DashboardPage() {
         </div>
         <table className="w-full" style={{ borderCollapse: 'collapse' }}>
           <thead>
-            <tr style={{ background: '#F8FAFC' }}>
-              <th className="px-6 py-3.5 text-left font-semibold text-[#8A9BB5] uppercase tracking-wider" style={{ fontSize: 11 }}>N°</th>
-              <th className="px-6 py-3.5 text-left font-semibold text-[#8A9BB5] uppercase tracking-wider" style={{ fontSize: 11 }}>Type</th>
-              <th className="px-6 py-3.5 text-left font-semibold text-[#8A9BB5] uppercase tracking-wider" style={{ fontSize: 11 }}>Source</th>
-              <th className="px-6 py-3.5 text-left font-semibold text-[#8A9BB5] uppercase tracking-wider" style={{ fontSize: 11 }}>Entreprise</th>
-              <th className="px-6 py-3.5 text-left font-semibold text-[#8A9BB5] uppercase tracking-wider cursor-pointer select-none hover:text-[#374151] transition-colors" style={{ fontSize: 11 }} onClick={() => handleSort('client')}>Client <SortIcon col="client" /></th>
-              <th className="px-6 py-3.5 text-left font-semibold text-[#8A9BB5] uppercase tracking-wider cursor-pointer select-none hover:text-[#374151] transition-colors" style={{ fontSize: 11 }} onClick={() => handleSort('date')}>Date <SortIcon col="date" /></th>
-              <th className="px-6 py-3.5 text-left font-semibold text-[#8A9BB5] uppercase tracking-wider cursor-pointer select-none hover:text-[#374151] transition-colors" style={{ fontSize: 11 }} onClick={() => handleSort('statut')}>Statut <SortIcon col="statut" /></th>
+            <tr style={{ background: '#F8FAFC' }} className="flex md:table-row">
+              <th className="px-6 py-3.5 text-left font-semibold text-[#8A9BB5] uppercase tracking-wider order-5 md:order-1" style={{ fontSize: 11 }}>N°</th>
+              <th className="px-6 py-3.5 text-left font-semibold text-[#8A9BB5] uppercase tracking-wider order-1 md:order-2" style={{ fontSize: 11 }}>Type</th>
+              <th className="px-6 py-3.5 text-left font-semibold text-[#8A9BB5] uppercase tracking-wider order-2 md:order-3" style={{ fontSize: 11 }}>Source</th>
+              <th className="px-6 py-3.5 text-left font-semibold text-[#8A9BB5] uppercase tracking-wider order-3 md:order-4" style={{ fontSize: 11 }}>Entreprise</th>
+              <th className="px-6 py-3.5 text-left font-semibold text-[#8A9BB5] uppercase tracking-wider cursor-pointer select-none hover:text-[#374151] transition-colors order-6 md:order-5" style={{ fontSize: 11 }} onClick={() => handleSort('client')}>Client <SortIcon col="client" /></th>
+              <th className="px-6 py-3.5 text-left font-semibold text-[#8A9BB5] uppercase tracking-wider cursor-pointer select-none hover:text-[#374151] transition-colors order-7 md:order-6" style={{ fontSize: 11 }} onClick={() => handleSort('date')}>Date <SortIcon col="date" /></th>
+              <th className="px-6 py-3.5 text-left font-semibold text-[#8A9BB5] uppercase tracking-wider cursor-pointer select-none hover:text-[#374151] transition-colors order-4 md:order-7" style={{ fontSize: 11 }} onClick={() => handleSort('statut')}>Statut <SortIcon col="statut" /></th>
             </tr>
           </thead>
           <tbody>
@@ -928,22 +994,22 @@ export default function DashboardPage() {
               const src        = row.source ?? 'SITE';
               const srcCfg     = src === 'SITE' ? SOURCE_COLOR.SITE : SOURCE_COLOR.OTHER;
               return (
-                <tr key={i} onClick={() => setSelectedRequest(row)} className="cursor-pointer transition-colors"
+                <tr key={i} onClick={() => setSelectedRequest(row)} className="cursor-pointer transition-colors flex md:table-row"
                   style={{ background: rowBg, borderTop: '1px solid #F2F4F7' }}
                   onMouseEnter={(e) => (e.currentTarget.style.background = rowBgHover)}
                   onMouseLeave={(e) => (e.currentTarget.style.background = rowBg)}>
-                  <td className="px-6 py-4 text-[12px] font-mono font-bold" style={{ color: row.type === 'Commande' ? '#4CAF4F' : '#8B5CF6' }}>{row.ref}</td>
-                  <td className="px-6 py-4"><TypeChip type={row.type} /></td>
-                  <td className="px-6 py-4">
+                  <td className="px-6 py-4 text-[12px] font-mono font-bold order-5 md:order-1" style={{ color: row.type === 'Commande' ? '#4CAF4F' : '#8B5CF6' }}>{row.ref}</td>
+                  <td className="px-6 py-4 order-1 md:order-2"><TypeChip type={row.type} /></td>
+                  <td className="px-6 py-4 order-2 md:order-3">
                     <span className="text-[11px] font-bold px-2 py-1 rounded-lg border"
                       style={{ background: srcCfg.bg, color: srcCfg.color, borderColor: srcCfg.border }}>
                       {getSourceLabel(src)}
                     </span>
                   </td>
-                  <td className="px-6 py-4 text-[13px] font-semibold text-[#0F172A]">{row.entreprise}</td>
-                  <td className="px-6 py-4 text-[13px] text-[#8A9BB5]">{row.client}</td>
-                  <td className="px-6 py-4 text-[13px] text-[#8A9BB5] tabular-nums">{row.date}</td>
-                  <td className="px-6 py-4"><StatusPill status={row.statut} /></td>
+                  <td className="px-6 py-4 text-[13px] font-semibold text-[#0F172A] order-3 md:order-4">{row.entreprise}</td>
+                  <td className="px-6 py-4 text-[13px] text-[#8A9BB5] order-6 md:order-5">{row.client}</td>
+                  <td className="px-6 py-4 text-[13px] text-[#8A9BB5] tabular-nums order-7 md:order-6">{row.date}</td>
+                  <td className="px-6 py-4 order-4 md:order-7"><StatusPill status={row.statut} /></td>
                 </tr>
               );
             })}
