@@ -246,7 +246,9 @@ export default function DashboardPage() {
   // silent = refetch temps réel (SSE) → pas de spinner, mise à jour en douceur
   const fetchData = useCallback(async (silent = false, dateParams?: { containerId: string; startDate: string | null; endDate: string | null }) => {
     console.log('🔍 fetchData appelé avec:', { silent, dateParams });
-    if (!silent) setLoading(true);
+    // Ne pas afficher le spinner de chargement global quand on filtre un conteneur spécifique
+    const isContainerFilter = dateParams?.containerId != null;
+    if (!silent && !isContainerFilter) setLoading(true);
     try {
       // Build query string with optional date parameters
       const buildUrl = (baseUrl: string, startDate?: string | null, endDate?: string | null) => {
