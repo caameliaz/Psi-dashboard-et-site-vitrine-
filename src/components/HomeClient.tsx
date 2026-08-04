@@ -173,14 +173,14 @@ export function HomeClient({ initialContent, initialCategories, initialProducts 
               const delayByIndex = [150, 0, 450, 300];
               return (
                 <QualityItem key={item.titleKey} delayMs={delayByIndex[i]}>
-                  <div className="flex flex-col gap-5 min-w-0">
-                    <div className="flex items-center gap-4">
-                      <div className="w-12 h-12 md:w-14 md:h-14 flex items-center justify-center flex-shrink-0">
+                  <div className="flex flex-col gap-6 min-w-0">
+                    <div className="flex items-center gap-5">
+                      <div className="w-14 h-14 md:w-16 md:h-16 flex items-center justify-center flex-shrink-0">
                         {item.icon}
                       </div>
-                      <h3 className="text-[21px] md:text-[26px] font-semibold text-[#263238] [font-family:var(--font-playfair)] leading-tight">{t(item.titleKey)}</h3>
+                      <h3 className="text-[24px] md:text-[30px] font-semibold text-[#263238] [font-family:var(--font-playfair)] leading-tight">{t(item.titleKey)}</h3>
                     </div>
-                    <p className="text-[15px] md:text-[17px] text-[#1A1A1A] leading-loose">{t(item.descKey)}</p>
+                    <p className="text-[16px] md:text-[19px] text-[#1A1A1A] leading-loose">{t(item.descKey)}</p>
                   </div>
                 </QualityItem>
               );
@@ -188,7 +188,7 @@ export function HomeClient({ initialContent, initialCategories, initialProducts 
           </div>
         </div>
 
-        <div className="mt-10 -mx-8 md:-mx-20">
+        <div className="mt-16 md:mt-20 -mx-8 md:-mx-20">
           <QuoteCTA id="devis" fullBleed />
         </div>
       </section>

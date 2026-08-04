@@ -882,7 +882,7 @@ export default function DashboardPage() {
                 fetchData(false, { containerId: 'wilaya', startDate: start, endDate: end });
               }} />
             </div>
-            <WilayaBarChart data={filteredTopWilayas || topWilayas} />
+            <WilayaBarChart data={filteredTopWilayas || topWilayas} isFiltered={filteredTopWilayas !== null} />
           </div>
         </div>
         

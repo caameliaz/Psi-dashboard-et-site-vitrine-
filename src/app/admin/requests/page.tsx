@@ -764,6 +764,8 @@ function RequestsPageInner() {
       return false;
     }
     await fetchAll(true);
+    // Scroll to top pour voir l'overlay de confirmation
+    window.scrollTo({ top: 0, behavior: 'smooth' });
     setActiveTab(result.type === 'Commande' ? 'commandes' : 'devis');
     return true;
   };
