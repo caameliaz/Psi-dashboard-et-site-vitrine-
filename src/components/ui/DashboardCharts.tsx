@@ -61,10 +61,12 @@ export function TrendLineChart({ data }: { data: { mois: string; commandes: numb
           <Line type="monotone" dataKey="devis" name="Devis" stroke="#8B5CF6" strokeWidth={2.5} dot={{ r: 3 }} activeDot={{ r: 5 }} />
         </LineChart>
       </ResponsiveContainer>
-      <div className="flex items-center gap-5 mt-2 justify-center">
-        <span className="text-[11px] font-semibold text-[#8A9BB5]">Évolution sur 6 mois</span>
-        <span className="flex items-center gap-1.5 text-[11px] text-[#374151]"><span className="w-3 h-1.5 rounded-full" style={{ background: '#4CAF4F' }} />Commandes</span>
-        <span className="flex items-center gap-1.5 text-[11px] text-[#374151]"><span className="w-3 h-1.5 rounded-full" style={{ background: '#8B5CF6' }} />Devis</span>
+      <div className="flex flex-col md:flex-row md:items-center gap-1 md:gap-5 mt-2 md:justify-center">
+        <span className="text-[9px] md:text-[11px] font-semibold text-[#8A9BB5] text-center md:text-left">Évolution 6 mois</span>
+        <div className="flex items-center gap-3 justify-center">
+          <span className="flex items-center gap-1 text-[10px] md:text-[11px] text-[#374151]"><span className="w-2.5 md:w-3 h-1 md:h-1.5 rounded-full" style={{ background: '#4CAF4F' }} />Cmd</span>
+          <span className="flex items-center gap-1 text-[10px] md:text-[11px] text-[#374151]"><span className="w-2.5 md:w-3 h-1 md:h-1.5 rounded-full" style={{ background: '#8B5CF6' }} />Devis</span>
+        </div>
       </div>
     </>
   );

@@ -13,6 +13,7 @@ export async function GET(request: NextRequest) {
     // Récupérer les paramètres de date optionnels
     const startDateParam = request.nextUrl.searchParams.get('startDate');
     const endDateParam = request.nextUrl.searchParams.get('endDate');
+    const userIdParam = request.nextUrl.searchParams.get('userId'); // NOUVEAU: filtre par employé
     
     // Parser les dates ou utiliser les valeurs par défaut (mois courant)
     let startOfMonth: Date;
@@ -40,6 +41,11 @@ export async function GET(request: NextRequest) {
       startOfPrevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
       start6MonthsAgo = new Date(now.getFullYear(), now.getMonth() - 5, 1);
     }
+
+    // Créer les filtres conditionnels pour l'employé
+    const userFilter = userIdParam ? { assignedToId: userIdParam } : {};
+    const orderUserWhere = userIdParam ? { assignedToId: userIdParam, status: 'LIVRE' } : { status: 'LIVRE' };
+    const quoteUserWhere = userIdParam ? { assignedToId: userIdParam, status: 'LIVRE' } : { status: 'LIVRE' };
 
     const [
       commandesMois,
@@ -78,12 +84,12 @@ export async function GET(request: NextRequest) {
       prisma.quote.count({ where: { createdAt: { gte: startOfPrevMonth, lt: startOfMonth } } }),
       // Commandes LIVRÉES dans l'intervalle (montant via items + assigné) — pour ventes + par commercial + employés
       prisma.order.findMany({
-        where: { status: 'LIVRE', createdAt: { gte: startOfMonth, lte: endDate } },
+        where: { ...orderUserWhere, createdAt: { gte: startOfMonth, lte: endDate } },
         select: { assignedToId: true, items: { select: { quantity: true, unitPrice: true } } },
       }),
       // Devis LIVRÉS dans l'intervalle (proposedPrice + assigné)
       prisma.quote.findMany({
-        where: { status: 'LIVRE', createdAt: { gte: startOfMonth, lte: endDate } },
+        where: { ...quoteUserWhere, createdAt: { gte: startOfMonth, lte: endDate } },
         select: { assignedToId: true, proposedPrice: true },
       }),
       // Commandes + devis livrés le MOIS PRÉCÉDENT (montant global, pour l'évolution des ventes)
@@ -124,11 +130,11 @@ export async function GET(request: NextRequest) {
       prisma.quote.findMany({ where: { createdAt: { gte: start6MonthsAgo } }, select: { createdAt: true } }),
       // Ventes livrées des 6 derniers mois (pour la courbe des ventes)
       prisma.order.findMany({
-        where: { status: 'LIVRE', createdAt: { gte: start6MonthsAgo } },
+        where: { ...orderUserWhere, createdAt: { gte: start6MonthsAgo } },
         select: { createdAt: true, items: { select: { quantity: true, unitPrice: true } } },
       }),
       prisma.quote.findMany({
-        where: { status: 'LIVRE', createdAt: { gte: start6MonthsAgo } },
+        where: { ...quoteUserWhere, createdAt: { gte: start6MonthsAgo } },
         select: { createdAt: true, proposedPrice: true },
       }),
       prisma.order.findMany({

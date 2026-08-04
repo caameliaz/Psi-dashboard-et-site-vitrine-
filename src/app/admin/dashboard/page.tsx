@@ -255,18 +255,21 @@ export default function DashboardPage() {
   }, []);
 
   // silent = refetch temps réel (SSE) → pas de spinner, mise à jour en douceur
-  const fetchData = useCallback(async (silent = false, dateParams?: { containerId: string; startDate: string | null; endDate: string | null }) => {
+  const fetchData = useCallback(async (silent = false, dateParams?: { containerId: string; startDate: string | null; endDate: string | null; userId?: string | null }) => {
     console.log('🔍 fetchData appelé avec:', { silent, dateParams });
     // Ne pas afficher le spinner de chargement global quand on filtre un conteneur spécifique
     const isContainerFilter = dateParams?.containerId != null;
     if (!silent && !isContainerFilter) setLoading(true);
     try {
       // Build query string with optional date parameters
-      const buildUrl = (baseUrl: string, startDate?: string | null, endDate?: string | null) => {
+      const buildUrl = (baseUrl: string, startDate?: string | null, endDate?: string | null, userId?: string | null) => {
         const url = new URL(baseUrl, window.location.origin);
         if (startDate && endDate) {
           url.searchParams.set('startDate', startDate);
           url.searchParams.set('endDate', endDate);
+        }
+        if (userId) {
+          url.searchParams.set('userId', userId);
         }
         return url.toString();
       };
@@ -278,7 +281,7 @@ export default function DashboardPage() {
       if (dateParams?.startDate && dateParams?.endDate) {
         console.log('✅ Filtrage détecté pour:', dateParams.containerId);
         // Container-specific filtering
-        const baseUrl = buildUrl('/api/stats', dateParams.startDate, dateParams.endDate);
+        const baseUrl = buildUrl('/api/stats', dateParams.startDate, dateParams.endDate, dateParams.userId);
         const baseAnalyticsUrl = buildUrl('/api/analytics', dateParams.startDate, dateParams.endDate);
 
         if (dateParams.containerId === 'topProduits') {
@@ -417,6 +420,19 @@ export default function DashboardPage() {
   }, []);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  // Re-fetch ventes data when selectedCommercial changes
+  useEffect(() => {
+    if (ventesDateRange.start && ventesDateRange.end) {
+      console.log('🔄 Re-fetch ventes data for selectedCommercial:', selectedCommercial);
+      fetchData(false, { 
+        containerId: 'ventes', 
+        startDate: ventesDateRange.start, 
+        endDate: ventesDateRange.end,
+        userId: selectedCommercial || null 
+      });
+    }
+  }, [selectedCommercial, ventesDateRange, fetchData]);
   
   // Ne rafraîchir automatiquement QUE si aucun filtre n'est actif
   const hasAnyFilter = filteredTopProduits !== null || filteredAnalyticsData !== null || 
@@ -814,7 +830,9 @@ export default function DashboardPage() {
           
           {/* Graphique d'évolution sur 6 mois */}
           <div className="mt-2 md:mt-6">
-            <TrendLineChart data={serie6Mois} />
+            <div className="h-[120px] md:h-auto">
+              <TrendLineChart data={serie6Mois} />
+            </div>
           </div>
         </div>
 
@@ -853,7 +871,7 @@ export default function DashboardPage() {
                 <div className="mb-3">
                   <DateRangePicker onDateChange={(start, end) => {
                     setVentesDateRange({ start, end });
-                    fetchData(false, { containerId: 'ventes', startDate: start, endDate: end });
+                    fetchData(false, { containerId: 'ventes', startDate: start, endDate: end, userId: selectedCommercial || null });
                   }} />
                 </div>
               </div>
@@ -879,7 +897,7 @@ export default function DashboardPage() {
                 </div>
                 <DateRangePicker onDateChange={(start, end) => {
                   setVentesDateRange({ start, end });
-                  fetchData(false, { containerId: 'ventes', startDate: start, endDate: end });
+                  fetchData(false, { containerId: 'ventes', startDate: start, endDate: end, userId: selectedCommercial || null });
                 }} />
               </div>
               <div>
@@ -919,7 +937,9 @@ export default function DashboardPage() {
               {/* Graphique d'évolution des ventes sur 6 mois */}
               {isTotal && (
                 <div className="mt-2 md:mt-6">
-                  <SalesLineChart data={filteredSerie6MoisVentes || serie6MoisVentes} />
+                  <div className="h-[120px] md:h-auto">
+                    <SalesLineChart data={filteredSerie6MoisVentes || serie6MoisVentes} />
+                  </div>
                 </div>
               )}
             </div>
