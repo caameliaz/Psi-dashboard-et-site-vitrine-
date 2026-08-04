@@ -44,8 +44,8 @@ export async function GET(request: NextRequest) {
 
     // Créer les filtres conditionnels pour l'employé
     const userFilter = userIdParam ? { assignedToId: userIdParam } : {};
-    const orderUserWhere = userIdParam ? { assignedToId: userIdParam, status: 'LIVRE' } : { status: 'LIVRE' };
-    const quoteUserWhere = userIdParam ? { assignedToId: userIdParam, status: 'LIVRE' } : { status: 'LIVRE' };
+    const orderUserWhere = userIdParam ? { assignedToId: userIdParam, status: 'LIVRE' as const } : { status: 'LIVRE' as const };
+    const quoteUserWhere = userIdParam ? { assignedToId: userIdParam, status: 'LIVRE' as const } : { status: 'LIVRE' as const };
 
     const [
       commandesMois,
@@ -131,11 +131,11 @@ export async function GET(request: NextRequest) {
       // Ventes livrées des 6 derniers mois (pour la courbe des ventes)
       prisma.order.findMany({
         where: { ...orderUserWhere, createdAt: { gte: start6MonthsAgo } },
-        select: { createdAt: true, items: { select: { quantity: true, unitPrice: true } } },
+        select: { createdAt: true, assignedToId: true, items: { select: { quantity: true, unitPrice: true } } },
       }),
       prisma.quote.findMany({
         where: { ...quoteUserWhere, createdAt: { gte: start6MonthsAgo } },
-        select: { createdAt: true, proposedPrice: true },
+        select: { createdAt: true, assignedToId: true, proposedPrice: true },
       }),
       prisma.order.findMany({
         take: 5,
