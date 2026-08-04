@@ -194,7 +194,7 @@ export function ConversionRateChart({ data }: { data: { label: string; rate: num
       <h3 className="text-[14px] font-bold text-[#0F172A] mb-1">Taux de conversion</h3>
       <p className="text-[11px] text-[#8A9BB5] mb-4">Devis → Ventes</p>
       <ResponsiveContainer width="100%" height={Math.max(400, data.length * 45)}>
-        <BarChart data={data} margin={{ left: 8, right: 8, top: 6, bottom: 20 }}>
+        <BarChart data={data} margin={{ left: 8, right: 8, top: 6, bottom: 20 }} barSize={40}>
           <CartesianGrid stroke="#F2F4F7" vertical={false} />
           <XAxis 
             dataKey="label" 
