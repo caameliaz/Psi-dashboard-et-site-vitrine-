@@ -31,8 +31,8 @@ export function ClientAutocomplete({
   
   useEffect(() => {
     // Récupérer l'utilisateur actuel depuis le session
-    fetch('/api/auth/session').then(r => r.ok ? r.json() : {}).then(session => {
-      setCurrentUserId(session?.user?.id || null);
+    fetch('/api/auth/session').then(r => r.ok ? r.json() : {}).then((session: { user?: { id?: string } }) => {
+      setCurrentUserId(session?.user?.id ?? null);
     }).catch(() => {});
   }, []);
 
