@@ -1,6 +1,8 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import { useSession } from 'next-auth/react';
+import { useRole } from '@/lib/role-context';
 
 export interface ClientLight {
   id: string; name: string; company: string | null; email: string | null;
@@ -20,13 +22,20 @@ export function ClientAutocomplete({
   placeholder?: string;
   searchBy?: 'name' | 'company'; // détermine ce qui s'affiche en gros dans la liste
 }) {
+  const { isAdmin } = useRole();
+  const { data: session } = useSession();
   const [clients, setClients] = useState<ClientLight[]>([]);
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    fetch('/api/clients?light=true').then((r) => (r.ok ? r.json() : [])).then(setClients).catch(() => {});
-  }, []);
+    let url = '/api/clients?light=true';
+    // Si pas admin, filtrer par utilisateur actuel
+    if (!isAdmin && session?.user?.id) {
+      url += `&assignedToId=${session.user.id}`;
+    }
+    fetch(url).then((r) => (r.ok ? r.json() : [])).then(setClients).catch(() => {});
+  }, [isAdmin, session?.user?.id]);
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {

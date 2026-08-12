@@ -12,6 +12,7 @@ import { MobileNavbar } from '@/components/MobileNavbar';
 import { exportTableauExcel } from '@/lib/export-tableau';
 import { exportVentesExcel } from '@/lib/export-ventes';
 import { useSession } from 'next-auth/react';
+import { useRole } from '@/lib/role-context';
 import { RequirePerm } from '@/components/RequirePerm';
 import { ImportVentesModal } from '@/components/ui/ImportVentesModal';
 import { orderToDetail, quoteToDetail, DB_TO_UI, UI_TO_DB } from '@/lib/request-detail';
@@ -153,6 +154,8 @@ export function CreateForm({ defaultType, onClose, onSave, users, currentUserId,
   inline?: boolean;
   prefill?: { clientId?: string; client?: string; entreprise?: string; telephone?: string; email?: string; wilaya?: string; commune?: string };
 }) {
+  const { can } = useRole();
+  const canAssignCommercial = can('assign_commandes');
   // Bloquer le scroll du body quand la modale est ouverte (sauf en mode inline - pleine page)
   if (!inline) {
     // eslint-disable-next-line react-hooks/rules-of-hooks
@@ -175,7 +178,10 @@ export function CreateForm({ defaultType, onClose, onSave, users, currentUserId,
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
-  const [assignedToId, setAssignedToId] = useState<string>(currentUserId ?? '');
+  const [assignedToId, setAssignedToId] = useState<string>(() => {
+    // Si l'utilisateur ne peut pas assigner de commercial, s'assigner automatiquement
+    return canAssignCommercial ? (currentUserId ?? '') : (currentUserId ?? '');
+  });
   // Infos de facturation / règlement (toutes facultatives)
   const [invoiceNumber, setInvoiceNumber] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('');
@@ -250,7 +256,7 @@ export function CreateForm({ defaultType, onClose, onSave, users, currentUserId,
       _message: message.trim(), // Ajout du message
       // Rattache la demande au client d'origine (créée depuis sa fiche)
       _clientId: prefill?.clientId,
-      _assignedToId: assignedToId || undefined,
+      _assignedToId: canAssignCommercial ? (assignedToId || undefined) : currentUserId,
       _invoiceNumber: invoiceNumber.trim() || undefined,
       _paymentMethod: paymentMethod || undefined,
       _paymentDate: paymentDate || undefined,
@@ -329,15 +335,17 @@ export function CreateForm({ defaultType, onClose, onSave, users, currentUserId,
               {fieldErrors.commune && <p className="text-[11px] text-[#EF4444] font-medium mt-1 flex items-center gap-1"><svg width="12" height="12" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" stroke="currentColor" strokeWidth="1.5"/><path d="M8 4v5M8 11v1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>{fieldErrors.commune}</p>}
             </div>
           </div>
-          <div>
-            <label className={lc}>Commercial</label>
-            <AdminSelect
-              className="w-full"
-              value={assignedToId}
-              onChange={setAssignedToId}
-              options={[{ value: '', label: '— Non assigné —' }, ...users.map(u => ({ value: u.id, label: u.name }))]}
-            />
-          </div>
+          {canAssignCommercial && (
+            <div>
+              <label className={lc}>Commercial</label>
+              <AdminSelect
+                className="w-full"
+                value={assignedToId}
+                onChange={setAssignedToId}
+                options={[{ value: '', label: '— Non assigné —' }, ...users.map(u => ({ value: u.id, label: u.name }))]}
+              />
+            </div>
+          )}
 
           {/* ── Facturation / règlement (facultatif) ── */}
           <div className="grid grid-cols-2 gap-3">
@@ -543,6 +551,7 @@ export function CreateForm({ defaultType, onClose, onSave, users, currentUserId,
 
 function RequestsPageInner() {
   const { data: session } = useSession();
+  const { isAdmin } = useRole();
   const currentUserId = (session?.user as { id?: string } | undefined)?.id;
   const [activeTab, setActiveTab] = useState<'tous' | 'commandes' | 'devis'>('tous');
   const [orders, setOrders]       = useState<RequestDetail[]>([]);
@@ -564,7 +573,13 @@ function RequestsPageInner() {
     try {
       // Perf : on ne charge que la période sélectionnée (le serveur filtre par ?from)
       const from = periodeToFrom(filterPeriode);
-      const qs = from ? `?from=${encodeURIComponent(from)}` : '';
+      let qs = from ? `?from=${encodeURIComponent(from)}` : '';
+      
+      // Si pas admin, filtrer par utilisateur actuel
+      if (!isAdmin && currentUserId) {
+        qs += (qs ? '&' : '?') + `assignedToId=${currentUserId}`;
+      }
+      
       const [ordRes, quoRes] = await Promise.all([
         fetch(`/api/orders${qs}`),
         fetch(`/api/quotes${qs}`),
@@ -592,7 +607,7 @@ function RequestsPageInner() {
     } finally {
       if (!silent) setLoading(false);
     }
-  }, [filterPeriode]);
+  }, [filterPeriode, isAdmin, currentUserId]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
   
@@ -670,8 +685,16 @@ function RequestsPageInner() {
 
   // Liste des utilisateurs actifs (pour l'assignation "pris en charge par")
   useEffect(() => {
-    fetch('/api/users?assignable=true').then(r => r.ok ? r.json() : []).then(setUsers).catch(() => {});
-  }, []);
+    fetch('/api/users?assignable=true').then(r => r.ok ? r.json() : []).then((allUsers) => {
+      // Si pas admin, ne montrer que soi-même
+      if (!isAdmin && currentUserId) {
+        const currentUser = allUsers.find((u: any) => u.id === currentUserId);
+        setUsers(currentUser ? [currentUser] : []);
+      } else {
+        setUsers(allUsers);
+      }
+    }).catch(() => {});
+  }, [isAdmin, currentUserId]);
 
   const isDevis = activeTab === 'devis';
   const rawItems = activeTab === 'tous' ? [...orders, ...quotes] : isDevis ? quotes : orders;

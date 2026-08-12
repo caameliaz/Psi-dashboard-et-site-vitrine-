@@ -5,15 +5,30 @@ import { createAudit } from '@/lib/audit';
 
 // GET /api/clients — liste tous les clients (permission voir_clients)
 // GET /api/clients?light=true — liste légère (autocomplete lors de la création
-//   d'une commande), accessible avec voir_commandes.
+//   d'une commande), accessible avec voir_commandes. Les employés ne voient que leurs clients.
 export async function GET(request: NextRequest) {
   const light = request.nextUrl.searchParams.get('light') === 'true';
+  const assignedToIdParam = request.nextUrl.searchParams.get('assignedToId');
 
   if (light) {
     const guard = await requirePermission('voir_commandes');
     if (guard.error) return guard.error;
+    
     try {
+      let whereClause: any = {};
+      
+      // Si assignedToId est fourni, filtrer les clients qui ont des commandes/devis assignés à cet utilisateur
+      if (assignedToIdParam) {
+        whereClause = {
+          OR: [
+            { orders: { some: { assignedToId: assignedToIdParam } } },
+            { quotes: { some: { assignedToId: assignedToIdParam } } },
+          ],
+        };
+      }
+      
       const clients = await prisma.client.findMany({
+        where: whereClause,
         select: {
           id: true, name: true, company: true, email: true, wilaya: true, commune: true,
           phones: { where: { primary: true }, select: { number: true } },

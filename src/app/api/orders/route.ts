@@ -14,12 +14,26 @@ export async function GET(request: NextRequest) {
   if (guard.error) return guard.error;
 
   // ?from=<ISO> → ne renvoie que les commandes créées depuis cette date (perf : filtre par période)
+  // ?assignedToId=<userId> → filtre par commercial assigné (pour les employés non-admin)
   const fromParam = request.nextUrl.searchParams.get('from');
+  const assignedToIdParam = request.nextUrl.searchParams.get('assignedToId');
   const from = fromParam ? new Date(fromParam) : null;
+
+  const whereClause: any = {};
+  
+  // Filtre par date si fourni
+  if (from && !isNaN(from.getTime())) {
+    whereClause.createdAt = { gte: from };
+  }
+  
+  // Filtre par assignation si fourni (sécurité pour employés)
+  if (assignedToIdParam) {
+    whereClause.assignedToId = assignedToIdParam;
+  }
 
   try {
     const orders = await prisma.order.findMany({
-      where: from && !isNaN(from.getTime()) ? { createdAt: { gte: from } } : undefined,
+      where: Object.keys(whereClause).length > 0 ? whereClause : undefined,
       include: {
         client: { include: { phones: true } },
         items: { include: { product: { include: { category: true } } } },

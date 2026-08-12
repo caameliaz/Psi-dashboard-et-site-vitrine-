@@ -72,15 +72,87 @@ export function CategoryBrowser({
 function CategoryCard({ category, products }: { category: Cat; products: Prod[] }) {
   const { t } = useTranslation();
   const addItem = useCartStore((s) => s.addItem);
-  const trackRef = useRef<HTMLDivElement>(null);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  
+  // Clé pour localStorage spécifique à cette catégorie
+  const storageKey = `product-selections-${category.id}`;
+  
+  // État pour gérer les quantités de chaque produit avec persistance
+  const [quantities, setQuantities] = useState<Record<string, number>>(() => {
+    // Essayer de restaurer depuis localStorage
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem(storageKey);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          // Vérifier que les produits existent toujours
+          const validQuantities: Record<string, number> = {};
+          products.forEach(p => {
+            validQuantities[p.id] = parsed[p.id] || 0;
+          });
+          return validQuantities;
+        }
+      } catch (error) {
+        console.warn('Erreur lors de la restauration des sélections:', error);
+      }
+    }
+    // Valeur par défaut
+    return Object.fromEntries(products.map(p => [p.id, 0]));
+  });
+  
+  // État pour le message d'erreur
+  const [errorMessage, setErrorMessage] = useState('');
 
-  const current = products.find((p) => p.id === selectedId) ?? products[0];
+  // Sauvegarder dans localStorage à chaque changement
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem(storageKey, JSON.stringify(quantities));
+      } catch (error) {
+        console.warn('Erreur lors de la sauvegarde des sélections:', error);
+      }
+    }
+  }, [quantities, storageKey]);
 
-  const scrollByPage = (dir: 1 | -1) => {
-    const track = trackRef.current;
-    if (!track) return;
-    track.scrollBy({ left: dir * track.clientWidth * 0.8, behavior: 'smooth' });
+  const updateQuantity = (productId: string, newQty: number) => {
+    setQuantities(prev => ({ ...prev, [productId]: Math.max(0, newQty) }));
+    // Effacer le message d'erreur quand on sélectionne quelque chose
+    if (newQty > 0) setErrorMessage('');
+  };
+
+  const selectProduct = (productId: string) => {
+    const currentQty = quantities[productId] || 0;
+    if (currentQty === 0) {
+      updateQuantity(productId, 1);
+    }
+  };
+
+  const addSelectedToCart = () => {
+    const hasSelection = Object.values(quantities).some(qty => qty > 0);
+    
+    if (!hasSelection) {
+      setErrorMessage('Aucune réf sélectionnée');
+      return;
+    }
+    
+    // Ajouter tous les produits avec quantité > 0 au panier
+    Object.entries(quantities).forEach(([productId, qty]) => {
+      if (qty > 0) {
+        const product = products.find(p => p.id === productId);
+        if (product) {
+          addItem({
+            productId: product.id,
+            quantity: qty,
+            reference: product.reference,
+            unitPrice: product.price
+          });
+        }
+      }
+    });
+    
+    // Réinitialiser les quantités et effacer les messages après ajout
+    const resetQuantities = Object.fromEntries(products.map(p => [p.id, 0]));
+    setQuantities(resetQuantities);
+    setErrorMessage('');
   };
 
   return (
@@ -108,7 +180,7 @@ function CategoryCard({ category, products }: { category: Cat; products: Prod[] 
         </span>
       </Link>
 
-      {/* Titre + refs + bouton, alignés avec la largeur de la photo */}
+      {/* Titre + liste verticale des produits + bouton */}
       <div className="w-[95%] mx-auto flex flex-col gap-3">
         <Link href={`/products/${category.id}`}>
           <h3 className="text-[15px] md:text-[16px] font-bold text-[#263238] leading-tight hover:text-[#4CAF4F] transition-colors truncate" title={category.name}>{category.name}</h3>
@@ -117,74 +189,74 @@ function CategoryCard({ category, products }: { category: Cat; products: Prod[] 
         {products.length === 0 ? (
           <p className="text-[13px] text-[#717171]">{t('common.no_products')}</p>
         ) : (
-          <div className="flex flex-col gap-2.5">
-            {/* Étiquettes défilables (dimensions + métrage) — la sélectionnée est verte */}
-            <div className="flex items-center gap-1.5">
-              <button
-                type="button"
-                onClick={() => scrollByPage(-1)}
-                disabled={products.length < 2}
-                aria-label="Précédent"
-                className="shrink-0 w-6 h-6 rounded-full border border-[#ABBED1]/50 flex items-center justify-center text-[#717171] hover:border-[#4CAF4F] hover:text-[#4CAF4F] disabled:opacity-30 transition-colors"
-              >
-                <svg width="11" height="11" viewBox="0 0 16 16" fill="none">
-                  <path d="M10 3L5 8l5 5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-              </button>
+          <div className="flex flex-col gap-3">
+            {/* Liste verticale des produits */}
+            <div className="flex flex-col gap-2">
+              {products.map((product) => {
+                const qty = quantities[product.id] || 0;
+                const isSelected = qty > 0;
+                return (
+                  <div 
+                    key={product.id} 
+                    onClick={() => selectProduct(product.id)}
+                    className={`flex items-center justify-between gap-3 p-2 rounded-lg border cursor-pointer transition-all ${
+                      isSelected 
+                        ? 'border-[#4CAF4F] border-2 bg-[#F0FDF4]' 
+                        : 'border-[#F0F4F8] bg-[#FAFCFF] hover:border-[#4CAF4F]/50'
+                    }`}
+                  >
+                    {/* Info produit */}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[12px] md:text-[13px] font-semibold text-[#263238] truncate">
+                        {product.width}/{product.length} mm
+                      </p>
+                      <p className="text-[11px] md:text-[12px] font-bold text-[#4CAF4F]">
+                        {product.price.toFixed(2)} DA
+                      </p>
+                    </div>
 
-              <div
-                ref={trackRef}
-                className="flex-1 flex gap-2 overflow-x-auto min-w-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-              >
-                {products.map((p) => {
-                  const isSelected = p.id === current.id;
-                  return (
-                    <button
-                      key={p.id}
-                      onClick={() => setSelectedId(p.id)}
-                      className={`flex-shrink-0 px-3 py-1.5 rounded-lg border text-[12px] font-bold whitespace-nowrap transition-all ${
-                        isSelected
-                          // Bordure VERTE + fond vert clair : la référence choisie doit
-                          // se distinguer nettement (l'ombre seule ne suffisait pas sur mobile).
-                          ? 'border-[#4CAF4F] border-2 bg-[#F0FDF4] text-[#166534] shadow-[0_3px_10px_rgba(76,175,79,0.25)]'
-                          : 'border-[#E0E0E0] bg-white text-[#374151] hover:border-[#4CAF4F]/60 hover:outline hover:outline-1 hover:outline-[#CBD5E1] hover:shadow-[0_4px_14px_rgba(171,190,209,0.5)]'
-                      }`}
-                    >
-                      {/* Format « 57/50 mm » — le métrage n'apparaît que dans la fiche détaillée */}
-                      {p.width}/{p.length} mm
-                    </button>
-                  );
-                })}
-              </div>
-
-              <button
-                type="button"
-                onClick={() => scrollByPage(1)}
-                disabled={products.length < 2}
-                aria-label="Suivant"
-                className="shrink-0 w-6 h-6 rounded-full border border-[#ABBED1]/50 flex items-center justify-center text-[#717171] hover:border-[#4CAF4F] hover:text-[#4CAF4F] disabled:opacity-30 transition-colors"
-              >
-                <svg width="11" height="11" viewBox="0 0 16 16" fill="none">
-                  <path d="M6 3l5 5-5 5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-              </button>
+                    {/* Contrôles quantité */}
+                    <div className="flex items-center gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
+                      <button
+                        onClick={() => updateQuantity(product.id, qty === 1 ? 0 : qty - 1)}
+                        className="w-6 h-6 md:w-7 md:h-7 rounded-lg border border-[#ABBED1] flex items-center justify-center text-[#4D4D4D] hover:border-[#4CAF4F] hover:text-[#4CAF4F] transition-colors text-[14px] leading-none"
+                      >−</button>
+                      <input
+                        type="number"
+                        inputMode="numeric"
+                        min={0}
+                        value={qty}
+                        onChange={(e) => {
+                          const v = parseInt(e.target.value, 10);
+                          updateQuantity(product.id, Number.isFinite(v) && v >= 0 ? v : 0);
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                        className="w-10 md:w-12 px-1 py-1 rounded-lg border border-[#ABBED1] text-center text-[11px] md:text-[12px] font-semibold text-[#263238] focus:outline-none focus:border-[#4CAF4F] focus:ring-2 focus:ring-[#4CAF4F]/20 transition-all"
+                      />
+                      <button
+                        onClick={() => updateQuantity(product.id, qty + 1)}
+                        className="w-6 h-6 md:w-7 md:h-7 rounded-lg border border-[#ABBED1] flex items-center justify-center text-[#4D4D4D] hover:border-[#4CAF4F] hover:text-[#4CAF4F] transition-colors text-[14px] leading-none"
+                      >+</button>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
 
-            {/* Usage de la référence sélectionnée (à quoi ça sert) */}
-            {current?.usage && (
-              <p className="text-[12px] text-[#717171] leading-relaxed truncate" title={current.usage}>{current.usage}</p>
+            {/* Message d'erreur */}
+            {errorMessage && (
+              <p className="text-[12px] text-red-600 font-medium text-center">{errorMessage}</p>
             )}
 
-            {/* Ajouter au panier — prix mis à jour selon la réf choisie */}
+            {/* Bouton ajouter au panier */}
             <button
-              onClick={() => addItem({ productId: current.id, quantity: 1, reference: current.reference, unitPrice: current.price })}
-              className="w-full flex items-center justify-between gap-3 rounded-lg border border-[#4CAF4F]/40 bg-[#F0FDF4] px-4 py-2.5 hover:border-[#4CAF4F] hover:bg-[#E3F9E5] transition-colors"
+              onClick={addSelectedToCart}
+              className="w-full flex items-center justify-center gap-2 rounded-lg bg-[#4CAF4F] px-4 py-2.5 text-white hover:bg-[#43A047] transition-all"
             >
-              <span className="text-[13px] font-semibold text-[#263238]">{t('common.add_to_cart')}</span>
-              <span className="flex items-center gap-3">
-                <span className="w-px h-4 bg-[#4CAF4F]/30" />
-                <span className="text-[13px] font-bold text-[#4CAF4F] whitespace-nowrap">{current.price.toFixed(2)} DA</span>
-              </span>
+              <svg width="16" height="16" viewBox="0 0 13 13" fill="none">
+                <path d="M6.5 2.71v7.58M2.71 6.5h7.58" stroke="white" strokeWidth="1.3" strokeLinecap="round"/>
+              </svg>
+              <span className="text-[13px] font-semibold">{t('common.add_to_cart')}</span>
             </button>
           </div>
         )}

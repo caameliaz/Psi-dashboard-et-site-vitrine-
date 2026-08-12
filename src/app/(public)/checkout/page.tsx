@@ -211,7 +211,10 @@ export default function CheckoutPage() {
                       <p className="text-[14px] font-semibold text-[#263238]">{t('checkout.ref')} {item.reference}</p>
                       <p className="text-[12px] text-[#89939E]">× {item.quantity}</p>
                     </div>
-                    <p className="text-[14px] font-bold text-[#263238]">{item.unitPrice * item.quantity} DA</p>
+                    <div className="text-right">
+                      <p className="text-[11px] text-[#89939E]">{item.unitPrice} DA/u.</p>
+                      <p className="text-[14px] font-bold text-[#263238]">{item.unitPrice * item.quantity} DA</p>
+                    </div>
                   </div>
                 ))}
               </div>

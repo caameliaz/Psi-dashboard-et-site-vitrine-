@@ -8,7 +8,7 @@ export const fr = {
     order: 'Commander',
   },
   hero: {
-    subtitle: "PSI fournit aux professionnels d'Algérie un papier thermique premium 55 gr/m², fabriqué en Allemagne et garanti 100% sans BPA.",
+    subtitle: "PSI fournit aux professionnels d'Algérie un papier thermique premium 55 gr/m², garanti 100% sans BPA.",
     cta_products: 'Voir nos produits',
     cta_quote: 'Demander un devis',
     title_pre: 'Votre spécialiste du ',
@@ -31,7 +31,7 @@ export const fr = {
     badge2_title: 'Qualité et Savoir-faire',
     badge2_sub: 'Origine Europe',
     badge2_desc: 'Nous utilisons un papier thermique de haute qualité, issu de matières premières provenant de fournisseurs européens reconnus. Transformé et conditionné en Algérie, il bénéficie de notre savoir-faire local pour garantir une qualité constante et des impressions nettes et durables.',
-    badge2_desc_short: 'Notre papier thermique est fabriqué en Allemagne, un savoir-faire européen reconnu.',
+    badge2_desc_short: 'Papier thermique de haute qualité, savoir-faire européen reconnu.',
     badge3_title: 'Compatible avec la plupart des imprimantes',
     badge3_sub: 'Compatibilité universelle',
     badge3_desc: "Nos rouleaux s'adaptent à la plupart des imprimantes et terminaux thermiques du marché, sans réglage particulier. Un gain de temps immédiat à l'installation.",

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useCartStore } from '@/store/cartStore';
 import { useTranslation } from '@/lib/i18n';
 
@@ -11,10 +12,11 @@ interface ProductPhoto {
   category?: { photo?: string | null } | null;
 }
 
-// Icône panier + badge, avec un mini-aperçu qui s'ouvre juste en dessous au clic
-// (photo + réf + qté de chaque article), sans quitter la page.
+// Icône panier + badge, avec un mini-aperçu qui s'ouvre au hover
+// et clic qui mène directement vers la page panier.
 export function CartDropdown({ variant = 'desktop' }: { variant?: 'desktop' | 'mobile' }) {
   const { t } = useTranslation();
+  const router = useRouter();
   const items = useCartStore((s) => s.items);
   const removeItem = useCartStore((s) => s.removeItem);
   const totalItems = useCartStore((s) => s.getTotalItems());
@@ -23,6 +25,7 @@ export function CartDropdown({ variant = 'desktop' }: { variant?: 'desktop' | 'm
   const [open, setOpen] = useState(false);
   const [photosById, setPhotosById] = useState<Record<string, string | null>>({});
   const ref = useRef<HTMLDivElement>(null);
+  const hoverTimeoutRef = useRef<NodeJS.Timeout>();
 
   useEffect(() => {
     if (!open || Object.keys(photosById).length > 0) return;
@@ -41,13 +44,31 @@ export function CartDropdown({ variant = 'desktop' }: { variant?: 'desktop' | 'm
     return () => document.removeEventListener('mousedown', handleClick);
   }, []);
 
+  const handleMouseEnter = () => {
+    if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
+    setOpen(true);
+  };
+
+  const handleMouseLeave = () => {
+    hoverTimeoutRef.current = setTimeout(() => setOpen(false), 200);
+  };
+
+  const handleClick = () => {
+    router.push('/cart');
+  };
+
   const iconColor = '#4D4D4D';
 
   return (
-    <div ref={ref} className="relative">
+    <div 
+      ref={ref} 
+      className="relative"
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
+    >
       <button
         type="button"
-        onClick={() => setOpen((o) => !o)}
+        onClick={handleClick}
         className={variant === 'desktop' ? 'relative p-2 rounded-lg transition-colors hover:bg-[#F5F7FA]' : 'relative p-2'}
         aria-label={t('cart.title')}
       >
@@ -66,7 +87,11 @@ export function CartDropdown({ variant = 'desktop' }: { variant?: 'desktop' | 'm
       {open && (
         // Mobile : panneau pleine largeur (320px fixes débordaient sur petits écrans).
         // Ordinateur : inchangé.
-        <div className="fixed md:absolute left-3 right-3 md:left-auto md:right-0 top-16 md:top-full md:mt-2 md:w-[320px] bg-white rounded-2xl border border-[#E4EBF5] shadow-[0_12px_40px_rgba(38,50,56,0.18)] z-50 overflow-hidden">
+        <div 
+          className="fixed md:absolute left-3 right-3 md:left-auto md:right-0 top-16 md:top-full md:mt-2 md:w-[320px] bg-white rounded-2xl border border-[#E4EBF5] shadow-[0_12px_40px_rgba(38,50,56,0.18)] z-50 overflow-hidden"
+          onMouseEnter={handleMouseEnter}
+          onMouseLeave={handleMouseLeave}
+        >
           {items.length === 0 ? (
             <div className="p-6 flex flex-col items-center gap-3 text-center">
               <p className="text-[13px] text-[#8A9BB5]">{t('cart.empty_title')}</p>

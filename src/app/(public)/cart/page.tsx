@@ -74,7 +74,6 @@ export default function CartPage() {
 
                 <div className="flex-1 min-w-0">
                   <p className="text-[13px] md:text-[16px] font-semibold text-[#263238] truncate">{t('common.ref')} {item.reference}</p>
-                  <p className="text-[11px] md:text-[13px] text-[#89939E] mt-0.5">{item.unitPrice} DA / u.</p>
                 </div>
 
                 {/* − / + conservés, avec un petit champ saisissable au milieu */}
@@ -101,7 +100,7 @@ export default function CartPage() {
                 </div>
 
                 <div className="text-right shrink-0 min-w-[60px] md:min-w-[80px]">
-                  <p className="text-[12px] md:text-[16px] font-bold text-[#263238]">{item.unitPrice * item.quantity} DA</p>
+                  <p className="text-[12px] md:text-[16px] font-bold text-[#263238]">{item.unitPrice} DA</p>
                 </div>
 
                 <button
@@ -125,7 +124,10 @@ export default function CartPage() {
                 {items.map((item) => (
                   <div key={item.productId} className="flex justify-between text-[#717171]">
                     <span>{item.quantity}× {t('common.ref')} {item.reference}</span>
-                    <span className="font-medium text-[#4D4D4D]">{item.unitPrice * item.quantity} DA</span>
+                    <div className="text-right font-medium text-[#4D4D4D]">
+                      <div className="text-[12px] text-[#ABBED1]">{item.unitPrice} DA/u.</div>
+                      <div className="text-[14px] font-bold">{item.unitPrice * item.quantity} DA</div>
+                    </div>
                   </div>
                 ))}
               </div>
