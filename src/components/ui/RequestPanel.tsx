@@ -318,7 +318,7 @@ async function printDoc(item: RequestDetail) {
 ${item.message ? `<div style="margin-top:24px"><div class="section-title">Message du client</div><div style="border:1px solid #e5e7eb;border-radius:6px;padding:12px 14px;font-size:12px;color:#374151;line-height:1.6">${item.message}</div></div>` : ''}
 <div class="footer">
   <span>${item.ref} · PSI Paper Solutions Industry</span>
-  <span>psi-algerie.com</span>
+  <span>www.psi.dz</span>
 </div>
 </body></html>`;
 
@@ -1370,7 +1370,7 @@ export function RequestPanel({ item, onClose, onStatusChange, onConfirmQuoteWith
               </div>
 
             </div>
-            <p className="text-[10px] text-[#ABBED1] mt-3">{item.ref} · PSI Paper Solutions Industry · psi-algerie.com</p>
+            <p className="text-[10px] text-[#ABBED1] mt-3">{item.ref} · PSI Paper Solutions Industry · www.psi.dz</p>
           </div>
 
         </div>
