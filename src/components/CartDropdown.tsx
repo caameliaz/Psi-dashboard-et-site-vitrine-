@@ -25,7 +25,7 @@ export function CartDropdown({ variant = 'desktop' }: { variant?: 'desktop' | 'm
   const [open, setOpen] = useState(false);
   const [photosById, setPhotosById] = useState<Record<string, string | null>>({});
   const ref = useRef<HTMLDivElement>(null);
-  const hoverTimeoutRef = useRef<NodeJS.Timeout>();
+  const hoverTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   useEffect(() => {
     if (!open || Object.keys(photosById).length > 0) return;
