@@ -19,8 +19,8 @@ export function CartDropdown({ variant = 'desktop' }: { variant?: 'desktop' | 'm
   const router = useRouter();
   const items = useCartStore((s) => s.items);
   const removeItem = useCartStore((s) => s.removeItem);
-  const totalItems = useCartStore((s) => s.getTotalItems());
-  const totalPrice = useCartStore((s) => s.getTotalPrice());
+  const totalItems = useCartStore((s) => s.items.reduce((sum, i) => sum + i.quantity, 0));
+  const totalPrice = useCartStore((s) => s.items.reduce((sum, i) => sum + i.unitPrice * i.quantity, 0));
 
   const [open, setOpen] = useState(false);
   const [photosById, setPhotosById] = useState<Record<string, string | null>>({});
