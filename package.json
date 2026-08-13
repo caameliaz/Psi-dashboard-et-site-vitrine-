@@ -16,7 +16,7 @@
     "@auth/prisma-adapter": "^2.11.2",
     "@google-analytics/data": "^6.1.0",
     "@prisma/client": "^6.19.3",
-    "@trigger.dev/sdk": "^3.3.17",
+    "@trigger.dev/sdk": "^4.5.11",
     "bcryptjs": "^2.4.3",
     "docx": "^9.7.1",
     "next": "^16.2.12",
