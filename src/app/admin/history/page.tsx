@@ -98,6 +98,15 @@ function HistoryPageInner() {
 
   useEffect(() => { fetchHistory(); }, [fetchHistory]);
   
+  // Fetch tous les users actifs pour le filtre
+  const [users, setUsers] = useState<{ id: string; name: string }[]>([]);
+  
+  useEffect(() => {
+    fetch('/api/users?assignable=true')
+      .then((r) => r.ok ? r.json() : [])
+      .then((data: { id: string; name: string }[]) => setUsers(data))
+      .catch(() => {});
+  }, []);
   // Polling adaptatif : 20s si onglet actif, 60s si inactif
   useEffect(() => {
     let intervalId: NodeJS.Timeout;
@@ -123,8 +132,6 @@ function HistoryPageInner() {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, [fetchHistory]);
-
-  const users = Array.from(new Set(history.map((h) => h.user)));
 
   const filtered = history.filter((h) => {
     const matchSearch = !search || h.action.toLowerCase().includes(search.toLowerCase()) || h.detail.toLowerCase().includes(search.toLowerCase()) || h.user.toLowerCase().includes(search.toLowerCase());
@@ -164,7 +171,7 @@ function HistoryPageInner() {
         <AdminSelect
           value={filterUser}
           onChange={setFilterUser}
-          options={[{ value: 'all', label: 'Tous les utilisateurs' }, ...users.map((u) => ({ value: u, label: u }))]}
+          options={[{ value: 'all', label: 'Tous les utilisateurs' }, ...users.map((u) => ({ value: u.name, label: u.name }))]}
         />
         {(search || filterType !== 'all' || filterUser !== 'all') && (
           <button onClick={() => { setSearch(''); setFilterType('all'); setFilterUser('all'); }} className="text-[12px] font-semibold text-[#8A9BB5] hover:text-[#374151]">Effacer</button>

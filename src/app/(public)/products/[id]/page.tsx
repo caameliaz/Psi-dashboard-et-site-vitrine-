@@ -83,10 +83,13 @@ export default function ProductDetailPage() {
   const description = category.description || getFallbackDescription(category.name, lang) || '';
 
   // Fiche technique : Largeur (toujours dispo) + champs personnalisés du produit (Diamètre, Mandrin, Papier, Grammage, Couleur…)
+  // On filtre le champ "ORIGINE" pour ne plus l'afficher
   const specRows = current
     ? [
         { key: 'largeur', label: t('product_detail.spec_width'), value: `${current.width} mm` },
-        ...(current.customFields ?? []).map((cf) => ({ key: cf.definition.label, label: cf.definition.label, value: cf.value })),
+        ...(current.customFields ?? [])
+          .filter((cf) => !cf.definition.label.toLowerCase().includes('origine'))
+          .map((cf) => ({ key: cf.definition.label, label: cf.definition.label, value: cf.value })),
       ]
     : [];
   const total = current ? current.price * qty : 0;

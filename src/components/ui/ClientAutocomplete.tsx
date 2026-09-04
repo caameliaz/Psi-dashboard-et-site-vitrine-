@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import { useRole } from '@/lib/role-context';
 
 export interface ClientLight {
   id: string; name: string; company: string | null; email: string | null;
@@ -20,13 +21,29 @@ export function ClientAutocomplete({
   placeholder?: string;
   searchBy?: 'name' | 'company'; // détermine ce qui s'affiche en gros dans la liste
 }) {
+  const { isAdmin } = useRole();
   const [clients, setClients] = useState<ClientLight[]>([]);
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  
+  // Récupérer l'utilisateur actuel - on pourrait passer en prop mais plus simple ainsi
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  
+  useEffect(() => {
+    // Récupérer l'utilisateur actuel depuis le session
+    fetch('/api/auth/session').then(r => r.ok ? r.json() : {}).then((session: { user?: { id?: string } }) => {
+      setCurrentUserId(session?.user?.id ?? null);
+    }).catch(() => {});
+  }, []);
 
   useEffect(() => {
-    fetch('/api/clients?light=true').then((r) => (r.ok ? r.json() : [])).then(setClients).catch(() => {});
-  }, []);
+    let url = '/api/clients?light=true';
+    // Si pas admin, filtrer par utilisateur actuel
+    if (!isAdmin && currentUserId) {
+      url += `&assignedToId=${currentUserId}`;
+    }
+    fetch(url).then((r) => (r.ok ? r.json() : [])).then(setClients).catch(() => {});
+  }, [isAdmin, currentUserId]);
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {

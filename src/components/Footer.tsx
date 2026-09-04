@@ -27,7 +27,7 @@ export function Footer() {
             <img src="/Logo PSI-new.jpeg" alt="PSI" className="h-[72px] w-[72px] object-contain" style={{ maskImage: 'radial-gradient(ellipse 80% 80% at 50% 50%, black 55%, transparent 100%)', WebkitMaskImage: 'radial-gradient(ellipse 80% 80% at 50% 50%, black 55%, transparent 100%)' }} />
             <div className="flex flex-col">
               <span className="text-white text-[20px] font-bold tracking-tight leading-none">PSI</span>
-              <span className="text-[#89939E] text-[12px] mt-0.5">psi-algerie.com</span>
+              <span className="text-[#89939E] text-[12px] mt-0.5">www.psi.dz</span>
             </div>
           </div>
           <p className="text-[14px] text-[#89939E] leading-relaxed">

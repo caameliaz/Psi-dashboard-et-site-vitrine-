@@ -4,19 +4,19 @@ const credentials = process.env.GA4_CREDENTIALS ? JSON.parse(process.env.GA4_CRE
 
 let analyticsDataClient: any | null = null;
 
-// Palette de couleurs pour les cat├®gories
+// Palette de couleurs pour les categories
 const CATEGORY_COLORS = ['#7C6BAF', '#EF4444', '#F59E0B', '#10B981', '#3B82F6', '#8B5CF6'];
 
 // Initialiser le client GA4
 function getAnalyticsClient() {
   if (!analyticsDataClient && credentials) {
     try {
-      // Le package sera install├® s├®par├®ment
+      // Le package sera installe separement
       // eslint-disable-next-line @typescript-eslint/no-var-requires
       const { BetaAnalyticsDataClient } = require('@google-analytics/data');
       analyticsDataClient = new BetaAnalyticsDataClient({ credentials });
     } catch {
-      // Package non install├®, retourner null
+      // Package non installe, retourner null
       return null;
     }
   }
@@ -40,21 +40,21 @@ function formatDate(date: Date): string {
   return date.toISOString().split('T')[0];
 }
 
-// R├®cup├®rer les vues de pages par cat├®gorie pour le mois en cours
+// Recuperer les vues de pages par categorie pour le mois en cours
 export async function getMonthlyPageViews(): Promise<{ total: number; byCategory: CategoryPageViews[] }> {
   const client = getAnalyticsClient();
   
-  // Import dynamique de prisma uniquement c├┤t├® serveur
+  // Import dynamique de prisma uniquement cote serveur
   const { prisma } = await import('@/lib/prisma');
   
-  // R├®cup├®rer les vraies cat├®gories depuis la DB
+  // Recuperer les vraies categories depuis la DB
   const categories = await prisma.category.findMany({
     orderBy: { order: 'asc' },
     select: { id: true, name: true },
   });
   
   if (!client || !propertyId || categories.length === 0) {
-    console.warn('GA4 non configur├® - client, propertyId manquant ou aucune cat├®gorie');
+    console.warn('GA4 non configure - client, propertyId manquant ou aucune categorie');
     return {
       total: 0,
       byCategory: categories.map((cat, index) => ({
@@ -72,7 +72,7 @@ export async function getMonthlyPageViews(): Promise<{ total: number; byCategory
     const today = formatDate(now);
     const startDate = formatDate(startOfMonth);
     
-    console.log('­ƒôè Appel runReport mensuel:', {
+    console.log('[GA4] Appel runReport mensuel:', {
       startDate,
       endDate: today,
     });
@@ -89,7 +89,7 @@ export async function getMonthlyPageViews(): Promise<{ total: number; byCategory
       metrics: [{ name: 'screenPageViews' }],
     });
 
-    // Mapper les cat├®gories par ID pour recherche rapide
+    // Mapper les categories par ID pour recherche rapide
     const categoryIds = new Set(categories.map(c => c.id));
     
     // Initialiser le map
@@ -103,7 +103,7 @@ export async function getMonthlyPageViews(): Promise<{ total: number; byCategory
     const matchedPaths: Array<{ path: string; categoryId: string }> = [];
     const unmatchedPaths: string[] = [];
     
-    // Regex pour extraire l'ID de cat├®gorie du pagePath
+    // Regex pour extraire l'ID de categorie du pagePath
     const categoryIdRegex = /\/products\/([a-zA-Z0-9]+)/;
     
     response.rows?.forEach((row: any) => {
@@ -113,7 +113,7 @@ export async function getMonthlyPageViews(): Promise<{ total: number; byCategory
       total += views;
       allRows.push({ pagePath, views });
 
-      // Extraire l'ID de cat├®gorie du pagePath
+      // Extraire l'ID de categorie du pagePath
       const match = pagePath.match(categoryIdRegex);
       if (match && match[1]) {
         const categoryId = match[1];
@@ -128,7 +128,7 @@ export async function getMonthlyPageViews(): Promise<{ total: number; byCategory
       }
     });
 
-    console.log('­ƒôè R├®sultat runReport mensuel:', {
+    console.log('[GA4] Resultat runReport mensuel:', {
       totalSite: total,
       totalCategories: Object.values(byCategoryMap).reduce((a, b) => a + b, 0),
       byCategoryMap,
@@ -146,7 +146,7 @@ export async function getMonthlyPageViews(): Promise<{ total: number; byCategory
       })),
     };
   } catch (error) {
-    console.error('ÔØî Erreur GA4 runReport mensuel:', error);
+    console.error('[GA4] Erreur runReport mensuel:', error);
     return {
       total: 0,
       byCategory: categories.map((cat, index) => ({
@@ -158,21 +158,21 @@ export async function getMonthlyPageViews(): Promise<{ total: number; byCategory
   }
 }
 
-// R├®cup├®rer les vues de pages par cat├®gorie sur les 4 derni├¿res semaines
+// Recuperer les vues de pages par categorie sur les 4 dernieres semaines
 export async function getWeeklyPageViews(): Promise<PageViewsByWeek[]> {
   const client = getAnalyticsClient();
   
-  // Import dynamique de prisma uniquement c├┤t├® serveur
+  // Import dynamique de prisma uniquement cote serveur
   const { prisma } = await import('@/lib/prisma');
   
-  // R├®cup├®rer les vraies cat├®gories depuis la DB
+  // Recuperer les vraies categories depuis la DB
   const categories = await prisma.category.findMany({
     orderBy: { order: 'asc' },
     select: { id: true, name: true },
   });
   
   if (!client || !propertyId || categories.length === 0) {
-    console.warn('GA4 non configur├® - client, propertyId manquant ou aucune cat├®gorie');
+    console.warn('GA4 non configure - client, propertyId manquant ou aucune categorie');
     const weeks = ['Sem 1', 'Sem 2', 'Sem 3', 'Sem 4'];
     return weeks.map((week) => ({
       week,
@@ -189,7 +189,7 @@ export async function getWeeklyPageViews(): Promise<PageViewsByWeek[]> {
     // Utiliser runReport avec week et pagePath
     const today = formatDate(new Date());
     
-    console.log('­ƒôè Appel runReport hebdomadaire:', {
+    console.log('[GA4] Appel runReport hebdomadaire:', {
       startDate: '28daysAgo',
       endDate: today,
     });
@@ -209,29 +209,29 @@ export async function getWeeklyPageViews(): Promise<PageViewsByWeek[]> {
       metrics: [{ name: 'screenPageViews' }],
     });
 
-    // DEBUG: Afficher la structure des cat├®gories
-    console.log('­ƒôè DEBUG categoriesDB:', {
+    // DEBUG: Afficher la structure des categories
+    console.log('[GA4] DEBUG categoriesDB:', {
       count: categories.length,
       sampleIds: categories.slice(0, 3).map(c => ({ id: c.id, type: typeof c.id, name: c.name })),
     });
 
-    // Mapper les cat├®gories par ID
+    // Mapper les categories par ID
     const categoryIds = new Set(categories.map(c => c.id));
     
-    // Collecter les num├®ros de semaine ISO uniques re├ºus de GA4
+    // Collecter les numeros de semaine ISO uniques recus de GA4
     const weekNumbers = new Set<number>();
     response.rows?.forEach((row: any) => {
       const weekNum = parseInt(row.dimensionValues?.[0]?.value ?? '0', 10);
       if (weekNum > 0) weekNumbers.add(weekNum);
     });
     
-    // Convertir en tableau tri├® (ordre chronologique)
+    // Convertir en tableau trie (ordre chronologique)
     const sortedWeeks = Array.from(weekNumbers).sort((a, b) => a - b);
     
-    console.log('­ƒôè DEBUG semaines GA4:', {
+    console.log('[GA4] DEBUG semaines GA4:', {
       weekNumbers: Array.from(weekNumbers),
       sortedWeeks,
-      note: 'Num├®ros ISO de semaine re├ºus de GA4',
+      note: 'Numeros ISO de semaine recus de GA4',
     });
     
     // Mapper les semaines ISO aux labels Sem 1-4
@@ -240,11 +240,11 @@ export async function getWeeklyPageViews(): Promise<PageViewsByWeek[]> {
       weekMapping[weekNum] = `Sem ${index + 1}`;
     });
     
-    console.log('­ƒôè DEBUG mapping semaines:', weekMapping);
+    console.log('[GA4] DEBUG mapping semaines:', weekMapping);
     
-    // G├®n├®rer les labels de semaine bas├®s sur les semaines re├ºues
+    // Generer les labels de semaine bases sur les semaines recues
     const weeks = sortedWeeks.map((_, index) => `Sem ${index + 1}`);
-    // Compl├®ter jusqu'├á 4 semaines si n├®cessaire
+    // Completer jusqu'a 4 semaines si necessaire
     while (weeks.length < 4) {
       weeks.unshift(`Sem ${weeks.length + 1}`);
     }
@@ -263,7 +263,7 @@ export async function getWeeklyPageViews(): Promise<PageViewsByWeek[]> {
     const matchedPaths: Array<{ week: string; path: string; categoryId: string }> = [];
     const unmatchedPaths: Array<{ week: string; path: string; reason: string }> = [];
     
-    // Regex pour extraire l'ID de cat├®gorie
+    // Regex pour extraire l'ID de categorie
     const categoryIdRegex = /\/products\/([a-zA-Z0-9]+)/;
     
     response.rows?.forEach((row: any) => {
@@ -271,12 +271,12 @@ export async function getWeeklyPageViews(): Promise<PageViewsByWeek[]> {
       const pagePath = row.dimensionValues?.[1]?.value ?? '';
       const views = parseInt(row.metricValues?.[0]?.value ?? '0', 10);
       
-      // Convertir le num├®ro ISO en label Sem 1-4
+      // Convertir le numero ISO en label Sem 1-4
       const weekLabel = weekMapping[weekNumISO] ?? 'Inconnu';
       
       allRows.push({ week: weekLabel, pagePath, views });
 
-      // Extraire l'ID de cat├®gorie du pagePath
+      // Extraire l'ID de categorie du pagePath
       const match = pagePath.match(categoryIdRegex);
       
       if (!match || !match[1]) {
@@ -289,7 +289,7 @@ export async function getWeeklyPageViews(): Promise<PageViewsByWeek[]> {
       // DEBUG avant la comparaison
       const isInSet = categoryIds.has(categoryId);
       if (!isInSet) {
-        console.log('­ƒôè DEBUG ID non trouv├®:', {
+        console.log('[GA4] DEBUG ID non trouve:', {
           extractedId: categoryId,
           extractedIdType: typeof categoryId,
           categoryIdsArray: Array.from(categoryIds).slice(0, 3),
@@ -310,7 +310,7 @@ export async function getWeeklyPageViews(): Promise<PageViewsByWeek[]> {
       }
     });
 
-    console.log('­ƒôè R├®sultat runReport hebdomadaire:', {
+    console.log('[GA4] Resultat runReport hebdomadaire:', {
       allRows: allRows.slice(0, 5),
       matchedPaths: matchedPaths.slice(0, 5),
       unmatchedPaths: unmatchedPaths.slice(0, 5),
@@ -327,7 +327,7 @@ export async function getWeeklyPageViews(): Promise<PageViewsByWeek[]> {
       total: Object.values(byWeekAndCategory[week] ?? {}).reduce((a, b) => a + b, 0),
     }));
   } catch (error) {
-    console.error('ÔØî Erreur GA4 runReport hebdomadaire:', error);
+    console.error('[GA4] Erreur runReport hebdomadaire:', error);
     const weeks = ['Sem 1', 'Sem 2', 'Sem 3', 'Sem 4'];
     return weeks.map((week) => ({
       week,

@@ -35,7 +35,7 @@ function ContentPageInner() {
     fetch('/api/content').then((r) => r.json()).then((data: Record<string, string>) => {
       setHero({
         titre: data['hero_titre'] ?? 'Votre spécialiste du papier thermique en Algérie',
-        sousTitre: data['hero_sous_titre'] ?? "PSI fournit aux professionnels d'Algérie un papier thermique premium 55 gr/m², fabriqué en Allemagne et garanti 100% sans BPA.",
+        sousTitre: data['hero_sous_titre'] ?? "PSI fournit aux professionnels d'Algérie un papier thermique premium 55 gr/m², garanti 100% sans BPA.",
       });
       setAbout({
         texte: data['about_texte'] ?? 'PSI (Paper Solutions Industry) est une entreprise algérienne spécialisée dans la transformation et la distribution de papier thermique professionnel. Basée à Alger, nous servons commerces, banques, restaurants et pharmacies à travers tout le territoire national.\n\nNous nous approvisionnons exclusivement auprès de fournisseurs européens certifiés, garantissant à nos clients des produits de qualité supérieure, conformes aux normes sanitaires les plus strictes.\n\nNotre mission est d\'offrir des solutions papier fiables, rapides et accessibles à tous les professionnels qui en ont besoin, avec un service client réactif et de proximité.',

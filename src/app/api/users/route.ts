@@ -4,11 +4,25 @@ import { prisma } from '@/lib/prisma';
 import bcrypt from 'bcryptjs';
 
 // GET /api/users — liste de tous les users (id + name) pour les dropdowns
-export async function GET() {
+export async function GET(req: Request) {
   const session = await auth();
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   try {
+    const { searchParams } = new URL(req.url);
+    const assignable = searchParams.get('assignable') === 'true';
+
+    // Si assignable=true, ne retourner que les users actifs avec id+name uniquement
+    if (assignable) {
+      const users = await prisma.user.findMany({
+        where: { active: true },
+        select: { id: true, name: true },
+        orderBy: { name: 'asc' },
+      });
+      return NextResponse.json(users);
+    }
+
+    // Sinon, retourner tous les users avec toutes les infos
     const users = await prisma.user.findMany({
       select: { id: true, name: true, email: true, role: true, active: true, permissions: true, resetRequested: true },
       orderBy: { name: 'asc' },

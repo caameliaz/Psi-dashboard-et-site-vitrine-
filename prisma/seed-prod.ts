@@ -86,7 +86,7 @@ async function main() {
         customFields: {
           create: [
             { definitionId: fieldGrammage.id, value: '55 gr/m² Premium' },
-            { definitionId: fieldOrigine.id,  value: 'Europe (Germany)' },
+            { definitionId: fieldOrigine.id,  value: 'Europe' },
             { definitionId: fieldBPA.id,      value: 'true' },
           ],
         },

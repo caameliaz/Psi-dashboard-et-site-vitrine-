@@ -237,12 +237,12 @@ export default function QuotePage() {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                 <div>
-                  <label className={labelClass}>{t('quote.name_label')} *</label>
+                  <label className={labelClass}>{t('quote.name_label')}</label>
                   <input type="text" name="name" value={formData.name} onChange={handleChange} placeholder={t('quote.name_ph')} className={inputClass} />
                   {fieldErrors.name && <p className="text-[13px] text-[#EF4444] font-medium mt-1.5 flex items-center gap-1.5"><svg width="14" height="14" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" stroke="currentColor" strokeWidth="1.5"/><path d="M8 4v5M8 11v1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>{fieldErrors.name}</p>}
                 </div>
                 <div>
-                  <label className={labelClass}>{t('quote.company_label')} *</label>
+                  <label className={labelClass}>{t('quote.company_label')}</label>
                   <input type="text" name="company" value={formData.company} onChange={handleChange} placeholder={t('quote.company_ph')} className={inputClass} />
                   {fieldErrors.company && <p className="text-[13px] text-[#EF4444] font-medium mt-1.5 flex items-center gap-1.5"><svg width="14" height="14" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" stroke="currentColor" strokeWidth="1.5"/><path d="M8 4v5M8 11v1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>{fieldErrors.company}</p>}
                 </div>
@@ -250,12 +250,12 @@ export default function QuotePage() {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                 <div>
-                  <label className={labelClass}>{t('quote.phone_label')} *</label>
+                  <label className={labelClass}>{t('quote.phone_label')}</label>
                   <input type="tel" name="phone" value={formData.phone} onChange={handleChange} placeholder={t('quote.phone_ph')} className={inputClass} />
                   {fieldErrors.phone && <p className="text-[13px] text-[#EF4444] font-medium mt-1.5 flex items-center gap-1.5"><svg width="14" height="14" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" stroke="currentColor" strokeWidth="1.5"/><path d="M8 4v5M8 11v1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>{fieldErrors.phone}</p>}
                 </div>
                 <div>
-                  <label className={labelClass}>{t('quote.wilaya_label')} *</label>
+                  <label className={labelClass}>{t('quote.wilaya_label')}</label>
                   <WilayaSelect
                     name="wilaya"
                     value={formData.wilaya}
@@ -267,7 +267,7 @@ export default function QuotePage() {
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className={labelClass}>{t('quote.commune_label')} *</label>
+                  <label className={labelClass}>{t('quote.commune_label')}</label>
                   <CommuneSelect
                     name="commune"
                     wilaya={formData.wilaya}

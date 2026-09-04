@@ -98,13 +98,19 @@ export function HomeClient({ initialContent, initialCategories, initialProducts 
 
             <div className="flex flex-row flex-wrap gap-4 mt-4">
               <Link
-                href="/cart"
+                href="/products"
                 className="flex items-center gap-2 bg-[#4CAF4F] text-white text-[14px] font-semibold px-6 py-3 rounded-lg shadow-[0px_4px_14px_rgba(76,175,79,0.5)] hover:bg-[#43A047] transition-all"
               >
                 {t('hero.cta_order')}
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
                   <path d="M3 8h10M9 4l4 4-4 4" stroke="white" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
                 </svg>
+              </Link>
+              <Link
+                href="/quote"
+                className="flex items-center gap-2 bg-transparent border-2 border-white text-white text-[14px] font-semibold px-6 py-3 rounded-lg hover:bg-white hover:text-[#263238] transition-all"
+              >
+                Demander un devis
               </Link>
             </div>
           </div>
