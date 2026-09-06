@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { StatusPill } from '@/components/ui/StatusPill';
 import { RequestPanel, type RequestDetail } from '@/components/ui/RequestPanel';
-import { orderToDetail, quoteToDetail, DB_TO_UI } from '@/lib/request-detail';
+import { orderToDetail, quoteToDetail, DB_TO_UI, UI_TO_DB } from '@/lib/request-detail';
 import dynamic from 'next/dynamic';
 import type { Order, Quote } from '@/types';
 import { notifBell } from '@/lib/notif-bell-store';
@@ -13,13 +13,11 @@ import { useSession } from 'next-auth/react';
 import { Modal } from '@/components/ui/Modal';
 import { MobileNavbar } from '@/components/MobileNavbar';
 import { DateRangePicker } from '@/components/ui/DateRangePicker';
+import { StockListsWidget } from '@/components/ui/StockListsWidget';
 
 // Graphiques Recharts chargés à la demande (ssr:false) → aucun poids ailleurs
 const WilayaBarChart = dynamic(() => import('@/components/ui/DashboardCharts').then((m) => m.WilayaBarChart), {
   ssr: false, loading: () => <ChartSkeleton title="Commandes par wilaya" />,
-});
-const ConversionRateChart = dynamic(() => import('@/components/ui/DashboardCharts').then((m) => m.ConversionRateChart), {
-  ssr: false, loading: () => <ChartSkeleton title="Taux de conversion" />,
 });
 const TrendLineChart = dynamic(() => import('@/components/ui/DashboardCharts').then((m) => m.TrendLineChart), {
   ssr: false, loading: () => <ChartSkeleton title="Évolution sur 6 mois" />,
@@ -968,15 +966,9 @@ export default function DashboardPage() {
           </div>
         </div>
         
-        {/* Colonne droite : Conversion */}
-        <div className="relative">
-          <div className="absolute top-5 right-5 z-10">
-            <DateRangePicker onDateChange={(start, end) => {
-              setConversionDateRange({ start, end });
-              fetchData(false, { containerId: 'conversion', startDate: start, endDate: end });
-            }} />
-          </div>
-          <ConversionRateChart data={filteredConversionRates || conversionRates} />
+        {/* Colonne droite : Liste d'achat / Liste de production */}
+        <div>
+          <StockListsWidget />
         </div>
       </div>
 
@@ -1041,7 +1033,6 @@ export default function DashboardPage() {
           onStatusChange={async (_ref, newStatut) => {
             const item = selectedRequest;
             if (!item?.id) return;
-            const UI_TO_DB: Record<string, string> = { 'En attente': 'EN_ATTENTE', 'Confirmé': 'VALIDE', 'Livré': 'LIVRE', 'Annulé': 'ANNULE' };
             const endpoint = item.type === 'Devis' ? `/api/quotes/${item.id}` : `/api/orders/${item.id}`;
             await fetch(endpoint, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: UI_TO_DB[newStatut] ?? newStatut }) });
             setSelectedRequest(null);

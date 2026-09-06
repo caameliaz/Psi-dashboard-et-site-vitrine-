@@ -54,13 +54,14 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      // 2FA ACTIVÉ - envoi du code OTP
-      if (step === 'credentials') {
-        await sendOtp();
-        setLoading(false);
-        return;
-      }
-      
+      // 2FA TEMPORAIREMENT DÉSACTIVÉ (dev en cours) — on saute l'étape OTP
+      // et on se connecte directement après email + mot de passe.
+      // if (step === 'credentials') {
+      //   await sendOtp();
+      //   setLoading(false);
+      //   return;
+      // }
+
       // Vérification du code OTP (step === 'otp')
       const res = await signIn('credentials', {
         email,

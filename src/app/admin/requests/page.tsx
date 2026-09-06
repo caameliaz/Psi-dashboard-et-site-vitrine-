@@ -85,8 +85,8 @@ function sortItems(items: RequestDetail[]): RequestDetail[] {
   });
 }
 
-const ALL_STATUTS_COMMANDE = ['En attente', 'Confirmé', 'Livré', 'Annulé'];
-const ALL_STATUTS_DEVIS    = ['En attente', 'Confirmé', 'Livré', 'Annulé'];
+const ALL_STATUTS_COMMANDE = ['En attente', 'Confirmé', 'Produit', 'Livré', 'Retourné', 'Annulé'];
+const ALL_STATUTS_DEVIS    = ['En attente', 'Confirmé', 'Produit', 'Livré', 'Retourné', 'Annulé'];
 
 interface Ligne { categoryId: string; ref: string; productId: string | null; qte: number; pu: number; metrage: string; }
 const emptyLigne = (): Ligne => ({ categoryId: '', ref: '', productId: null, qte: 1, pu: 0, metrage: '' });

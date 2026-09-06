@@ -42,22 +42,22 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
         if (!passwordMatch) { recordFail('login', email); return null; }
 
-        // ── 2FA ACTIVÉ ──
-        const otp = String(credentials.otp).trim();
-        const codeValid =
-          user.twoFactorCode &&
-          user.twoFactorExpires &&
-          user.twoFactorExpires.getTime() > Date.now() &&
-          (user.twoFactorAttempts ?? 0) < 5 &&
-          user.twoFactorCode === otp;
-
-        if (!codeValid) {
-          recordFail('login', email);
-          if (user.twoFactorCode && user.twoFactorExpires && user.twoFactorExpires.getTime() > Date.now()) {
-            await prisma.user.update({ where: { id: user.id }, data: { twoFactorAttempts: { increment: 1 } } });
-          }
-          return null;
-        }
+        // ── 2FA TEMPORAIREMENT DÉSACTIVÉ (dev en cours) ──
+        // const otp = String(credentials.otp).trim();
+        // const codeValid =
+        //   user.twoFactorCode &&
+        //   user.twoFactorExpires &&
+        //   user.twoFactorExpires.getTime() > Date.now() &&
+        //   (user.twoFactorAttempts ?? 0) < 5 &&
+        //   user.twoFactorCode === otp;
+        //
+        // if (!codeValid) {
+        //   recordFail('login', email);
+        //   if (user.twoFactorCode && user.twoFactorExpires && user.twoFactorExpires.getTime() > Date.now()) {
+        //     await prisma.user.update({ where: { id: user.id }, data: { twoFactorAttempts: { increment: 1 } } });
+        //   }
+        //   return null;
+        // }
 
         recordSuccess('login', email); // reset le compteur en cas de succès
 
@@ -78,9 +78,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       }
     })
   ],
-  // Session valable 24h (glissante) : tant que l'utilisateur revient dans les 24h,
-  // il reste connecté. "Rester connecté" garde le cookie même après fermeture du navigateur.
-  session: { strategy: 'jwt', maxAge: 24 * 60 * 60 },
+  // Session valable 30 jours (glissante) : tant que l'utilisateur revient dans les 30 jours,
+  // il reste connecté (évite de repasser par le 2FA à chaque fois). "Rester connecté"
+  // garde le cookie même après fermeture du navigateur.
+  session: { strategy: 'jwt', maxAge: 30 * 24 * 60 * 60 },
   callbacks: {
     async jwt({ token, user }) {
       if (user) {

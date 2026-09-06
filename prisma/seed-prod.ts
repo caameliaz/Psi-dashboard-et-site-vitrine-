@@ -10,11 +10,11 @@ const prisma = new PrismaClient();
 // Permissions (doivent correspondre à src/lib/permissions.ts)
 const ALL_PERMS = [
   'voir_commandes', 'modifier_statuts', 'assign_commandes', 'reassigner_client', 'voir_clients', 'modifier_clients',
-  'voir_produits', 'modifier_produits', 'voir_historique', 'modifier_contenu', 'gerer_utilisateurs',
+  'voir_produits', 'modifier_produits', 'voir_stock', 'modifier_stock', 'voir_historique', 'modifier_contenu', 'gerer_utilisateurs',
 ];
 const EMPLOYE_COMPLET = [
   'voir_commandes', 'modifier_statuts', 'voir_clients', 'modifier_clients',
-  'voir_produits', 'modifier_produits', 'voir_historique',
+  'voir_produits', 'modifier_produits', 'voir_stock', 'modifier_stock', 'voir_historique',
 ];
 const EMPLOYE_LIMITE = ['voir_commandes', 'voir_clients', 'voir_produits'];
 
@@ -33,6 +33,9 @@ async function main() {
   await prisma.clientNote.deleteMany();
   await prisma.clientPhone.deleteMany();
   await prisma.client.deleteMany();
+  await prisma.stockAssignment.deleteMany();
+  await prisma.recipeItem.deleteMany();
+  await prisma.rawMaterial.deleteMany();
   await prisma.productCustomField.deleteMany();
   await prisma.productFieldDef.deleteMany();
   await prisma.product.deleteMany();

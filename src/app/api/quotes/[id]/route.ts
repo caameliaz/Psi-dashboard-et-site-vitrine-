@@ -4,6 +4,10 @@ import { requirePermission, hasPermission } from '@/lib/permissions';
 import { createAudit, statusLabel } from '@/lib/audit';
 import { createNotif } from '@/lib/notifications';
 import { notifyStatusChange, notifyAssignment } from '@/lib/notify-activity';
+import { confirmStock, cancelStock, deliverStock, returnStock, releaseOrderItemStock, adjustOrderItemQuantity } from '@/lib/order-stock';
+
+// Statuts où les lignes ne peuvent plus être modifiées (déjà sorties du stock/annulées)
+const LOCKED_STATUSES = ['LIVRE', 'ANNULE', 'RETOURNE'];
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -58,26 +62,72 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
     // Modification des produits du devis (comme pour les commandes).
     // Un devis peut porter un prix unitaire par ligne (facultatif) → conservé
     // pour le détail, le PDF et l'Excel, en plus du total global (proposedPrice).
+    let current: { status: string } | null = null;
     if (body.items && Array.isArray(body.items)) {
-      const current = await prisma.quote.findUnique({ where: { id }, select: { status: true } });
-      if (current && (current.status === 'LIVRE' || current.status === 'ANNULE')) {
-        return NextResponse.json({ error: 'Impossible de modifier un devis livré ou annulé' }, { status: 409 });
+      current = await prisma.quote.findUnique({ where: { id }, select: { status: true } });
+      if (current && LOCKED_STATUSES.includes(current.status)) {
+        return NextResponse.json({ error: 'Impossible de modifier un devis livré, retourné ou annulé' }, { status: 409 });
       }
       // Une référence LIBRE n'a pas de productId : son libellé est dans `description`.
       const validItems = (body.items as { productId?: string; description?: string; quantity?: number; metrage?: number; unitPrice?: number }[])
         .filter((it) => (it.productId || (it.description && it.description.trim() !== '')) && (it.quantity ?? 0) > 0);
-      await prisma.quoteItem.deleteMany({ where: { quoteId: id } });
-      if (validItems.length > 0) {
-        await prisma.quoteItem.createMany({
-          data: validItems.map((it) => ({
-            quoteId: id,
-            productId: it.productId || null,
-            description: it.productId ? null : (it.description ?? null),
-            quantity: it.quantity!,
-            metrage: it.metrage ?? null,
-            unitPrice: it.unitPrice != null ? Number(it.unitPrice) : null,
-          })),
-        });
+
+      const isConfirmed = current && (current.status === 'VALIDE' || current.status === 'PRODUITE');
+      if (isConfirmed) {
+        // Devis déjà confirmé : on ne rejoue le moteur de stock QUE pour ce qui change
+        // réellement (cf. même correctif que pour les commandes, order-stock.ts) — sinon
+        // une simple hausse/baisse de quantité peut fusionner avec la ligne de liste
+        // d'une AUTRE commande/devis du même produit (une seule ligne partagée par produit).
+        const existingItems = await prisma.quoteItem.findMany({ where: { quoteId: id } });
+        const existingByProduct = new Map(existingItems.filter((e) => e.productId).map((e) => [e.productId as string, e]));
+        const newProductIds = new Set(validItems.filter((it) => it.productId).map((it) => it.productId as string));
+
+        for (const [productId, existing] of existingByProduct) {
+          if (!newProductIds.has(productId)) await releaseOrderItemStock('quote', existing.id);
+        }
+        await prisma.quoteItem.deleteMany({ where: { quoteId: id, productId: null } });
+        await prisma.quoteItem.deleteMany({ where: { quoteId: id, productId: { notIn: Array.from(newProductIds) } } });
+
+        for (const it of validItems) {
+          if (it.productId) {
+            const existing = existingByProduct.get(it.productId);
+            if (existing) {
+              if (existing.quantity !== it.quantity) await adjustOrderItemQuantity('quote', existing.id, it.quantity!);
+              await prisma.quoteItem.update({
+                where: { id: existing.id },
+                data: {
+                  metrage: it.metrage ?? existing.metrage,
+                  unitPrice: it.unitPrice != null ? Number(it.unitPrice) : existing.unitPrice,
+                },
+              });
+              continue;
+            }
+          }
+          await prisma.quoteItem.create({
+            data: {
+              quoteId: id,
+              productId: it.productId || null,
+              description: it.productId ? null : (it.description ?? null),
+              quantity: it.quantity!,
+              metrage: it.metrage ?? null,
+              unitPrice: it.unitPrice != null ? Number(it.unitPrice) : null,
+            },
+          });
+        }
+      } else {
+        await prisma.quoteItem.deleteMany({ where: { quoteId: id } });
+        if (validItems.length > 0) {
+          await prisma.quoteItem.createMany({
+            data: validItems.map((it) => ({
+              quoteId: id,
+              productId: it.productId || null,
+              description: it.productId ? null : (it.description ?? null),
+              quantity: it.quantity!,
+              metrage: it.metrage ?? null,
+              unitPrice: it.unitPrice != null ? Number(it.unitPrice) : null,
+            })),
+          });
+        }
       }
     }
 
@@ -132,6 +182,31 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
     const action = body.status !== undefined ? `Statut devis : ${statusLabel(body.status)}` : 'Devis modifié';
     const quoteLabel = quote.clientCompany || quote.clientName || quote.client?.name || '';
     createAudit({ userId: session.user.id, action, entity: 'DEVIS', entityId: id, detail: quoteLabel ? `${quote.ref} — ${quoteLabel}` : (quote.ref ?? id), quoteId: id });
+
+    // ── Répercussion sur le stock selon la transition de statut ────────────────
+    // "Marquer Produit" (PRODUITE) est un pur changement de statut affiché — aucun effet sur
+    // le stock ni les listes d'achat/production, elles continuent de suivre le manquant réel
+    // exactement comme avant le clic.
+    try {
+      if (body.status === 'VALIDE') {
+        await confirmStock('quote', id);
+      } else if (body.status === 'ANNULE') {
+        await cancelStock('quote', id);
+      } else if (body.status === 'LIVRE') {
+        await deliverStock('quote', id);
+      } else if (body.status === 'RETOURNE') {
+        await returnStock('quote', id);
+      } else if (body.items !== undefined && (current?.status === 'VALIDE' || current?.status === 'PRODUITE')) {
+        await confirmStock('quote', id);
+        if (current.status === 'PRODUITE') {
+          const items = await prisma.quoteItem.findMany({ where: { quoteId: id } });
+          const allResolved = items.every((i) => i.stockPath === 'FROM_STOCK' || i.resolvedQuantity >= i.quantity);
+          if (!allResolved) await prisma.quote.update({ where: { id }, data: { status: 'VALIDE' } });
+        }
+      }
+    } catch (stockError) {
+      console.error('[quotes] Erreur de mise à jour du stock :', stockError);
+    }
 
     // Modification des PRODUITS (sans changement de statut) → notification aussi.
     if (body.items !== undefined && body.status === undefined) {

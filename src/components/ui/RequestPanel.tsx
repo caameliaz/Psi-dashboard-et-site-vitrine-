@@ -977,7 +977,7 @@ export function RequestPanel({ item, onClose, onStatusChange, onConfirmQuoteWith
   const [templateMode, setTemplateMode] = useState<'wa' | 'mail' | 'sms' | null>(null);
   const [emailOverride, setEmailOverride] = useState('');
   const isCommande = item.type === 'Commande';
-  const isArchived = item.statut === 'Livré' || item.statut === 'Annulé';
+  const isArchived = item.statut === 'Livré' || item.statut === 'Annulé' || item.statut === 'Retourné';
 
   // Fil de notes (auteur + date) — table RequestNote
   const notesBase = isCommande ? `/api/orders/${item.id}/notes` : `/api/quotes/${item.id}/notes`;
@@ -1332,8 +1332,15 @@ export function RequestPanel({ item, onClose, onStatusChange, onConfirmQuoteWith
                         Confirmer
                       </button>
                     )}
-                    {/* Commande confirmée → Marquer Livré (statut final → ferme) */}
+                    {/* Commande confirmée → Marquer Produit (avant la livraison) */}
                     {isCommande && item.statut === 'Confirmé' && (
+                      <button onClick={() => onStatusChange(item.ref, 'Produit')}
+                        className="px-4 py-2 rounded-lg text-[13px] font-bold border border-[#4CAF4F] text-[#4CAF4F] hover:bg-[#F0FDF4] transition-colors">
+                        Marquer Produit
+                      </button>
+                    )}
+                    {/* Commande déjà produite → Marquer Livré (statut final → ferme) */}
+                    {isCommande && item.statut === 'Produit' && (
                       <button onClick={() => onStatusChange(item.ref, 'Livré')}
                         className="px-4 py-2 rounded-lg text-[13px] font-bold border border-[#4CAF4F] text-[#4CAF4F] hover:bg-[#F0FDF4] transition-colors">
                         Marquer Livré
@@ -1346,8 +1353,15 @@ export function RequestPanel({ item, onClose, onStatusChange, onConfirmQuoteWith
                         Confirmer
                       </button>
                     )}
-                    {/* Devis confirmé → Marquer Livré (statut final → ferme) */}
+                    {/* Devis confirmé → Marquer Produit (avant la livraison) */}
                     {!isCommande && item.statut === 'Confirmé' && (
+                      <button onClick={() => onStatusChange(item.ref, 'Produit')}
+                        className="px-4 py-2 rounded-lg text-[13px] font-bold border border-[#4CAF4F] text-[#4CAF4F] hover:bg-[#F0FDF4] transition-colors">
+                        Marquer Produit
+                      </button>
+                    )}
+                    {/* Devis déjà produit → Marquer Livré (statut final → ferme) */}
+                    {!isCommande && item.statut === 'Produit' && (
                       <button onClick={() => onStatusChange(item.ref, 'Livré')}
                         className="px-4 py-2 rounded-lg text-[13px] font-bold border border-[#4CAF4F] text-[#4CAF4F] hover:bg-[#F0FDF4] transition-colors">
                         Marquer Livré
@@ -1364,6 +1378,14 @@ export function RequestPanel({ item, onClose, onStatusChange, onConfirmQuoteWith
                   <button onClick={() => onStatusChange(item.ref, 'En attente')}
                     className="px-4 py-2 rounded-lg text-[13px] font-semibold border border-[#ABBED1]/60 text-[#374151] hover:border-[#374151]/40 transition-colors">
                     Restaurer
+                  </button>
+                )}
+
+                {/* Livré → possibilité de signaler un retour colis (remise en stock manuelle ensuite) */}
+                {item.statut === 'Livré' && onStatusChange && canModifierStatuts && (
+                  <button onClick={() => { if (window.confirm('Signaler ce colis comme retourné ?')) onStatusChange(item.ref, 'Retourné'); }}
+                    className="px-4 py-2 rounded-lg text-[13px] font-semibold border border-[#FDE68A] text-[#92400E] hover:bg-[#FFFBEB] transition-colors">
+                    Signaler un retour
                   </button>
                 )}
               </div>

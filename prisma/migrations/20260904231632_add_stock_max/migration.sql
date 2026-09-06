@@ -1,0 +1,5 @@
+-- AlterTable
+ALTER TABLE "Product" ADD COLUMN     "stockMax" INTEGER NOT NULL DEFAULT 140;
+
+-- AlterTable
+ALTER TABLE "RawMaterial" ADD COLUMN     "stockMax" INTEGER NOT NULL DEFAULT 140;

@@ -1,11 +1,11 @@
 // ─── ENUMS ───────────────────────────────────────────────────────────────────
 
 export type Role = 'ADMIN' | 'EMPLOYEE';
-export type RequestStatus = 'EN_ATTENTE' | 'CONTACTE' | 'VALIDE' | 'LIVRE' | 'ANNULE';
+export type RequestStatus = 'EN_ATTENTE' | 'CONTACTE' | 'VALIDE' | 'PRODUITE' | 'LIVRE' | 'RETOURNE' | 'ANNULE';
 export type OrderSource = 'SITE' | 'WHATSAPP' | 'TELEPHONE' | 'AUTRE';
 export type FieldType = 'TEXT' | 'NUMBER' | 'BOOLEAN';
 export type TemplateCategory = 'CONFIRMATION' | 'RELANCE' | 'LIVRAISON' | 'DEVIS' | 'AUTRE';
-export type AuditEntity = 'COMMANDE' | 'DEVIS' | 'PRODUIT' | 'CLIENT' | 'UTILISATEUR' | 'CONTENU' | 'TEMPLATE' | 'STATUT';
+export type AuditEntity = 'COMMANDE' | 'DEVIS' | 'PRODUIT' | 'CLIENT' | 'UTILISATEUR' | 'CONTENU' | 'TEMPLATE' | 'STATUT' | 'STOCK' | 'MATIERE';
 export type NotifType = 'SITE_COMMANDE' | 'SITE_DEVIS' | 'ACTION_PERSO' | 'ACTION_AUTRE' | 'ANNULATION';
 export type ContactStatus = 'EN_ATTENTE' | 'TRAITE';
 
@@ -14,7 +14,9 @@ export const STATUS_LABELS: Record<RequestStatus, string> = {
   EN_ATTENTE: 'En attente',
   CONTACTE:   'Contacté',
   VALIDE:     'Confirmé',
+  PRODUITE:   'Produit',
   LIVRE:      'Livré',
+  RETOURNE:   'Retourné',
   ANNULE:     'Annulé',
 };
 

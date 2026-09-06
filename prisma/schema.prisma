@@ -56,6 +56,143 @@ model Product {
   quoteItems   QuoteItem[]
   createdAt    DateTime             @default(now())
   updatedAt    DateTime             @updatedAt
+
+  // ─── Stock & production (cf. modèles RawMaterial / RecipeItem / StockAssignment) ───
+  mode          ProductMode @default(FABRIQUE) // achete | fabrique | les_deux — cf. LOGIC stock
+  purchasePrice Float?      // prix d'achat — requis si mode = ACHETE ou LES_DEUX
+
+  // Stock max visé (objectif de reconstitution) : à la création, sert de base au calcul
+  // par défaut des seuils ci-dessous (50%) ; modifiable ensuite indépendamment, ainsi que
+  // les seuils eux-mêmes (page Stock → Seuils).
+  stockMax Int @default(140)
+
+  // Seuils déclenchant un réassort préventif sur `available` (indépendant des commandes) :
+  purchaseThreshold   Int @default(70) // liste d'achat — pertinent si mode ACHETE ou LES_DEUX
+  productionThreshold Int @default(70) // liste de production — pertinent si mode FABRIQUE ou LES_DEUX
+
+  // Statuts de stock (une seule ligne par référence, pas de variantes) :
+  available  Float @default(0) // Disponible — prêt à être vendu/utilisé, pas rattaché à une commande
+  reserved   Float @default(0) // Réservé — rattaché à une commande confirmée, aucun mouvement réel encore
+  inDelivery Float @default(0) // En livraison — physiquement chez le transporteur / en cours de livraison
+  returned   Float @default(0) // En retour — colis revenu, en attente de décision
+
+  recipeItems         RecipeItem[]
+  stockAssignments    StockAssignment[]
+  purchaseListItems   PurchaseListItem[]
+  productionListItems ProductionListItem[]
+}
+
+enum ProductMode {
+  ACHETE
+  FABRIQUE
+  LES_DEUX
+}
+
+// ─── STOCK & PRODUCTION ────────────────────────────────────────────────────────
+
+// Matière première entrant dans la composition d'un produit fabriqué (ex: film TPE, coating, mandrin).
+model RawMaterial {
+  id                String       @id @default(cuid())
+  reference         String       @unique
+  name              String
+  unit              String       // unité de mesure libre : bobine, g, kg, m, unité...
+  price             Float
+  stockMax          Int          @default(140) // stock max visé — base du calcul par défaut du seuil (50%) à la création
+  purchaseThreshold Int          @default(70) // seuil sur `available` déclenchant le réassort préventif en liste d'achat
+  available         Float        @default(0) // Disponible
+  reserved          Float        @default(0) // Réservé (rattaché à une recette/commande en cours, aucun mouvement réel encore)
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+  recipeItems       RecipeItem[]
+  purchaseListItems PurchaseListItem[]
+}
+
+// Ligne de recette : quantité d'une matière première nécessaire pour fabriquer 1 unité d'un produit.
+model RecipeItem {
+  id            String      @id @default(cuid())
+  product       Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
+  productId     String
+  rawMaterial   RawMaterial @relation(fields: [rawMaterialId], references: [id])
+  rawMaterialId String
+  quantity      Float
+
+  @@unique([productId, rawMaterialId])
+}
+
+// Quantité de stock d'un produit fini attribuée à un employé (commercial) qui la transporte.
+// État courant de l'attribution (pas un journal) : un retrait partiel diminue `quantity`,
+// un retrait total supprime la ligne.
+model StockAssignment {
+  id          String   @id @default(cuid())
+  product     Product  @relation(fields: [productId], references: [id])
+  productId   String
+  employee    User     @relation(fields: [employeeId], references: [id])
+  employeeId  String
+  quantity    Float
+  assignedAt  DateTime @default(now())
+  createdAt   DateTime @default(now())
+}
+
+// ─── LISTE D'ACHAT & LISTE DE PRODUCTION (Phase 1 : alimentation manuelle + par seuil) ───
+
+enum PurchaseItemStatus {
+  A_COMMANDER
+  COMMANDE
+  RECU
+}
+
+// Ligne de la liste d'achat — matière première OU produit fini "Acheté" à commander
+// auprès d'un fournisseur externe. `auto: true` = générée par un seuil de réassort
+// (peut être re-synchronisée/supprimée automatiquement) ; `auto: false` = ajoutée à
+// la main (persiste jusqu'à action explicite de l'utilisateur).
+model PurchaseListItem {
+  id               String             @id @default(cuid())
+  product          Product?           @relation(fields: [productId], references: [id], onDelete: Cascade)
+  productId        String?
+  rawMaterial      RawMaterial?       @relation(fields: [rawMaterialId], references: [id], onDelete: Cascade)
+  rawMaterialId    String?
+  neededQuantity   Float              // quantité manquante réelle (commande/manuel), pré-remplie
+  // Rattrapage préventif ajouté PAR-DESSUS `neededQuantity` (pas à sa place) pour reconstituer
+  // le stock disponible jusqu'au stock max — géré par syncPurchaseList tant que la ligne n'a
+  // pas encore été commandée (statut A_COMMANDER) ; replié dans `neededQuantity` (remis à 0)
+  // dès que l'utilisateur clique "Commander", puisqu'à partir de là c'est un engagement réel.
+  bufferQuantity   Float              @default(0)
+  orderedQuantity  Float              @default(0) // quantité indiquée au clic "Commander"
+  receivedQuantity Float              @default(0) // quantité indiquée au clic "Valider réception"
+  status           PurchaseItemStatus @default(A_COMMANDER)
+  auto             Boolean            @default(false)
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  orderItems       OrderItem[]
+  quoteItems       QuoteItem[]
+}
+
+enum ProductionItemStatus {
+  A_PRODUIRE
+  BLOQUE    // en attente de réception d'une matière première manquante
+  EN_COURS
+  PRODUIT
+}
+
+// Ligne de la liste de production — produit fini "Fabriqué"/"Les deux" à fabriquer.
+model ProductionListItem {
+  id               String               @id @default(cuid())
+  product          Product              @relation(fields: [productId], references: [id], onDelete: Cascade)
+  productId        String
+  neededQuantity   Float                // quantité à produire réelle (commande/manuel), pré-remplie
+  // Rattrapage préventif ajouté PAR-DESSUS `neededQuantity` — même logique que sur
+  // PurchaseListItem (cf. commentaire là-bas), replié dans `neededQuantity` dès que
+  // l'utilisateur clique "Marquer fabriquée".
+  bufferQuantity   Float                @default(0)
+  producedQuantity Float                @default(0) // quantité indiquée au clic "Marquer fabriquée"
+  status           ProductionItemStatus @default(A_PRODUIRE)
+  auto             Boolean              @default(false)
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+
+  orderItems       OrderItem[]
+  quoteItems       QuoteItem[]
 }
 
 // Valeurs des champs custom pour chaque produit
@@ -192,6 +329,21 @@ model OrderItem {
   metrage     Float?   // longueur en mètres (facultatif)
   quantity    Int
   unitPrice   Float   // snapshot du prix au moment de la commande
+
+  // ─── Stock (cf. features/stock — logique de confirmation de commande) ───
+  stockPath          ItemStockPath      @default(NONE) // chemin suivi à la confirmation
+  resolvedQuantity    Float             @default(0) // quantité déjà produite/reçue (fabrication/achat partiels)
+  purchaseListItem    PurchaseListItem?  @relation(fields: [purchaseListItemId], references: [id])
+  purchaseListItemId  String?
+  productionListItem  ProductionListItem? @relation(fields: [productionListItemId], references: [id])
+  productionListItemId String?
+}
+
+enum ItemStockPath {
+  NONE             // pas encore confirmé
+  FROM_STOCK       // pris directement sur le stock disponible à la confirmation
+  IN_PRODUCTION    // envoyé en liste de production
+  PURCHASE_PENDING // produit "Acheté" non en stock, envoyé en liste d'achat
 }
 
 enum OrderSource {
@@ -252,13 +404,23 @@ model QuoteItem {
   metrage     Float?   // longueur en mètres (facultatif)
   quantity    Int
   unitPrice   Float?   // prix unitaire proposé (facultatif ; conservé pour détail/PDF/Excel)
+
+  // ─── Stock (cf. features/stock — même logique que OrderItem une fois le devis confirmé) ───
+  stockPath             ItemStockPath       @default(NONE)
+  resolvedQuantity      Float               @default(0)
+  purchaseListItem      PurchaseListItem?   @relation(fields: [purchaseListItemId], references: [id])
+  purchaseListItemId    String?
+  productionListItem    ProductionListItem? @relation(fields: [productionListItemId], references: [id])
+  productionListItemId  String?
 }
 
 enum RequestStatus {
   EN_ATTENTE
   CONTACTE
   VALIDE
+  PRODUITE // tous les articles sont prêts (déjà en stock, fabriqués ou reçus) — en attente de préparation
   LIVRE
+  RETOURNE // colis revenu — remise en stock disponible manuelle (cf. page Stock, Correction)
   ANNULE
 }
 
@@ -352,6 +514,7 @@ model User {
   notifications   NotificationRead[]
   auditLogs       AuditLog[]
   pushSubscriptions PushSubscription[]
+  stockAssignments StockAssignment[] // stock de produits finis attribué en tant que commercial
   createdAt       DateTime           @default(now())
   updatedAt       DateTime           @updatedAt
 }
@@ -451,4 +614,6 @@ enum AuditEntity {
   CONTENU
   TEMPLATE
   STATUT
+  STOCK
+  MATIERE
 }

@@ -50,9 +50,14 @@ interface Ref {
   active: boolean;
   categoryId: string;
   customFields: { definitionId: string; label: string; value: string }[];
+  mode: 'ACHETE' | 'FABRIQUE' | 'LES_DEUX';
+  purchasePrice: number | null;
+  stockMax: number;
+  recipeItems: { id: string; rawMaterialId: string; quantity: number; rawMaterial: RawMaterial }[];
 }
 
 interface FieldDef { id: string; label: string; type: string; required: boolean; order: number; }
+interface RawMaterial { id: string; reference: string; name: string; unit: string; }
 
 interface Cat {
   id: string;
@@ -78,14 +83,24 @@ function dbToRef(p: any): Ref {
     customFields: (p.customFields ?? []).map((cf: any) => ({
       definitionId: cf.definitionId, label: cf.definition?.label ?? '', value: cf.value,
     })),
+    mode: p.mode ?? 'FABRIQUE',
+    purchasePrice: p.purchasePrice ?? null,
+    stockMax: p.stockMax ?? 140,
+    recipeItems: p.recipeItems ?? [],
   };
 }
 
 const inputClass = "w-full px-3 py-2.5 rounded-lg border border-[#E2E8F0] text-sm text-[#0F172A] focus:outline-none focus:border-[#4CAF4F] focus:ring-1 focus:ring-[#4CAF4F] transition-colors bg-[#F8FAFC]";
 
 // ── Modale "Nouvelle référence" — pour la catégorie sélectionnée ────────────
-interface RefForm { name: string; width: string; length: string; metrage: string; usage: string; price: string; customFields: Record<string, string>; }
-const emptyRefForm: RefForm = { name: '', width: '', length: '', metrage: '', usage: '', price: '', customFields: {} };
+interface RefForm { name: string; width: string; length: string; metrage: string; usage: string; price: string; customFields: Record<string, string>; mode: 'ACHETE' | 'FABRIQUE' | 'LES_DEUX'; purchasePrice: string; stockMax: string; }
+const emptyRefForm: RefForm = { name: '', width: '', length: '', metrage: '', usage: '', price: '', customFields: {}, mode: 'FABRIQUE', purchasePrice: '', stockMax: '' };
+
+const MODE_OPTIONS: { value: RefForm['mode']; label: string }[] = [
+  { value: 'FABRIQUE', label: 'Fabriqué' },
+  { value: 'ACHETE', label: 'Acheté' },
+  { value: 'LES_DEUX', label: 'Les deux' },
+];
 
 function RefFormFields({ form, setForm, fieldDefs }: { form: RefForm; setForm: (f: RefForm) => void; fieldDefs: FieldDef[] }) {
   return (
@@ -93,6 +108,28 @@ function RefFormFields({ form, setForm, fieldDefs }: { form: RefForm; setForm: (
       <div>
         <label className="block text-[12px] font-semibold text-[#374151] mb-1.5">Nom de la référence <span className="text-[#ABBED1] font-normal">(facultatif)</span></label>
         <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="ex: Rouleau thermique 80×80" className={inputClass} />
+      </div>
+      <div>
+        <label className="block text-[12px] font-semibold text-[#374151] mb-1.5">Mode</label>
+        <div className="flex gap-2">
+          {MODE_OPTIONS.map((opt) => (
+            <button key={opt.value} type="button" onClick={() => setForm({ ...form, mode: opt.value })}
+              className={`flex-1 py-2 rounded-lg border text-[12px] font-bold transition-colors ${form.mode === opt.value ? 'border-[#4CAF4F] bg-[#F0FDF4] text-[#166534]' : 'border-[#E2E8F0] text-[#374151]'}`}>
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      {(form.mode === 'ACHETE' || form.mode === 'LES_DEUX') && (
+        <div>
+          <label className="block text-[12px] font-semibold text-[#374151] mb-1.5">Prix d&apos;achat (DA)</label>
+          <input value={form.purchasePrice} onChange={(e) => setForm({ ...form, purchasePrice: e.target.value.replace(/[^\d.]/g, '') })} inputMode="decimal" placeholder="ex: 400" className={inputClass} />
+        </div>
+      )}
+      <div>
+        <label className="block text-[12px] font-semibold text-[#374151] mb-1.5">Stock max <span className="text-[#ABBED1] font-normal">(facultatif — 140 par défaut)</span></label>
+        <input value={form.stockMax} onChange={(e) => setForm({ ...form, stockMax: e.target.value.replace(/[^\d]/g, '') })} inputMode="numeric" placeholder="ex: 140" className={inputClass} />
+        <p className="text-[11px] text-[#8A9BB5] mt-1">Sert de base au seuil de réassort par défaut (50% du stock max).</p>
       </div>
       <div className="grid grid-cols-2 gap-3">
         <div>
@@ -237,6 +274,9 @@ function NewCategoryModal({ onClose, onCreated, fieldDefs }: { onClose: () => vo
           width: Number(r.width), length: Number(r.length),
           metrage: r.metrage.trim() ? Number(r.metrage) : null,
           usage: r.usage.trim(), price: Number(r.price) || 0, categoryId: cat.id, active: true,
+          mode: r.mode,
+          purchasePrice: (r.mode === 'ACHETE' || r.mode === 'LES_DEUX') ? (Number(r.purchasePrice) || 0) : null,
+          ...(r.stockMax.trim() !== '' && { stockMax: Number(r.stockMax) }),
         }),
       })));
       const failedCount = refResults.filter((r) => !r.ok).length;
@@ -333,6 +373,78 @@ function NewCategoryModal({ onClose, onCreated, fieldDefs }: { onClose: () => vo
   );
 }
 
+// ── Container "Recette" — dans la fiche d'une référence fabriquée ──────────
+function RecipeSection({ productId, initialItems, materials, canEdit, onSaved }: {
+  productId: string;
+  initialItems: { rawMaterialId: string; quantity: number; rawMaterial: RawMaterial }[];
+  materials: RawMaterial[];
+  canEdit: boolean;
+  onSaved: () => void;
+}) {
+  const [lines, setLines] = useState<{ rawMaterialId: string; quantity: string }[]>(
+    initialItems.length > 0 ? initialItems.map((i) => ({ rawMaterialId: i.rawMaterialId, quantity: String(i.quantity) })) : []
+  );
+  const [saving, setSaving] = useState(false);
+
+  const setLine = (i: number, patch: Partial<{ rawMaterialId: string; quantity: string }>) =>
+    setLines((ls) => ls.map((l, idx) => idx === i ? { ...l, ...patch } : l));
+  const addLine = () => setLines((ls) => [...ls, { rawMaterialId: '', quantity: '' }]);
+  const removeLine = (i: number) => setLines((ls) => ls.filter((_, idx) => idx !== i));
+
+  const save = async () => {
+    const items = lines.filter((l) => l.rawMaterialId && Number(l.quantity) > 0).map((l) => ({ rawMaterialId: l.rawMaterialId, quantity: Number(l.quantity) }));
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/products/${productId}/recipe`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        alert(err.error ?? 'Échec de l\'enregistrement de la recette');
+        return;
+      }
+      onSaved();
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="pt-1 border-t border-[#F0F4F8]">
+      <p className="text-[11px] font-bold text-[#8A9BB5] uppercase tracking-wide mt-3 mb-2">Recette de production</p>
+      <div className="flex flex-col gap-2">
+        {lines.map((l, i) => {
+          const mat = materials.find((m) => m.id === l.rawMaterialId);
+          return (
+            <div key={i} className="flex gap-2 items-center">
+              <select disabled={!canEdit} value={l.rawMaterialId} onChange={(e) => setLine(i, { rawMaterialId: e.target.value })} className={inputClass}>
+                <option value="">Choisir une référence</option>
+                {materials.map((m) => <option key={m.id} value={m.id}>{m.reference} — {m.name}</option>)}
+              </select>
+              <input disabled={!canEdit} value={l.quantity} onChange={(e) => setLine(i, { quantity: e.target.value.replace(/[^\d.]/g, '') })} inputMode="decimal"
+                placeholder="Qté" style={{ width: 80 }} className={inputClass} />
+              <span className="text-[11px] text-[#8A9BB5] w-12 flex-shrink-0">{mat?.unit ?? ''}</span>
+              {canEdit && (
+                <button type="button" onClick={() => removeLine(i)} className="w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-lg text-[#EF4444] hover:bg-[#FEF2F2] text-xs font-bold">×</button>
+              )}
+            </div>
+          );
+        })}
+        {lines.length === 0 && <p className="text-[12px] text-[#8A9BB5]">Aucune matière première dans la recette.</p>}
+      </div>
+      {canEdit && (
+        <div className="flex items-center justify-between mt-2">
+          <button type="button" onClick={addLine} className="text-[12px] font-bold text-[#4CAF4F] hover:text-[#388E3C]">+ Ajouter une matière première</button>
+          <button type="button" onClick={save} disabled={saving} className="px-3 py-1.5 rounded-lg text-[12px] font-bold text-white disabled:opacity-60" style={{ background: '#4CAF4F' }}>
+            {saving ? 'Enregistrement…' : 'Enregistrer la recette'}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ProductsPageInner() {
   const { can } = useRole();
   const canEdit = can('modifier_produits');
@@ -343,6 +455,7 @@ function ProductsPageInner() {
   const [refs, setRefs] = useState<Ref[]>([]);
   const [catList, setCatList] = useState<Cat[]>([]);
   const [fieldDefs, setFieldDefs] = useState<FieldDef[]>([]);
+  const [materials, setMaterials] = useState<RawMaterial[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedCatId, setSelectedCatId] = useState<string | null>(null);
 
@@ -389,6 +502,7 @@ function ProductsPageInner() {
     fetch('/api/products/fields').then((r) => r.ok ? r.json() : []).then((data: FieldDef[]) =>
       setFieldDefs(data.sort((a, b) => a.order - b.order))
     ).catch(() => {});
+    fetch('/api/raw-materials').then((r) => r.ok ? r.json() : []).then(setMaterials).catch(() => {});
   }, []);
 
   const selectedCat = useMemo(() => catList.find((c) => c.id === selectedCatId) ?? null, [catList, selectedCatId]);
@@ -428,7 +542,7 @@ function ProductsPageInner() {
   const openEditRef = (r: Ref) => {
     const customFields: Record<string, string> = {};
     r.customFields.forEach((cf) => { customFields[cf.definitionId] = cf.value; });
-    setEditRefForm({ name: r.name ?? '', width: String(r.width), length: String(r.length), metrage: r.metrage != null ? String(r.metrage) : '', usage: r.usage, price: String(r.price), customFields });
+    setEditRefForm({ name: r.name ?? '', width: String(r.width), length: String(r.length), metrage: r.metrage != null ? String(r.metrage) : '', usage: r.usage, price: String(r.price), customFields, mode: r.mode, purchasePrice: r.purchasePrice != null ? String(r.purchasePrice) : '', stockMax: String(r.stockMax) });
     setEditRef(r);
   };
 
@@ -457,6 +571,9 @@ function ProductsPageInner() {
         width: Number(editRefForm.width), length: Number(editRefForm.length),
         metrage: editRefForm.metrage.trim() ? Number(editRefForm.metrage) : null,
         usage: editRefForm.usage.trim(), price: Number(editRefForm.price) || 0,
+        mode: editRefForm.mode,
+        purchasePrice: (editRefForm.mode === 'ACHETE' || editRefForm.mode === 'LES_DEUX') ? (Number(editRefForm.purchasePrice) || 0) : null,
+        ...(editRefForm.stockMax.trim() !== '' && { stockMax: Number(editRefForm.stockMax) }),
       }),
     });
     if (!res.ok) {
@@ -480,6 +597,9 @@ function ProductsPageInner() {
         width: Number(newRefForm.width), length: Number(newRefForm.length),
         metrage: newRefForm.metrage.trim() ? Number(newRefForm.metrage) : null,
         usage: newRefForm.usage.trim(), price: Number(newRefForm.price) || 0, categoryId: selectedCatId, active: true,
+        mode: newRefForm.mode,
+        purchasePrice: (newRefForm.mode === 'ACHETE' || newRefForm.mode === 'LES_DEUX') ? (Number(newRefForm.purchasePrice) || 0) : null,
+        ...(newRefForm.stockMax.trim() !== '' && { stockMax: Number(newRefForm.stockMax) }),
       }),
     });
     if (!res.ok) {
@@ -811,6 +931,15 @@ function ProductsPageInner() {
         <Modal title="Modifier la référence" onClose={() => setEditRef(null)}>
           <div className="space-y-4">
             <RefFormFields form={editRefForm} setForm={setEditRefForm} fieldDefs={fieldDefs} />
+            {(editRefForm.mode === 'FABRIQUE' || editRefForm.mode === 'LES_DEUX') && (
+              <RecipeSection
+                productId={editRef.id}
+                initialItems={editRef.recipeItems}
+                materials={materials}
+                canEdit={canEdit}
+                onSaved={fetchProducts}
+              />
+            )}
             <div className="flex gap-3 pt-2">
               <button onClick={() => setEditRef(null)} className="flex-1 px-4 py-2.5 rounded-lg border border-[#E2E8F0] text-sm font-semibold text-[#374151] hover:bg-[#F8FAFC] transition-colors">Annuler</button>
               <button onClick={handleEditRef} className="flex-1 px-4 py-2.5 rounded-lg text-sm font-bold text-white transition-colors" style={{ background: '#4CAF4F' }}>Enregistrer</button>

@@ -4,6 +4,10 @@ import { requirePermission, hasPermission } from '@/lib/permissions';
 import { createAudit, statusLabel } from '@/lib/audit';
 import { createNotif } from '@/lib/notifications';
 import { notifyStatusChange, notifyAssignment } from '@/lib/notify-activity';
+import { confirmStock, cancelStock, deliverStock, returnStock, releaseOrderItemStock, adjustOrderItemQuantity } from '@/lib/order-stock';
+
+// Statuts où les lignes ne peuvent plus être modifiées (déjà sorties du stock/annulées)
+const LOCKED_STATUSES = ['LIVRE', 'ANNULE', 'RETOURNE'];
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -64,28 +68,76 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
     }
 
     // Remplacement complet des lignes de la commande (bouton "Modifier")
-    // body.items = [{ productId | description, quantity, unitPrice, metrage }] — pas de modif si livrée/annulée
+    // body.items = [{ productId | description, quantity, unitPrice, metrage }] — pas de modif si livrée/annulée/retournée
+    let current: { status: string } | null = null;
     if (body.items && Array.isArray(body.items)) {
-      const current = await prisma.order.findUnique({ where: { id }, select: { status: true } });
-      if (current && (current.status === 'LIVRE' || current.status === 'ANNULE')) {
-        return NextResponse.json({ error: 'Impossible de modifier une commande livrée ou annulée' }, { status: 409 });
+      current = await prisma.order.findUnique({ where: { id }, select: { status: true } });
+      if (current && LOCKED_STATUSES.includes(current.status)) {
+        return NextResponse.json({ error: 'Impossible de modifier une commande livrée, retournée ou annulée' }, { status: 409 });
       }
       // Une référence LIBRE n'a pas de productId : son libellé est dans `description`.
       // (avant, ces lignes étaient filtrées → elles disparaissaient à chaque modification)
       const validItems = (body.items as { productId?: string; description?: string; quantity?: number; unitPrice?: number; metrage?: number }[])
         .filter((it) => (it.productId || (it.description && it.description.trim() !== '')) && (it.quantity ?? 0) > 0);
-      await prisma.orderItem.deleteMany({ where: { orderId: id } });
-      if (validItems.length > 0) {
-        await prisma.orderItem.createMany({
-          data: validItems.map((it) => ({
-            orderId: id,
-            productId: it.productId || null,
-            description: it.productId ? null : (it.description ?? null),
-            quantity: it.quantity!,
-            unitPrice: it.unitPrice ?? 0,
-            metrage: it.metrage ?? null,
-          })),
-        });
+
+      const isConfirmed = current && (current.status === 'VALIDE' || current.status === 'PRODUITE');
+      if (isConfirmed) {
+        // Commande déjà confirmée : on ne rejoue le moteur de stock QUE pour ce qui
+        // change réellement, au lieu de tout relâcher puis tout reconfirmer — sinon
+        // une simple hausse/baisse de quantité peut se retrouver fusionnée avec une
+        // ligne de liste appartenant à une AUTRE commande du même produit (une seule
+        // ligne partagée par produit, cf. findOrCreate*ItemForProduct).
+        const existingItems = await prisma.orderItem.findMany({ where: { orderId: id } });
+        const existingByProduct = new Map(existingItems.filter((e) => e.productId).map((e) => [e.productId as string, e]));
+        const newProductIds = new Set(validItems.filter((it) => it.productId).map((it) => it.productId as string));
+
+        // Produits retirés de la commande → on relâche entièrement leur effet stock.
+        for (const [productId, existing] of existingByProduct) {
+          if (!newProductIds.has(productId)) await releaseOrderItemStock('order', existing.id);
+        }
+        // Lignes "libres" (sans productId) : pas de suivi de stock → on les remplace telles quelles.
+        await prisma.orderItem.deleteMany({ where: { orderId: id, productId: null } });
+        await prisma.orderItem.deleteMany({ where: { orderId: id, productId: { notIn: Array.from(newProductIds) } } });
+
+        for (const it of validItems) {
+          if (it.productId) {
+            const existing = existingByProduct.get(it.productId);
+            if (existing) {
+              // Même produit déjà engagé → ajuste par delta (préserve la ligne de liste liée).
+              if (existing.quantity !== it.quantity) await adjustOrderItemQuantity('order', existing.id, it.quantity!);
+              await prisma.orderItem.update({
+                where: { id: existing.id },
+                data: { unitPrice: it.unitPrice ?? existing.unitPrice, metrage: it.metrage ?? existing.metrage },
+              });
+              continue;
+            }
+          }
+          // Nouvelle ligne (produit pas encore présent, ou référence libre) → confirmStock la traitera.
+          await prisma.orderItem.create({
+            data: {
+              orderId: id,
+              productId: it.productId || null,
+              description: it.productId ? null : (it.description ?? null),
+              quantity: it.quantity!,
+              unitPrice: it.unitPrice ?? 0,
+              metrage: it.metrage ?? null,
+            },
+          });
+        }
+      } else {
+        await prisma.orderItem.deleteMany({ where: { orderId: id } });
+        if (validItems.length > 0) {
+          await prisma.orderItem.createMany({
+            data: validItems.map((it) => ({
+              orderId: id,
+              productId: it.productId || null,
+              description: it.productId ? null : (it.description ?? null),
+              quantity: it.quantity!,
+              unitPrice: it.unitPrice ?? 0,
+              metrage: it.metrage ?? null,
+            })),
+          });
+        }
       }
     }
 
@@ -115,6 +167,36 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
     const action = body.status !== undefined ? `Statut commande : ${statusLabel(body.status)}` : 'Commande modifiée';
     const orderLabel = order.clientCompany || order.clientName || order.client?.name || '';
     createAudit({ userId: session.user.id, action, entity: 'COMMANDE', entityId: id, detail: orderLabel ? `${order.ref} — ${orderLabel}` : order.ref, orderId: id });
+
+    // ── Répercussion sur le stock selon la transition de statut ────────────────
+    // "Marquer Produit" (PRODUITE) est un pur changement de statut affiché — aucun effet sur
+    // le stock ni les listes d'achat/production, elles continuent de suivre le manquant réel
+    // exactement comme avant le clic.
+    try {
+      if (body.status === 'VALIDE') {
+        await confirmStock('order', id);
+      } else if (body.status === 'ANNULE') {
+        await cancelStock('order', id);
+      } else if (body.status === 'LIVRE') {
+        await deliverStock('order', id);
+      } else if (body.status === 'RETOURNE') {
+        await returnStock('order', id);
+      } else if (body.items !== undefined && (current?.status === 'VALIDE' || current?.status === 'PRODUITE')) {
+        // Lignes modifiées sans changement de statut, commande déjà confirmée
+        // → traite les nouvelles lignes (stockPath NONE) comme une confirmation.
+        await confirmStock('order', id);
+        if (current.status === 'PRODUITE') {
+          // La commande était PRODUITE (tout résolu) avant la modif : si l'ajout/la
+          // hausse de quantité a fait réapparaître un article non résolu, elle doit
+          // repasser VALIDE (confirmStock ne fait jamais redescendre le statut seul).
+          const items = await prisma.orderItem.findMany({ where: { orderId: id } });
+          const allResolved = items.every((i) => i.stockPath === 'FROM_STOCK' || i.resolvedQuantity >= i.quantity);
+          if (!allResolved) await prisma.order.update({ where: { id }, data: { status: 'VALIDE' } });
+        }
+      }
+    } catch (stockError) {
+      console.error('[orders] Erreur de mise à jour du stock :', stockError);
+    }
 
     // Modification des PRODUITS (sans changement de statut) → on prévient quand même :
     // admins + employé assigné, comme pour les autres actions sur la commande.

@@ -4,7 +4,9 @@ const STATUS_LABELS: Record<string, string> = {
   EN_ATTENTE: 'En attente',
   CONTACTE: 'Contacté',
   VALIDE: 'Validé',
+  PRODUITE: 'Produit',
   LIVRE: 'Livré',
+  RETOURNE: 'Retourné',
   ANNULE: 'Annulé',
 };
 
@@ -12,7 +14,7 @@ export function statusLabel(s: string) {
   return STATUS_LABELS[s] ?? s;
 }
 
-type Entity = 'COMMANDE' | 'DEVIS' | 'PRODUIT' | 'CLIENT' | 'UTILISATEUR' | 'CONTENU' | 'TEMPLATE' | 'STATUT';
+type Entity = 'COMMANDE' | 'DEVIS' | 'PRODUIT' | 'CLIENT' | 'UTILISATEUR' | 'CONTENU' | 'TEMPLATE' | 'STATUT' | 'STOCK' | 'MATIERE';
 
 export function createAudit({
   userId,

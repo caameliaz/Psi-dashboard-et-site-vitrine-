@@ -29,8 +29,17 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
         ...(body.photo !== undefined && { photo: body.photo }),
         ...(body.active !== undefined && { active: body.active }),
         ...(body.categoryId !== undefined && { categoryId: body.categoryId }),
+        ...(body.mode !== undefined && { mode: body.mode }),
+        ...(body.purchasePrice !== undefined && { purchasePrice: body.purchasePrice != null ? Number(body.purchasePrice) : null }),
+        ...(body.stockMax !== undefined && { stockMax: Number(body.stockMax) }),
+        ...(body.available !== undefined && { available: Number(body.available) }),
+        ...(body.reserved !== undefined && { reserved: Number(body.reserved) }),
+        ...(body.inDelivery !== undefined && { inDelivery: Number(body.inDelivery) }),
+        ...(body.returned !== undefined && { returned: Number(body.returned) }),
+        ...(body.purchaseThreshold !== undefined && { purchaseThreshold: Number(body.purchaseThreshold) }),
+        ...(body.productionThreshold !== undefined && { productionThreshold: Number(body.productionThreshold) }),
       },
-      include: { category: true, customFields: { include: { definition: true } } },
+      include: { category: true, customFields: { include: { definition: true } }, recipeItems: { include: { rawMaterial: true } } },
     });
 
     const action = body.active !== undefined && !body.reference

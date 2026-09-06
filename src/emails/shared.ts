@@ -67,7 +67,9 @@ export const logoAttachment: { filename: string; content?: Buffer; path?: string
 export const STATUS_COLOR: Record<string, string> = {
   'En attente': '#F59E0B', // jaune
   'Confirmé': '#3B82F6',   // bleu
+  'Produit': '#6366F1',    // indigo
   'Livré': '#22C55E',      // vert
+  'Retourné': '#F97316',   // orange
   'Annulé': '#EF4444',     // rouge
 };
 
@@ -145,7 +147,9 @@ const TYPE_STYLE: Record<'Commande' | 'Devis', { border: string; bg: string; col
 const ITEM_STATUS_STYLE: Record<string, { dot: string; text: string; bg: string; border: string }> = {
   'En attente': { dot: '#F97316', text: '#9A3412', bg: '#FFF7ED', border: '#FED7AA' },
   'Confirmé': { dot: '#8B5CF6', text: '#5B21B6', bg: '#F5F3FF', border: '#DDD6FE' },
+  'Produit': { dot: '#3B82F6', text: '#1E40AF', bg: '#EFF6FF', border: '#BFDBFE' },
   'Livré': { dot: '#22C55E', text: '#166534', bg: '#F0FDF4', border: '#BBF7D0' },
+  'Retourné': { dot: '#F59E0B', text: '#92400E', bg: '#FFFBEB', border: '#FDE68A' },
   'Annulé': { dot: '#6B7280', text: '#374151', bg: '#F9FAFB', border: '#E5E7EB' },
 };
 

@@ -36,7 +36,7 @@ import { exportClientExcel, printClientDoc, type ClientExportData } from '@/lib/
 import { RequirePerm } from '@/components/RequirePerm';
 import { useRole } from '@/lib/role-context';
 import { AdminSelect } from '@/components/ui/AdminSelect';
-import { orderToDetail, quoteToDetail } from '@/lib/request-detail';
+import { orderToDetail, quoteToDetail, UI_TO_DB } from '@/lib/request-detail';
 import { CreateForm, submitNewRequest } from '@/app/admin/requests/page';
 import { useSession } from 'next-auth/react';
 import { validateEmail, validatePhone, validateText, normalizeEmail, normalizePhone, firstError, messageErreur, toWhatsAppNumber } from '@/lib/validation';
@@ -484,11 +484,10 @@ function ClientSlideIn({ client, onClose, onEdit, onDelete, onReactivate, onDele
           onReassigned={() => { setSelectedRequest(null); onRefresh?.(); }}
           onStatusChange={async (_ref, newStatut) => {
             if (!selectedRequest.id) return;
-            const UI_TO_DB: Record<string, string> = { 'En attente': 'EN_ATTENTE', 'Confirmé': 'VALIDE', 'Livré': 'LIVRE', 'Annulé': 'ANNULE' };
             const endpoint = selectedRequest.type === 'Devis' ? `/api/quotes/${selectedRequest.id}` : `/api/orders/${selectedRequest.id}`;
             await fetch(endpoint, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: UI_TO_DB[newStatut] ?? newStatut }) });
             // Statut final → ferme le détail. Sinon garde ouvert avec le nouveau statut.
-            if (newStatut === 'Livré' || newStatut === 'Annulé') setSelectedRequest(null);
+            if (newStatut === 'Livré' || newStatut === 'Annulé' || newStatut === 'Retourné') setSelectedRequest(null);
             else setSelectedRequest((prev) => (prev ? { ...prev, statut: newStatut } : prev));
             onRefresh?.();
           }}

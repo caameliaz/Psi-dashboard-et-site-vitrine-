@@ -53,6 +53,16 @@ function IconLogout({ color = '#717171' }) {
     <svg width={18} height={18} fill="none"><path d="M11.5 13V15C11.5 16.66 10.16 18 8.5 18H4.5C2.84 18 1.5 16.66 1.5 15V5C1.5 3.34 2.84 2 4.5 2H8.5C10.16 2 11.5 3.34 11.5 5V7" stroke={color} strokeLinecap="round" strokeWidth="1.5"/><path d="M14.5 12.5L16.79 10.21C17.18 9.82 17.18 9.18 16.79 8.79L14.5 6.5" stroke={color} strokeLinecap="round" strokeWidth="1.5"/><path d="M16.5 10H6.5" stroke={color} strokeLinecap="round" strokeWidth="1.5"/></svg>
   );
 }
+function IconBox({ color = '#717171' }) {
+  return (
+    <svg width={18} height={18} fill="none"><path d="M9 1.5L16.5 5.5V12.5L9 16.5L1.5 12.5V5.5L9 1.5Z" stroke={color} strokeWidth="1.5" strokeLinejoin="round"/><path d="M1.5 5.5L9 9.5L16.5 5.5M9 9.5V16.5" stroke={color} strokeWidth="1.5" strokeLinejoin="round"/></svg>
+  );
+}
+function IconFlask({ color = '#717171' }) {
+  return (
+    <svg width={18} height={18} fill="none"><path d="M7 1.5H11" stroke={color} strokeWidth="1.5" strokeLinecap="round"/><path d="M7.75 1.5V6.5L2.9 14.3C2.35 15.2 3 16.5 4.05 16.5H13.95C15 16.5 15.65 15.2 15.1 14.3L10.25 6.5V1.5" stroke={color} strokeWidth="1.5" strokeLinejoin="round"/><path d="M4.5 11.5H13.5" stroke={color} strokeWidth="1.5" strokeLinecap="round"/></svg>
+  );
+}
 function IconChevron({ collapsed }: { collapsed: boolean }) {
   return (
     <svg width={14} height={14} fill="none" viewBox="0 0 24 24" style={{ transform: collapsed ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>
@@ -65,6 +75,8 @@ const navItems: { href: string; label: string; Icon: typeof IconHome; perm: Perm
   { href: '/admin/dashboard', label: 'Dashboard',    Icon: IconHome,     perm: null },
   { href: '/admin/requests',  label: 'Commandes',    Icon: IconDocument, perm: 'voir_commandes' },
   { href: '/admin/products',  label: 'Produits',     Icon: IconLayers,   perm: 'voir_produits' },
+  { href: '/admin/stock',     label: 'Stock',        Icon: IconBox,      perm: 'voir_stock' },
+  { href: '/admin/recipes',   label: 'Recettes',     Icon: IconFlask,    perm: 'voir_stock' },
   { href: '/admin/clients',   label: 'Clients',      Icon: IconUsers,    perm: 'voir_clients' },
   { href: '/admin/history',   label: 'Historique',   Icon: IconHistory,  perm: 'voir_historique' },
   { href: '/admin/content',   label: 'Contenu',      Icon: IconEdit,     perm: 'modifier_contenu' },
