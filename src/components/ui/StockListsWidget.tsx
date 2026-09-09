@@ -5,7 +5,7 @@ import { Modal } from './Modal';
 
 const inputClass = "w-full px-3 py-2.5 rounded-lg border border-[#E2E8F0] text-sm text-[#0F172A] focus:outline-none focus:border-[#4CAF4F] focus:ring-1 focus:ring-[#4CAF4F] transition-colors bg-[#F8FAFC]";
 
-interface LinkedRef { quantity: number; order?: LinkedParent; quote?: LinkedParent }
+interface LinkedRef { quantity: number; order?: LinkedParent; quote?: LinkedParent; blocked?: boolean }
 interface LinkedParent { ref: string | null; clientName: string | null; client: { name: string; company: string | null } | null }
 
 interface PurchaseItem {
@@ -22,10 +22,10 @@ interface ProductionItem {
   orderItems: LinkedRef[]; quoteItems: LinkedRef[];
 }
 
-// Sous-titre de la carte : gravité décroissante — matière bloquante, puis stock à 0
-// (urgent), puis simple passage sous le seuil de réassort, sinon ajout manuel/commande.
-function severitySubtitle(opts: { blocked?: boolean; urgent: boolean; belowThreshold: boolean; auto: boolean }) {
-  if (opts.blocked) return 'Stock matière première insuffisant';
+// Sous-titre de la carte : gravité décroissante — stock à 0 (urgent), puis simple passage
+// sous le seuil de réassort, sinon ajout manuel/commande. Le blocage matière première ne
+// s'affiche plus qu'au niveau de chaque commande (cf. "Commandes concernées"), jamais ici.
+function severitySubtitle(opts: { urgent: boolean; belowThreshold: boolean; auto: boolean }) {
   if (opts.urgent) return 'Stock insuffisant';
   if (opts.belowThreshold || opts.auto) return 'Stock sous le seuil de réassort';
   return 'Ajouté manuellement';
@@ -54,7 +54,10 @@ function LinkedOrdersList({ linked, unit }: { linked: LinkedRef[]; unit?: string
           const { ref, client, qty } = linkedParts(lk);
           return (
             <div key={i} className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg bg-[#F8FAFC]">
-              <span className="text-[12px] font-bold text-[#0F172A]">{ref}</span>
+              <span className="flex items-center gap-1.5">
+                <span className="text-[12px] font-bold text-[#0F172A]">{ref}</span>
+                {lk.blocked && <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-[#FEF3C7] text-[#92400E] uppercase tracking-wide">Bloqué</span>}
+              </span>
               <span className="text-[12px] text-[#4F46E5]">
                 {client} · <span className="font-bold text-[#0F172A]">{qty}{unit ? ` ${unit}` : ''}</span>
               </span>
@@ -228,7 +231,9 @@ export function StockListsWidget() {
   };
 
   const bulkCandidates = bulkAction === 'order'
-    ? purchaseItems.filter((i) => i.status === 'A_COMMANDER').map((i) => { const l = itemLabel(i); return { id: i.id, label: `${l.ref} — ${l.name} (${totalQty(i)} manquant)`, suggested: totalQty(i), unit: l.unit }; })
+    // Inclut aussi les lignes déjà "Commandé" tant qu'il leur reste un manquant (nouveau
+    // besoin apparu depuis, ou commande fournisseur fractionnée) — pas seulement "À commander".
+    ? purchaseItems.filter((i) => (i.status === 'A_COMMANDER' || i.status === 'COMMANDE') && totalQty(i) > 0).map((i) => { const l = itemLabel(i); return { id: i.id, label: `${l.ref} — ${l.name} (${totalQty(i)} manquant${i.status === 'COMMANDE' ? ', déjà commandé en partie' : ''})`, suggested: totalQty(i), unit: l.unit }; })
     : bulkAction === 'receive'
     ? purchaseItems.filter((i) => i.status === 'COMMANDE').map((i) => { const l = itemLabel(i); return { id: i.id, label: `${l.ref} — ${l.name} (${i.orderedQuantity} commandé)`, suggested: i.orderedQuantity ?? i.neededQuantity, unit: l.unit }; })
     : bulkAction === 'produce'
@@ -267,10 +272,15 @@ export function StockListsWidget() {
             // le plus avancé des deux (commandé = sécurisé, reçu = physiquement en stock).
             const pct = target > 0 ? Math.min(100, (Math.max(ordered, received) / target) * 100) : 0;
             const available = item.product?.available ?? item.rawMaterial?.available ?? 0;
-            const urgent = available <= 0;
+            // "Urgent" ne veut rien dire s'il ne manque plus rien du tout (ex: une carte
+            // "Commandé" qui attend juste sa réception, besoin+buffer déjà à 0) — sinon le
+            // badge reste affiché à tort indéfiniment tant que la matière n'est pas livrée.
+            const urgent = total > 0 && available <= 0;
             const linked = [...item.orderItems, ...item.quoteItems];
             const threshold = item.product?.purchaseThreshold ?? item.rawMaterial?.purchaseThreshold ?? 0;
-            const subtitle = severitySubtitle({ urgent, belowThreshold: available < threshold, auto: item.auto });
+            const subtitle = total <= 0
+              ? 'En attente de réception'
+              : severitySubtitle({ urgent, belowThreshold: available < threshold, auto: item.auto });
             return (
               <div key={item.id} className="rounded-xl border border-[#E2E8F0] p-3">
                 <div className="flex items-start justify-between gap-2">
@@ -309,10 +319,12 @@ export function StockListsWidget() {
             const produced = item.producedQuantity ?? 0;
             const target = produced + total; // objectif d'origine reconstitué (produit + encore à produire)
             const pct = target > 0 ? Math.min(100, (produced / target) * 100) : 0;
-            const urgent = item.product.available <= 0;
+            const urgent = total > 0 && item.product.available <= 0;
             const linked = [...item.orderItems, ...item.quoteItems];
+            // Le statut "Bloqué" ne s'affiche plus au niveau de la carte (badge, sous-titre,
+            // ligne de statut) — il ne reste visible que par commande, dans "Commandes
+            // concernées" (badge précis calculé par simulation FIFO, cf. stock-traceability.ts).
             const subtitle = severitySubtitle({
-              blocked: item.status === 'BLOQUE',
               urgent,
               belowThreshold: item.product.available < item.product.productionThreshold,
               auto: item.auto,
@@ -324,7 +336,6 @@ export function StockListsWidget() {
                     <div className="flex items-center gap-1.5 flex-wrap">
                       <p className="text-[11px] font-bold text-[#4F46E5]">{item.product.reference}</p>
                       {urgent && <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-[#FEF2F2] text-[#DC2626] uppercase tracking-wide">Urgent</span>}
-                      {item.status === 'BLOQUE' && <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-[#FEF3C7] text-[#92400E] uppercase tracking-wide">Bloqué</span>}
                     </div>
                     <p className="text-[13px] font-bold text-[#0F172A] truncate">{item.product.name ?? item.product.reference}</p>
                     <p className="text-[11px] text-[#8A9BB5] italic mt-0.5">{subtitle}</p>
@@ -338,8 +349,7 @@ export function StockListsWidget() {
                   <div className="h-full bg-[#4CAF4F] rounded-full" style={{ width: `${pct}%` }} />
                 </div>
                 <p className="text-[13px] font-semibold text-[#374151] mt-1.5">
-                  {item.status === 'A_PRODUIRE' && `${produced} produit / ${target} au total`}
-                  {item.status === 'BLOQUE' && `${produced} produit / ${target} au total — en attente de matière première`}
+                  {produced} produit / {target} au total
                 </p>
                 <LinkedOrdersList linked={linked} />
               </div>

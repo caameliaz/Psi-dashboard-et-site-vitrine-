@@ -3,28 +3,30 @@ import { prisma } from '@/lib/prisma';
 import { auth } from '@/lib/auth';
 import { requirePermission } from '@/lib/permissions';
 import { createAudit } from '@/lib/audit';
-import { syncProductionList } from '@/lib/stock-lists';
 import { OPEN_PRODUCTION_STATUSES } from '@/lib/order-stock';
-import { openOrdersByProduct } from '@/lib/stock-traceability';
+import { createLinkResolver } from '@/lib/stock-traceability';
 
 const INCLUDE = {
   product: { select: { id: true, reference: true, name: true, mode: true, available: true, productionThreshold: true } },
 } as const;
 
-// GET /api/production-list — liste de production (synchronisée par seuil à chaque lecture)
+// GET /api/production-list — liste de production. Le rattrapage (buffer) et le besoin réel
+// sont désormais tenus à jour EN CONTINU par les actions elles-mêmes (commande, annulation,
+// correction de stock, changement de seuil...) — cf. order-stock.ts. Cette route ne fait
+// plus de recalcul global de tous les produits à chaque lecture, seulement lire.
 export async function GET() {
   const session = await auth();
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   try {
-    await syncProductionList();
     // Les lignes "Produit" sont soldées → elles disparaissent de la liste (l'historique
     // reste consultable via l'audit, cf. src/lib/audit.ts).
     const items = await prisma.productionListItem.findMany({ where: { status: { not: 'PRODUIT' } }, include: INCLUDE, orderBy: { createdAt: 'asc' } });
 
-    // Traçabilité : commandes/devis "en cours" sur ce produit — cf. src/lib/stock-traceability.ts.
-    const byProduct = await openOrdersByProduct(items.map((i) => i.productId));
-    const withLinks = items.map((i) => ({ ...i, ...(byProduct.get(i.productId) ?? { orderItems: [], quoteItems: [] }) }));
+    // Traçabilité précise : commandes/devis réellement rattachés à chaque ligne, avec badge
+    // "Bloqué" par commande — cf. src/lib/stock-traceability.ts.
+    const resolver = createLinkResolver();
+    const withLinks = await Promise.all(items.map(async (i) => ({ ...i, ...(await resolver.productionLineLinks(i.productId, i.id)) })));
 
     return NextResponse.json(withLinks);
   } catch (e) {

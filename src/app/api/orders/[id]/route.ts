@@ -4,7 +4,7 @@ import { requirePermission, hasPermission } from '@/lib/permissions';
 import { createAudit, statusLabel } from '@/lib/audit';
 import { createNotif } from '@/lib/notifications';
 import { notifyStatusChange, notifyAssignment } from '@/lib/notify-activity';
-import { confirmStock, cancelStock, deliverStock, returnStock, releaseOrderItemStock, adjustOrderItemQuantity } from '@/lib/order-stock';
+import { confirmStock, cancelStock, deliverStock, returnStock, releaseOrderItemStock, adjustOrderItemQuantity, forceCompleteOrder, previewForceCompleteShortfall } from '@/lib/order-stock';
 
 // Statuts où les lignes ne peuvent plus être modifiées (déjà sorties du stock/annulées)
 const LOCKED_STATUSES = ['LIVRE', 'ANNULE', 'RETOURNE'];
@@ -56,6 +56,16 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
     // Ré-assigner la commande à un autre client → nécessite reassigner_client
     if (body.clientId !== undefined && !hasPermission(session.user as any, 'reassigner_client')) {
       return NextResponse.json({ error: "Vous n'avez pas la permission de ré-assigner le client" }, { status: 403 });
+    }
+
+    // "Marquer Produit" — si de la matière première manque pour finir de produire, on
+    // demande confirmation AVANT de toucher à quoi que ce soit (sinon réponse 409 avec le
+    // détail, à renvoyer avec `confirmShortfall: true` une fois l'utilisateur d'accord).
+    if (body.status === 'PRODUITE' && !body.confirmShortfall) {
+      const shortfall = await previewForceCompleteShortfall('order', id);
+      if (shortfall.length > 0) {
+        return NextResponse.json({ error: 'MATERIAL_SHORTFALL', shortfall }, { status: 409 });
+      }
     }
 
     // Mise à jour des prix unitaires par produit si fournis
@@ -169,12 +179,14 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
     createAudit({ userId: session.user.id, action, entity: 'COMMANDE', entityId: id, detail: orderLabel ? `${order.ref} — ${orderLabel}` : order.ref, orderId: id });
 
     // ── Répercussion sur le stock selon la transition de statut ────────────────
-    // "Marquer Produit" (PRODUITE) est un pur changement de statut affiché — aucun effet sur
-    // le stock ni les listes d'achat/production, elles continuent de suivre le manquant réel
-    // exactement comme avant le clic.
     try {
       if (body.status === 'VALIDE') {
         await confirmStock('order', id);
+      } else if (body.status === 'PRODUITE') {
+        // "Marquer Produit" — résout la part manquante de chaque article (matière première
+        // + liste d'achat/production), la confirmation d'un éventuel manquant a déjà eu lieu
+        // plus haut (cf. previewForceCompleteShortfall).
+        await forceCompleteOrder('order', id);
       } else if (body.status === 'ANNULE') {
         await cancelStock('order', id);
       } else if (body.status === 'LIVRE') {

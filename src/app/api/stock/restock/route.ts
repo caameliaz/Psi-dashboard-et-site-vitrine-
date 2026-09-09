@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { requirePermission } from '@/lib/permissions';
 import { createAudit } from '@/lib/audit';
+import { resyncMaterialBufferOnly, reallocateAvailableStock, unblockProductionForMaterial } from '@/lib/order-stock';
 
 // POST /api/stock/restock — augmente le stock d'un produit ou d'une matière première.
 // Pour un produit fabriqué (mode FABRIQUE ou LES_DEUX avec mode:'produire'), décrémente
@@ -54,6 +55,19 @@ export async function POST(request: NextRequest) {
       }
 
       createAudit({ userId: session?.user?.id, action: `Stock produit approvisionné (+${qty})`, entity: 'STOCK', entityId: product.id, detail: `${product.name ?? product.reference} — ${effectiveMode}` });
+
+      // Le disponible du produit vient d'augmenter → proposer ce stock EN PRIORITÉ aux autres
+      // commandes/devis déjà en attente sur ce même produit (FIFO), avant de laisser le
+      // reliquat compter comme simple buffer — même logique que la réception en liste d'achat
+      // ou l'annulation d'une commande. `reallocateAvailableStock` recalcule aussi le buffer
+      // du produit (et de sa matière en cascade) à la fin, dans tous les cas.
+      await reallocateAvailableStock(product.id);
+      // Les matières consommées ci-dessus (mode "produire") ont vu leur disponible BAISSER —
+      // seul leur buffer est concerné (pas de réaffectation à faire, rien ne se libère ici).
+      if (effectiveMode === 'produire' && product.recipeItems.length > 0) {
+        for (const r of product.recipeItems) await resyncMaterialBufferOnly(r.rawMaterialId);
+      }
+
       return NextResponse.json({ ok: true, mode: effectiveMode });
     }
 
@@ -63,6 +77,11 @@ export async function POST(request: NextRequest) {
 
       await prisma.rawMaterial.update({ where: { id: material.id }, data: { available: { increment: qty } } });
       createAudit({ userId: session?.user?.id, action: `Stock matière approvisionné (+${qty})`, entity: 'MATIERE', entityId: material.id, detail: `${material.name} (${material.reference})` });
+      // Le disponible de la matière vient d'augmenter → débloque d'abord les lignes de
+      // production "Bloquées" qui l'attendaient (même logique que la réception en liste
+      // d'achat), avant de recalculer son propre buffer sur ce qui reste.
+      await unblockProductionForMaterial(material.id);
+      await resyncMaterialBufferOnly(material.id);
       return NextResponse.json({ ok: true });
     }
 

@@ -3,43 +3,34 @@ import { prisma } from '@/lib/prisma';
 import { auth } from '@/lib/auth';
 import { requirePermission } from '@/lib/permissions';
 import { createAudit } from '@/lib/audit';
-import { syncPurchaseList } from '@/lib/stock-lists';
 import { OPEN_PURCHASE_STATUSES } from '@/lib/order-stock';
-import { openOrdersByProduct, productIdsUsingMaterial } from '@/lib/stock-traceability';
+import { createLinkResolver } from '@/lib/stock-traceability';
 
 const INCLUDE = {
   product: { select: { id: true, reference: true, name: true, available: true, purchaseThreshold: true } },
   rawMaterial: { select: { id: true, reference: true, name: true, unit: true, available: true, purchaseThreshold: true } },
 } as const;
 
-// GET /api/purchase-list — liste d'achat (synchronisée par seuil à chaque lecture)
+// GET /api/purchase-list — liste d'achat. Le rattrapage (buffer) et le besoin réel matière
+// sont désormais tenus à jour EN CONTINU par les actions elles-mêmes (commande, annulation,
+// correction de stock, changement de seuil...) — cf. order-stock.ts. Cette route ne fait
+// plus de recalcul global de tous les produits/matières à chaque lecture, seulement lire.
 export async function GET() {
   const session = await auth();
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   try {
-    await syncPurchaseList();
     // Les lignes "Reçu" sont soldées → elles disparaissent de la liste (l'historique
     // reste consultable via l'audit, cf. src/lib/audit.ts).
     const items = await prisma.purchaseListItem.findMany({ where: { status: { not: 'RECU' } }, include: INCLUDE, orderBy: { createdAt: 'asc' } });
 
-    // Traçabilité (cf. src/lib/stock-traceability.ts) : commandes/devis "en cours" sur ce
-    // produit — ou, pour une matière première, sur les produits qui l'utilisent (recette).
-    const materialIds = items.filter((i) => i.rawMaterialId).map((i) => i.rawMaterialId as string);
-    const productsByMaterial = await productIdsUsingMaterial(materialIds);
-    const allProductIds = [
-      ...items.filter((i) => i.productId).map((i) => i.productId as string),
-      ...[...productsByMaterial.values()].flat(),
-    ];
-    const byProduct = await openOrdersByProduct(allProductIds);
-
-    const withLinks = items.map((i) => {
-      if (i.productId) return { ...i, ...(byProduct.get(i.productId) ?? { orderItems: [], quoteItems: [] }) };
-      const pids = productsByMaterial.get(i.rawMaterialId as string) ?? [];
-      const orderItems = pids.flatMap((pid) => byProduct.get(pid)?.orderItems ?? []);
-      const quoteItems = pids.flatMap((pid) => byProduct.get(pid)?.quoteItems ?? []);
-      return { ...i, orderItems, quoteItems };
-    });
+    // Traçabilité précise (cf. src/lib/stock-traceability.ts) : commandes/devis réellement
+    // rattachés, avec badge "Bloqué" par commande pour les matières premières.
+    const resolver = createLinkResolver();
+    const withLinks = await Promise.all(items.map(async (i) => ({
+      ...i,
+      ...(i.productId ? await resolver.purchaseLineLinks(i.id) : await resolver.materialPurchaseLinks(i.rawMaterialId!)),
+    })));
 
     return NextResponse.json(withLinks);
   } catch (e) {

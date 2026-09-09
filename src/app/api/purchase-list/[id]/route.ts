@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { requirePermission } from '@/lib/permissions';
 import { createAudit } from '@/lib/audit';
-import { distributePurchase, unblockProductionForMaterial } from '@/lib/order-stock';
+import { distributePurchase, unblockProductionForMaterial, resyncPurchaseLineForProduct, resyncMaterialPurchaseNeed } from '@/lib/order-stock';
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -24,11 +24,24 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
     if (!item) return NextResponse.json({ error: 'Ligne introuvable' }, { status: 404 });
 
     if (body.action === 'order') {
-      // Un éventuel rattrapage préventif (bufferQuantity) se replie ici dans le besoin
-      // réel : une fois commandé au fournisseur, ce n'est plus un simple ajustement de
-      // seuil librement recalculable, c'est un engagement réel.
+      // Rejouable plusieurs fois sur la même ligne (ex: une carte déjà "Commandé" à qui il
+      // reste du manquant — nouveau besoin apparu depuis, ou commande fournisseur fractionnée).
+      // Seule la quantité réellement commandée MAINTENANT sort du manquant (besoin d'abord,
+      // puis buffer) — jamais tout le buffer d'un coup, peu importe ce qui est saisi.
+      const outstanding = item.neededQuantity + item.bufferQuantity;
+      if (qty > outstanding) {
+        return NextResponse.json({ error: `Quantité supérieure au manquant actuel (${outstanding})` }, { status: 400 });
+      }
+      const fromNeeded = Math.min(item.neededQuantity, qty);
+      const fromBuffer = Math.min(item.bufferQuantity, qty - fromNeeded);
       const updated = await prisma.purchaseListItem.update({
-        where: { id }, data: { neededQuantity: { increment: item.bufferQuantity }, bufferQuantity: 0, orderedQuantity: qty, status: 'COMMANDE' },
+        where: { id },
+        data: {
+          neededQuantity: item.neededQuantity - fromNeeded,
+          bufferQuantity: item.bufferQuantity - fromBuffer,
+          orderedQuantity: { increment: qty },
+          status: 'COMMANDE',
+        },
       });
       const label = item.product?.reference ?? item.rawMaterial?.reference;
       createAudit({ userId: session?.user?.id, action: `Commande fournisseur passée (${qty})`, entity: 'STOCK', entityId: id, detail: `${label}` });
@@ -36,27 +49,31 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
     }
 
     if (body.action === 'receive') {
-      const remaining = item.neededQuantity - qty;
-
       if (item.productId) {
-        // Produit fini "Acheté" → distribué en priorité aux commandes/devis liés (Réservé),
-        // le reliquat (réassort manuel/seuil) part en Disponible.
-        await prisma.purchaseListItem.update({
-          where: { id },
-          data: { receivedQuantity: { increment: qty }, ...(remaining <= 0 ? { status: 'RECU' } : {}) },
-        });
+        // Produit fini "Acheté" → distribué en priorité aux commandes/devis liés (Réservé,
+        // FIFO), le reliquat (réassort manuel/seuil) part en Disponible.
+        await prisma.purchaseListItem.update({ where: { id }, data: { receivedQuantity: { increment: qty } } });
         await distributePurchase(id, qty, item.productId);
-        if (remaining > 0) await prisma.purchaseListItem.update({ where: { id }, data: { neededQuantity: remaining } });
+        // Besoin réel dérivé des commandes restantes + buffer recalculés entièrement à neuf.
+        await resyncPurchaseLineForProduct(item.productId);
       } else {
         // Matière première → toujours en Disponible ; débloque les productions en attente.
         await prisma.$transaction([
-          prisma.purchaseListItem.update({
-            where: { id },
-            data: { receivedQuantity: { increment: qty }, ...(remaining <= 0 ? { status: 'RECU' } : { neededQuantity: remaining }) },
-          }),
+          prisma.purchaseListItem.update({ where: { id }, data: { receivedQuantity: { increment: qty } } }),
           prisma.rawMaterial.update({ where: { id: item.rawMaterialId! }, data: { available: { increment: qty } } }),
         ]);
         await unblockProductionForMaterial(item.rawMaterialId!);
+        // Le disponible de CETTE matière a bougé → recalcul immédiat de sa propre ligne
+        // (besoin réel + buffer), même si aucune ligne de production n'a été débloquée.
+        await resyncMaterialPurchaseNeed(item.rawMaterialId!);
+      }
+
+      // "Reçu" seulement quand il ne manque plus RIEN du tout — besoin ET buffer à 0 (pas
+      // seulement le besoin, sinon une carte avec du buffer restant ne passait jamais Reçu
+      // et polluait la liste indéfiniment, même une fois tout ce qui était commandé arrivé).
+      const afterResync = await prisma.purchaseListItem.findUnique({ where: { id } });
+      if (afterResync && afterResync.status !== 'RECU' && afterResync.neededQuantity <= 0 && afterResync.bufferQuantity <= 0) {
+        await prisma.purchaseListItem.update({ where: { id }, data: { status: 'RECU' } });
       }
 
       const updated = await prisma.purchaseListItem.findUnique({ where: { id } });

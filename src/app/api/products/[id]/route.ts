@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { requirePermission } from '@/lib/permissions';
 import { createAudit } from '@/lib/audit';
+import { resyncProductionLine, resyncPurchaseLineForProduct, reallocateAvailableStock } from '@/lib/order-stock';
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -15,6 +16,7 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
 
   try {
     const body = await request.json();
+    const before = body.available !== undefined ? await prisma.product.findUnique({ where: { id }, select: { available: true } }) : null;
 
     const product = await prisma.product.update({
       where: { id },
@@ -47,6 +49,21 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
       : 'Produit modifié';
     const prodLabel = product.name ? `${product.name} (${product.reference})` : product.reference;
     createAudit({ userId: session?.user?.id, action, entity: 'PRODUIT', entityId: id, detail: prodLabel });
+
+    // Champs qui influent sur le besoin/buffer (stock max/seuils ou `available` modifié
+    // directement ici) → recalcul immédiat, uniquement sur ce produit.
+    if (body.stockMax !== undefined || body.purchaseThreshold !== undefined || body.productionThreshold !== undefined || body.available !== undefined) {
+      if (before && body.available !== undefined && Number(body.available) > before.available) {
+        // Disponible en hausse → sert d'abord les commandes en attente (FIFO) avant de
+        // laisser le reliquat compter comme simple buffer (reallocate recalcule aussi les
+        // deux lignes à la fin).
+        await reallocateAvailableStock(id);
+      } else {
+        await resyncProductionLine(id);
+        await resyncPurchaseLineForProduct(id);
+      }
+    }
+
     return NextResponse.json(product);
   } catch (e) {
     console.error(e);

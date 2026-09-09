@@ -723,11 +723,30 @@ function RequestsPageInner() {
     const dbStatus = UI_TO_DB[newStatut] ?? newStatut;
     const isItemDevis = item.type === 'Devis';
     const endpoint = isItemDevis ? `/api/quotes/${item.id}` : `/api/orders/${item.id}`;
-    const res = await fetch(endpoint, {
+
+    const send = (confirmShortfall?: boolean) => fetch(endpoint, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: dbStatus }),
+      body: JSON.stringify({ status: dbStatus, ...(confirmShortfall && { confirmShortfall: true }) }),
     });
+
+    let res = await send();
+
+    // "Marquer Produit" avec de la matière première manquante → confirmation groupée avant
+    // de considérer que le manquant a été réapprovisionné automatiquement puis consommé.
+    if (res.status === 409) {
+      const data = await res.json().catch(() => null);
+      if (data?.error === 'MATERIAL_SHORTFALL') {
+        const shortfall: { material: string; missing: number }[] = data.shortfall ?? [];
+        const message =
+          "Matière première manquante pour finir de produire :\n" +
+          shortfall.map((w) => `• ${w.material} — ${w.missing} manquant(s)`).join('\n') +
+          "\n\nElle sera marquée comme réapprovisionnée automatiquement. Continuer ?";
+        if (!window.confirm(message)) return;
+        res = await send(true);
+      }
+    }
+
     if (!res.ok) console.error('PATCH failed', await res.text());
     // fetchAll resynchronise le détail ouvert : on ne ferme jamais le panneau,
     // l'utilisateur enchaîne ses actions et ferme lui-même quand il a fini.

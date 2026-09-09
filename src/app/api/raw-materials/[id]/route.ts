@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { requirePermission } from '@/lib/permissions';
 import { createAudit } from '@/lib/audit';
+import { resyncMaterialBufferOnly } from '@/lib/order-stock';
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -31,6 +32,11 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
     });
 
     createAudit({ userId: session?.user?.id, action: 'Matière première modifiée', entity: 'MATIERE', entityId: id, detail: `${material.name} (${material.reference})` });
+
+    if (body.stockMax !== undefined || body.purchaseThreshold !== undefined || body.available !== undefined) {
+      await resyncMaterialBufferOnly(id);
+    }
+
     return NextResponse.json(material);
   } catch (e: any) {
     if (e?.code === 'P2002') {
