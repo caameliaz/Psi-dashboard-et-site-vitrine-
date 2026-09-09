@@ -1,4 +1,5 @@
 import { prisma } from './prisma';
+import { notifyRollLinkOrderReady } from './rolllink-notify';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Logique de stock déclenchée par le cycle de vie des commandes/devis.
@@ -337,7 +338,7 @@ export async function confirmStock(kind: Kind, parentId: string) {
 
 // ── Vérifie si tous les articles sont résolus → passe la commande en PRODUITE ─
 export async function checkCompletion(kind: Kind, parentId: string) {
-  const parent = await (parentDelegate(kind) as any).findUnique({ where: { id: parentId }, select: { status: true } });
+  const parent = await (parentDelegate(kind) as any).findUnique({ where: { id: parentId }, select: { status: true, source: true, ref: true } });
   if (!parent || parent.status !== 'VALIDE') return;
 
   const items = await (itemDelegate(kind) as any).findMany({ where: itemWhereParent(kind, parentId) });
@@ -351,6 +352,12 @@ export async function checkCompletion(kind: Kind, parentId: string) {
   if (!allResolved) return;
 
   await (parentDelegate(kind) as any).update({ where: { id: parentId }, data: { status: 'PRODUITE' } });
+
+  // Liaison RollLink (cf. Liaison.md) : commande RollLink prête → notifier RollLink.
+  // Best-effort — ne doit jamais faire échouer checkCompletion (cf. rolllink-notify.ts).
+  if (kind === 'order' && parent.source === 'ROLLINK' && parent.ref) {
+    notifyRollLinkOrderReady(parent.ref).catch(() => {});
+  }
 }
 
 // ── "Marquer Produit" manuel depuis la commande (admin) ─────────────────────
