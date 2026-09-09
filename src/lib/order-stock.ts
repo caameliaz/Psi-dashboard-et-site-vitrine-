@@ -536,6 +536,68 @@ export async function reallocateAvailableStock(productId: string) {
   }
 }
 
+// ── Symétrique de reallocateAvailableStock : à appeler quand `product.reserved` vient de
+// BAISSER par une correction manuelle (le stock mis de côté pour des commandes déjà résolues
+// diminue, sans qu'aucune commande n'ait elle-même changé). Reprend la couverture aux
+// commandes/devis concernés — les plus RÉCENTES perdent leur couverture en premier (FIFO par
+// ancienneté, les plus anciennes gardent la priorité), symétrique à reassessProductionForMaterial.
+// Seules les commandes encore actives comptent (VALIDE/PRODUITE — pas encore Livrées, dont la
+// part a déjà quitté `reserved` via deliverStock ; pas Annulées/Retournées, déjà remises à 0).
+export async function reassessProductReserved(productId: string) {
+  const product = await prisma.product.findUnique({ where: { id: productId } });
+  if (!product) return;
+
+  const [orderItems, quoteItems] = await Promise.all([
+    prisma.orderItem.findMany({
+      where: { productId, resolvedQuantity: { gt: 0 }, order: { status: { in: ['VALIDE', 'PRODUITE'] } } },
+      include: { order: { select: { createdAt: true } } },
+    }),
+    prisma.quoteItem.findMany({
+      where: { productId, resolvedQuantity: { gt: 0 }, quote: { status: { in: ['VALIDE', 'PRODUITE'] } } },
+      include: { quote: { select: { createdAt: true } } },
+    }),
+  ]);
+
+  const claims = [
+    ...orderItems.map((i) => ({ id: i.id, kind: 'order' as Kind, resolvedQuantity: i.resolvedQuantity, createdAt: i.order.createdAt })),
+    ...quoteItems.map((i) => ({ id: i.id, kind: 'quote' as Kind, resolvedQuantity: i.resolvedQuantity, createdAt: i.quote.createdAt })),
+  ].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+
+  let poolLeft = product.reserved;
+  let touchedAny = false;
+  const newStockPath = product.mode === 'ACHETE' ? 'PURCHASE_PENDING' : 'IN_PRODUCTION';
+
+  for (const claim of claims) {
+    if (poolLeft >= claim.resolvedQuantity) {
+      poolLeft -= claim.resolvedQuantity;
+      continue;
+    }
+    const covered = Math.max(0, poolLeft);
+    const takeBack = claim.resolvedQuantity - covered;
+    poolLeft = 0;
+    if (takeBack <= 0) continue;
+
+    await (itemDelegate(claim.kind) as any).update({
+      where: { id: claim.id },
+      data: { resolvedQuantity: claim.resolvedQuantity - takeBack, stockPath: newStockPath },
+    });
+    touchedAny = true;
+  }
+
+  if (!touchedAny) return;
+
+  if (product.mode === 'FABRIQUE' || product.mode === 'LES_DEUX') {
+    const line = await resyncProductionLine(productId);
+    await prisma.orderItem.updateMany({ where: { productId, stockPath: 'IN_PRODUCTION', productionListItemId: null }, data: { productionListItemId: line?.id ?? null } });
+    await prisma.quoteItem.updateMany({ where: { productId, stockPath: 'IN_PRODUCTION', productionListItemId: null }, data: { productionListItemId: line?.id ?? null } });
+  }
+  if (product.mode === 'ACHETE' || product.mode === 'LES_DEUX') {
+    const line = await resyncPurchaseLineForProduct(productId);
+    await prisma.orderItem.updateMany({ where: { productId, stockPath: 'PURCHASE_PENDING', purchaseListItemId: null }, data: { purchaseListItemId: line?.id ?? null } });
+    await prisma.quoteItem.updateMany({ where: { productId, stockPath: 'PURCHASE_PENDING', purchaseListItemId: null }, data: { purchaseListItemId: line?.id ?? null } });
+  }
+}
+
 // ── Modification de la quantité d'un article DÉJÀ engagé (même produit) ──────
 // Met juste à jour `quantity`/`resolvedQuantity` sur l'article et sa réservation matière/
 // stock propre, puis délègue TOUJOURS le recalcul de la ligne de liste au resync dérivé —

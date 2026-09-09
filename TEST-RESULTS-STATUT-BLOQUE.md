@@ -417,5 +417,40 @@ une CONSÉQUENCE naturelle du calcul honnête du besoin, pas une règle spécial
 
 ---
 
+## Mise à jour 3 — correction manuelle de `reserved` produit à la baisse : reprend aux plus récentes
+
+Demande : si on baisse `reserved` d'un produit à la main, les commandes les plus récentes
+doivent perdre leur couverture en premier (FIFO), et repartir en besoin réel.
+
+**Changement** : nouvelle fonction `reassessProductReserved` (`src/lib/order-stock.ts`),
+symétrique de `reassessProductionForMaterial` mais côté produit. Ne considère que les
+commandes/devis encore actifs (`VALIDE`/`PRODUITE` — pas encore Livrés, dont la part a déjà
+quitté `reserved` ; pas Annulés/Retournés, déjà remis à 0). Simule un parcours FIFO par
+ancienneté : dès que le pot restant (`reserved`) ne couvre plus une commande, elle ET toutes
+les suivantes (plus récentes) reperdent la part non couverte de leur `resolvedQuantity`,
+repassent `IN_PRODUCTION`/`PURCHASE_PENDING` selon le mode du produit, puis
+`resyncProductionLine`/`resyncPurchaseLineForProduct` fait apparaître le manquant. Branché dans
+`src/app/api/stock/correction/route.ts` (uniquement à la baisse — à la hausse, rien ne change).
+
+### Test (script temporaire, supprimé après usage)
+Produit `mode=FABRIQUE`, deux commandes entièrement résolues directement depuis le stock
+(`FROM_STOCK`) : ANCIEN (10, créée en premier) et RÉCENT (20, créée ensuite).
+
+**Avant correction** :
+- Produit : `available=0 reserved=30`
+- ANCIEN : `quantity=10 resolvedQuantity=10 stockPath=FROM_STOCK`
+- RÉCENT : `quantity=20 resolvedQuantity=20 stockPath=FROM_STOCK`
+
+**Après correction manuelle `reserved` 30→15** :
+- Produit : `available=0 reserved=15`
+- ANCIEN : `quantity=10 resolvedQuantity=10 stockPath=FROM_STOCK` — **intact**, priorité FIFO
+- RÉCENT : `quantity=20 resolvedQuantity=5 stockPath=IN_PRODUCTION` — **perd 15** de couverture
+- Ligne production : `needed=15 buffer=100 status=A_PRODUIRE` — le manquant réapparaît
+
+✅ Conforme : l'ancienne commande garde toute sa couverture, la plus récente encaisse la perte
+et repart en besoin réel.
+
+---
+
 Scripts temporaires supprimés après usage, comme d'habitude. Détails et chiffres consignés
-également dans TESTS-STOCK.md (section 3, sous-sections a/b/c, et section 4).
+également dans TESTS-STOCK.md (section 3, sous-sections a/b/c, et section 8).

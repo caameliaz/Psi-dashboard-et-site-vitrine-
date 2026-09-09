@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { requirePermission } from '@/lib/permissions';
 import { createAudit } from '@/lib/audit';
-import { resyncProductionLine, resyncPurchaseLineForProduct, resyncMaterialBufferOnly, resyncMaterialPurchaseNeed, reallocateAvailableStock, unblockProductionForMaterial } from '@/lib/order-stock';
+import { resyncProductionLine, resyncPurchaseLineForProduct, resyncMaterialBufferOnly, resyncMaterialPurchaseNeed, reallocateAvailableStock, unblockProductionForMaterial, reassessProductReserved } from '@/lib/order-stock';
 
 const PRODUCT_FIELDS = ['available', 'reserved', 'inDelivery', 'returned'] as const;
 const MATERIAL_FIELDS = ['available', 'reserved'] as const;
@@ -27,7 +27,9 @@ export async function POST(request: NextRequest) {
 
     if (body.type === 'product') {
       if (!PRODUCT_FIELDS.includes(body.field)) return NextResponse.json({ error: 'Champ invalide' }, { status: 400 });
-      const before = body.field === 'available' ? await prisma.product.findUnique({ where: { id: body.id }, select: { available: true } }) : null;
+      const before = ['available', 'reserved'].includes(body.field)
+        ? await prisma.product.findUnique({ where: { id: body.id }, select: { available: true, reserved: true } })
+        : null;
       const product = await prisma.product.update({ where: { id: body.id }, data: { [body.field]: qty } });
       createAudit({ userId: session?.user?.id, action: `Correction stock produit — ${FIELD_LABELS[body.field]}`, entity: 'STOCK', entityId: product.id, detail: `${product.name ?? product.reference} → ${qty}` });
       // `available` est le seul champ qui influe sur la cible du rattrapage préventif —
@@ -42,6 +44,14 @@ export async function POST(request: NextRequest) {
         } else {
           await resyncProductionLine(product.id);
           await resyncPurchaseLineForProduct(product.id);
+        }
+      } else if (body.field === 'reserved') {
+        // `reserved` vient de BAISSER → le stock mis de côté pour des commandes déjà résolues
+        // diminue sans qu'aucune commande n'ait changé — on reprend la couverture aux
+        // commandes concernées (les plus RÉCENTES perdent en premier, FIFO). Aucun effet à la
+        // hausse (une hausse manuelle ne "invente" pas une commande à mieux couvrir).
+        if (before && qty < before.reserved) {
+          await reassessProductReserved(product.id);
         }
       }
       return NextResponse.json({ ok: true });

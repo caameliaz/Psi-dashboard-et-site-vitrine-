@@ -126,8 +126,15 @@ Matière dispo=3 pour un besoin de 10.
   pour la part reprise ne l'est **qu'une fois** (pas de double comptage).
 - [ ] Correction du disponible d'une matière **à la hausse** avec une ligne "Bloquée" en
   attente → elle se débloque (ou avance partiellement, cf. section 11).
-- [ ] Correction de `reserved` sur une matière → recalcule le besoin réel immédiatement. Sur un
-  produit → aucun effet nulle part (isolé).
+- [ ] Correction de `reserved` sur une matière → recalcule le besoin réel immédiatement.
+- [ ] Correction de `reserved` sur un **produit**, **à la baisse** : reprend la couverture aux
+  commandes/devis actifs concernés (VALIDE/PRODUITE), **les plus RÉCENTES perdent en premier**
+  (FIFO, les plus anciennes gardent la priorité). Exemple : produit `reserved=30` (10 pour une
+  ancienne commande, 20 pour une plus récente, toutes deux entièrement résolues) → correction à
+  15 : l'ancienne garde ses 10 intacts, la récente perd 15 de couverture
+  (`resolvedQuantity` 20→5, repasse `IN_PRODUCTION`/`PURCHASE_PENDING`), et une ligne de
+  production/achat apparaît avec le manquant (`needed=15`). **À la hausse** : aucun effet
+  (une hausse manuelle n'invente pas de commande à mieux couvrir).
 - [ ] Témoin (autre produit/matière non touché) : ne bouge jamais pendant ces actions.
 
 ## 9. FIFO multi-commandes
