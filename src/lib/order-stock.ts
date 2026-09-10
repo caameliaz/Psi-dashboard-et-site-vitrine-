@@ -26,6 +26,17 @@ function itemWhereParent(kind: Kind, parentId: string) {
 export const OPEN_PURCHASE_STATUSES = ['A_COMMANDER', 'COMMANDE'] as const;
 export const OPEN_PRODUCTION_STATUSES = ['A_PRODUIRE', 'BLOQUE', 'EN_COURS'] as const;
 
+// ── Comparateur FIFO commun (commandes prioritaires) ─────────────────────────────────────────
+// Une commande/devis marqué "prioritaire" passe TOUJOURS avant les autres dans toutes les
+// simulations FIFO (distribution, réaffectation, reprise de couverture...), comme si elle avait
+// été créée en premier. Entre plusieurs prioritaires (ou plusieurs non-prioritaires), la vraie
+// ancienneté décide comme d'habitude. Ne déclenche jamais rien tout seul — la priorité ne
+// compte qu'au prochain évènement qui relance l'une de ces simulations.
+export function fifoCompare(a: { priority: boolean; createdAt: Date }, b: { priority: boolean; createdAt: Date }): number {
+  if (a.priority !== b.priority) return a.priority ? -1 : 1;
+  return a.createdAt.getTime() - b.createdAt.getTime();
+}
+
 // Réserve les matières premières nécessaires pour produire `qty` unités d'un produit.
 // Ce qui est disponible est déplacé de `available` vers `reserved`. Retourne le statut
 // résultant de la ligne de production — le manquant éventuel en liste d'achat matière n'est
@@ -361,66 +372,148 @@ export async function checkCompletion(kind: Kind, parentId: string) {
 }
 
 // ── "Marquer Produit" manuel depuis la commande (admin) ─────────────────────
-// Ne touche QUE la part encore manquante de chaque article (jamais ce qui était déjà
-// résolu) — consomme la matière réservée pour cette part, et ajoute la quantité manquante
-// en `reserved` sur le produit fini. Le recalcul des lignes de liste se fait ensuite par
-// resync (dérivé), plus de décrément manuel de neededQuantity.
+// Résout la part encore manquante de chaque article (IN_PRODUCTION ou PURCHASE_PENDING),
+// dans cet ordre strict, par produit :
+//   1. Ce qui est en `available` (stock produit fini réellement disponible).
+//   2. Ce qui est `reserved` chez une AUTRE commande/devis déjà "Produite" pour ce même
+//      produit — on le lui reprend (la plus RÉCEMMENT créée en premier) ; elle repasse alors
+//      "Confirmée" avec un manquant qui réapparaît normalement (elle n'a plus son stock).
+//   3. (Fabriqués seulement) fabrication immédiate en consommant la matière première déjà
+//      réservée pour cette ligne — dans la limite de ce que la recette permet vraiment.
+// S'il reste un manquant après ces 3 étapes → BLOCAGE DUR (rien n'est modifié pour AUCUN
+// article de la commande, tout ou rien) : le manquant est renvoyé par produit.
 
-type ShortfallWarning = { material: string; missing: number };
+export type ProductShortfall = { productId: string; reference: string; name: string | null; missing: number };
 
-export async function previewForceCompleteShortfall(kind: Kind, parentId: string): Promise<ShortfallWarning[]> {
+// Combien d'unités de `productId` peut-on fabriquer MAINTENANT avec la matière déjà réservée,
+// dans la limite de `cap` — bornée par la matière la plus rare de la recette (jamais une
+// recette à moitié suivie). Pas de recette définie → aucune limite matière.
+async function manufacturableUnits(productId: string, cap: number): Promise<number> {
+  if (cap <= 0) return 0;
+  const recipe = await prisma.recipeItem.findMany({ where: { productId }, include: { rawMaterial: true } });
+  if (recipe.length === 0) return cap;
+  let manufacturable = cap;
+  for (const r of recipe) {
+    manufacturable = Math.min(manufacturable, Math.max(0, Math.floor(r.rawMaterial.reserved / r.quantity)));
+  }
+  return manufacturable;
+}
+
+// Candidats "donneurs" pour un produit : commandes/devis déjà "Produite" (autres que la
+// commande/devis en cours), triés du plus RÉCEMMENT créé au plus ancien.
+async function findDonorItems(productId: string, excludeKind: Kind, excludeParentId: string) {
+  const [orderItems, quoteItems] = await Promise.all([
+    prisma.orderItem.findMany({
+      where: { productId, resolvedQuantity: { gt: 0 }, order: { status: 'PRODUITE' }, NOT: excludeKind === 'order' ? { orderId: excludeParentId } : undefined },
+      include: { order: { select: { createdAt: true } } },
+    }),
+    prisma.quoteItem.findMany({
+      where: { productId, resolvedQuantity: { gt: 0 }, quote: { status: 'PRODUITE' }, NOT: excludeKind === 'quote' ? { quoteId: excludeParentId } : undefined },
+      include: { quote: { select: { createdAt: true } } },
+    }),
+  ]);
+  return [
+    ...orderItems.map((i) => ({ id: i.id, kind: 'order' as Kind, parentId: i.orderId, quantity: i.quantity, resolvedQuantity: i.resolvedQuantity, createdAt: i.order.createdAt })),
+    ...quoteItems.map((i) => ({ id: i.id, kind: 'quote' as Kind, parentId: i.quoteId, quantity: i.quantity, resolvedQuantity: i.resolvedQuantity, createdAt: i.quote.createdAt })),
+  ].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+}
+
+// Simule (sans RIEN modifier) le plan de résolution complet ci-dessus pour chaque article
+// encore ouvert. Retourne le manquant final par produit (vide = tout est réalisable).
+export async function previewForceCompleteShortfall(kind: Kind, parentId: string): Promise<ProductShortfall[]> {
   const items = await (itemDelegate(kind) as any).findMany({
-    where: { ...itemWhereParent(kind, parentId), stockPath: 'IN_PRODUCTION' },
-    include: { productionListItem: true },
+    where: { ...itemWhereParent(kind, parentId), stockPath: { in: ['IN_PRODUCTION', 'PURCHASE_PENDING'] } },
+    include: { product: true },
   });
 
-  const warnings: ShortfallWarning[] = [];
+  const shortfalls: ProductShortfall[] = [];
   for (const item of items) {
     const stillNeeded = item.quantity - item.resolvedQuantity;
-    if (stillNeeded <= 0 || !item.productId || item.productionListItem?.status === 'PRODUIT') continue;
+    if (stillNeeded <= 0 || !item.productId || !item.product) continue;
 
-    const recipe = await prisma.recipeItem.findMany({ where: { productId: item.productId }, include: { rawMaterial: true } });
-    for (const r of recipe) {
-      const needed = r.quantity * stillNeeded;
-      const missing = needed - r.rawMaterial.reserved;
-      if (missing > 0) warnings.push({ material: r.rawMaterial.reference, missing });
+    let remaining = stillNeeded - Math.min(stillNeeded, item.product.available);
+
+    if (remaining > 0) {
+      const donors = await findDonorItems(item.productId, kind, parentId);
+      for (const d of donors) {
+        if (remaining <= 0) break;
+        remaining -= Math.min(remaining, d.resolvedQuantity);
+      }
+    }
+
+    if (remaining > 0 && item.stockPath === 'IN_PRODUCTION') {
+      remaining -= await manufacturableUnits(item.productId, remaining);
+    }
+
+    if (remaining > 0) {
+      shortfalls.push({ productId: item.productId, reference: item.product.reference, name: item.product.name, missing: remaining });
     }
   }
-  return warnings;
+  return shortfalls;
 }
 
 export async function forceCompleteOrder(kind: Kind, parentId: string): Promise<void> {
   const items = await (itemDelegate(kind) as any).findMany({
     where: { ...itemWhereParent(kind, parentId), stockPath: { in: ['IN_PRODUCTION', 'PURCHASE_PENDING'] } },
-    include: { productionListItem: true, purchaseListItem: true },
+    include: { product: true },
   });
 
   const touchedProducts = new Set<string>();
 
   for (const item of items) {
     const stillNeeded = item.quantity - item.resolvedQuantity;
-    if (stillNeeded <= 0 || !item.productId) continue;
+    if (stillNeeded <= 0 || !item.productId || !item.product) continue;
 
-    if (item.stockPath === 'IN_PRODUCTION' && item.productionListItem) {
-      const pli = item.productionListItem;
-      if (pli.status !== 'PRODUIT') {
-        // Consomme la matière première réellement réservée pour cette part (jamais négatif).
-        const recipe = await prisma.recipeItem.findMany({ where: { productId: item.productId } });
-        for (const r of recipe) {
-          const needed = r.quantity * stillNeeded;
-          const material = await prisma.rawMaterial.findUnique({ where: { id: r.rawMaterialId } });
-          if (!material) continue;
-          const reservable = Math.min(needed, material.reserved);
-          if (reservable > 0) {
-            await prisma.rawMaterial.update({ where: { id: r.rawMaterialId }, data: { reserved: { decrement: reservable } } }).catch(() => {});
-          }
-        }
+    // 1. Disponible produit d'abord.
+    const fromAvailable = Math.min(stillNeeded, item.product.available);
+    let remaining = stillNeeded - fromAvailable;
+
+    // 2. Vol chez une autre commande/devis déjà "Produite" (la plus récente en premier) —
+    //    transfert interne au pot `reserved` (ne le change pas, juste réattribué).
+    const donorSteals: { id: string; kind: Kind; parentId: string; quantity: number; newResolved: number; amount: number }[] = [];
+    if (remaining > 0) {
+      const donors = await findDonorItems(item.productId, kind, parentId);
+      for (const d of donors) {
+        if (remaining <= 0) break;
+        const take = Math.min(remaining, d.resolvedQuantity);
+        if (take <= 0) continue;
+        remaining -= take;
+        donorSteals.push({ id: d.id, kind: d.kind, parentId: d.parentId, quantity: d.quantity, newResolved: d.resolvedQuantity - take, amount: take });
       }
     }
 
-    // Seule la quantité MANQUANTE (jamais ce qui était déjà résolu) part en réservé, et
-    // l'article est marqué entièrement résolu → il ne compte plus dans le besoin dérivé.
-    await prisma.product.update({ where: { id: item.productId }, data: { reserved: { increment: stillNeeded } } });
+    // 3. Fabrication immédiate (fabriqués seulement), dans la limite de la matière réservée.
+    let manufactured = 0;
+    if (remaining > 0 && item.stockPath === 'IN_PRODUCTION') {
+      manufactured = await manufacturableUnits(item.productId, remaining);
+      if (manufactured > 0) {
+        const recipe = await prisma.recipeItem.findMany({ where: { productId: item.productId } });
+        for (const r of recipe) {
+          const consume = r.quantity * manufactured;
+          if (consume > 0) await prisma.rawMaterial.update({ where: { id: r.rawMaterialId }, data: { reserved: { decrement: consume } } }).catch(() => {});
+        }
+      }
+      remaining -= manufactured;
+    }
+    // Le préview vient d'être revérifié juste avant l'appel (côté route) — `remaining` doit
+    // être à 0 ici ; par sécurité on ne dépasse jamais ce qui a été validé.
+    if (remaining > 0) continue;
+
+    // Applique les vols chez les commandes/devis "Produite" (chacune repasse "Confirmée").
+    for (const steal of donorSteals) {
+      await (itemDelegate(steal.kind) as any).update({ where: { id: steal.id }, data: { resolvedQuantity: steal.newResolved } });
+      if (steal.newResolved < steal.quantity) {
+        await (parentDelegate(steal.kind) as any).update({ where: { id: steal.parentId }, data: { status: 'VALIDE' } });
+      }
+    }
+
+    const newlyReserved = fromAvailable + manufactured; // le vol chez un donneur ne change pas le total réservé
+    if (fromAvailable > 0) {
+      await prisma.product.update({ where: { id: item.productId }, data: { available: { decrement: fromAvailable } } });
+    }
+    if (newlyReserved > 0) {
+      await prisma.product.update({ where: { id: item.productId }, data: { reserved: { increment: newlyReserved } } });
+    }
     await (itemDelegate(kind) as any).update({ where: { id: item.id }, data: { resolvedQuantity: item.quantity } });
     touchedProducts.add(item.productId);
   }
@@ -428,6 +521,14 @@ export async function forceCompleteOrder(kind: Kind, parentId: string): Promise<
   for (const productId of touchedProducts) {
     await resyncProductionLine(productId);
     await resyncPurchaseLineForProduct(productId);
+    // Relie les articles rouverts (vol chez un donneur) à la ligne de liste fraîchement
+    // recalculée, comme partout ailleurs (cf. reassessProductReserved).
+    const prodLine = await prisma.productionListItem.findFirst({ where: { productId, status: { in: ['A_PRODUIRE', 'BLOQUE'] } } });
+    await prisma.orderItem.updateMany({ where: { productId, stockPath: 'IN_PRODUCTION', productionListItemId: null }, data: { productionListItemId: prodLine?.id ?? null } });
+    await prisma.quoteItem.updateMany({ where: { productId, stockPath: 'IN_PRODUCTION', productionListItemId: null }, data: { productionListItemId: prodLine?.id ?? null } });
+    const purchLine = await prisma.purchaseListItem.findFirst({ where: { productId, status: { in: [...OPEN_PURCHASE_STATUSES] } } });
+    await prisma.orderItem.updateMany({ where: { productId, stockPath: 'PURCHASE_PENDING', purchaseListItemId: null }, data: { purchaseListItemId: purchLine?.id ?? null } });
+    await prisma.quoteItem.updateMany({ where: { productId, stockPath: 'PURCHASE_PENDING', purchaseListItemId: null }, data: { purchaseListItemId: purchLine?.id ?? null } });
   }
 }
 
@@ -480,25 +581,25 @@ export async function reallocateAvailableStock(productId: string) {
   const [orderItems, quoteItems] = await Promise.all([
     prisma.orderItem.findMany({
       where: { productId, stockPath: { in: ['IN_PRODUCTION', 'PURCHASE_PENDING'] } },
-      include: { order: { select: { createdAt: true } } },
+      include: { order: { select: { createdAt: true, priority: true } } },
     }),
     prisma.quoteItem.findMany({
       where: { productId, stockPath: { in: ['IN_PRODUCTION', 'PURCHASE_PENDING'] } },
-      include: { quote: { select: { createdAt: true } } },
+      include: { quote: { select: { createdAt: true, priority: true } } },
     }),
   ]);
 
   const pending = [
     ...orderItems.map((i) => ({
       id: i.id, kind: 'order' as Kind, parentId: i.orderId, quantity: i.quantity, resolvedQuantity: i.resolvedQuantity,
-      stockPath: i.stockPath, createdAt: i.order.createdAt,
+      stockPath: i.stockPath, createdAt: i.order.createdAt, priority: i.order.priority,
     })),
     ...quoteItems.map((i) => ({
       id: i.id, kind: 'quote' as Kind, parentId: i.quoteId, quantity: i.quantity, resolvedQuantity: i.resolvedQuantity,
-      stockPath: i.stockPath, createdAt: i.quote.createdAt,
+      stockPath: i.stockPath, createdAt: i.quote.createdAt, priority: i.quote.priority,
     })),
   ].filter((i) => i.quantity - i.resolvedQuantity > 0)
-    .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+    .sort(fifoCompare);
 
   const touchedParents = new Set<string>();
   let available = product.available;
@@ -557,18 +658,18 @@ export async function reassessProductReserved(productId: string) {
   const [orderItems, quoteItems] = await Promise.all([
     prisma.orderItem.findMany({
       where: { productId, resolvedQuantity: { gt: 0 }, order: { status: { in: ['VALIDE', 'PRODUITE'] } } },
-      include: { order: { select: { createdAt: true } } },
+      include: { order: { select: { createdAt: true, priority: true } } },
     }),
     prisma.quoteItem.findMany({
       where: { productId, resolvedQuantity: { gt: 0 }, quote: { status: { in: ['VALIDE', 'PRODUITE'] } } },
-      include: { quote: { select: { createdAt: true } } },
+      include: { quote: { select: { createdAt: true, priority: true } } },
     }),
   ]);
 
   const claims = [
-    ...orderItems.map((i) => ({ id: i.id, kind: 'order' as Kind, resolvedQuantity: i.resolvedQuantity, createdAt: i.order.createdAt })),
-    ...quoteItems.map((i) => ({ id: i.id, kind: 'quote' as Kind, resolvedQuantity: i.resolvedQuantity, createdAt: i.quote.createdAt })),
-  ].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+    ...orderItems.map((i) => ({ id: i.id, kind: 'order' as Kind, resolvedQuantity: i.resolvedQuantity, createdAt: i.order.createdAt, priority: i.order.priority })),
+    ...quoteItems.map((i) => ({ id: i.id, kind: 'quote' as Kind, resolvedQuantity: i.resolvedQuantity, createdAt: i.quote.createdAt, priority: i.quote.priority })),
+  ].sort(fifoCompare);
 
   let poolLeft = product.reserved;
   let touchedAny = false;
@@ -707,13 +808,13 @@ async function distributeToLinkedItems(
 ) {
   let remaining = producedOrReceivedQty;
   const [orderItems, quoteItems] = await Promise.all([
-    prisma.orderItem.findMany({ where: { [linkField]: listItemId }, include: { order: { select: { createdAt: true } } } }),
-    prisma.quoteItem.findMany({ where: { [linkField]: listItemId }, include: { quote: { select: { createdAt: true } } } }),
+    prisma.orderItem.findMany({ where: { [linkField]: listItemId }, include: { order: { select: { createdAt: true, priority: true } } } }),
+    prisma.quoteItem.findMany({ where: { [linkField]: listItemId }, include: { quote: { select: { createdAt: true, priority: true } } } }),
   ]);
-  const linked: { id: string; kind: Kind; parentId: string; quantity: number; resolvedQuantity: number; createdAt: Date }[] = [
-    ...orderItems.map((i) => ({ id: i.id, kind: 'order' as Kind, parentId: i.orderId, quantity: i.quantity, resolvedQuantity: i.resolvedQuantity, createdAt: i.order.createdAt })),
-    ...quoteItems.map((i) => ({ id: i.id, kind: 'quote' as Kind, parentId: i.quoteId, quantity: i.quantity, resolvedQuantity: i.resolvedQuantity, createdAt: i.quote.createdAt })),
-  ].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+  const linked: { id: string; kind: Kind; parentId: string; quantity: number; resolvedQuantity: number; createdAt: Date; priority: boolean }[] = [
+    ...orderItems.map((i) => ({ id: i.id, kind: 'order' as Kind, parentId: i.orderId, quantity: i.quantity, resolvedQuantity: i.resolvedQuantity, createdAt: i.order.createdAt, priority: i.order.priority })),
+    ...quoteItems.map((i) => ({ id: i.id, kind: 'quote' as Kind, parentId: i.quoteId, quantity: i.quantity, resolvedQuantity: i.resolvedQuantity, createdAt: i.quote.createdAt, priority: i.quote.priority })),
+  ].sort(fifoCompare);
 
   const touchedParents = new Set<string>();
   for (const li of linked) {
@@ -834,4 +935,39 @@ export async function reassessProductionForMaterial(rawMaterialId: string) {
   }
 
   await resyncMaterialPurchaseNeed(rawMaterialId);
+}
+
+// ── "Production urgente" — commandes/devis prioritaires ──────────────────────────────────────
+// Agrégation en LECTURE SEULE (jamais stockée, comme le badge "Bloqué" par commande) : pour
+// chaque produit fabriqué, la somme du manquant réel (quantity − resolvedQuantity) des seuls
+// articles IN_PRODUCTION appartenant à une commande/devis marqué "prioritaire" ET encore VALIDE
+// (pas déjà PRODUITE/LIVRÉE/ANNULÉE/RETOURNÉE — plus rien à produire pour elle dans ces cas).
+// Ne change RIEN au reste de la liste de production (les cartes normales restent inchangées,
+// leur `needed` continue d'inclure TOUTES les commandes, prioritaires ou pas) — c'est un
+// résumé à part, qui disparaît de lui-même dès que toutes les commandes prioritaires sont
+// entièrement produites (plus aucun manquant à sommer).
+export type UrgentProductionNeed = { productId: string; reference: string; name: string | null; quantity: number };
+
+export async function getUrgentProductionNeeds(): Promise<UrgentProductionNeed[]> {
+  const [orderItems, quoteItems] = await Promise.all([
+    prisma.orderItem.findMany({
+      where: { stockPath: 'IN_PRODUCTION', order: { priority: true, status: 'VALIDE' } },
+      select: { productId: true, quantity: true, resolvedQuantity: true, product: { select: { reference: true, name: true } } },
+    }),
+    prisma.quoteItem.findMany({
+      where: { stockPath: 'IN_PRODUCTION', quote: { priority: true, status: 'VALIDE' } },
+      select: { productId: true, quantity: true, resolvedQuantity: true, product: { select: { reference: true, name: true } } },
+    }),
+  ]);
+
+  const totals = new Map<string, UrgentProductionNeed>();
+  for (const i of [...orderItems, ...quoteItems]) {
+    if (!i.productId || !i.product) continue;
+    const outstanding = i.quantity - i.resolvedQuantity;
+    if (outstanding <= 0) continue;
+    const existing = totals.get(i.productId);
+    if (existing) existing.quantity += outstanding;
+    else totals.set(i.productId, { productId: i.productId, reference: i.product.reference, name: i.product.name, quantity: outstanding });
+  }
+  return [...totals.values()].sort((a, b) => b.quantity - a.quantity);
 }

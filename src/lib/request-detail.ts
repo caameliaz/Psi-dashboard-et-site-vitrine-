@@ -94,6 +94,7 @@ export function orderToDetail(o: any, fallback?: ClientFallback): RequestDetail 
     // renseigne depuis vatEnabled pour n'avoir QU'UNE source de vérité.
     tva: Boolean(o.vatEnabled),
     salesRepName: o.salesRepName ?? null,
+    priority: Boolean(o.priority),
     date: new Date(o.createdAt).toLocaleDateString('fr-FR'),
     heure: new Date(o.createdAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
   };
@@ -142,6 +143,7 @@ export function quoteToDetail(q: any, fallback?: ClientFallback): RequestDetail 
     // renseigne depuis vatEnabled pour n'avoir QU'UNE source de vérité.
     tva: Boolean(q.vatEnabled),
     salesRepName: q.salesRepName ?? null,
+    priority: Boolean(q.priority),
     date: new Date(q.createdAt).toLocaleDateString('fr-FR'),
     heure: new Date(q.createdAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
     message: q.message ?? '',

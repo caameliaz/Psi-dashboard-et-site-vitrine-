@@ -70,9 +70,14 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
 
       // "Reçu" seulement quand il ne manque plus RIEN du tout — besoin ET buffer à 0 (pas
       // seulement le besoin, sinon une carte avec du buffer restant ne passait jamais Reçu
-      // et polluait la liste indéfiniment, même une fois tout ce qui était commandé arrivé).
+      // et polluait la liste indéfiniment, même une fois tout ce qui était commandé arrivé)
+      // ET tout ce qui a été commandé est physiquement arrivé (`received >= ordered`) — sinon,
+      // comme l'en-transit (`ordered - received`) compte comme "déjà sécurisé" dans le calcul
+      // du besoin (cf. resyncMaterialPurchaseNeed), une réception PARTIELLE minime pourrait
+      // suffire à faire retomber besoin+buffer à 0 et fermer la carte à tort, alors qu'il reste
+      // encore l'essentiel de la commande à recevoir.
       const afterResync = await prisma.purchaseListItem.findUnique({ where: { id } });
-      if (afterResync && afterResync.status !== 'RECU' && afterResync.neededQuantity <= 0 && afterResync.bufferQuantity <= 0) {
+      if (afterResync && afterResync.status !== 'RECU' && afterResync.neededQuantity <= 0 && afterResync.bufferQuantity <= 0 && afterResync.receivedQuantity >= afterResync.orderedQuantity) {
         await prisma.purchaseListItem.update({ where: { id }, data: { status: 'RECU' } });
       }
 

@@ -724,26 +724,24 @@ function RequestsPageInner() {
     const isItemDevis = item.type === 'Devis';
     const endpoint = isItemDevis ? `/api/quotes/${item.id}` : `/api/orders/${item.id}`;
 
-    const send = (confirmShortfall?: boolean) => fetch(endpoint, {
+    const res = await fetch(endpoint, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: dbStatus, ...(confirmShortfall && { confirmShortfall: true }) }),
+      body: JSON.stringify({ status: dbStatus }),
     });
 
-    let res = await send();
-
-    // "Marquer Produit" avec de la matière première manquante → confirmation groupée avant
-    // de considérer que le manquant a été réapprovisionné automatiquement puis consommé.
+    // "Marquer Produit" impossible (rien pour couvrir le manquant, même après avoir cherché
+    // dans le disponible et chez les commandes déjà Produites) → blocage dur, pas de "forcer
+    // quand même" : on afficherait un stock produit fini qui n'existe nulle part.
     if (res.status === 409) {
       const data = await res.json().catch(() => null);
-      if (data?.error === 'MATERIAL_SHORTFALL') {
-        const shortfall: { material: string; missing: number }[] = data.shortfall ?? [];
-        const message =
-          "Matière première manquante pour finir de produire :\n" +
-          shortfall.map((w) => `• ${w.material} — ${w.missing} manquant(s)`).join('\n') +
-          "\n\nElle sera marquée comme réapprovisionnée automatiquement. Continuer ?";
-        if (!window.confirm(message)) return;
-        res = await send(true);
+      if (data?.error === 'PRODUCT_SHORTFALL') {
+        const shortfall: { reference: string; name: string | null; missing: number }[] = data.shortfall ?? [];
+        alert(
+          "Impossible de marquer produit — stock insuffisant :\n" +
+          shortfall.map((w) => `• ${w.name ?? w.reference} — ${w.missing} manquant(s)`).join('\n')
+        );
+        return;
       }
     }
 

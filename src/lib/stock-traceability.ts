@@ -1,4 +1,5 @@
 import { prisma } from './prisma';
+import { fifoCompare } from './order-stock';
 
 // ── "Commandes concernées" (précis) pour les listes d'achat / production ──────────────────
 // Ne montre QUE les commandes/devis réellement rattachés (productionListItemId /
@@ -12,7 +13,7 @@ import { prisma } from './prisma';
 // donc une commande est "bloquée" dès que le cumul de ce qu'il lui faut de cette matière
 // (elle + toutes les plus anciennes qu'elle) dépasse ce qui est réellement réservé.
 
-const PARENT_SELECT = { ref: true, clientName: true, createdAt: true, client: { select: { name: true, company: true } } } as const;
+const PARENT_SELECT = { ref: true, clientName: true, createdAt: true, priority: true, client: { select: { name: true, company: true } } } as const;
 
 export type LinkedParent = { ref: string | null; clientName: string | null; client: { name: string; company: string | null } | null };
 export type LinkedOrderItem = { quantity: number; order: LinkedParent; blocked: boolean };
@@ -20,7 +21,7 @@ export type LinkedQuoteItem = { quantity: number; quote: LinkedParent; blocked: 
 export type Links = { orderItems: LinkedOrderItem[]; quoteItems: LinkedQuoteItem[] };
 
 type Claim = {
-  id: string; kind: 'order' | 'quote'; parent: LinkedParent; createdAt: Date; stillNeeded: number; owed: number;
+  id: string; kind: 'order' | 'quote'; parent: LinkedParent; createdAt: Date; priority: boolean; stillNeeded: number; owed: number;
 };
 
 // Pour UNE matière première : toutes les commandes/devis réellement en attente de production
@@ -55,16 +56,16 @@ async function materialClaims(rawMaterialId: string): Promise<{ claims: Claim[];
 
   const claims: Claim[] = [
     ...orderItems.map((i) => ({
-      id: i.id, kind: 'order' as const, parent: i.order, createdAt: i.order.createdAt,
+      id: i.id, kind: 'order' as const, parent: i.order, createdAt: i.order.createdAt, priority: i.order.priority,
       stillNeeded: i.quantity - i.resolvedQuantity,
       owed: (ratioByLineId.get(i.productionListItemId!) ?? 0) * (i.quantity - i.resolvedQuantity),
     })),
     ...quoteItems.map((i) => ({
-      id: i.id, kind: 'quote' as const, parent: i.quote, createdAt: i.quote.createdAt,
+      id: i.id, kind: 'quote' as const, parent: i.quote, createdAt: i.quote.createdAt, priority: i.quote.priority,
       stillNeeded: i.quantity - i.resolvedQuantity,
       owed: (ratioByLineId.get(i.productionListItemId!) ?? 0) * (i.quantity - i.resolvedQuantity),
     })),
-  ].filter((c) => c.stillNeeded > 0).sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+  ].filter((c) => c.stillNeeded > 0).sort(fifoCompare);
 
   const blockedKeys = new Set<string>();
   let cumulative = 0;

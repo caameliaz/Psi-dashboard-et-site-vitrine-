@@ -58,13 +58,24 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
       return NextResponse.json({ error: "Vous n'avez pas la permission de ré-assigner le client" }, { status: 403 });
     }
 
-    // "Marquer Produit" — si de la matière première manque pour finir de produire, on
-    // demande confirmation AVANT de toucher à quoi que ce soit (sinon réponse 409 avec le
-    // détail, à renvoyer avec `confirmShortfall: true` une fois l'utilisateur d'accord).
-    if (body.status === 'PRODUITE' && !body.confirmShortfall) {
+    // Commande prioritaire — togglable seulement sur une commande confirmée (VALIDE) et pas
+    // encore entièrement produite (PRODUITE = plus rien à prioriser dessus). Ne déclenche rien
+    // d'immédiat : compte juste comme "la plus ancienne" au prochain calcul FIFO du stock.
+    if (body.priority !== undefined) {
+      const statusNow = body.status !== undefined ? body.status : (await prisma.order.findUnique({ where: { id }, select: { status: true } }))?.status;
+      if (statusNow !== 'VALIDE') {
+        return NextResponse.json({ error: 'La priorité ne peut être définie que sur une commande confirmée (Validée) et pas encore produite' }, { status: 400 });
+      }
+    }
+
+    // "Marquer Produit" — vérifie AVANT de toucher à quoi que ce soit qu'il y a bien de quoi
+    // couvrir tout le manquant (disponible → vol chez une commande déjà Produite → fabrication
+    // avec la matière réservée). Blocage dur (409) si non, PAS de moyen de forcer quand même —
+    // sinon on prétendrait avoir du stock produit fini qui n'existe nulle part.
+    if (body.status === 'PRODUITE') {
       const shortfall = await previewForceCompleteShortfall('order', id);
       if (shortfall.length > 0) {
-        return NextResponse.json({ error: 'MATERIAL_SHORTFALL', shortfall }, { status: 409 });
+        return NextResponse.json({ error: 'PRODUCT_SHORTFALL', shortfall }, { status: 409 });
       }
     }
 
@@ -155,6 +166,7 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
       where: { id },
       data: {
         ...(body.status !== undefined && { status: body.status }),
+        ...(body.priority !== undefined && { priority: Boolean(body.priority) }),
         // Facturation / règlement — modifiables après validation
         ...(body.invoiceNumber !== undefined && { invoiceNumber: body.invoiceNumber || null }),
         ...(body.paymentMethod !== undefined && { paymentMethod: body.paymentMethod || null }),
@@ -174,7 +186,9 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
       },
     });
 
-    const action = body.status !== undefined ? `Statut commande : ${statusLabel(body.status)}` : 'Commande modifiée';
+    const action = body.status !== undefined ? `Statut commande : ${statusLabel(body.status)}`
+      : body.priority !== undefined ? (body.priority ? 'Commande marquée prioritaire' : 'Priorité retirée de la commande')
+      : 'Commande modifiée';
     const orderLabel = order.clientCompany || order.clientName || order.client?.name || '';
     createAudit({ userId: session.user.id, action, entity: 'COMMANDE', entityId: id, detail: orderLabel ? `${order.ref} — ${orderLabel}` : order.ref, orderId: id });
 

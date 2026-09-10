@@ -85,6 +85,7 @@ export interface RequestDetail {
   paymentDate?: string | null;
   vatEnabled?: boolean;
   salesRepName?: string | null;   // commercial importé, avant rattachement à un compte
+  priority?: boolean;             // commande/devis prioritaire (passe en tête des FIFO du stock)
 }
 
 function getSourceLabel(src: string) { return src === 'SITE' ? 'Site web' : 'Manuel'; }
@@ -953,6 +954,17 @@ export function RequestPanel({ item, onClose, onStatusChange, onConfirmQuoteWith
 
   const openReassign = () => { setReassignSearch(''); setReassignPicked(null); setReassignReason(''); setShowReassign(true); };
 
+  // Bascule "prioritaire" (togglable tant que Confirmé/pas encore produite) — ne change rien
+  // au reste de la commande, juste son ordre dans les simulations FIFO du stock (cf.
+  // src/lib/order-stock.ts `fifoCompare`). Refresh pur, comme la ré-assignation client.
+  const togglePriority = async () => {
+    if (!item.id) return;
+    const endpoint = item.type === 'Devis' ? `/api/quotes/${item.id}` : `/api/orders/${item.id}`;
+    const res = await fetch(endpoint, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ priority: !item.priority }) });
+    if (!res.ok) { const err = await res.json().catch(() => ({})); alert(err.error ?? 'Action impossible'); return; }
+    onReassigned?.();
+  };
+
   // Ré-assigner la demande à un autre client (permission reassigner_client)
   // Les non-admins doivent justifier → la raison est enregistrée en note interne.
   const reassignClient = async (clientId: string, reason: string) => {
@@ -1323,6 +1335,13 @@ export function RequestPanel({ item, onClose, onStatusChange, onConfirmQuoteWith
 
               {/* Droite : actions statut (côte à côte, toujours alignées à droite) */}
               <div className="flex flex-row items-center gap-2 flex-wrap justify-end ml-auto">
+                {/* Prioritaire — togglable uniquement tant que Confirmé (pas encore Produit) */}
+                {item.statut === 'Confirmé' && canModifierStatuts && (
+                  <button onClick={togglePriority}
+                    className={`px-3 py-1.5 rounded-lg text-[12px] font-bold border transition-colors ${item.priority ? 'border-[#DC2626] text-[#DC2626] bg-[#FEF2F2] hover:bg-[#FEE2E2]' : 'border-[#E2E8F0] text-[#374151] hover:bg-[#F8FAFC]'}`}>
+                    {item.priority ? '★ Prioritaire' : '☆ Marquer prioritaire'}
+                  </button>
+                )}
                 {!isArchived && onStatusChange && canModifierStatuts && (
                   <>
                     {/* Commande en attente → Confirmer (garde le détail ouvert) */}

@@ -67,6 +67,12 @@ ce qui a été produit (cas normal, cf. 3a). Ce n'est PAS une règle absolue : d
 plus que le besoin réel déjà reconnu par la ligne, le surplus prend sur `available` — cf. 3d
 ci-dessous, qui teste précisément ce cas.
 
+**3a rejoué via la VRAIE route API** (login réel, `PATCH /api/orders/[id]` pour valider la
+commande, `PATCH /api/production-list/[id]` pour produire) : départ `needed=10`, matière
+`available=990 reserved=10` ; après production de 6 (HTTP 200) → `available=990 reserved=4`
+(inchangé/−6 exact) ; après production des 4 restants (HTTP 200) → `available=990 reserved=0`
+— **identique** à la version testée en interne.
+
 ### NOUVEAU — 3d : surplus produit au-delà du besoin réel, pris sur un disponible qui EN A
 Une seule ligne, aucune autre commande concurrente sur cette matière. Besoin réel=10 (déjà
 réservé), matière `available=200` en plus (ex: du réassort), `reserved=10`.
@@ -82,6 +88,11 @@ réservé), matière `available=200` en plus (ex: du réassort), `reserved=10`.
 ✅ Conforme : les 10 du besoin réel viennent bien du `reserved` (10→0, la réservation d'origine
 est enfin consommée, pas laissée orpheline) ; les 15 de surplus viennent bien du `available`
 (200→185), pas volés ailleurs puisque personne d'autre n'utilisait cette matière ici.
+
+**Rejoué via la VRAIE route API** : commande réelle validée (`PATCH /api/orders/[id]`), départ
+`needed=10`, matière `available=200 reserved=10` ; appel réel `PATCH /api/production-list/[id]`
+`{quantity:25}` → réponse HTTP 200 `{needed:0, buffer:85, produced:25}` ; état final vérifié :
+matière `available=185 reserved=0` — **identique** à la version testée en interne.
 
 ## Section 4 — Liste d'achat matière : "Commander" puis annuler la commande d'origine
 **Départ**
@@ -250,21 +261,27 @@ régression.
 
 ## Section 14 — Réapprovisionnement manuel (restock)
 
+⚠️ **Chiffres mis à jour** (voir "Mise à jour 6" plus bas) : cette section avait été écrite
+AVANT la décision "le buffer ne réserve jamais de matière" — les nombres ci-dessous montraient
+donc encore un buffer réservé (110 = 10 besoin + 100 buffer). Retestée via les **vraies routes
+API** (pas les fonctions internes) pour confirmer les chiffres actuels :
+
 **Restock produit mode "produire" (ratio 2, matière dispo=1000)**
 - Réapprovisionnement de 30 → Produit `available=30` ; Matière `available=940 reserved=0`
-  (consommée directement, jamais réservée) ✅
+  (consommée directement, jamais réservée) ✅ — inchangé.
 
 **Restock produit avec commande de 15 en attente (ratio 1)**
-- Avant : Matière `available=885 reserved=115` ; Ligne `needed=15 buffer=100`
-- Réapprovisionnement de 10 → Produit `available=0 reserved=10` ; Matière `available=885
-  reserved=105` (relâchée une seule fois) ; Ligne `needed=5 buffer=100` ✅
+- Avant : Matière `available=985 reserved=15` (15 = besoin réel seul, le buffer ne réserve
+  plus) ; Ligne `needed=15 buffer=100`
+- Réapprovisionnement de 10 → Produit `available=0 reserved=10` ; Matière `available=985
+  reserved=5` (relâchée une seule fois) ; Ligne `needed=5 buffer=100` ✅
 
 **Restock matière (+500) débloquant une ligne Bloquée**
 - Avant : Matière `available=0 reserved=2` ; Ligne `BLOQUE`
-- Après : Matière `available=392 reserved=110` ; Ligne `A_PRODUIRE` ; Ligne achat matière
-  `needed=0 buffer=1608` ✅
+- Après : Matière `available=492 reserved=10` (**seulement le besoin réel**, plus 100 comme
+  avant) ; Ligne `A_PRODUIRE` ; Ligne achat matière `needed=0 buffer=1508`
 
-✅ Conforme — chiffres identiques à ceux déjà validés et consignés dans TESTS-STOCK.md.
+✅ Conforme au comportement actuel (post "buffer ne réserve jamais").
 
 ## Conclusion (1ʳᵉ passe)
 13 sections sur 14 rejouées entièrement conformes, aucune régression. La section 4 révèle une
@@ -361,6 +378,14 @@ réservé, puis 5 volés au pot commun faute de disponible) :
 ✅ Conforme — les plus récentes basculent Bloquée en priorité, les plus anciennes gardent leur
 matière.
 
+**Rejoué via les VRAIES routes API** (login réel, `PATCH /api/orders/[id]` pour valider les
+deux commandes, `PATCH /api/production-list/[id]` pour "Marquer fabriquée") : état de départ
+identique (`ANCIEN` et `RÉCENT` tous deux `needed=10 buffer=100 A_PRODUIRE`, matière
+`reserved=20`) ; après l'appel réel à "Marquer fabriquée" 15 pour ANCIEN → réponse HTTP 200
+`{needed:0, buffer:95, produced:15, status:"A_PRODUIRE"}` ; état final : matière `available=0
+reserved=5`, RÉCENT `needed=10 buffer=100 status=BLOQUE`, ligne achat matière `needed=200
+buffer=2000` — **identique en tout point** à la version testée via les fonctions internes.
+
 ### NOUVEAU — 3c : refus net si vraiment pas assez de matière du tout
 Matière : `available=0 reserved=5`. Tentative de produire 20 (recette ratio 1, besoin=20).
 
@@ -370,6 +395,13 @@ besoin=20)"}`
 - Ligne production après : `produced=0` — **strictement inchangée**
 
 ✅ Conforme — aucune modification partielle, refus net et propre.
+
+**Rejoué via la VRAIE route API** : appel réel `PATCH /api/production-list/[id]` avec
+`{quantity:20}` sur une ligne `needed=20`, matière `available=0 reserved=5` → réponse HTTP
+**409** `{"error":"Stock matière insuffisant pour produire cette quantité : mC
+(disponible+réservé=5, besoin=20)"}` ; état final vérifié : matière `available=0 reserved=5`,
+ligne `produced=0 status=BLOQUE` — **strictement inchangés**, identique à la version testée via
+les fonctions internes.
 
 ---
 
@@ -417,7 +449,7 @@ une CONSÉQUENCE naturelle du calcul honnête du besoin, pas une règle spécial
 
 ---
 
-## Mise à jour 3 — correction manuelle de `reserved` produit à la baisse : reprend aux plus récentes
+/## Mise à jour 3 — correction manuelle de `reserved` produit à la baisse : reprend aux plus récentes
 
 Demande : si on baisse `reserved` d'un produit à la main, les commandes les plus récentes
 doivent perdre leur couverture en premier (FIFO), et repartir en besoin réel.
@@ -452,5 +484,160 @@ et repart en besoin réel.
 
 ---
 
+/## Mise à jour 4 — correction manuelle de `reserved` matière à la baisse : revérifie les lignes couvertes
+
+Demande : quand on baisse `reserved` d'une matière à la main, les lignes de production "À
+produire" qui comptaient dessus doivent être revérifiées — les plus récentes rebasculent
+"Bloquée" en premier (FIFO), symétrique à ce qu'on fait déjà pour "Marquer fabriquée".
+Confirmé : ce recalcul est déclenché uniquement par l'action de correction elle-même (POST),
+jamais par un chargement de page — vérifié qu'aucune route de lecture n'appelle ces fonctions.
+
+**Changement** (`src/app/api/stock/correction/route.ts`) : pour une matière, à la baisse de
+`reserved`, on appelle désormais `reassessProductionForMaterial` (déjà existante, créée pour
+"Marquer fabriquée") au lieu de `resyncMaterialPurchaseNeed` seule — elle fait les deux
+(réévalue le statut des lignes, puis recalcule la carte d'achat). À la hausse : inchangé.
+
+### Test (script temporaire, supprimé après usage)
+Une matière partagée par deux lignes de production (ANCIENNE créée en premier, RÉCENTE
+ensuite), chacune `needed=10 buffer=100 status=A_PRODUIRE`, matière `reserved=20` (10+10).
+
+**Avant** :
+- Matière : `available=0 reserved=20`
+- Ligne ANCIENNE : `needed=10 buffer=100 status=A_PRODUIRE`
+- Ligne RÉCENTE : `needed=10 buffer=100 status=A_PRODUIRE`
+
+**Après correction manuelle `reserved` 20→12** :
+- Matière : `available=0 reserved=12`
+- Ligne ANCIENNE : `needed=10 buffer=100 status=A_PRODUIRE` — **inchangée**, toujours couverte
+  (10 ≤ 12)
+- Ligne RÉCENTE : `needed=10 buffer=100 status=BLOQUE` — **rebascule**, plus assez pour ses 10
+- Ligne achat matière : `needed=208 buffer=2000` — le manquant remonte automatiquement
+  (`demande=220` pour les deux lignes, `couvert=12`)
+
+✅ Conforme.
+
+---
+
+## Mise à jour 5 — bug trouvé et corrigé : une réception minime fermait la carte à tort
+
+Repéré par l'utilisateur en relisant la section 10 : si `needed`/`buffer` retombent à 0 dès
+qu'une petite partie est reçue (l'en-transit restant compte comme "couvert", cf. Mise à jour 2),
+alors réceptionner ne serait-ce que 1 unité sur 2120 commandées fermait déjà la carte en
+"Reçu" — confirmé par test, **c'était bien un vrai bug**.
+
+**Correctif** (`src/app/api/purchase-list/[id]/route.ts`, action 'receive') : la carte ne passe
+"Reçu" que si **les trois conditions** sont réunies : `needed<=0` ET `buffer<=0` ET
+`receivedQuantity >= orderedQuantity` (plus rien en transit, tout est physiquement arrivé).
+
+### Tests (script temporaire, supprimé après usage)
+
+**Cas 1 — réception de 1 sur 2120** : `needed=0 buffer=0 ordered=2120 received=1
+status=COMMANDE` ✅ reste ouverte (avant le correctif, ça serait passé "Reçu" à tort).
+
+**Cas 2 — réception totale d'un coup (non-régression section 4)** : `needed=0 buffer=0
+ordered=2120 received=2120 status=RECU` ✅ toujours conforme.
+
+**Cas 3 — réception en 2 fois (1900 puis le reste)** : après 1900/2120 → reste `COMMANDE` ;
+après le reste (2120/2120) → `RECU` ✅ ferme seulement à la toute fin.
+
+✅ Conforme partout, aucune régression sur les cas déjà validés.
+
+---
+
+## Mise à jour 6 — Section 14 rejouée via les VRAIES routes API (pas les fonctions internes)
+
+Jusqu'ici, tous les tests de cette conversation appelaient directement les fonctions de
+`src/lib/order-stock.ts` (ou, pour "Marquer fabriquée", recopiaient la logique de la route dans
+le script). Ça vérifie que le calcul est juste, mais pas que la vraie route HTTP (permissions,
+authentification, code réellement exécuté) fonctionne pareil.
+
+**Méthode** : connexion réelle via le flux NextAuth (login avec le compte de test, cookie de
+session récupéré), données de base créées directement en Prisma (produits/matière/recette —
+pure préparation de décor), puis **appels HTTP réels** :
+- `PATCH /api/orders/[id]` avec `{status:"VALIDE"}` pour valider les commandes (déclenche
+  `confirmStock` via le vrai code de la route, pas une copie).
+- `POST /api/stock/restock` pour les 3 réapprovisionnements (vrai code de la route).
+
+### Résultats
+
+**Après validation des commandes (via la vraie route)** :
+- Scénario B (matière abondante, ratio 1, commande de 15) : Matière `available=985 reserved=15`
+  ; Ligne production `needed=15 buffer=100 status=A_PRODUIRE` ✅
+- Scénario C (matière dispo=2, commande de 10) : Matière `available=0 reserved=2` ; Ligne
+  `needed=10 buffer=100 status=BLOQUE` ; Ligne achat matière `needed=108 buffer=2000` ✅
+
+**Après réapprovisionnement (via la vraie route `POST /api/stock/restock`)** :
+- Scénario A (produit +30, mode "produire", ratio 2) : Produit `available=30` ; Matière
+  `available=940 reserved=0` ✅
+- Scénario B (produit +10) : Produit `available=0 reserved=10` ; Matière `available=985
+  reserved=5` ; Ligne `needed=5 buffer=100 status=A_PRODUIRE` ✅
+- Scénario C (matière +500) : Matière `available=492 reserved=10` ; Ligne `needed=10 buffer=100
+  status=A_PRODUIRE` ; Ligne achat matière `needed=0 buffer=1508` ✅
+
+✅ **Résultats identiques à ceux obtenus via les fonctions internes** (aux chiffres près
+attendus depuis la décision "le buffer ne réserve jamais de matière") — confirme que la vraie
+route, avec authentification réelle, exécute bien exactement le comportement attendu. Données
+de test et scripts temporaires supprimés après usage.
+
+---
+
+## Mise à jour 7 — Nouvelle fonctionnalité : commandes/devis prioritaires
+
+Demande : une commande marquée "prioritaire" passe devant les autres dans les simulations FIFO
+du stock, comme si elle avait été créée en premier ; une carte "Production urgente" en bas de
+la liste de production affiche le manquant des commandes prioritaires (par produit), et
+disparaît une fois produite. Togglable côté admin, uniquement quand la commande est confirmée
+et pas encore produite. Ne déclenche rien immédiatement (compte seulement au prochain
+évènement FIFO) ; applicable aux commandes ET aux devis ; pas d'équivalent côté achat.
+
+### Changements
+- **Schéma** : `priority Boolean @default(false)` ajouté sur `Order` et `Quote` (migration
+  `20260910180635_add_priority_orders_quotes`).
+- **`src/lib/order-stock.ts`** : nouveau comparateur `fifoCompare` (priorité d'abord, ancienneté
+  ensuite), branché dans les 3 simulations FIFO par commande : `distributeToLinkedItems`,
+  `reallocateAvailableStock`, `reassessProductReserved`. Nouvelle fonction
+  `getUrgentProductionNeeds()` (lecture seule, jamais stockée) qui agrège par produit le
+  manquant des commandes/devis prioritaires encore actifs (`VALIDE`).
+- **`src/lib/stock-traceability.ts`** : le badge "Bloqué" par commande (`materialClaims`) utilise
+  aussi `fifoCompare` — une commande prioritaire n'apparaît plus "Bloquée" à tort si elle est
+  couverte en priorité.
+- **`src/app/api/orders/[id]/route.ts`** et **`quotes/[id]/route.ts`** : `PATCH` accepte
+  `{priority: true/false}`, refusé (400) si le statut n'est pas `VALIDE`.
+- **`src/app/api/production-list/urgent/route.ts`** (nouveau) : `GET`, expose
+  `getUrgentProductionNeeds()`.
+- **`src/components/ui/StockListsWidget.tsx`** : carte "Production urgente" en bas de la liste
+  de production, visible seulement si non vide, ne modifie rien aux cartes normales.
+- **`src/components/ui/RequestPanel.tsx`** + **`src/lib/request-detail.ts`** : bouton
+  "☆ Marquer prioritaire" / "★ Prioritaire" dans le détail commande/devis, visible seulement
+  quand le statut est "Confirmé".
+
+### Tests (via les VRAIES routes API — login réel, requêtes HTTP réelles)
+Produit `FABRIQUE`, matière abondante (pas de blocage matière en jeu). ANCIENNE (commande de
+10, créée en premier) et RÉCENTE (commande de 10, créée ensuite, marquée **prioritaire**).
+
+**Avant production** :
+- `GET /api/production-list/urgent` → `[{reference:"...", quantity:10}]` ✅ (seule RÉCENTE,
+  la prioritaire, compte)
+
+**Après "Marquer fabriquée" 10** (pas assez pour les deux commandes de 10) :
+- ANCIENNE (non prioritaire, plus ancienne) : `resolvedQuantity=0` — **rien reçu**
+- RÉCENTE (prioritaire, plus récente) : `resolvedQuantity=10` — **tout reçu**
+
+✅ Exactement l'inverse du FIFO normal — la priorité l'emporte sur l'ancienneté réelle.
+
+**Après production complète de RÉCENTE** :
+- `GET /api/production-list/urgent` → `[]` ✅ la carte disparaît (RÉCENTE passée "Produite"
+  automatiquement via `checkCompletion`, plus de manquant prioritaire à sommer)
+
+**Garde-fous vérifiés** :
+- Retirer la priorité sur RÉCENTE une fois "Produite" → **HTTP 400** (plus rien à prioriser,
+  cohérent).
+- Marquer prioritaire une commande "Annulée" → **HTTP 400**, message clair.
+
+✅ Conforme à la demande sur tous les points testés.
+
+---
+
 Scripts temporaires supprimés après usage, comme d'habitude. Détails et chiffres consignés
-également dans TESTS-STOCK.md (section 3, sous-sections a/b/c, et section 8).
+également dans TESTS-STOCK.md (section 3, sous-sections a/b/c, section 8, section 10, et
+section 15).

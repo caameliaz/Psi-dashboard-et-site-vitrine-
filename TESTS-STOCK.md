@@ -126,7 +126,13 @@ Matière dispo=3 pour un besoin de 10.
   pour la part reprise ne l'est **qu'une fois** (pas de double comptage).
 - [ ] Correction du disponible d'une matière **à la hausse** avec une ligne "Bloquée" en
   attente → elle se débloque (ou avance partiellement, cf. section 11).
-- [ ] Correction de `reserved` sur une matière → recalcule le besoin réel immédiatement.
+- [ ] Correction de `reserved` sur une matière → recalcule le besoin réel immédiatement. **À la
+  baisse** : revérifie aussi si les lignes de production "À produire" qui comptaient sur ce pot
+  commun sont toujours couvertes — **les plus RÉCENTES rebasculent "Bloquée" en premier**
+  (FIFO), le manquant qui en résulte remonte dans la liste d'achat matière. Exemple : matière
+  `reserved=20` (10 pour une ligne ancienne, 10 pour une plus récente, toutes deux `A_PRODUIRE`)
+  → correction à 12 : l'ancienne reste `A_PRODUIRE` (10 ≤ 12), la récente repasse `BLOQUE`
+  (plus assez pour ses 10), la liste d'achat matière reflète le manquant.
 - [ ] Correction de `reserved` sur un **produit**, **à la baisse** : reprend la couverture aux
   commandes/devis actifs concernés (VALIDE/PRODUITE), **les plus RÉCENTES perdent en premier**
   (FIFO, les plus anciennes gardent la priorité). Exemple : produit `reserved=30` (10 pour une
@@ -142,10 +148,15 @@ Deux commandes de 10 sur le même produit, la 1ʳᵉ créée avant la 2ᵉ.
 - [ ] Produisez 10 (ne couvre qu'une commande) → la plus ancienne reçoit tout
   (`resolvedQuantity=10`), la plus récente rien (`resolvedQuantity=0`).
 
-## 10. Réception qui ne passe "Reçu" que si besoin ET buffer sont à 0
+## 10. Réception qui ne passe "Reçu" que si besoin ET buffer sont à 0, ET tout est reçu
 - [ ] Forcez une ligne avec besoin réel ET buffer > 0, "Commandez" tout, réceptionnez
   EXACTEMENT le besoin réel (pas le buffer) → reste "Commandé".
 - [ ] Réceptionnez le reste (buffer) → passe enfin "Reçu".
+- [ ] **Piège à vérifier** : commande de 2120 chez le fournisseur → réceptionnez SEULEMENT 1
+  unité → reste "Commandé" (ne doit JAMAIS passer "Reçu" juste parce que `needed`/`buffer`
+  retombent à 0 grâce à l'en-transit qui compte comme "couvert" — il faut EN PLUS que
+  `receivedQuantity >= orderedQuantity`, sinon une réception minime fermerait la carte à tort).
+  Réceptionnez ensuite le reste → passe "Reçu" seulement à ce moment-là.
 - [ ] Badge "Urgent" : affiché seulement si `needed+buffer > 0` ET stock physique à 0 — jamais
   sur une ligne "Commandé" qui n'attend plus que sa réception (sous-titre "En attente de
   réception" à la place).
@@ -197,6 +208,26 @@ Matière dispo=2 pour un besoin de 10 (ratio 1) → ligne "Bloquée".
   priorité ; correction de `reserved` matière = recalcul du besoin réel, sur produit = aucun
   effet) — le réapprovisionnement suit exactement les mêmes règles qu'une correction à la
   hausse, seule la source de l'augmentation change (bouton dédié vs champ libre).
+
+## 15. Commandes/devis prioritaires
+Une commande/devis marqué "prioritaire" passe TOUJOURS devant les autres dans les simulations
+FIFO du stock (distribution, réaffectation, reprise de couverture, badge "Bloqué"), comme si
+elle avait été créée en premier — ne déclenche rien tout de suite, compte juste comme "la plus
+ancienne" au prochain évènement. Togglable uniquement tant que la commande est "Confirmée"
+(VALIDE) et pas encore "Produite" — ne change RIEN au reste de la ligne de production/achat
+normale (son `needed` continue d'inclure toutes les commandes, prioritaires ou pas).
+
+- [ ] Deux commandes sur le même produit (matière abondante) : ANCIENNE créée en premier (10),
+  RÉCENTE créée ensuite (10), RÉCENTE marquée prioritaire. Produisez seulement 10 (pas assez
+  pour les deux) → **RÉCENTE reçoit tout** (`resolvedQuantity=10`), ANCIENNE rien
+  (`resolvedQuantity=0`) — inversé par rapport au FIFO normal.
+- [ ] Carte "Production urgente" (en bas de la liste de production) : affiche le produit avec
+  quantité=10 tant que RÉCENTE n'est pas produite ; **disparaît d'elle-même** une fois
+  RÉCENTE entièrement produite (elle repasse "Produite" automatiquement, plus de manquant à
+  sommer).
+- [ ] Retirer la priorité sur une commande déjà "Produite" → refusé (rien à prioriser dessus).
+- [ ] Marquer prioritaire une commande "Annulée" (ou tout statut ≠ Confirmé) → refusé,
+  message clair.
 
 ## Notes
 Pour chaque étape qui échoue, notez les valeurs exactes observées (disponible/réservé produit

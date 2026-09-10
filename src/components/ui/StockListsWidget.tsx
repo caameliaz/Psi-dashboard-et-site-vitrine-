@@ -21,6 +21,7 @@ interface ProductionItem {
   product: { id: string; reference: string; name: string | null; mode: string; available: number; productionThreshold: number };
   orderItems: LinkedRef[]; quoteItems: LinkedRef[];
 }
+interface UrgentNeed { productId: string; reference: string; name: string | null; quantity: number }
 
 // Sous-titre de la carte : gravité décroissante — stock à 0 (urgent), puis simple passage
 // sous le seuil de réassort, sinon ajout manuel/commande. Le blocage matière première ne
@@ -179,6 +180,7 @@ export function StockListsWidget() {
   const [mode, setMode] = useState<'achat' | 'production'>('achat');
   const [purchaseItems, setPurchaseItems] = useState<PurchaseItem[]>([]);
   const [productionItems, setProductionItems] = useState<ProductionItem[]>([]);
+  const [urgentNeeds, setUrgentNeeds] = useState<UrgentNeed[]>([]);
   const [products, setProducts] = useState<PickableProduct[]>([]);
   const [materials, setMaterials] = useState<PickableMaterial[]>([]);
   const [loading, setLoading] = useState(true);
@@ -188,11 +190,12 @@ export function StockListsWidget() {
   const fetchAll = useCallback(async () => {
     setLoading(true);
     try {
-      const [purRes, prodListRes, prodRes, matRes] = await Promise.all([
-        fetch('/api/purchase-list'), fetch('/api/production-list'), fetch('/api/stock/products'), fetch('/api/raw-materials'),
+      const [purRes, prodListRes, urgentRes, prodRes, matRes] = await Promise.all([
+        fetch('/api/purchase-list'), fetch('/api/production-list'), fetch('/api/production-list/urgent'), fetch('/api/stock/products'), fetch('/api/raw-materials'),
       ]);
       if (purRes.ok) setPurchaseItems(await purRes.json());
       if (prodListRes.ok) setProductionItems(await prodListRes.json());
+      if (urgentRes.ok) setUrgentNeeds(await urgentRes.json());
       if (prodRes.ok) setProducts(await prodRes.json());
       if (matRes.ok) setMaterials(await matRes.json());
     } finally { setLoading(false); }
@@ -355,6 +358,22 @@ export function StockListsWidget() {
               </div>
             );
           })
+        )}
+        {mode === 'production' && urgentNeeds.length > 0 && (
+          <div className="rounded-xl border-2 border-[#DC2626] bg-[#FEF2F2] p-3">
+            <div className="flex items-center gap-1.5 mb-2">
+              <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-[#DC2626] text-white uppercase tracking-wide">Prioritaire</span>
+              <p className="text-[13px] font-bold text-[#DC2626]">Production urgente</p>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              {urgentNeeds.map((n) => (
+                <div key={n.productId} className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg bg-white">
+                  <span className="text-[12px] font-bold text-[#0F172A] truncate">{n.name ?? n.reference}</span>
+                  <span className="text-[13px] font-bold text-[#DC2626] tabular-nums flex-shrink-0">{n.quantity} à produire</span>
+                </div>
+              ))}
+            </div>
+          </div>
         )}
       </div>
 

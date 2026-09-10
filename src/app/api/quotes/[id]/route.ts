@@ -59,11 +59,20 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
       return NextResponse.json({ error: "Vous n'avez pas la permission de ré-assigner le client" }, { status: 403 });
     }
 
-    // "Marquer Produit" — même vérification préalable que pour les commandes (cf. plus haut).
-    if (body.status === 'PRODUITE' && !body.confirmShortfall) {
+    // Devis prioritaire — même règle que pour les commandes (cf. orders/[id]/route.ts).
+    if (body.priority !== undefined) {
+      const statusNow = body.status !== undefined ? body.status : (await prisma.quote.findUnique({ where: { id }, select: { status: true } }))?.status;
+      if (statusNow !== 'VALIDE') {
+        return NextResponse.json({ error: 'La priorité ne peut être définie que sur un devis confirmé (Validé) et pas encore produit' }, { status: 400 });
+      }
+    }
+
+    // "Marquer Produit" — même vérification préalable que pour les commandes (cf. plus haut) :
+    // blocage dur (409), pas de moyen de forcer.
+    if (body.status === 'PRODUITE') {
       const shortfall = await previewForceCompleteShortfall('quote', id);
       if (shortfall.length > 0) {
-        return NextResponse.json({ error: 'MATERIAL_SHORTFALL', shortfall }, { status: 409 });
+        return NextResponse.json({ error: 'PRODUCT_SHORTFALL', shortfall }, { status: 409 });
       }
     }
 
@@ -166,6 +175,7 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
       where: { id },
       data: {
         ...(body.status !== undefined && { status: body.status }),
+        ...(body.priority !== undefined && { priority: Boolean(body.priority) }),
         // Facturation / règlement — modifiables après validation
         ...(body.invoiceNumber !== undefined && { invoiceNumber: body.invoiceNumber || null }),
         ...(body.paymentMethod !== undefined && { paymentMethod: body.paymentMethod || null }),
@@ -187,7 +197,9 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
       },
     });
 
-    const action = body.status !== undefined ? `Statut devis : ${statusLabel(body.status)}` : 'Devis modifié';
+    const action = body.status !== undefined ? `Statut devis : ${statusLabel(body.status)}`
+      : body.priority !== undefined ? (body.priority ? 'Devis marqué prioritaire' : 'Priorité retirée du devis')
+      : 'Devis modifié';
     const quoteLabel = quote.clientCompany || quote.clientName || quote.client?.name || '';
     createAudit({ userId: session.user.id, action, entity: 'DEVIS', entityId: id, detail: quoteLabel ? `${quote.ref} — ${quoteLabel}` : (quote.ref ?? id), quoteId: id });
 

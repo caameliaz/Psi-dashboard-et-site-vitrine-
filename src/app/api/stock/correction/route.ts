@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { requirePermission } from '@/lib/permissions';
 import { createAudit } from '@/lib/audit';
-import { resyncProductionLine, resyncPurchaseLineForProduct, resyncMaterialBufferOnly, resyncMaterialPurchaseNeed, reallocateAvailableStock, unblockProductionForMaterial, reassessProductReserved } from '@/lib/order-stock';
+import { resyncProductionLine, resyncPurchaseLineForProduct, resyncMaterialBufferOnly, resyncMaterialPurchaseNeed, reallocateAvailableStock, unblockProductionForMaterial, reassessProductReserved, reassessProductionForMaterial } from '@/lib/order-stock';
 
 const PRODUCT_FIELDS = ['available', 'reserved', 'inDelivery', 'returned'] as const;
 const MATERIAL_FIELDS = ['available', 'reserved'] as const;
@@ -59,7 +59,9 @@ export async function POST(request: NextRequest) {
 
     if (body.type === 'material') {
       if (!MATERIAL_FIELDS.includes(body.field)) return NextResponse.json({ error: 'Champ invalide' }, { status: 400 });
-      const before = body.field === 'available' ? await prisma.rawMaterial.findUnique({ where: { id: body.id }, select: { available: true } }) : null;
+      const before = ['available', 'reserved'].includes(body.field)
+        ? await prisma.rawMaterial.findUnique({ where: { id: body.id }, select: { available: true, reserved: true } })
+        : null;
       const material = await prisma.rawMaterial.update({ where: { id: body.id }, data: { [body.field]: qty } });
       createAudit({ userId: session?.user?.id, action: `Correction stock matière — ${FIELD_LABELS[body.field]}`, entity: 'MATIERE', entityId: material.id, detail: `${material.name} → ${qty}` });
       if (body.field === 'available') {
@@ -73,7 +75,15 @@ export async function POST(request: NextRequest) {
         // `reserved` fait partie de la formule du besoin réel (besoin réel = demande −
         // reserved) — contrairement au produit, le corriger doit recalculer le besoin de
         // cette matière (pas seulement le buffer, qui lui n'en dépend pas).
-        await resyncMaterialPurchaseNeed(material.id);
+        if (before && qty < before.reserved) {
+          // `reserved` vient de BAISSER : le pot commun qui couvrait certaines lignes de
+          // production "À produire" a diminué sans qu'aucune commande n'ait changé — revérifie
+          // si elles sont toujours couvertes (les plus RÉCENTES rebasculent "Bloquée" en
+          // premier, FIFO), avant de recalculer le besoin d'achat qui en découle.
+          await reassessProductionForMaterial(material.id);
+        } else {
+          await resyncMaterialPurchaseNeed(material.id);
+        }
       }
       return NextResponse.json({ ok: true });
     }

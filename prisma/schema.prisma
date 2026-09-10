@@ -302,6 +302,11 @@ model Order {
   source          OrderSource    @default(SITE)
   cancelReason    String?
   notes           String?
+  // Commande prioritaire : passe devant toutes les autres dans les simulations FIFO du stock
+  // (distribution, réaffectation, reprise de couverture, badge "Bloqué"...), comme si elle
+  // avait été créée en premier — cf. src/lib/order-stock.ts `fifoCompare`. Togglable tant que
+  // la commande n'est pas encore entièrement produite/livrée (uniquement pertinent si VALIDE).
+  priority        Boolean        @default(false)
   // ── Facturation / règlement (renseignés à l'import Excel ou à la validation) ──
   invoiceNumber String?        // N° de facture (en plus de la référence auto)
   paymentMethod String?        // Espèces, Chèque, Virement, Versement, À crédit, Dépensé, Offert
@@ -370,6 +375,8 @@ model Quote {
   status           RequestStatus  @default(EN_ATTENTE)
   source           OrderSource    @default(SITE)
   cancelReason     String?
+  // Devis prioritaire : même logique que Order.priority (cf. commentaire là-bas).
+  priority         Boolean        @default(false)
   // Champs admin (remplis après discussion avec le client)
   proposedPrice    Float?
   deliveryDelay    String?        // ex: "5 à 7 jours"
