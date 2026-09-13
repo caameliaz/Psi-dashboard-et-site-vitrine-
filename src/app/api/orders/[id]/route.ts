@@ -4,7 +4,7 @@ import { requirePermission, hasPermission } from '@/lib/permissions';
 import { createAudit, statusLabel } from '@/lib/audit';
 import { createNotif } from '@/lib/notifications';
 import { notifyStatusChange, notifyAssignment } from '@/lib/notify-activity';
-import { confirmStock, cancelStock, deliverStock, returnStock, releaseOrderItemStock, adjustOrderItemQuantity, forceCompleteOrder, previewForceCompleteShortfall } from '@/lib/order-stock';
+import { confirmStock, cancelStock, deliverStock, returnStock, releaseOrderItemStock, adjustOrderItemQuantity, forceCompleteOrder, previewForceCompleteShortfall, syncCommercialAssignmentForParent } from '@/lib/order-stock';
 
 // Statuts où les lignes ne peuvent plus être modifiées (déjà sorties du stock/annulées)
 const LOCKED_STATUSES = ['LIVRE', 'ANNULE', 'RETOURNE'];
@@ -60,7 +60,8 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
 
     // Commande prioritaire — togglable seulement sur une commande confirmée (VALIDE) et pas
     // encore entièrement produite (PRODUITE = plus rien à prioriser dessus). Ne déclenche rien
-    // d'immédiat : compte juste comme "la plus ancienne" au prochain calcul FIFO du stock.
+    // d'immédiat : compte juste comme "la plus ancienne" au prochain calcul FIFO du stock
+    // (distribution, réaffectation, reprise de couverture...).
     if (body.priority !== undefined) {
       const statusNow = body.status !== undefined ? body.status : (await prisma.order.findUnique({ where: { id }, select: { status: true } }))?.status;
       if (statusNow !== 'VALIDE') {
@@ -68,11 +69,28 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
       }
     }
 
+    // Auto-attribution au commercial — togglable seulement en attente ou confirmée (EN_ATTENTE
+    // / VALIDE), et seulement si un commercial ("Pris en charge par") est assigné, sinon rien à
+    // créditer (cf. syncCommercialAssignment, order-stock.ts).
+    if (body.autoAssignStock !== undefined) {
+      const current = await prisma.order.findUnique({ where: { id }, select: { status: true, assignedToId: true } });
+      const statusNow = body.status !== undefined ? body.status : current?.status;
+      if (statusNow !== 'EN_ATTENTE' && statusNow !== 'VALIDE') {
+        return NextResponse.json({ error: "L'auto-attribution au commercial n'est modifiable qu'en attente ou confirmée" }, { status: 400 });
+      }
+      const assignedToIdNow = body.assignedToId !== undefined ? body.assignedToId : current?.assignedToId;
+      if (body.autoAssignStock && !assignedToIdNow) {
+        return NextResponse.json({ error: "Assigne d'abord un commercial (Pris en charge par) avant d'activer l'auto-attribution" }, { status: 400 });
+      }
+    }
+
     // "Marquer Produit" — vérifie AVANT de toucher à quoi que ce soit qu'il y a bien de quoi
     // couvrir tout le manquant (disponible → vol chez une commande déjà Produite → fabrication
-    // avec la matière réservée). Blocage dur (409) si non, PAS de moyen de forcer quand même —
-    // sinon on prétendrait avoir du stock produit fini qui n'existe nulle part.
-    if (body.status === 'PRODUITE') {
+    // avec la matière réservée). Blocage (409) si non, SAUF si l'utilisateur a explicitement
+    // choisi de continuer quand même (`body.force`) — dans ce cas le manquant restant est
+    // marqué résolu SANS qu'aucun stock fictif ne soit inventé (cf. forceCompleteOrder), un
+    // écart assumé plutôt qu'un blocage total ou un mensonge silencieux sur le stock.
+    if (body.status === 'PRODUITE' && !body.force) {
       const shortfall = await previewForceCompleteShortfall('order', id);
       if (shortfall.length > 0) {
         return NextResponse.json({ error: 'PRODUCT_SHORTFALL', shortfall }, { status: 409 });
@@ -167,6 +185,7 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
       data: {
         ...(body.status !== undefined && { status: body.status }),
         ...(body.priority !== undefined && { priority: Boolean(body.priority) }),
+        ...(body.autoAssignStock !== undefined && { autoAssignStock: Boolean(body.autoAssignStock) }),
         // Facturation / règlement — modifiables après validation
         ...(body.invoiceNumber !== undefined && { invoiceNumber: body.invoiceNumber || null }),
         ...(body.paymentMethod !== undefined && { paymentMethod: body.paymentMethod || null }),
@@ -188,19 +207,34 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
 
     const action = body.status !== undefined ? `Statut commande : ${statusLabel(body.status)}`
       : body.priority !== undefined ? (body.priority ? 'Commande marquée prioritaire' : 'Priorité retirée de la commande')
+      : body.autoAssignStock !== undefined ? (body.autoAssignStock ? 'Auto-attribution au commercial activée' : 'Auto-attribution au commercial désactivée')
       : 'Commande modifiée';
     const orderLabel = order.clientCompany || order.clientName || order.client?.name || '';
     createAudit({ userId: session.user.id, action, entity: 'COMMANDE', entityId: id, detail: orderLabel ? `${order.ref} — ${orderLabel}` : order.ref, orderId: id });
 
     // ── Répercussion sur le stock selon la transition de statut ────────────────
     try {
+      // `autoAssignStock` vient de changer (case cochée/décochée) → le resolvedQuantity des
+      // articles ne bouge pas, mais la CIBLE de l'auto-attribution change instantanément :
+      // on retire tout de suite le stock déjà crédité si on décoche (cf. syncCommercialAssignment).
+      if (body.autoAssignStock !== undefined) {
+        await syncCommercialAssignmentForParent('order', id);
+      }
+
       if (body.status === 'VALIDE') {
         await confirmStock('order', id);
       } else if (body.status === 'PRODUITE') {
         // "Marquer Produit" — résout la part manquante de chaque article (matière première
         // + liste d'achat/production), la confirmation d'un éventuel manquant a déjà eu lieu
-        // plus haut (cf. previewForceCompleteShortfall).
-        await forceCompleteOrder('order', id);
+        // plus haut (cf. previewForceCompleteShortfall). `force: true` accepte l'écart restant
+        // sans stock fictif — tracé dans l'audit si un manquant a réellement été accepté.
+        const phantom = await forceCompleteOrder('order', id, { force: !!body.force });
+        if (phantom.length > 0) {
+          createAudit({
+            userId: session.user.id, action: 'Marqué produit malgré un manquant (forcé)', entity: 'COMMANDE', entityId: id,
+            detail: phantom.map((p) => `${p.reference} — ${p.missing} manquant(s)`).join(', '), orderId: id,
+          });
+        }
       } else if (body.status === 'ANNULE') {
         await cancelStock('order', id);
       } else if (body.status === 'LIVRE') {

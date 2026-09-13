@@ -4,7 +4,7 @@ import { requirePermission, hasPermission } from '@/lib/permissions';
 import { createAudit, statusLabel } from '@/lib/audit';
 import { createNotif } from '@/lib/notifications';
 import { notifyStatusChange, notifyAssignment } from '@/lib/notify-activity';
-import { confirmStock, cancelStock, deliverStock, returnStock, releaseOrderItemStock, adjustOrderItemQuantity, forceCompleteOrder, previewForceCompleteShortfall } from '@/lib/order-stock';
+import { confirmStock, cancelStock, deliverStock, returnStock, releaseOrderItemStock, adjustOrderItemQuantity, forceCompleteOrder, previewForceCompleteShortfall, syncCommercialAssignmentForParent } from '@/lib/order-stock';
 
 // Statuts où les lignes ne peuvent plus être modifiées (déjà sorties du stock/annulées)
 const LOCKED_STATUSES = ['LIVRE', 'ANNULE', 'RETOURNE'];
@@ -59,7 +59,8 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
       return NextResponse.json({ error: "Vous n'avez pas la permission de ré-assigner le client" }, { status: 403 });
     }
 
-    // Devis prioritaire — même règle que pour les commandes (cf. orders/[id]/route.ts).
+    // Devis prioritaire — même règle que pour les commandes (cf. orders/[id]/route.ts). Ne
+    // déclenche rien d'immédiat : compte juste comme "le plus ancien" au prochain calcul FIFO.
     if (body.priority !== undefined) {
       const statusNow = body.status !== undefined ? body.status : (await prisma.quote.findUnique({ where: { id }, select: { status: true } }))?.status;
       if (statusNow !== 'VALIDE') {
@@ -67,9 +68,23 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
       }
     }
 
+    // Auto-attribution au commercial — même règle que pour les commandes (cf. orders/[id]/route.ts).
+    if (body.autoAssignStock !== undefined) {
+      const current = await prisma.quote.findUnique({ where: { id }, select: { status: true, assignedToId: true } });
+      const statusNow = body.status !== undefined ? body.status : current?.status;
+      if (statusNow !== 'EN_ATTENTE' && statusNow !== 'VALIDE') {
+        return NextResponse.json({ error: "L'auto-attribution au commercial n'est modifiable qu'en attente ou confirmé" }, { status: 400 });
+      }
+      const assignedToIdNow = body.assignedToId !== undefined ? body.assignedToId : current?.assignedToId;
+      if (body.autoAssignStock && !assignedToIdNow) {
+        return NextResponse.json({ error: "Assigne d'abord un commercial (Pris en charge par) avant d'activer l'auto-attribution" }, { status: 400 });
+      }
+    }
+
     // "Marquer Produit" — même vérification préalable que pour les commandes (cf. plus haut) :
-    // blocage dur (409), pas de moyen de forcer.
-    if (body.status === 'PRODUITE') {
+    // blocage (409), sauf si `body.force` (l'utilisateur a choisi de continuer quand même —
+    // cf. orders/[id]/route.ts pour le détail du comportement).
+    if (body.status === 'PRODUITE' && !body.force) {
       const shortfall = await previewForceCompleteShortfall('quote', id);
       if (shortfall.length > 0) {
         return NextResponse.json({ error: 'PRODUCT_SHORTFALL', shortfall }, { status: 409 });
@@ -176,6 +191,7 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
       data: {
         ...(body.status !== undefined && { status: body.status }),
         ...(body.priority !== undefined && { priority: Boolean(body.priority) }),
+        ...(body.autoAssignStock !== undefined && { autoAssignStock: Boolean(body.autoAssignStock) }),
         // Facturation / règlement — modifiables après validation
         ...(body.invoiceNumber !== undefined && { invoiceNumber: body.invoiceNumber || null }),
         ...(body.paymentMethod !== undefined && { paymentMethod: body.paymentMethod || null }),
@@ -199,19 +215,31 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
 
     const action = body.status !== undefined ? `Statut devis : ${statusLabel(body.status)}`
       : body.priority !== undefined ? (body.priority ? 'Devis marqué prioritaire' : 'Priorité retirée du devis')
+      : body.autoAssignStock !== undefined ? (body.autoAssignStock ? 'Auto-attribution au commercial activée' : 'Auto-attribution au commercial désactivée')
       : 'Devis modifié';
     const quoteLabel = quote.clientCompany || quote.clientName || quote.client?.name || '';
     createAudit({ userId: session.user.id, action, entity: 'DEVIS', entityId: id, detail: quoteLabel ? `${quote.ref} — ${quoteLabel}` : (quote.ref ?? id), quoteId: id });
 
     // ── Répercussion sur le stock selon la transition de statut ────────────────
     try {
+      if (body.autoAssignStock !== undefined) {
+        await syncCommercialAssignmentForParent('quote', id);
+      }
+
       if (body.status === 'VALIDE') {
         await confirmStock('quote', id);
       } else if (body.status === 'PRODUITE') {
         // "Marquer Produit" — résout la part manquante de chaque article (matière première
         // + liste d'achat/production), la confirmation d'un éventuel manquant a déjà eu lieu
-        // plus haut (cf. previewForceCompleteShortfall).
-        await forceCompleteOrder('quote', id);
+        // plus haut (cf. previewForceCompleteShortfall). `force: true` accepte l'écart restant
+        // sans stock fictif — tracé dans l'audit si un manquant a réellement été accepté.
+        const phantom = await forceCompleteOrder('quote', id, { force: !!body.force });
+        if (phantom.length > 0) {
+          createAudit({
+            userId: session.user.id, action: 'Marqué produit malgré un manquant (forcé)', entity: 'DEVIS', entityId: id,
+            detail: phantom.map((p) => `${p.reference} — ${p.missing} manquant(s)`).join(', '), quoteId: id,
+          });
+        }
       } else if (body.status === 'ANNULE') {
         await cancelStock('quote', id);
       } else if (body.status === 'LIVRE') {

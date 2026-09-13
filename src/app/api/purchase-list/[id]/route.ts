@@ -49,6 +49,19 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
     }
 
     if (body.action === 'receive') {
+      // Ne jamais réceptionner plus que ce qui a réellement été commandé, ni sur une ligne
+      // dont tout le commandé est déjà arrivé — sinon `receivedQuantity` dépasserait
+      // `orderedQuantity` (un en-transit négatif, cf. resyncMaterialPurchaseNeed/
+      // resyncPurchaseLineForProduct qui font `Math.max(0, ordered - received)`, ce qui
+      // masquerait silencieusement l'anomalie plutôt que de la refuser franchement ici).
+      const remainingToReceive = item.orderedQuantity - item.receivedQuantity;
+      if (remainingToReceive <= 0) {
+        return NextResponse.json({ error: 'Tout ce qui a été commandé est déjà reçu sur cette ligne' }, { status: 400 });
+      }
+      if (qty > remainingToReceive) {
+        return NextResponse.json({ error: `Quantité supérieure à ce qu'il reste à recevoir (${remainingToReceive})` }, { status: 400 });
+      }
+
       if (item.productId) {
         // Produit fini "Acheté" → distribué en priorité aux commandes/devis liés (Réservé,
         // FIFO), le reliquat (réassort manuel/seuil) part en Disponible.

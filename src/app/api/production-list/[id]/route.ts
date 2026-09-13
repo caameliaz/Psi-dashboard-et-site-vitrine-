@@ -27,13 +27,19 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
     // globale D'ABORD, sur TOUTES les matières de la recette, avant de toucher quoi que ce
     // soit : si une seule matière n'a physiquement pas assez de stock (disponible + réservé
     // combinés, tous produits confondus), on arrête tout net, rien n'est modifié.
+    // On collecte le manquant de TOUTES les matières en cause (pas juste la première) pour
+    // que l'appelant puisse afficher exactement ce qu'il manque pour produire cette quantité.
     const recipe = await prisma.recipeItem.findMany({ where: { productId: item.productId }, include: { rawMaterial: true } });
-    for (const r of recipe) {
-      const totalNeeded = r.quantity * qty;
-      const totalStock = r.rawMaterial.available + r.rawMaterial.reserved;
-      if (totalStock < totalNeeded) {
-        return NextResponse.json({ error: `Stock matière insuffisant pour produire cette quantité : ${r.rawMaterial.name} (disponible+réservé=${totalStock}, besoin=${totalNeeded})` }, { status: 409 });
-      }
+    const shortfalls = recipe
+      .map((r) => {
+        const totalNeeded = r.quantity * qty;
+        const totalStock = r.rawMaterial.available + r.rawMaterial.reserved;
+        return { reference: r.rawMaterial.reference, name: r.rawMaterial.name, unit: r.rawMaterial.unit, missing: totalNeeded - totalStock };
+      })
+      .filter((s) => s.missing > 0);
+    if (shortfalls.length > 0) {
+      const detail = shortfalls.map((s) => `${s.name} (manque ${s.missing} ${s.unit})`).join(', ');
+      return NextResponse.json({ error: `Stock matière insuffisant pour produire cette quantité : ${detail}`, shortfalls }, { status: 409 });
     }
 
     // Consommation, en 3 temps par matière :

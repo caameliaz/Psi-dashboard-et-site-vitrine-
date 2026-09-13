@@ -5,8 +5,10 @@ import { createAudit } from '@/lib/audit';
 
 type Ctx = { params: Promise<{ id: string }> };
 
-// PATCH /api/stock/assignments/item/[id] — retire tout ou partie d'une attribution ;
-// la quantité retirée redevient disponible dans le stock produit général.
+// PATCH /api/stock/assignments/item/[id] — retire tout ou partie d'une attribution.
+// `available` n'est PLUS touché ici (il n'était plus décrémenté à l'attribution non plus,
+// cf. POST ci-dessus) : le stock revient simplement à ne plus être compté "chez ce
+// commercial", il n'a jamais quitté `available`.
 // body: { quantity?: number } — omis = retrait total
 export async function PATCH(request: NextRequest, { params }: Ctx) {
   const guard = await requirePermission('modifier_stock');
@@ -25,12 +27,9 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
 
     const remaining = assignment.quantity - qty;
 
-    await prisma.$transaction([
-      prisma.product.update({ where: { id: assignment.productId }, data: { available: { increment: qty } } }),
-      remaining <= 0
-        ? prisma.stockAssignment.delete({ where: { id: assignment.id } })
-        : prisma.stockAssignment.update({ where: { id: assignment.id }, data: { quantity: remaining } }),
-    ]);
+    await (remaining <= 0
+      ? prisma.stockAssignment.delete({ where: { id: assignment.id } })
+      : prisma.stockAssignment.update({ where: { id: assignment.id }, data: { quantity: remaining } }));
 
     createAudit({ userId: session?.user?.id, action: `Stock retiré (${qty})`, entity: 'STOCK', entityId: assignment.productId, detail: `${assignment.employee.name} — ${assignment.product.reference}` });
     return NextResponse.json({ ok: true });

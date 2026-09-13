@@ -717,7 +717,7 @@ function RequestsPageInner() {
     return matchSearch && matchStatut && matchAssigne && matchPeriode;
   });
 
-  const handleStatusChange = async (ref: string, newStatut: string) => {
+  const handleStatusChange = async (ref: string, newStatut: string, force = false) => {
     const item = selected ?? rawItems.find((r) => r.ref === ref || r.id === ref);
     if (!item?.id) return;
     const dbStatus = UI_TO_DB[newStatut] ?? newStatut;
@@ -727,20 +727,25 @@ function RequestsPageInner() {
     const res = await fetch(endpoint, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: dbStatus }),
+      body: JSON.stringify({ status: dbStatus, ...(force && { force: true }) }),
     });
 
-    // "Marquer Produit" impossible (rien pour couvrir le manquant, même après avoir cherché
-    // dans le disponible et chez les commandes déjà Produites) → blocage dur, pas de "forcer
-    // quand même" : on afficherait un stock produit fini qui n'existe nulle part.
+    // "Marquer Produit" avec un manquant (rien pour le couvrir, même après avoir cherché dans
+    // le disponible et chez les commandes déjà Produites) → proposé à l'utilisateur avec le
+    // détail du manquant, plutôt qu'un simple blocage : "Continuer quand même" relance la même
+    // action avec `force`, qui marque la part manquante résolue SANS inventer de stock fictif
+    // (cf. forceCompleteOrder, order-stock.ts) — un écart assumé, tracé dans l'audit.
     if (res.status === 409) {
       const data = await res.json().catch(() => null);
       if (data?.error === 'PRODUCT_SHORTFALL') {
         const shortfall: { reference: string; name: string | null; missing: number }[] = data.shortfall ?? [];
-        alert(
-          "Impossible de marquer produit — stock insuffisant :\n" +
-          shortfall.map((w) => `• ${w.name ?? w.reference} — ${w.missing} manquant(s)`).join('\n')
-        );
+        const detail = shortfall.map((w) => `• ${w.name ?? w.reference} — ${w.missing} manquant(s)`).join('\n');
+        if (window.confirm(
+          `Il manque du produit fini pour marquer ${isItemDevis ? 'ce devis' : 'cette commande'} produit(e) :\n${detail}\n\n` +
+          'Continuer quand même ? Le manquant sera marqué résolu sans stock réel derrière (écart assumé, visible en audit).'
+        )) {
+          await handleStatusChange(ref, newStatut, true);
+        }
         return;
       }
     }
@@ -763,6 +768,20 @@ function RequestsPageInner() {
     await fetchAll(true);
     // Met à jour le panneau ouvert avec le nouvel assigné
     setSelected(prev => prev ? { ...prev, assignedToId, assignedToName: users.find(u => u.id === assignedToId)?.name ?? null } : prev);
+  };
+
+  // Coche/décoche "Attribuer automatiquement au commercial" (cf. RequestPanel.tsx) — le
+  // serveur refuse si aucun commercial n'est assigné ou si le statut n'est pas En attente/Confirmé.
+  const handleToggleAutoAssign = async (id: string, type: string, value: boolean) => {
+    const endpoint = type === 'Devis' ? `/api/quotes/${id}` : `/api/orders/${id}`;
+    const res = await fetch(endpoint, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ autoAssignStock: value }),
+    });
+    if (!res.ok) { const err = await res.json().catch(() => ({})); alert(err.error ?? "Échec de l'action"); return; }
+    setSelected(prev => prev ? { ...prev, autoAssignStock: value } : prev);
+    await fetchAll(true);
   };
 
   // Enregistre le prix d'un devis SANS changer son statut. Le prix peut être
@@ -1019,6 +1038,7 @@ function RequestsPageInner() {
           users={users}
           onAssign={handleAssign}
           onReassigned={() => { fetchAll(true); }}
+          onToggleAutoAssign={handleToggleAutoAssign}
         />
       )}
       {showImportVentes && (

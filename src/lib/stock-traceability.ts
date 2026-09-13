@@ -13,15 +13,37 @@ import { fifoCompare } from './order-stock';
 // donc une commande est "bloquée" dès que le cumul de ce qu'il lui faut de cette matière
 // (elle + toutes les plus anciennes qu'elle) dépasse ce qui est réellement réservé.
 
-const PARENT_SELECT = { ref: true, clientName: true, createdAt: true, priority: true, client: { select: { name: true, company: true } } } as const;
+// clientName/clientCompany : snapshot figé au moment de la création de la commande/devis
+// (cf. schema.prisma) — c'est la société POUR QUI cette commande a été passée, même si le
+// client lié (`clientId`) est ensuite réassigné/modifié/fusionné. `client` (relation live)
+// ne sert que de repli quand le snapshot est vide — même priorité que partout ailleurs dans
+// l'app (cf. request-detail.ts:76-77), pour ne jamais afficher la société ACTUELLE du client
+// lié à la place de celle pour qui la commande a réellement été prise.
+const PARENT_SELECT = { ref: true, clientName: true, clientCompany: true, createdAt: true, priority: true, client: { select: { name: true, company: true } } } as const;
 
-export type LinkedParent = { ref: string | null; clientName: string | null; client: { name: string; company: string | null } | null };
-export type LinkedOrderItem = { quantity: number; order: LinkedParent; blocked: boolean };
-export type LinkedQuoteItem = { quantity: number; quote: LinkedParent; blocked: boolean };
-export type Links = { orderItems: LinkedOrderItem[]; quoteItems: LinkedQuoteItem[] };
+export type LinkedParent = { ref: string | null; clientName: string | null; clientCompany: string | null; client: { name: string; company: string | null } | null };
+// `product` : uniquement pour les commandes remontées via une matière PARTAGÉE par plusieurs
+// produits (cf. materialPurchaseLinks) — précise quel produit fabriqué est à l'origine de ce
+// besoin de matière, pour ne jamais confondre la contribution de deux produits différents.
+export type LinkedOrderItem = { quantity: number; order: LinkedParent; blocked: boolean; product?: { reference: string; name: string | null } };
+export type LinkedQuoteItem = { quantity: number; quote: LinkedParent; blocked: boolean; product?: { reference: string; name: string | null } };
+// Part du besoin d'une matière première qui vient du BUFFER (rattrapage préventif) d'un
+// produit fabriqué en aval, PAS d'une commande client — cf. resyncMaterialPurchaseNeed.
+// Affiché à part dans "Commandes concernées" ("Réassort préventif (RÉF produit)") pour ne
+// jamais le confondre avec le propre buffer de la matière ("Réassort préventif (buffer)").
+export type BufferSource = { productId: string; reference: string; name: string | null; quantity: number };
+export type Links = { orderItems: LinkedOrderItem[]; quoteItems: LinkedQuoteItem[]; bufferSources?: BufferSource[] };
 
 type Claim = {
-  id: string; kind: 'order' | 'quote'; parent: LinkedParent; createdAt: Date; priority: boolean; stillNeeded: number; owed: number;
+  id: string; kind: 'order' | 'quote'; parent: LinkedParent; createdAt: Date; priority: boolean;
+  // `stillNeeded` = manquant en unités de PRODUIT (quantity − resolvedQuantity, brut) ; sert au
+  // statut "Bloqué" par commande (checkCompletion, ailleurs) et n'est jamais affiché tel quel.
+  // `materialQty` = ce même manquant converti en unités de CETTE matière (× ratio de recette) —
+  // c'est la seule quantité qui doit être affichée sur une carte de matière première, sinon on
+  // montre le manquant produit à la place du manquant matière (faux dès que le ratio ≠ 1, ou
+  // que la matière est partagée par plusieurs produits à des ratios différents).
+  stillNeeded: number; materialQty: number; owed: number;
+  product: { reference: string; name: string | null };
 };
 
 // Pour UNE matière première : toutes les commandes/devis réellement en attente de production
@@ -37,11 +59,12 @@ async function materialClaims(rawMaterialId: string): Promise<{ claims: Claim[];
 
   const lines = await prisma.productionListItem.findMany({
     where: { productId: { in: recipeUses.map((r) => r.productId) }, status: { in: ['A_PRODUIRE', 'BLOQUE'] } },
-    select: { id: true, productId: true },
+    select: { id: true, productId: true, product: { select: { reference: true, name: true } } },
   });
   if (lines.length === 0) return { claims: [], blockedKeys: new Set() };
   const lineIds = lines.map((l) => l.id);
   const ratioByLineId = new Map(lines.map((l) => [l.id, ratioByProduct.get(l.productId) ?? 0]));
+  const productByLineId = new Map(lines.map((l) => [l.id, l.product]));
 
   const [orderItems, quoteItems] = await Promise.all([
     prisma.orderItem.findMany({
@@ -55,16 +78,24 @@ async function materialClaims(rawMaterialId: string): Promise<{ claims: Claim[];
   ]);
 
   const claims: Claim[] = [
-    ...orderItems.map((i) => ({
-      id: i.id, kind: 'order' as const, parent: i.order, createdAt: i.order.createdAt, priority: i.order.priority,
-      stillNeeded: i.quantity - i.resolvedQuantity,
-      owed: (ratioByLineId.get(i.productionListItemId!) ?? 0) * (i.quantity - i.resolvedQuantity),
-    })),
-    ...quoteItems.map((i) => ({
-      id: i.id, kind: 'quote' as const, parent: i.quote, createdAt: i.quote.createdAt, priority: i.quote.priority,
-      stillNeeded: i.quantity - i.resolvedQuantity,
-      owed: (ratioByLineId.get(i.productionListItemId!) ?? 0) * (i.quantity - i.resolvedQuantity),
-    })),
+    ...orderItems.map((i) => {
+      const ratio = ratioByLineId.get(i.productionListItemId!) ?? 0;
+      const stillNeeded = i.quantity - i.resolvedQuantity;
+      return {
+        id: i.id, kind: 'order' as const, parent: i.order, createdAt: i.order.createdAt, priority: i.order.priority,
+        stillNeeded, materialQty: ratio * stillNeeded, owed: ratio * stillNeeded,
+        product: productByLineId.get(i.productionListItemId!)!,
+      };
+    }),
+    ...quoteItems.map((i) => {
+      const ratio = ratioByLineId.get(i.productionListItemId!) ?? 0;
+      const stillNeeded = i.quantity - i.resolvedQuantity;
+      return {
+        id: i.id, kind: 'quote' as const, parent: i.quote, createdAt: i.quote.createdAt, priority: i.quote.priority,
+        stillNeeded, materialQty: ratio * stillNeeded, owed: ratio * stillNeeded,
+        product: productByLineId.get(i.productionListItemId!)!,
+      };
+    }),
   ].filter((c) => c.stillNeeded > 0).sort(fifoCompare);
 
   const blockedKeys = new Set<string>();
@@ -111,12 +142,30 @@ export function createLinkResolver() {
       };
     },
 
-    // Ligne d'achat MATIÈRE : directement la simulation FIFO de cette matière.
+    // Ligne d'achat MATIÈRE : directement la simulation FIFO de cette matière, PLUS la part du
+    // besoin qui vient du buffer de chaque produit fabriqué en aval (pas d'une commande — cf.
+    // resyncMaterialPurchaseNeed qui cascade needed+buffer des lignes de production).
     async materialPurchaseLinks(rawMaterialId: string): Promise<Links> {
       const { claims, blockedKeys } = await getMaterialClaims(rawMaterialId);
+
+      const recipeUses = await prisma.recipeItem.findMany({ where: { rawMaterialId }, select: { productId: true, quantity: true } });
+      const ratioByProduct = new Map(recipeUses.map((r) => [r.productId, r.quantity]));
+      const lines = recipeUses.length > 0
+        ? await prisma.productionListItem.findMany({
+            where: { productId: { in: recipeUses.map((r) => r.productId) }, status: { in: ['A_PRODUIRE', 'BLOQUE'] }, bufferQuantity: { gt: 0 } },
+            select: { productId: true, bufferQuantity: true, product: { select: { reference: true, name: true } } },
+          })
+        : [];
+      const bufferSources: BufferSource[] = lines
+        .map((l) => ({ productId: l.productId, reference: l.product.reference, name: l.product.name, quantity: (ratioByProduct.get(l.productId) ?? 0) * l.bufferQuantity }))
+        .filter((s) => s.quantity > 0);
+
       return {
-        orderItems: claims.filter((c) => c.kind === 'order').map((c) => ({ quantity: c.stillNeeded, order: c.parent, blocked: blockedKeys.has(`order:${c.id}`) })),
-        quoteItems: claims.filter((c) => c.kind === 'quote').map((c) => ({ quantity: c.stillNeeded, quote: c.parent, blocked: blockedKeys.has(`quote:${c.id}`) })),
+        // `materialQty` (jamais `stillNeeded`, le manquant produit brut) : cf. commentaire du
+        // type Claim — sinon on affiche le manquant PRODUIT sur une carte de MATIÈRE.
+        orderItems: claims.filter((c) => c.kind === 'order').map((c) => ({ quantity: c.materialQty, order: c.parent, blocked: blockedKeys.has(`order:${c.id}`), product: c.product })),
+        quoteItems: claims.filter((c) => c.kind === 'quote').map((c) => ({ quantity: c.materialQty, quote: c.parent, blocked: blockedKeys.has(`quote:${c.id}`), product: c.product })),
+        bufferSources,
       };
     },
 

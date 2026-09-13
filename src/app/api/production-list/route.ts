@@ -54,9 +54,12 @@ export async function POST(request: NextRequest) {
       where: { productId: body.productId, status: { in: [...OPEN_PRODUCTION_STATUSES] } },
     });
 
+    // `manualQuantity` mémorise cette part PERSISTANTE (jamais écrasée par resyncProductionLine,
+    // qui l'ajoute au besoin réel des commandes) — `neededQuantity` est aussi incrémenté ici
+    // pour un affichage immédiat correct avant le prochain recalcul.
     const item = existing
-      ? await prisma.productionListItem.update({ where: { id: existing.id }, data: { neededQuantity: { increment: qty } }, include: INCLUDE })
-      : await prisma.productionListItem.create({ data: { productId: body.productId, neededQuantity: qty, auto: false }, include: INCLUDE });
+      ? await prisma.productionListItem.update({ where: { id: existing.id }, data: { neededQuantity: { increment: qty }, manualQuantity: { increment: qty } }, include: INCLUDE })
+      : await prisma.productionListItem.create({ data: { productId: body.productId, neededQuantity: qty, manualQuantity: qty, auto: false }, include: INCLUDE });
 
     createAudit({ userId: session?.user?.id, action: 'Ligne ajoutée à la liste de production', entity: 'STOCK', entityId: item.id, detail: `${item.product.reference} — ${qty}` });
     return NextResponse.json(item, { status: existing ? 200 : 201 });

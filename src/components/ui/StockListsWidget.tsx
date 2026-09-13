@@ -5,18 +5,25 @@ import { Modal } from './Modal';
 
 const inputClass = "w-full px-3 py-2.5 rounded-lg border border-[#E2E8F0] text-sm text-[#0F172A] focus:outline-none focus:border-[#4CAF4F] focus:ring-1 focus:ring-[#4CAF4F] transition-colors bg-[#F8FAFC]";
 
-interface LinkedRef { quantity: number; order?: LinkedParent; quote?: LinkedParent; blocked?: boolean }
-interface LinkedParent { ref: string | null; clientName: string | null; client: { name: string; company: string | null } | null }
+// `product` : uniquement pour une matière partagée par plusieurs produits (cf.
+// stock-traceability.ts::materialPurchaseLinks) — précise quel produit fabriqué est à
+// l'origine de ce besoin de matière, et `quantity` est alors déjà converti en unités de
+// matière (ratio de recette × manquant produit), jamais le manquant produit brut.
+interface LinkedRef { quantity: number; order?: LinkedParent; quote?: LinkedParent; blocked?: boolean; product?: { reference: string; name: string | null } }
+interface LinkedParent { ref: string | null; clientName: string | null; clientCompany: string | null; client: { name: string; company: string | null } | null }
+// Part du besoin d'une matière qui vient du buffer d'un produit fabriqué en aval (pas d'une
+// commande client) — cf. stock-traceability.ts::materialPurchaseLinks.
+interface BufferSource { productId: string; reference: string; name: string | null; quantity: number }
 
 interface PurchaseItem {
-  id: string; neededQuantity: number; bufferQuantity: number; orderedQuantity: number | null; receivedQuantity: number | null;
+  id: string; neededQuantity: number; bufferQuantity: number; manualQuantity: number; orderedQuantity: number | null; receivedQuantity: number | null;
   status: 'A_COMMANDER' | 'COMMANDE' | 'RECU'; auto: boolean;
   product: { id: string; reference: string; name: string | null; available: number; purchaseThreshold: number } | null;
   rawMaterial: { id: string; reference: string; name: string; unit: string; available: number; purchaseThreshold: number } | null;
-  orderItems: LinkedRef[]; quoteItems: LinkedRef[];
+  orderItems: LinkedRef[]; quoteItems: LinkedRef[]; bufferSources?: BufferSource[];
 }
 interface ProductionItem {
-  id: string; neededQuantity: number; bufferQuantity: number; producedQuantity: number | null;
+  id: string; neededQuantity: number; bufferQuantity: number; manualQuantity: number; producedQuantity: number | null;
   status: 'A_PRODUIRE' | 'BLOQUE' | 'EN_COURS' | 'PRODUIT'; auto: boolean;
   product: { id: string; reference: string; name: string | null; mode: string; available: number; productionThreshold: number };
   orderItems: LinkedRef[]; quoteItems: LinkedRef[];
@@ -24,12 +31,22 @@ interface ProductionItem {
 interface UrgentNeed { productId: string; reference: string; name: string | null; quantity: number }
 
 // Sous-titre de la carte : gravité décroissante — stock à 0 (urgent), puis simple passage
-// sous le seuil de réassort, sinon ajout manuel/commande. Le blocage matière première ne
-// s'affiche plus qu'au niveau de chaque commande (cf. "Commandes concernées"), jamais ici.
-function severitySubtitle(opts: { urgent: boolean; belowThreshold: boolean; auto: boolean }) {
+// sous le seuil de réassort, puis ajout manuel, sinon commande client (besoin réel, ni
+// urgent ni sous le seuil). Le blocage matière première ne s'affiche plus qu'au niveau de
+// chaque commande (cf. "Commandes concernées"), jamais ici.
+// "Ajouté manuellement" ne doit être décidé QUE par manualQuantity > 0 (la vraie trace d'un
+// ajout à la main, cf. POST /api/purchase-list|production-list) — jamais par élimination
+// (ni urgent, ni sous le seuil, ni buffer) : une ligne 100% générée par une vraie commande
+// client, dont le stock reste au-dessus du seuil, tombait à tort dans ce cas par défaut.
+// `isMaterial` : une matière première n'a jamais de commande client directe — son besoin
+// vient TOUJOURS d'un ou plusieurs produits (besoin réel cascadé et/ou leur buffer, cf.
+// resyncMaterialPurchaseNeed) — jamais "Commande client" (qui n'a de sens que pour un
+// produit acheté, directement commandé par un client).
+function severitySubtitle(opts: { urgent: boolean; belowThreshold: boolean; auto: boolean; manual: boolean; isMaterial?: boolean }) {
   if (opts.urgent) return 'Stock insuffisant';
   if (opts.belowThreshold || opts.auto) return 'Stock sous le seuil de réassort';
-  return 'Ajouté manuellement';
+  if (opts.manual) return 'Ajouté manuellement';
+  return opts.isMaterial ? 'Réassort préventif produits' : 'Commande client';
 }
 
 // Total affiché/à traiter pour une ligne : besoin réel + rattrapage préventif éventuel.
@@ -41,22 +58,41 @@ function totalQty(item: { neededQuantity: number; bufferQuantity: number }) {
 function linkedParts(link: LinkedRef) {
   const parent = link.order ?? link.quote;
   const ref = parent?.ref ?? '—';
-  const client = parent?.client?.company ?? parent?.client?.name ?? parent?.clientName ?? 'Client';
-  return { ref, client, qty: link.quantity };
+  // Snapshot (société POUR QUI la commande a été passée) prioritaire sur le client lié
+  // actuel — même règle que partout ailleurs dans l'app (cf. request-detail.ts) : le client
+  // lié (`clientId`) peut être réassigné/corrigé après coup, ça ne doit jamais faire
+  // apparaître une autre société que celle de la commande d'origine.
+  const client = parent?.clientCompany || parent?.client?.company || parent?.clientName || parent?.client?.name || 'Client';
+  // `product` n'est présent que pour une matière partagée par plusieurs produits (cf.
+  // materialPurchaseLinks) — précise quel produit fabriqué motive ce besoin de matière.
+  const product = link.product ? `${link.product.reference}${link.product.name ? ` — ${link.product.name}` : ''}` : null;
+  return { ref, client, qty: link.quantity, product };
 }
 
-function LinkedOrdersList({ linked, unit }: { linked: LinkedRef[]; unit?: string }) {
-  if (linked.length === 0) return null;
+// "Commandes concernées" : les vraies commandes/devis liés, PLUS des lignes à part pour ce qui
+// n'appartient à aucune commande précise — le rattrapage préventif PROPRE (buffer), ce qui a
+// été ajouté à la main (manualQuantity, persistant, cf. order-stock.ts), et — pour une matière
+// première seulement — la part qui vient du rattrapage préventif d'un produit fabriqué en aval
+// (bufferSources, cf. resyncMaterialPurchaseNeed/stock-traceability.ts) — pour que le total
+// affiché sur la carte (needed+buffer) soit entièrement traçable, pas seulement sa part "commandes".
+function LinkedOrdersList({ linked, unit, bufferQuantity, manualQuantity, bufferSources }: { linked: LinkedRef[]; unit?: string; bufferQuantity?: number; manualQuantity?: number; bufferSources?: BufferSource[] }) {
+  const hasBuffer = (bufferQuantity ?? 0) > 0;
+  const hasManual = (manualQuantity ?? 0) > 0;
+  const sources = bufferSources ?? [];
+  if (linked.length === 0 && !hasBuffer && !hasManual && sources.length === 0) return null;
   return (
     <div className="mt-2 pt-2 border-t border-[#F0F4F8]">
       <p className="text-[10px] font-bold text-[#8A9BB5] uppercase tracking-wide mb-1.5">Commandes concernées</p>
       <div className="flex flex-col gap-1.5">
         {linked.map((lk, i) => {
-          const { ref, client, qty } = linkedParts(lk);
+          const { ref, client, qty, product } = linkedParts(lk);
           return (
             <div key={i} className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg bg-[#F8FAFC]">
-              <span className="flex items-center gap-1.5">
+              <span className="flex items-center gap-1.5 flex-wrap">
                 <span className="text-[12px] font-bold text-[#0F172A]">{ref}</span>
+                {/* Produit affiché seulement pour une matière partagée par plusieurs produits
+                    — sinon on sait déjà de quel produit il s'agit (la carte elle-même). */}
+                {product && <span className="text-[11px] text-[#8A9BB5]">({product})</span>}
                 {lk.blocked && <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-[#FEF3C7] text-[#92400E] uppercase tracking-wide">Bloqué</span>}
               </span>
               <span className="text-[12px] text-[#4F46E5]">
@@ -65,6 +101,24 @@ function LinkedOrdersList({ linked, unit }: { linked: LinkedRef[]; unit?: string
             </div>
           );
         })}
+        {hasManual && (
+          <div className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg bg-[#F8FAFC]">
+            <span className="text-[12px] font-bold text-[#0F172A]">Ajouté manuellement</span>
+            <span className="text-[12px] font-bold text-[#0F172A]">{manualQuantity}{unit ? ` ${unit}` : ''}</span>
+          </div>
+        )}
+        {sources.map((s) => (
+          <div key={s.productId} className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg bg-[#F8FAFC]">
+            <span className="text-[12px] font-bold text-[#0F172A]">Réassort préventif ({s.reference}{s.name ? ` — ${s.name}` : ''})</span>
+            <span className="text-[12px] font-bold text-[#0F172A]">{s.quantity}{unit ? ` ${unit}` : ''}</span>
+          </div>
+        ))}
+        {hasBuffer && (
+          <div className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg bg-[#F8FAFC]">
+            <span className="text-[12px] font-bold text-[#0F172A]">Réassort préventif (buffer)</span>
+            <span className="text-[12px] font-bold text-[#0F172A]">{bufferQuantity}{unit ? ` ${unit}` : ''}</span>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -131,15 +185,23 @@ function AddLineModal({ mode, products, materials, onClose, onSave }: {
 
 // ── Overlay : action groupée (Commander / Valider réception / Produire) ────
 function BulkActionModal({ title, candidates, onClose, onConfirm }: {
-  title: string; candidates: { id: string; label: string; suggested: number; unit: string }[];
+  title: string; candidates: { id: string; label: string; suggested: number; unit: string; max?: number }[];
   onClose: () => void; onConfirm: (selections: { id: string; quantity: number }[]) => Promise<void>;
 }) {
   const [selected, setSelected] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
+  const maxById = new Map(candidates.map((c) => [c.id, c.max]));
 
   const toggle = (id: string, suggested: number) =>
     setSelected((s) => { const n = { ...s }; if (id in n) delete n[id]; else n[id] = String(suggested); return n; });
-  const setQty = (id: string, v: string) => setSelected((s) => ({ ...s, [id]: v }));
+  // Bloque la saisie au-delà du max autorisé pour cette ligne (ex: restant à recevoir) — le
+  // serveur revalide de toute façon, mais autant ne pas laisser taper une valeur refusée.
+  const setQty = (id: string, v: string) => {
+    const max = maxById.get(id);
+    const n = Number(v);
+    const clamped = max !== undefined && v !== '' && !Number.isNaN(n) && n > max ? String(max) : v;
+    setSelected((s) => ({ ...s, [id]: clamped }));
+  };
 
   const submit = async () => {
     const selections = Object.entries(selected).filter(([, v]) => Number(v) > 0).map(([id, v]) => ({ id, quantity: Number(v) }));
@@ -187,8 +249,10 @@ export function StockListsWidget() {
   const [showAdd, setShowAdd] = useState(false);
   const [bulkAction, setBulkAction] = useState<'order' | 'receive' | 'produce' | null>(null);
 
-  const fetchAll = useCallback(async () => {
-    setLoading(true);
+  // `silent` évite le flash "Chargement…" pour les rafraîchissements en arrière-plan
+  // (polling, retour sur l'onglet) — seul le premier chargement doit bloquer l'affichage.
+  const fetchAll = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const [purRes, prodListRes, urgentRes, prodRes, matRes] = await Promise.all([
         fetch('/api/purchase-list'), fetch('/api/production-list'), fetch('/api/production-list/urgent'), fetch('/api/stock/products'), fetch('/api/raw-materials'),
@@ -198,10 +262,26 @@ export function StockListsWidget() {
       if (urgentRes.ok) setUrgentNeeds(await urgentRes.json());
       if (prodRes.ok) setProducts(await prodRes.json());
       if (matRes.ok) setMaterials(await matRes.json());
-    } finally { setLoading(false); }
+    } finally { if (!silent) setLoading(false); }
   }, []);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
+
+  // Le besoin peut changer AILLEURS pendant que ce widget reste ouvert (une commande
+  // confirmée/annulée sur un autre écran, par un autre utilisateur...) — sans ça, le total
+  // affiché reste figé jusqu'au prochain rechargement complet de la page. On rafraîchit donc
+  // en arrière-plan à intervalle régulier, et immédiatement quand l'onglet redevient actif.
+  useEffect(() => {
+    const interval = setInterval(() => fetchAll(true), 20000);
+    const onVisible = () => { if (document.visibilityState === 'visible') fetchAll(true); };
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', onVisible);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', onVisible);
+    };
+  }, [fetchAll]);
 
   const purchasableProducts = products.filter((p) => p.mode === 'ACHETE' || p.mode === 'LES_DEUX');
   const producibleProducts = products.filter((p) => p.mode === 'FABRIQUE' || p.mode === 'LES_DEUX');
@@ -215,30 +295,59 @@ export function StockListsWidget() {
   };
 
   const runBulk = async (selections: { id: string; quantity: number }[]) => {
+    // On garde une trace de chaque échec (ex: matière première insuffisante — disponible +
+    // réservé ne suffisent pas — cf. PATCH /api/production-list/[id]) pour l'afficher : sans
+    // ça, une ligne qui échoue silencieusement donne l'impression que rien ne s'est passé,
+    // alors que l'API renvoie déjà le détail de ce qui manque.
+    const failures: string[] = [];
+    const labelFor = (id: string) => {
+      const item = productionItems.find((i) => i.id === id) ?? purchaseItems.find((i) => i.id === id);
+      if (!item) return id;
+      return 'product' in item && item.product ? (item.product.name ?? item.product.reference) : itemLabel(item as PurchaseItem).name;
+    };
+
     if (bulkAction === 'order' || bulkAction === 'receive') {
-      await Promise.all(selections.map((s) =>
-        fetch(`/api/purchase-list/${s.id}`, {
+      await Promise.all(selections.map(async (s) => {
+        const res = await fetch(`/api/purchase-list/${s.id}`, {
           method: 'PATCH', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ action: bulkAction, quantity: s.quantity }),
-        })
-      ));
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          failures.push(`${labelFor(s.id)} : ${err.error ?? 'échec'}`);
+        }
+      }));
     } else if (bulkAction === 'produce') {
-      await Promise.all(selections.map((s) =>
-        fetch(`/api/production-list/${s.id}`, {
+      await Promise.all(selections.map(async (s) => {
+        const res = await fetch(`/api/production-list/${s.id}`, {
           method: 'PATCH', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ quantity: s.quantity }),
-        })
-      ));
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          failures.push(`${labelFor(s.id)} : ${err.error ?? 'échec'}`);
+        }
+      }));
     }
     await fetchAll();
+    if (failures.length > 0) alert(failures.join('\n\n'));
   };
 
   const bulkCandidates = bulkAction === 'order'
     // Inclut aussi les lignes déjà "Commandé" tant qu'il leur reste un manquant (nouveau
     // besoin apparu depuis, ou commande fournisseur fractionnée) — pas seulement "À commander".
-    ? purchaseItems.filter((i) => (i.status === 'A_COMMANDER' || i.status === 'COMMANDE') && totalQty(i) > 0).map((i) => { const l = itemLabel(i); return { id: i.id, label: `${l.ref} — ${l.name} (${totalQty(i)} manquant${i.status === 'COMMANDE' ? ', déjà commandé en partie' : ''})`, suggested: totalQty(i), unit: l.unit }; })
+    ? purchaseItems.filter((i) => (i.status === 'A_COMMANDER' || i.status === 'COMMANDE') && totalQty(i) > 0).map((i) => { const l = itemLabel(i); return { id: i.id, label: `${l.ref} — ${l.name} (${totalQty(i)} manquant${i.status === 'COMMANDE' ? ', déjà commandé en partie' : ''})`, suggested: totalQty(i), max: totalQty(i), unit: l.unit }; })
     : bulkAction === 'receive'
-    ? purchaseItems.filter((i) => i.status === 'COMMANDE').map((i) => { const l = itemLabel(i); return { id: i.id, label: `${l.ref} — ${l.name} (${i.orderedQuantity} commandé)`, suggested: i.orderedQuantity ?? i.neededQuantity, unit: l.unit }; })
+    // Exclut les lignes déjà entièrement reçues (rien de plus à réceptionner dessus), et la
+    // quantité suggérée/max est le restant RÉELLEMENT commandé non encore reçu — jamais tout
+    // l'`orderedQuantity` d'un coup si une réception partielle a déjà eu lieu avant (cf. la
+    // même contrainte, appliquée côté serveur, dans PATCH /api/purchase-list/[id]).
+    ? purchaseItems.filter((i) => i.status === 'COMMANDE' && (i.orderedQuantity ?? 0) - (i.receivedQuantity ?? 0) > 0)
+        .map((i) => {
+          const l = itemLabel(i);
+          const remaining = (i.orderedQuantity ?? 0) - (i.receivedQuantity ?? 0);
+          return { id: i.id, label: `${l.ref} — ${l.name} (${remaining} restant sur ${i.orderedQuantity} commandé)`, suggested: remaining, max: remaining, unit: l.unit };
+        })
     : bulkAction === 'produce'
     ? productionItems.filter((i) => i.status !== 'PRODUIT').map((i) => ({ id: i.id, label: `${i.product.reference} — ${i.product.name ?? i.product.reference} (${totalQty(i)} à produire)`, suggested: totalQty(i), unit: '' }))
     : [];
@@ -260,6 +369,25 @@ export function StockListsWidget() {
       </button>
 
       <div className="flex-1 overflow-y-auto max-h-[360px] flex flex-col gap-3 pr-1">
+        {/* Placée en haut de la liste de production — carte neutre comme les autres, seuls
+            les statuts ("Prioritaire", la quantité) restent en rouge. Une ombre portée la
+            distingue légèrement du reste de la liste sans recolorer toute la carte. */}
+        {!loading && mode === 'production' && urgentNeeds.length > 0 && (
+          <div className="rounded-xl border border-[#E2E8F0] shadow-md p-3">
+            <div className="flex items-center gap-1.5 mb-2">
+              <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-[#DC2626] text-white uppercase tracking-wide">Prioritaire</span>
+              <p className="text-[13px] font-bold text-[#0F172A]">Production urgente</p>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              {urgentNeeds.map((n) => (
+                <div key={n.productId} className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg bg-[#F8FAFC]">
+                  <span className="text-[12px] font-bold text-[#0F172A] truncate">{n.name ?? n.reference}</span>
+                  <span className="text-[13px] font-bold text-[#DC2626] tabular-nums flex-shrink-0">{n.quantity} à produire</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
         {loading ? (
           <p className="text-[12px] text-[#8A9BB5] text-center py-8">Chargement…</p>
         ) : mode === 'achat' ? (
@@ -283,7 +411,7 @@ export function StockListsWidget() {
             const threshold = item.product?.purchaseThreshold ?? item.rawMaterial?.purchaseThreshold ?? 0;
             const subtitle = total <= 0
               ? 'En attente de réception'
-              : severitySubtitle({ urgent, belowThreshold: available < threshold, auto: item.auto });
+              : severitySubtitle({ urgent, belowThreshold: available < threshold, auto: item.auto, manual: item.manualQuantity > 0, isMaterial: !!item.rawMaterial });
             return (
               <div key={item.id} className="rounded-xl border border-[#E2E8F0] p-3">
                 <div className="flex items-start justify-between gap-2">
@@ -310,7 +438,7 @@ export function StockListsWidget() {
                   {item.status === 'A_COMMANDER' && `0 commandé · 0 reçu / ${target} au total`}
                   {item.status === 'COMMANDE' && `${item.orderedQuantity} commandé · ${received} reçu / ${target} au total`}
                 </p>
-                <LinkedOrdersList linked={linked} unit={l.unit} />
+                <LinkedOrdersList linked={linked} unit={l.unit} bufferQuantity={item.bufferQuantity} manualQuantity={item.manualQuantity} bufferSources={item.bufferSources} />
               </div>
             );
           })
@@ -331,6 +459,7 @@ export function StockListsWidget() {
               urgent,
               belowThreshold: item.product.available < item.product.productionThreshold,
               auto: item.auto,
+              manual: item.manualQuantity > 0,
             });
             return (
               <div key={item.id} className="rounded-xl border border-[#E2E8F0] p-3">
@@ -354,26 +483,10 @@ export function StockListsWidget() {
                 <p className="text-[13px] font-semibold text-[#374151] mt-1.5">
                   {produced} produit / {target} au total
                 </p>
-                <LinkedOrdersList linked={linked} />
+                <LinkedOrdersList linked={linked} bufferQuantity={item.bufferQuantity} manualQuantity={item.manualQuantity} />
               </div>
             );
           })
-        )}
-        {mode === 'production' && urgentNeeds.length > 0 && (
-          <div className="rounded-xl border-2 border-[#DC2626] bg-[#FEF2F2] p-3">
-            <div className="flex items-center gap-1.5 mb-2">
-              <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-[#DC2626] text-white uppercase tracking-wide">Prioritaire</span>
-              <p className="text-[13px] font-bold text-[#DC2626]">Production urgente</p>
-            </div>
-            <div className="flex flex-col gap-1.5">
-              {urgentNeeds.map((n) => (
-                <div key={n.productId} className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg bg-white">
-                  <span className="text-[12px] font-bold text-[#0F172A] truncate">{n.name ?? n.reference}</span>
-                  <span className="text-[13px] font-bold text-[#DC2626] tabular-nums flex-shrink-0">{n.quantity} à produire</span>
-                </div>
-              ))}
-            </div>
-          </div>
         )}
       </div>
 

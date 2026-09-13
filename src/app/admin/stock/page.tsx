@@ -11,7 +11,12 @@ const inputClass = "w-full px-3 py-2.5 rounded-lg border border-[#E2E8F0] text-s
 interface StockProduct {
   id: string; reference: string; name: string | null; price: number;
   mode: 'ACHETE' | 'FABRIQUE' | 'LES_DEUX';
-  available: number; reserved: number; inDelivery: number; returned: number;
+  // `available` inclut le stock attribué aux commerciaux (plus décrémenté à l'attribution,
+  // cf. stock/assignments/route.ts) — `assignedToCommercials` sert à en dériver la colonne
+  // "Stock hors commerciaux" (available + reserved − assignedToCommercials) à l'affichage :
+  // tout ce qui est physiquement en entrepôt OU engagé sur une commande, moins ce qui est
+  // chez un commercial.
+  available: number; reserved: number; inDelivery: number; returned: number; assignedToCommercials: number;
   purchaseThreshold: number; productionThreshold: number;
   category: { name: string } | null;
   recipeItems: { id: string }[];
@@ -135,7 +140,12 @@ function AssignModal({ employees, products, onClose, onSave }: {
   const [lines, setLines] = useState<{ productId: string; quantity: string }[]>([{ productId: '', quantity: '' }]);
   const [saving, setSaving] = useState(false);
 
-  const availableProducts = products.filter((p) => p.available > 0);
+  // On propose/plafonne sur le stock HORS COMMERCIAUX (available + reserved − déjà attribué),
+  // pas `available` seul — même formule que la colonne "Hors commerciaux" et que le contrôle
+  // serveur (cf. /api/stock/assignments), sinon on proposerait d'attribuer un produit dont le
+  // dispo est à 0 mais qui a du réservé pas encore tout attribué, ou l'inverse.
+  const horsCommerciaux = (p: StockProduct) => Math.max(0, p.available + p.reserved - p.assignedToCommercials);
+  const availableProducts = products.filter((p) => horsCommerciaux(p) > 0);
   const setLine = (i: number, patch: Partial<{ productId: string; quantity: string }>) =>
     setLines((ls) => ls.map((l, idx) => idx === i ? { ...l, ...patch } : l));
   const addLine = () => setLines((ls) => [...ls, { productId: '', quantity: '' }]);
@@ -170,10 +180,10 @@ function AssignModal({ employees, products, onClose, onSave }: {
                 <div key={i} className="flex gap-2 items-center">
                   <select value={l.productId} onChange={(e) => setLine(i, { productId: e.target.value })} className={inputClass}>
                     <option value="">Choisir une référence</option>
-                    {availableProducts.map((p) => <option key={p.id} value={p.id}>{p.reference} — {p.available} dispo</option>)}
+                    {availableProducts.map((p) => <option key={p.id} value={p.id}>{p.reference} — {horsCommerciaux(p)} hors commerciaux</option>)}
                   </select>
                   <input value={l.quantity} onChange={(e) => setLine(i, { quantity: e.target.value.replace(/[^\d.]/g, '') })} inputMode="decimal"
-                    placeholder="Qté" max={prod?.available} style={{ width: 80 }} className={inputClass} />
+                    placeholder="Qté" max={prod ? horsCommerciaux(prod) : undefined} style={{ width: 80 }} className={inputClass} />
                   {lines.length > 1 && (
                     <button onClick={() => removeLine(i)} className="w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-lg text-[#EF4444] hover:bg-[#FEF2F2] text-xs font-bold">×</button>
                   )}
@@ -351,11 +361,9 @@ function StockPageInner() {
             <button onClick={() => setShowRestock(true)} className="px-4 py-2 rounded-lg text-sm font-semibold border border-[#4CAF4F] text-[#4CAF4F] hover:bg-[#F0FDF4] transition-colors">
               Restocker
             </button>
-            {tab === 'commercial' && (
-              <button onClick={() => setShowAssign(true)} className="px-4 py-2 rounded-lg text-sm font-semibold text-white transition-colors" style={{ background: '#4CAF4F' }}>
-                + Attribuer du stock
-              </button>
-            )}
+            <button onClick={() => setShowAssign(true)} className="px-4 py-2 rounded-lg text-sm font-semibold text-white transition-colors" style={{ background: '#4CAF4F' }}>
+              + Attribuer du stock
+            </button>
           </div>
         )}
       </div>
@@ -382,6 +390,7 @@ function StockPageInner() {
                 <th className="px-4 py-3 text-[11px] font-bold text-[#8A9BB5] uppercase">Mode</th>
                 <th className="px-4 py-3 text-[11px] font-bold text-[#8A9BB5] uppercase text-right">Disponible</th>
                 <th className="px-4 py-3 text-[11px] font-bold text-[#8A9BB5] uppercase text-right">Réservé</th>
+                <th className="px-4 py-3 text-[11px] font-bold text-[#8A9BB5] uppercase text-right">Hors commerciaux</th>
                 <th className="px-4 py-3 text-[11px] font-bold text-[#8A9BB5] uppercase text-right">En livraison</th>
                 <th className="px-4 py-3 text-[11px] font-bold text-[#8A9BB5] uppercase text-right">En retour</th>
                 <th className="px-4 py-3 text-[11px] font-bold text-[#8A9BB5] uppercase">Statut</th>
@@ -398,6 +407,11 @@ function StockPageInner() {
                   <td className="px-4 py-3 text-[12px] text-[#8A9BB5]">{p.mode === 'ACHETE' ? 'Acheté' : p.mode === 'FABRIQUE' ? 'Fabriqué' : 'Les deux'}</td>
                   <td className="px-4 py-3 text-[13px] font-semibold text-[#0F172A] text-right tabular-nums">{p.available}</td>
                   <td className="px-4 py-3 text-[13px] text-[#374151] text-right tabular-nums">{p.reserved}</td>
+                  {/* Disponible + Réservé (tout ce qui est en entrepôt ou engagé sur une commande)
+                      moins ce qui est actuellement chez un commercial (StockAssignment) —
+                      jamais négatif à l'affichage (une incohérence de données ne doit jamais
+                      remonter un total halluciné). */}
+                  <td className="px-4 py-3 text-[13px] text-[#374151] text-right tabular-nums">{Math.max(0, p.available + p.reserved - p.assignedToCommercials)}</td>
                   <td className="px-4 py-3 text-[13px] text-[#374151] text-right tabular-nums">{p.inDelivery}</td>
                   <td className="px-4 py-3 text-[13px] text-[#374151] text-right tabular-nums">{p.returned}</td>
                   <td className="px-4 py-3">{statusBadge(p.available, p.mode === 'ACHETE' ? p.purchaseThreshold : p.productionThreshold)}</td>
@@ -412,7 +426,7 @@ function StockPageInner() {
                 </tr>
               ))}
               {filteredProducts.length === 0 && !loading && (
-                <tr><td colSpan={8} className="px-4 py-10 text-center text-[13px] text-[#8A9BB5]">Aucun produit.</td></tr>
+                <tr><td colSpan={9} className="px-4 py-10 text-center text-[13px] text-[#8A9BB5]">Aucun produit.</td></tr>
               )}
             </tbody>
           </table>

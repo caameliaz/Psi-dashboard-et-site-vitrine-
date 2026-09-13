@@ -61,13 +61,18 @@ export async function POST(request: NextRequest) {
       },
     });
 
+    // `manualQuantity` mémorise cette part PERSISTANTE (jamais écrasée par le recalcul dérivé,
+    // cf. resyncMaterialPurchaseNeed/resyncPurchaseLineForProduct qui l'ajoutent au besoin réel
+    // des commandes) — `neededQuantity` est aussi incrémenté ici pour un affichage immédiat
+    // correct avant le prochain recalcul.
     const item = existing
-      ? await prisma.purchaseListItem.update({ where: { id: existing.id }, data: { neededQuantity: { increment: qty } }, include: INCLUDE })
+      ? await prisma.purchaseListItem.update({ where: { id: existing.id }, data: { neededQuantity: { increment: qty }, manualQuantity: { increment: qty } }, include: INCLUDE })
       : await prisma.purchaseListItem.create({
           data: {
             productId: body.productId ?? null,
             rawMaterialId: body.rawMaterialId ?? null,
             neededQuantity: qty,
+            manualQuantity: qty,
             auto: false,
           },
           include: INCLUDE,

@@ -79,6 +79,10 @@ export interface RequestDetail {
   message?: string;
   assignedToId?: string | null;
   assignedToName?: string | null;
+  // Auto-attribution au commercial (case à cocher, uniquement En attente/Confirmé) — dès que
+  // du stock est réservé pour cette commande/devis, la même quantité est automatiquement
+  // créditée à `assignedToId` (cf. syncCommercialAssignment, order-stock.ts).
+  autoAssignStock?: boolean;
   // Facturation / règlement
   invoiceNumber?: string | null;
   paymentMethod?: string | null;
@@ -859,6 +863,8 @@ interface RequestPanelProps {
   users?: { id: string; name: string }[];
   onAssign?: (id: string, type: string, assignedToId: string | null) => void;
   onReassigned?: () => void; // appelé après un changement de client (refresh SANS toucher au statut)
+  // Case "Attribuer automatiquement au commercial" — cf. RequestDetail.autoAssignStock.
+  onToggleAutoAssign?: (id: string, type: string, value: boolean) => void;
 }
 
 // ── Bouton icône rond ────────────────────────────────────────────────────────
@@ -936,7 +942,7 @@ function ContactDropdown({ title, color, hoverColor, children, options }: {
   );
 }
 
-export function RequestPanel({ item, onClose, onStatusChange, onConfirmQuoteWithPrice, users, onAssign, onReassigned }: RequestPanelProps) {
+export function RequestPanel({ item, onClose, onStatusChange, onConfirmQuoteWithPrice, users, onAssign, onReassigned, onToggleAutoAssign }: RequestPanelProps) {
   // Bloquer le scroll du body quand le panneau est ouvert
   useLockBodyScroll();
   
@@ -1260,6 +1266,29 @@ export function RequestPanel({ item, onClose, onStatusChange, onConfirmQuoteWith
                   </div>
                 );
               })()}
+
+              {/* Auto-attribution au commercial — uniquement En attente/Confirmé (cf.
+                  Order.autoAssignStock), et seulement si un commercial est assigné. */}
+              {(item.statut === 'En attente' || item.statut === 'Confirmé') && canModifierStatuts && onToggleAutoAssign && (
+                <label
+                  title={item.assignedToId ? undefined : "Assigne d'abord un commercial (\"Pris en charge par\") pour activer ceci"}
+                  className={`flex items-start gap-2.5 px-4 py-3 rounded-xl border border-[#F2F4F7] ${item.assignedToId ? 'cursor-pointer' : 'opacity-50 cursor-not-allowed'}`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={Boolean(item.autoAssignStock)}
+                    disabled={!item.assignedToId}
+                    onChange={(e) => onToggleAutoAssign(item.id!, item.type, e.target.checked)}
+                    className="w-4 h-4 mt-0.5 flex-shrink-0"
+                  />
+                  <span>
+                    <span className="block text-[12px] font-bold text-[#0F172A]">Attribuer automatiquement au commercial</span>
+                    <span className="block text-[11px] text-[#8A9BB5] mt-0.5">
+                      Dès que du stock est réservé pour {isCommande ? 'cette commande' : 'ce devis'}, il est crédité à {item.assignedToName ?? 'son commercial'} automatiquement.
+                    </span>
+                  </span>
+                </label>
+              )}
 
             </div>
           </div>

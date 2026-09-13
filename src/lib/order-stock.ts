@@ -1,5 +1,6 @@
 import { prisma } from './prisma';
 import { notifyRollLinkOrderReady } from './rolllink-notify';
+import type { RequestStatus } from '@prisma/client';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Logique de stock déclenchée par le cycle de vie des commandes/devis.
@@ -75,7 +76,12 @@ export async function releaseRawMaterialsForProduction(productId: string, qty: n
 
 // ── Recalcule le besoin réel + buffer d'UNE matière première entièrement à neuf (jamais
 // accumulé), à partir de ce que les lignes de production ouvertes réclament réellement.
-// besoin réel = Σ (recette × (besoin + buffer de chaque ligne utilisant cette matière))
+// besoin réel = Σ (recette × (besoin + buffer de chaque ligne utilisant cette matière)) — le
+// buffer d'un produit fabriqué en aval (son propre rattrapage préventif) cascade donc bien
+// dans le besoin de la matière : ce n'est pas une commande client, mais tant qu'un produit
+// veut se réapprovisionner, la matière qu'il faudrait pour ça doit être visible ici aussi.
+// Distingué dans "Commandes concernées" de son PROPRE buffer (cf. materialPurchaseLinks,
+// stock-traceability.ts) via un libellé par produit ("Réassort préventif (RÉF produit)").
 //
 // Deux notions de "couvert", pour ne jamais compter `available` deux fois :
 // - couvertBesoin = reserved + en-transit + available : pour savoir si le BESOIN (needed+buffer
@@ -93,8 +99,13 @@ export async function resyncMaterialPurchaseNeed(rawMaterialId: string) {
   const material = await prisma.rawMaterial.findUnique({ where: { id: rawMaterialId } });
   if (!material) return;
 
+  const existing = await prisma.purchaseListItem.findFirst({ where: { rawMaterialId, status: { in: [...OPEN_PURCHASE_STATUSES] } } });
+
   const recipeUses = await prisma.recipeItem.findMany({ where: { rawMaterialId }, select: { productId: true, quantity: true } });
-  let demand = 0;
+  // Le besoin réel des lignes de production + ce qui a été ajouté À LA MAIN (persistant,
+  // jamais écrasé — cf. `manualQuantity`) : traité comme du vrai besoin, même logique de
+  // couverture.
+  let demand = existing?.manualQuantity ?? 0;
   if (recipeUses.length > 0) {
     const ratioByProduct = new Map(recipeUses.map((r) => [r.productId, r.quantity]));
     const lines = await prisma.productionListItem.findMany({
@@ -106,7 +117,6 @@ export async function resyncMaterialPurchaseNeed(rawMaterialId: string) {
   }
   const bufferTarget = material.available < material.purchaseThreshold ? Math.max(0, material.stockMax - material.available) : 0;
 
-  const existing = await prisma.purchaseListItem.findFirst({ where: { rawMaterialId, status: { in: [...OPEN_PURCHASE_STATUSES] } } });
   const inTransit = existing ? Math.max(0, existing.orderedQuantity - existing.receivedQuantity) : 0;
   const coveredForNeed = material.reserved + inTransit + material.available;
   const realNeeded = Math.max(0, demand - coveredForNeed);
@@ -121,8 +131,13 @@ export async function resyncMaterialPurchaseNeed(rawMaterialId: string) {
       await prisma.purchaseListItem.delete({ where: { id: existing.id } }).catch(() => {});
       return;
     }
-    if (existing.neededQuantity === realNeeded && existing.bufferQuantity === bufferNeeded) return;
-    await prisma.purchaseListItem.update({ where: { id: existing.id }, data: { neededQuantity: realNeeded, bufferQuantity: bufferNeeded } }).catch(() => {});
+    // `auto` (pur rattrapage préventif, sans aucune vraie commande derrière) doit être
+    // reclassé à chaque appel comme le reste — sinon une ligne créée avec un vrai besoin
+    // (auto=false) qui retombe plus tard à du buffer pur reste étiquetée "Ajouté
+    // manuellement" pour toujours à l'affichage (cf. severitySubtitle, StockListsWidget.tsx).
+    const auto = realNeeded === 0;
+    if (existing.neededQuantity === realNeeded && existing.bufferQuantity === bufferNeeded && existing.auto === auto) return;
+    await prisma.purchaseListItem.update({ where: { id: existing.id }, data: { neededQuantity: realNeeded, bufferQuantity: bufferNeeded, auto } }).catch(() => {});
     return;
   }
   if (realNeeded > 0 || bufferNeeded > 0) {
@@ -220,15 +235,22 @@ export async function resyncProductionLine(productId: string) {
   const product = await prisma.product.findUnique({ where: { id: productId } });
   if (!product || !(product.mode === 'FABRIQUE' || product.mode === 'LES_DEUX')) return null;
 
-  const realNeeded = await realProductionNeed(productId);
-  const target = product.available < product.productionThreshold ? Math.max(0, product.stockMax - product.available) : 0;
   const existing = await prisma.productionListItem.findFirst({ where: { productId, status: { in: ['A_PRODUIRE', 'BLOQUE'] } } });
+  // Le besoin réel des commandes + ce qui a été ajouté À LA MAIN (persistant, jamais écrasé —
+  // cf. `manualQuantity`) : traité comme du vrai besoin, soumis à la même logique de réservation.
+  const realNeeded = (await realProductionNeed(productId)) + (existing?.manualQuantity ?? 0);
+  const target = product.available < product.productionThreshold ? Math.max(0, product.stockMax - product.available) : 0;
 
   try {
     if (existing) {
       const deltaNeeded = realNeeded - existing.neededQuantity;
       const deltaBuffer = target - existing.bufferQuantity;
-      if (deltaNeeded === 0 && deltaBuffer === 0) return existing;
+      // `auto` (pur rattrapage préventif, sans aucune vraie commande derrière) doit être
+      // reclassé à chaque appel comme le besoin/buffer — sinon une ligne créée avec un vrai
+      // besoin (auto=false) qui retombe plus tard à du buffer pur reste étiquetée "Ajouté
+      // manuellement" pour toujours à l'affichage (cf. severitySubtitle, StockListsWidget.tsx).
+      const auto = realNeeded === 0;
+      if (deltaNeeded === 0 && deltaBuffer === 0 && existing.auto === auto) return existing;
 
       if (deltaNeeded > 0) await reserveRawMaterialsForProduction(productId, deltaNeeded);
       // deltaNeeded < 0 : jamais de relâchement automatique ici (cf. commentaire ci-dessus).
@@ -256,7 +278,7 @@ export async function resyncProductionLine(productId: string) {
 
       return await prisma.productionListItem.update({
         where: { id: existing.id },
-        data: { neededQuantity: realNeeded, bufferQuantity: target, status: blockedByDelta ? 'BLOQUE' : 'A_PRODUIRE' },
+        data: { neededQuantity: realNeeded, bufferQuantity: target, status: blockedByDelta ? 'BLOQUE' : 'A_PRODUIRE', auto },
       });
     }
 
@@ -283,9 +305,11 @@ export async function resyncPurchaseLineForProduct(productId: string) {
   const product = await prisma.product.findUnique({ where: { id: productId } });
   if (!product || !(product.mode === 'ACHETE' || product.mode === 'LES_DEUX')) return null;
 
-  const demand = await realPurchaseNeed(productId);
-  const target = product.available < product.purchaseThreshold ? Math.max(0, product.stockMax - product.available) : 0;
   const existing = await prisma.purchaseListItem.findFirst({ where: { productId, status: { in: [...OPEN_PURCHASE_STATUSES] } } });
+  // Le besoin réel des commandes + ce qui a été ajouté À LA MAIN (persistant, jamais écrasé —
+  // cf. `manualQuantity`) : traité comme du vrai besoin, soumis à la même logique de couverture.
+  const demand = (await realPurchaseNeed(productId)) + (existing?.manualQuantity ?? 0);
+  const target = product.available < product.purchaseThreshold ? Math.max(0, product.stockMax - product.available) : 0;
   const inTransit = existing ? Math.max(0, existing.orderedQuantity - existing.receivedQuantity) : 0;
   const realNeeded = Math.max(0, demand - inTransit);
   const leftoverCovered = Math.max(0, inTransit - demand);
@@ -298,13 +322,77 @@ export async function resyncPurchaseLineForProduct(productId: string) {
       await prisma.purchaseListItem.delete({ where: { id: existing.id } });
       return null;
     }
-    if (existing.neededQuantity === realNeeded && existing.bufferQuantity === bufferNeeded) return existing;
-    return await prisma.purchaseListItem.update({ where: { id: existing.id }, data: { neededQuantity: realNeeded, bufferQuantity: bufferNeeded } });
+    // `auto` reclassé à chaque appel comme le reste (cf. resyncMaterialPurchaseNeed) — sinon
+    // une ligne créée avec un vrai besoin reste étiquetée "Ajouté manuellement" pour toujours
+    // même une fois retombée à du pur rattrapage préventif.
+    const auto = realNeeded === 0;
+    if (existing.neededQuantity === realNeeded && existing.bufferQuantity === bufferNeeded && existing.auto === auto) return existing;
+    return await prisma.purchaseListItem.update({ where: { id: existing.id }, data: { neededQuantity: realNeeded, bufferQuantity: bufferNeeded, auto } });
   }
   if (realNeeded > 0 || bufferNeeded > 0) {
     return await prisma.purchaseListItem.create({ data: { productId, neededQuantity: realNeeded, bufferQuantity: bufferNeeded, auto: realNeeded === 0 } });
   }
   return null;
+}
+
+// ── Auto-attribution au commercial (case à cocher "Pris en charge par", RequestPanel) ───────
+// Synchronise l'attribution automatique au commercial d'UN article avec son `resolvedQuantity`
+// réel — dès que du stock est réservé pour cette commande/devis (resolvedQuantity augmente),
+// la même quantité est créditée dans StockAssignment pour l'employé "Pris en charge par" ;
+// si elle baisse (annulation, vol par une autre commande, reprise de couverture...), le crédit
+// est repris symétriquement. Pure couche de bookkeeping PAR-DESSUS reserved/available, qui ne
+// les modifie JAMAIS elle-même (aucun changement à la logique reserved/available existante) —
+// à appeler après CHAQUE écriture de `resolvedQuantity` sur un article produit.
+//
+// Simplification volontaire sur la réassignation : le commercial est VERROUILLÉ sur l'article
+// dès son premier crédit (`assignedEmployeeId`, figé) — un changement de "Pris en charge par"
+// après coup ne redirige JAMAIS ce qui est déjà (ou sera encore) auto-attribué pour CET
+// article ; il faut décocher/recocher la case pour reverrouiller sur le nouvel employé. Sans
+// ça, un changement d'assignation en cours de route redonnerait à tort le même stock déjà
+// crédité à l'ancien commercial une seconde fois au nouveau (double comptage).
+export async function syncCommercialAssignment(kind: Kind, itemId: string) {
+  const item = await (itemDelegate(kind) as any).findUnique({ where: { id: itemId } });
+  if (!item || !item.productId) return;
+
+  const parent = await (parentDelegate(kind) as any).findUnique({
+    where: { id: kind === 'order' ? item.orderId : item.quoteId },
+    select: { autoAssignStock: true, assignedToId: true },
+  });
+  if (!parent) return;
+
+  const employeeId: string | null = item.assignedEmployeeId ?? parent.assignedToId ?? null;
+  const target = parent.autoAssignStock && employeeId ? item.resolvedQuantity : 0;
+  const delta = target - item.assignedQuantity;
+  if (delta === 0) return;
+
+  if (delta > 0 && employeeId) {
+    const existing = await prisma.stockAssignment.findFirst({ where: { employeeId, productId: item.productId } });
+    await (existing
+      ? prisma.stockAssignment.update({ where: { id: existing.id }, data: { quantity: { increment: delta } } })
+      : prisma.stockAssignment.create({ data: { employeeId, productId: item.productId, quantity: delta } }));
+  } else if (delta < 0 && item.assignedEmployeeId) {
+    const existing = await prisma.stockAssignment.findFirst({ where: { employeeId: item.assignedEmployeeId, productId: item.productId } });
+    if (existing) {
+      const take = Math.min(-delta, existing.quantity);
+      const remaining = existing.quantity - take;
+      await (remaining <= 0
+        ? prisma.stockAssignment.delete({ where: { id: existing.id } })
+        : prisma.stockAssignment.update({ where: { id: existing.id }, data: { quantity: remaining } }));
+    }
+  }
+
+  await (itemDelegate(kind) as any).update({
+    where: { id: item.id },
+    data: { assignedQuantity: Math.max(0, target), assignedEmployeeId: target > 0 ? employeeId : null },
+  });
+}
+
+// Réapplique syncCommercialAssignment à TOUS les articles produit d'une commande/devis — à
+// appeler quand `autoAssignStock` lui-même change (cocher/décocher la case), puisque le
+// `resolvedQuantity` de ses articles ne bouge pas mais la cible, elle, change instantanément.
+export async function syncCommercialAssignmentForParent(kind: Kind, parentId: string) {
+  const items = await (itemDelegate(kind) as any).findMany({ where: { ...itemWhereParent(kind, parentId), productId: { not: null } }, select: { id: true } });
+  for (const item of items) await syncCommercialAssignment(kind, item.id);
 }
 
 // ── Étape 2 : vérification à la confirmation ────────────────────────────────
@@ -328,11 +416,13 @@ export async function confirmStock(kind: Kind, parentId: string) {
     const remainder = qty - fromStock;
     if (remainder <= 0) {
       await (itemDelegate(kind) as any).update({ where: { id: item.id }, data: { stockPath: 'FROM_STOCK', resolvedQuantity: qty } });
+      await syncCommercialAssignment(kind, item.id);
       continue;
     }
 
     if (product.mode === 'ACHETE') {
       await (itemDelegate(kind) as any).update({ where: { id: item.id }, data: { stockPath: 'PURCHASE_PENDING', resolvedQuantity: fromStock } });
+      await syncCommercialAssignment(kind, item.id);
       const line = await resyncPurchaseLineForProduct(product.id);
       await (itemDelegate(kind) as any).update({ where: { id: item.id }, data: { purchaseListItemId: line?.id ?? null } });
       continue;
@@ -340,6 +430,7 @@ export async function confirmStock(kind: Kind, parentId: string) {
 
     // 2. Le manquant sur un produit fabriqué → liste de production, matière réservée si dispo.
     await (itemDelegate(kind) as any).update({ where: { id: item.id }, data: { stockPath: 'IN_PRODUCTION', resolvedQuantity: fromStock } });
+    await syncCommercialAssignment(kind, item.id);
     const line = await resyncProductionLine(product.id);
     await (itemDelegate(kind) as any).update({ where: { id: item.id }, data: { productionListItemId: line?.id ?? null } });
   }
@@ -375,15 +466,22 @@ export async function checkCompletion(kind: Kind, parentId: string) {
 // Résout la part encore manquante de chaque article (IN_PRODUCTION ou PURCHASE_PENDING),
 // dans cet ordre strict, par produit :
 //   1. Ce qui est en `available` (stock produit fini réellement disponible).
-//   2. Ce qui est `reserved` chez une AUTRE commande/devis déjà "Produite" pour ce même
-//      produit — on le lui reprend (la plus RÉCEMMENT créée en premier) ; elle repasse alors
-//      "Confirmée" avec un manquant qui réapparaît normalement (elle n'a plus son stock).
+//   2. Ce qui est `reserved` chez N'IMPORTE QUELLE AUTRE commande/devis active sur ce même
+//      produit — "Confirmée" (même pas encore produite, juste partiellement résolue via le
+//      disponible) OU déjà "Produite" — peu importe, on le lui reprend (la plus RÉCEMMENT
+//      créée en premier). Si elle n'a plus rien après ça, son manquant réapparaît normalement
+//      (repasse "Confirmée" si elle était "Produite").
 //   3. (Fabriqués seulement) fabrication immédiate en consommant la matière première déjà
 //      réservée pour cette ligne — dans la limite de ce que la recette permet vraiment.
 // S'il reste un manquant après ces 3 étapes → BLOCAGE DUR (rien n'est modifié pour AUCUN
 // article de la commande, tout ou rien) : le manquant est renvoyé par produit.
 
 export type ProductShortfall = { productId: string; reference: string; name: string | null; missing: number };
+
+// Statuts éligibles comme "donneur" pour "Marquer Produit" : n'importe quelle commande/devis
+// encore active avec du réservé sur ce produit, peu importe si elle est déjà "Produite" ou
+// simplement "Confirmée" (partiellement résolue).
+const FORCE_COMPLETE_DONOR_STATUSES: RequestStatus[] = ['VALIDE', 'PRODUITE'];
 
 // Combien d'unités de `productId` peut-on fabriquer MAINTENANT avec la matière déjà réservée,
 // dans la limite de `cap` — bornée par la matière la plus rare de la recette (jamais une
@@ -399,16 +497,17 @@ async function manufacturableUnits(productId: string, cap: number): Promise<numb
   return manufacturable;
 }
 
-// Candidats "donneurs" pour un produit : commandes/devis déjà "Produite" (autres que la
-// commande/devis en cours), triés du plus RÉCEMMENT créé au plus ancien.
-async function findDonorItems(productId: string, excludeKind: Kind, excludeParentId: string) {
+// Candidats "donneurs" pour un produit : commandes/devis (parmi `donorStatuses`, autres que la
+// commande/devis en cours) qui ont déjà du réservé sur ce produit, triés du plus RÉCEMMENT créé
+// au plus ancien.
+async function findDonorItems(productId: string, excludeKind: Kind, excludeParentId: string, donorStatuses: RequestStatus[]) {
   const [orderItems, quoteItems] = await Promise.all([
     prisma.orderItem.findMany({
-      where: { productId, resolvedQuantity: { gt: 0 }, order: { status: 'PRODUITE' }, NOT: excludeKind === 'order' ? { orderId: excludeParentId } : undefined },
+      where: { productId, resolvedQuantity: { gt: 0 }, order: { status: { in: donorStatuses } }, NOT: excludeKind === 'order' ? { orderId: excludeParentId } : undefined },
       include: { order: { select: { createdAt: true } } },
     }),
     prisma.quoteItem.findMany({
-      where: { productId, resolvedQuantity: { gt: 0 }, quote: { status: 'PRODUITE' }, NOT: excludeKind === 'quote' ? { quoteId: excludeParentId } : undefined },
+      where: { productId, resolvedQuantity: { gt: 0 }, quote: { status: { in: donorStatuses } }, NOT: excludeKind === 'quote' ? { quoteId: excludeParentId } : undefined },
       include: { quote: { select: { createdAt: true } } },
     }),
   ]);
@@ -434,7 +533,7 @@ export async function previewForceCompleteShortfall(kind: Kind, parentId: string
     let remaining = stillNeeded - Math.min(stillNeeded, item.product.available);
 
     if (remaining > 0) {
-      const donors = await findDonorItems(item.productId, kind, parentId);
+      const donors = await findDonorItems(item.productId, kind, parentId, FORCE_COMPLETE_DONOR_STATUSES);
       for (const d of donors) {
         if (remaining <= 0) break;
         remaining -= Math.min(remaining, d.resolvedQuantity);
@@ -452,13 +551,20 @@ export async function previewForceCompleteShortfall(kind: Kind, parentId: string
   return shortfalls;
 }
 
-export async function forceCompleteOrder(kind: Kind, parentId: string): Promise<void> {
+// `opts.force` : accepte l'écart quand le manquant persiste même après les 3 étapes ci-dessous
+// (disponible → vol chez un donneur → fabrication avec la matière réservée) — l'utilisateur a
+// explicitement choisi de continuer malgré l'alerte de manquant (cf. route.ts, PRODUCT_SHORTFALL).
+// La part non couverte est marquée résolue SANS toucher au stock produit fini pour elle : on
+// ne réserve/décrémente jamais que ce qui existe vraiment (fromAvailable + manufactured) —
+// l'écart reste un manquant assumé (visible en audit), jamais un stock fictif inventé.
+export async function forceCompleteOrder(kind: Kind, parentId: string, opts?: { force?: boolean }): Promise<{ productId: string; reference: string; missing: number }[]> {
   const items = await (itemDelegate(kind) as any).findMany({
     where: { ...itemWhereParent(kind, parentId), stockPath: { in: ['IN_PRODUCTION', 'PURCHASE_PENDING'] } },
     include: { product: true },
   });
 
   const touchedProducts = new Set<string>();
+  const phantomShortfalls: { productId: string; reference: string; missing: number }[] = [];
 
   for (const item of items) {
     const stillNeeded = item.quantity - item.resolvedQuantity;
@@ -472,7 +578,7 @@ export async function forceCompleteOrder(kind: Kind, parentId: string): Promise<
     //    transfert interne au pot `reserved` (ne le change pas, juste réattribué).
     const donorSteals: { id: string; kind: Kind; parentId: string; quantity: number; newResolved: number; amount: number }[] = [];
     if (remaining > 0) {
-      const donors = await findDonorItems(item.productId, kind, parentId);
+      const donors = await findDonorItems(item.productId, kind, parentId, FORCE_COMPLETE_DONOR_STATUSES);
       for (const d of donors) {
         if (remaining <= 0) break;
         const take = Math.min(remaining, d.resolvedQuantity);
@@ -496,13 +602,30 @@ export async function forceCompleteOrder(kind: Kind, parentId: string): Promise<
       remaining -= manufactured;
     }
     // Le préview vient d'être revérifié juste avant l'appel (côté route) — `remaining` doit
-    // être à 0 ici ; par sécurité on ne dépasse jamais ce qui a été validé.
-    if (remaining > 0) continue;
+    // être à 0 ici sauf en mode `force` (l'utilisateur a explicitement choisi de continuer
+    // malgré le manquant) ; par sécurité on ne dépasse jamais ce qui a été validé sinon.
+    if (remaining > 0) {
+      if (!opts?.force) continue;
+      phantomShortfalls.push({ productId: item.productId, reference: item.product.reference, missing: remaining });
+    }
 
     // Applique les vols chez les commandes/devis "Produite" (chacune repasse "Confirmée").
+    // Le chemin de stock est remis sur IN_PRODUCTION/PURCHASE_PENDING selon le mode du produit
+    // — sinon un article resté à FROM_STOCK (ce qu'il était probablement, ayant été comblé
+    // directement à sa confirmation) ne réapparaît JAMAIS dans le besoin dérivé, et son
+    // manquant se perdrait silencieusement, invisible partout.
+    const donorStockPath = item.product.mode === 'ACHETE' ? 'PURCHASE_PENDING' : 'IN_PRODUCTION';
     for (const steal of donorSteals) {
-      await (itemDelegate(steal.kind) as any).update({ where: { id: steal.id }, data: { resolvedQuantity: steal.newResolved } });
-      if (steal.newResolved < steal.quantity) {
+      const stillOpen = steal.newResolved < steal.quantity;
+      await (itemDelegate(steal.kind) as any).update({
+        where: { id: steal.id },
+        data: {
+          resolvedQuantity: steal.newResolved,
+          ...(stillOpen && { stockPath: donorStockPath, productionListItemId: null, purchaseListItemId: null }),
+        },
+      });
+      await syncCommercialAssignment(steal.kind, steal.id);
+      if (stillOpen) {
         await (parentDelegate(steal.kind) as any).update({ where: { id: steal.parentId }, data: { status: 'VALIDE' } });
       }
     }
@@ -515,22 +638,30 @@ export async function forceCompleteOrder(kind: Kind, parentId: string): Promise<
       await prisma.product.update({ where: { id: item.productId }, data: { reserved: { increment: newlyReserved } } });
     }
     await (itemDelegate(kind) as any).update({ where: { id: item.id }, data: { resolvedQuantity: item.quantity } });
+    await syncCommercialAssignment(kind, item.id);
     touchedProducts.add(item.productId);
   }
 
   for (const productId of touchedProducts) {
-    await resyncProductionLine(productId);
-    await resyncPurchaseLineForProduct(productId);
-    // Relie les articles rouverts (vol chez un donneur) à la ligne de liste fraîchement
-    // recalculée, comme partout ailleurs (cf. reassessProductReserved).
-    const prodLine = await prisma.productionListItem.findFirst({ where: { productId, status: { in: ['A_PRODUIRE', 'BLOQUE'] } } });
-    await prisma.orderItem.updateMany({ where: { productId, stockPath: 'IN_PRODUCTION', productionListItemId: null }, data: { productionListItemId: prodLine?.id ?? null } });
-    await prisma.quoteItem.updateMany({ where: { productId, stockPath: 'IN_PRODUCTION', productionListItemId: null }, data: { productionListItemId: prodLine?.id ?? null } });
-    const purchLine = await prisma.purchaseListItem.findFirst({ where: { productId, status: { in: [...OPEN_PURCHASE_STATUSES] } } });
-    await prisma.orderItem.updateMany({ where: { productId, stockPath: 'PURCHASE_PENDING', purchaseListItemId: null }, data: { purchaseListItemId: purchLine?.id ?? null } });
-    await prisma.quoteItem.updateMany({ where: { productId, stockPath: 'PURCHASE_PENDING', purchaseListItemId: null }, data: { purchaseListItemId: purchLine?.id ?? null } });
+    await resyncAndRelink(productId);
   }
+  return phantomShortfalls;
 }
+
+// Recalcule les lignes de production/achat d'un produit puis relie les articles rouverts
+// (ex: un donneur qui vient de perdre sa couverture) à la ligne fraîchement recalculée —
+// factorisé car utilisé par plusieurs actions (vol chez un donneur, reprise de couverture...).
+async function resyncAndRelink(productId: string) {
+  await resyncProductionLine(productId);
+  await resyncPurchaseLineForProduct(productId);
+  const prodLine = await prisma.productionListItem.findFirst({ where: { productId, status: { in: ['A_PRODUIRE', 'BLOQUE'] } } });
+  await prisma.orderItem.updateMany({ where: { productId, stockPath: 'IN_PRODUCTION', productionListItemId: null }, data: { productionListItemId: prodLine?.id ?? null } });
+  await prisma.quoteItem.updateMany({ where: { productId, stockPath: 'IN_PRODUCTION', productionListItemId: null }, data: { productionListItemId: prodLine?.id ?? null } });
+  const purchLine = await prisma.purchaseListItem.findFirst({ where: { productId, status: { in: [...OPEN_PURCHASE_STATUSES] } } });
+  await prisma.orderItem.updateMany({ where: { productId, stockPath: 'PURCHASE_PENDING', purchaseListItemId: null }, data: { purchaseListItemId: purchLine?.id ?? null } });
+  await prisma.quoteItem.updateMany({ where: { productId, stockPath: 'PURCHASE_PENDING', purchaseListItemId: null }, data: { purchaseListItemId: purchLine?.id ?? null } });
+}
+
 
 // ── Étape 8 (Annulée) / Étape 5 (retrait d'article sur commande confirmée) ──
 // Annule l'effet stock d'UN article déjà engagé (utilisé pour l'annulation
@@ -559,6 +690,7 @@ export async function releaseOrderItemStock(kind: Kind, itemId: string) {
   const wasProduction = item.stockPath === 'IN_PRODUCTION';
   const wasPurchase = item.stockPath === 'PURCHASE_PENDING';
   await (itemDelegate(kind) as any).update({ where: { id: item.id }, data: { stockPath: 'NONE', resolvedQuantity: 0, purchaseListItemId: null, productionListItemId: null } });
+  await syncCommercialAssignment(kind, item.id);
 
   if (wasProduction) await resyncProductionLine(item.productId!);
   else if (wasPurchase) await resyncPurchaseLineForProduct(item.productId!);
@@ -615,6 +747,7 @@ export async function reallocateAvailableStock(productId: string) {
 
     await prisma.product.update({ where: { id: productId }, data: { available: { decrement: take }, reserved: { increment: take } } });
     await (itemDelegate(it.kind) as any).update({ where: { id: it.id }, data: { resolvedQuantity: { increment: take } } });
+    await syncCommercialAssignment(it.kind, it.id);
 
     if (it.stockPath === 'IN_PRODUCTION') {
       // Cette part ne sera plus fabriquée (satisfaite directement par le stock) → la matière
@@ -689,6 +822,7 @@ export async function reassessProductReserved(productId: string) {
       where: { id: claim.id },
       data: { resolvedQuantity: claim.resolvedQuantity - takeBack, stockPath: newStockPath },
     });
+    await syncCommercialAssignment(claim.kind, claim.id);
     touchedAny = true;
   }
 
@@ -730,6 +864,16 @@ export async function adjustOrderItemQuantity(kind: Kind, itemId: string, newQua
     await prisma.product.update({ where: { id: item.productId }, data: { reserved: { decrement: excessResolved }, available: { increment: excessResolved } } });
   }
   await (itemDelegate(kind) as any).update({ where: { id: item.id }, data: { quantity: newQuantity, resolvedQuantity: newResolved } });
+  await syncCommercialAssignment(kind, item.id);
+
+  if (excessResolved > 0) {
+    // Le disponible vient d'augmenter → le proposer EN PRIORITÉ aux autres commandes/devis
+    // déjà en attente sur ce même produit (FIFO), avant de laisser le reliquat compter comme
+    // simple buffer — même logique que releaseOrderItemStock, la correction de stock ou le
+    // restock. Sans cet appel, ce disponible restait "libre" au lieu d'être proposé à la plus
+    // ancienne commande en attente (trou trouvé en testant "Marquer Produit").
+    await reallocateAvailableStock(item.productId);
+  }
 
   if (item.stockPath === 'FROM_STOCK' && newQuantity > oldQuantity) {
     // Le complément est pris sur le stock dispo si possible, le manquant part en production/achat.
@@ -738,6 +882,7 @@ export async function adjustOrderItemQuantity(kind: Kind, itemId: string, newQua
     if (fromStock > 0) {
       await prisma.product.update({ where: { id: item.productId }, data: { available: { decrement: fromStock }, reserved: { increment: fromStock } } });
       await (itemDelegate(kind) as any).update({ where: { id: item.id }, data: { resolvedQuantity: { increment: fromStock } } });
+      await syncCommercialAssignment(kind, item.id);
     }
     const remainder = delta - fromStock;
     if (remainder > 0) {
@@ -789,11 +934,33 @@ export async function returnStock(kind: Kind, parentId: string) {
 }
 
 // ── Étape "Livrée" ───────────────────────────────────────────────────────────
+// `reserved` baisse du plein montant comme avant (logique reserved/available INCHANGÉE). En
+// plus (bookkeeping séparé) : le stock livré quitte aussi le pot du commercial verrouillé pour
+// cet article (StockAssignment), dans la limite de ce qu'il y détient — jamais le stock hors
+// commerciaux (entrepôt, `available`) : `reserved` vient déjà de baisser du plein montant,
+// donc si le commercial n'en avait pas assez pour couvrir toute la livraison, la formule
+// (available + reserved − attribué) absorbe NATURELLEMENT la différence côté entrepôt — inutile
+// (et faux) de retoucher `available` ici pour ça.
 export async function deliverStock(kind: Kind, parentId: string) {
   const items = await (itemDelegate(kind) as any).findMany({ where: { ...itemWhereParent(kind, parentId), productId: { not: null } } });
   for (const item of items) {
     if (!item.productId || !item.resolvedQuantity) continue;
     await prisma.product.update({ where: { id: item.productId }, data: { reserved: { decrement: item.resolvedQuantity } } });
+
+    if (item.assignedEmployeeId) {
+      const assignment = await prisma.stockAssignment.findFirst({ where: { employeeId: item.assignedEmployeeId, productId: item.productId } });
+      if (assignment) {
+        const take = Math.min(item.resolvedQuantity, assignment.quantity);
+        if (take > 0) {
+          const remaining = assignment.quantity - take;
+          await (remaining <= 0
+            ? prisma.stockAssignment.delete({ where: { id: assignment.id } })
+            : prisma.stockAssignment.update({ where: { id: assignment.id }, data: { quantity: remaining } }));
+        }
+      }
+      // Le crédit vient d'être consommé par la livraison — rien à "reprendre" en le décochant.
+      await (itemDelegate(kind) as any).update({ where: { id: item.id }, data: { assignedQuantity: 0, assignedEmployeeId: null } });
+    }
   }
 }
 
@@ -825,6 +992,7 @@ async function distributeToLinkedItems(
     remaining -= take;
     await (itemDelegate(li.kind) as any).update({ where: { id: li.id }, data: { resolvedQuantity: { increment: take } } });
     await prisma.product.update({ where: { id: productId }, data: { reserved: { increment: take } } });
+    await syncCommercialAssignment(li.kind, li.id);
     touchedParents.add(`${li.kind}:${li.parentId}`);
   }
 

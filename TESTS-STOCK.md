@@ -30,6 +30,14 @@ Commande de 20 confirmée → matière `available=880 reserved=120`, ligne produ
 - [ ] Cas particulier : si la ligne liée n'est plus modifiable (achat déjà "Commandé") : la
   nouvelle quantité doit quand même s'enregistrer sur la commande ET le stock/la liste doit
   suivre après coup (pas resté bloqué sur l'ancienne quantité).
+- [ ] **Réduction d'une commande déjà résolue → réaffectation automatique à une AUTRE commande
+  en attente** (trou trouvé et corrigé). ORDOLD (créée en premier, besoin=5, matière
+  indisponible → reste en attente) puis ORDBIG (créée ensuite, dispo=10 → prise directement en
+  stock, `FROM_STOCK`, résolue à 10/10). Réduisez ORDBIG de 10 → 4 (excédent de 6 à relâcher)
+  → **ORDOLD reçoit automatiquement ses 5** (`resolvedQuantity=5/5`, sans action manuelle),
+  ORDBIG `resolvedQuantity=4/4`, produit `available=1 reserved=9` (6 relâchés − 5 réaffectés =
+  1 de reliquat). Avant le correctif, ce disponible restait "libre" au lieu d'être proposé à
+  la plus ancienne commande en attente.
 
 ## 3. "Marquer fabriquée"
 Le buffer ne réserve JAMAIS de matière (c'est un simple chiffre indicatif de rattrapage
@@ -75,6 +83,12 @@ les deux besoins réels, rien de plus).
 Matière `available=0 reserved=5`, tentative de produire 20 (recette ratio 1, besoin=20).
 - [ ] Rien ne se passe : erreur "Stock matière insuffisant" renvoyée, `producedQuantity` et le
   stock matière restent parfaitement inchangés (aucune modification partielle).
+- [ ] **Recette à plusieurs matières, une seule insuffisante** : MAT-OK très abondante
+  (`available=1000`), MAT-COURTE insuffisante (`available=0 reserved=5`), besoin=20 pour les
+  deux. Tentative de produire 20 → **refus net (409)**, `"Stock matière insuffisant : courte
+  (disponible+réservé=5, besoin=20)"` — et **MAT-OK reste rigoureusement inchangée
+  (`1000/0`)** : une seule matière manquante bloque toute la recette, même si toutes les
+  autres suffisent largement.
 
 ### 3d. Surplus produit au-delà du besoin réel, pris sur un disponible qui en a
 Une seule ligne, aucune autre commande concurrente sur cette matière. Besoin réel=10 (déjà
@@ -112,11 +126,48 @@ X(20, prend son stock directement — FROM_STOCK) puis Y(15, tout en production,
 - [ ] Item Y : `resolvedQuantity` passe à `quantity` (comblé automatiquement, FIFO).
 
 ## 7. "Marquer Produit" (bouton manuel, avant Livré)
-Matière dispo=3 pour un besoin de 10.
-- [ ] Preview détecte un manquant de 7.
-- [ ] Après "Marquer Produit" : matière `reserved` retombe à 0 (consommait tout ce qui était
-  réservable), produit `reserved` augmente exactement de la part manquante (jamais plus),
-  commande entièrement résolue.
+Résout le manquant de chaque article, dans cet ordre STRICT, par produit : 1) disponible
+produit, 2) réservé d'une AUTRE commande/devis déjà "Produite" (la plus RÉCEMMENT créée en
+premier — elle repasse "Confirmée", `stockPath` remis sur IN_PRODUCTION/PURCHASE_PENDING, son
+manquant réapparaît normalement), 3) (fabriqués seulement) fabrication immédiate avec la
+matière déjà réservée. S'il reste un manquant après ces 3 étapes → **blocage dur** (rien n'est
+modifié, aucun moyen de forcer), erreur affichée avec les produits manquants et les quantités.
+
+### 7a. Disponible couvre tout
+Produit `available=10` (arrivé après coup, sans réaffectation), commande de 10 en attente.
+- [ ] "Marquer Produit" → réussit (200) : produit `available=10→0 reserved=0→10`, commande
+  entièrement résolue.
+- [ ] **Effet sur les autres commandes/la liste/un témoin** : avec DEUX autres commandes en
+  attente (A, B) sur le même produit en plus de celle qu'on force (C), matière indisponible
+  (ligne `needed=15 buffer=100 BLOQUE` pour les 3 réunies) — après "Marquer Produit" sur C
+  SEULE (disponible=5 arrivé sans réaffectation) : A et B **restent strictement inchangées**
+  (`resolvedQuantity=0`, toujours "Confirmée", toujours Bloquées — l'action ne redistribue
+  jamais aux autres commandes en attente) ; la ligne de production recalcule correctement
+  `needed=15→10` (A+B seulement) ; matière et témoin (autre produit/matière) inchangés.
+
+### 7b. Vol chez une AUTRE commande active — "Produite" OU simplement "Confirmée"
+Le donneur peut être n'importe quelle commande/devis encore active (Confirmée OU Produite) qui
+a déjà du réservé sur ce produit — pas seulement celles déjà "Produite". Toujours la plus
+RÉCEMMENT créée en premier.
+
+- [ ] Produit avec commande DONOR (5, confirmée avec dispo=5 → `FROM_STOCK`, devient
+  automatiquement "Produite") puis commande CURRENT (5, créée après, dispo=0 ensuite, matière
+  indisponible). "Marquer Produit" sur CURRENT → réussit (200) : CURRENT entièrement résolue
+  (`resolvedQuantity=5`), DONOR **repasse "Confirmée"** avec `resolvedQuantity=0` et
+  `stockPath=IN_PRODUCTION` (son manquant de 5 réapparaît dans la liste de production, jamais
+  perdu silencieusement), produit `reserved` reste à 5 (transfert interne, pas de changement de
+  total).
+- [ ] **Donneur encore "Confirmée" (jamais "Produite")** : commande DONOR2 (8, confirmée avec
+  dispo=5 → 5 pris directement, 3 restent en attente en production, matière indisponible →
+  reste "Confirmée", ne devient JAMAIS "Produite") puis commande CURRENT (5, créée après,
+  dispo=0). "Marquer Produit" sur CURRENT → réussit (200) : CURRENT entièrement résolue
+  (`resolvedQuantity=5/5`), DONOR2 perd ses 5 (`resolvedQuantity=0/8`, reste "Confirmée" —
+  n'avait pas de statut à faire redescendre), produit `reserved` reste à 5.
+
+### 7c. Rien du tout nulle part → blocage dur
+Matière dispo=3 pour un besoin de 10, aucune commande "Produite" à qui prendre.
+- [ ] "Marquer Produit" → **refusé (409)**, `{error: "PRODUCT_SHORTFALL", shortfall: [{reference,
+  name, missing}]}` — commande reste "Confirmée", RIEN n'est modifié (ni stock, ni statut).
 
 ## 8. Stock direct (hors commande)
 - [ ] Correction manuelle du disponible produit **à la baisse** → seul le buffer bouge (le
@@ -212,19 +263,26 @@ Matière dispo=2 pour un besoin de 10 (ratio 1) → ligne "Bloquée".
 ## 15. Commandes/devis prioritaires
 Une commande/devis marqué "prioritaire" passe TOUJOURS devant les autres dans les simulations
 FIFO du stock (distribution, réaffectation, reprise de couverture, badge "Bloqué"), comme si
-elle avait été créée en premier — ne déclenche rien tout de suite, compte juste comme "la plus
-ancienne" au prochain évènement. Togglable uniquement tant que la commande est "Confirmée"
-(VALIDE) et pas encore "Produite" — ne change RIEN au reste de la ligne de production/achat
-normale (son `needed` continue d'inclure toutes les commandes, prioritaires ou pas).
+elle avait été créée en premier — **ne déclenche RIEN d'immédiat**, compte juste comme "la
+plus ancienne" au prochain évènement qui recalcule le stock. Togglable uniquement tant que la
+commande est "Confirmée" (VALIDE) et pas encore "Produite" — ne change RIEN au reste de la
+ligne de production/achat normale (son `needed` continue d'inclure toutes les commandes,
+prioritaires ou pas).
 
 - [ ] Deux commandes sur le même produit (matière abondante) : ANCIENNE créée en premier (10),
   RÉCENTE créée ensuite (10), RÉCENTE marquée prioritaire. Produisez seulement 10 (pas assez
   pour les deux) → **RÉCENTE reçoit tout** (`resolvedQuantity=10`), ANCIENNE rien
   (`resolvedQuantity=0`) — inversé par rapport au FIFO normal.
+- [ ] **Aucun effet immédiat à la mise en priorité** : commande A (5, confirmée avec dispo=5 →
+  `FROM_STOCK`, devient "Produite" automatiquement) créée avant B (5, dispo=0 ensuite). Marquer
+  B prioritaire → réussit (200) : B a juste `priority=true`, `resolvedQuantity` **reste à
+  0/5** (rien volé) ; A **reste strictement inchangée** (`status=PRODUITE
+  resolvedQuantity=5/5 stockPath=FROM_STOCK`) — aucun vol, aucune réouverture. B ne récupère du
+  stock qu'au prochain évènement qui recalcule le stock (réception, correction, etc.), et à ce
+  moment-là seulement en tant que "la plus ancienne".
 - [ ] Carte "Production urgente" (en bas de la liste de production) : affiche le produit avec
-  quantité=10 tant que RÉCENTE n'est pas produite ; **disparaît d'elle-même** une fois
-  RÉCENTE entièrement produite (elle repasse "Produite" automatiquement, plus de manquant à
-  sommer).
+  la quantité manquante des commandes prioritaires ; **disparaît d'elle-même** une fois
+  entièrement produite.
 - [ ] Retirer la priorité sur une commande déjà "Produite" → refusé (rien à prioriser dessus).
 - [ ] Marquer prioritaire une commande "Annulée" (ou tout statut ≠ Confirmé) → refusé,
   message clair.

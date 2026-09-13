@@ -141,7 +141,7 @@ export async function GET(request: NextRequest) {
         take: 5,
         orderBy: { createdAt: 'desc' },
         select: {
-          id: true, ref: true, status: true, source: true, createdAt: true,
+          id: true, ref: true, status: true, source: true, createdAt: true, priority: true,
           clientName: true, clientCompany: true, clientWilaya: true,
           client: { select: { name: true, company: true, wilaya: true, email: true, phones: { where: { primary: true }, select: { number: true } } } },
           items: { select: { quantity: true, unitPrice: true, product: { select: { reference: true } } } },
@@ -151,7 +151,7 @@ export async function GET(request: NextRequest) {
         take: 5,
         orderBy: { createdAt: 'desc' },
         select: {
-          id: true, ref: true, status: true, source: true, message: true, proposedPrice: true, createdAt: true,
+          id: true, ref: true, status: true, source: true, message: true, proposedPrice: true, createdAt: true, priority: true,
           clientName: true, clientCompany: true, clientWilaya: true,
           client: { select: { name: true, company: true, wilaya: true, email: true, phones: { where: { primary: true }, select: { number: true } } } },
           items: { select: { quantity: true, product: { select: { reference: true } } } },
