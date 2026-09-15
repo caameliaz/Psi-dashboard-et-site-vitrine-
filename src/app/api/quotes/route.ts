@@ -8,27 +8,38 @@ import { pushSSE } from '@/lib/sse-bus';
 import { createAudit } from '@/lib/audit';
 import { rateLimit } from '@/lib/rate-limit';
 import { validateEmail, validatePhone, validateText, validateQuantity, firstError } from '@/lib/validation';
+import { resolveClientVisibility } from '@/lib/leave';
 
 export async function GET(request: NextRequest) {
   const guard = await requirePermission('voir_commandes');
   if (guard.error) return guard.error;
 
   // ?from=<ISO> → ne renvoie que les devis créés depuis cette date (perf : filtre par période)
-  // ?assignedToId=<userId> → filtre par commercial assigné (pour les employés non-admin)
   const fromParam = request.nextUrl.searchParams.get('from');
-  const assignedToIdParam = request.nextUrl.searchParams.get('assignedToId');
   const from = fromParam ? new Date(fromParam) : null;
 
   const whereClause: any = {};
-  
+
   // Filtre par date si fourni
   if (from && !isNaN(from.getTime())) {
     whereClause.createdAt = { gte: from };
   }
-  
-  // Filtre par assignation si fourni (sécurité pour employés)
-  if (assignedToIdParam) {
-    whereClause.assignedToId = assignedToIdParam;
+
+  // Sécurité serveur (cf. commentaire équivalent dans /api/orders) : mêmes règles de
+  // visibilité client/congé appliquées aux devis.
+  if (guard.session!.user.role !== 'ADMIN') {
+    const userId = guard.session!.user.id;
+    const { historyClientIds, interimSince } = await resolveClientVisibility(userId);
+
+    const orConditions: any[] = [
+      { assignedToId: userId },
+      { clientId: { in: historyClientIds } },
+      ...interimSince.map(({ clientId, since }) => ({
+        clientId,
+        createdAt: { gte: since },
+      })),
+    ];
+    whereClause.AND = [...(whereClause.AND ?? []), { OR: orConditions }];
   }
 
   try {
@@ -152,8 +163,9 @@ export async function POST(request: NextRequest) {
         message: body.message ?? '',
         source: source as any,
         createdById: session?.user?.id ?? null,
-        // Assignation : valeur fournie, sinon le créateur (utilisateur connecté)
-        assignedToId: body.assignedToId ?? session?.user?.id ?? null,
+        // Assignation : valeur fournie explicitement, sinon le responsable habituel du
+        // client (Client.assignedToId), sinon le créateur (utilisateur connecté).
+        assignedToId: body.assignedToId ?? client.assignedToId ?? session?.user?.id ?? null,
         invoiceNumber: body.invoiceNumber ?? null,
         paymentMethod: body.paymentMethod ?? null,
         paymentDate: body.paymentDate ? new Date(body.paymentDate) : null,

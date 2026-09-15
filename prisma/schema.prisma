@@ -3,7 +3,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider  = "postgresql"
   // url       = connexion applicative, via le POOLER Neon (rapide, beaucoup de connexions)
   // directUrl = connexion DIRECTE, utilisée UNIQUEMENT par les migrations.
   //
@@ -21,7 +21,7 @@ model Category {
   name        String    @unique
   photo       String?
   description String?
-  prefix      String?   // préfixe des références produit auto (ex: PTT, IMP)
+  prefix      String? // préfixe des références produit auto (ex: PTT, IMP)
   refCounter  Int       @default(0) // dernier numéro utilisé pour l'auto-incrément
   order       Int       @default(0)
   products    Product[]
@@ -41,14 +41,18 @@ model Sector {
 model Product {
   id           String               @id @default(cuid())
   reference    String               @unique
-  name         String?              // nom personnalisable du produit (facultatif)
-  width        Int                  // largeur en mm
-  length       Int                  // longueur en m
-  metrage      Float?               // longueur en mètres (facultatif)
+  name         String? // nom personnalisable du produit (facultatif)
+  width        Int // largeur en mm
+  length       Int // longueur en m
+  metrage      Float? // longueur en mètres (facultatif)
   usage        String
   price        Float
   photo        String?
   active       Boolean              @default(true)
+  // Indépendant de `active` : un produit peut être actif dans le dashboard (stock,
+  // commandes...) sans être affiché sur le site vitrine public. Le site public filtre
+  // sur active ET visibleOnSite ; le dashboard continue de n'utiliser que `active`.
+  visibleOnSite Boolean             @default(true)
   category     Category             @relation(fields: [categoryId], references: [id])
   categoryId   String
   customFields ProductCustomField[]
@@ -56,6 +60,150 @@ model Product {
   quoteItems   QuoteItem[]
   createdAt    DateTime             @default(now())
   updatedAt    DateTime             @updatedAt
+
+  // ─── Stock & production (cf. modèles RawMaterial / RecipeItem / StockAssignment) ───
+  mode          ProductMode @default(FABRIQUE) // achete | fabrique | les_deux — cf. LOGIC stock
+  purchasePrice Float? // prix d'achat — requis si mode = ACHETE ou LES_DEUX
+
+  // Stock max visé (objectif de reconstitution) : à la création, sert de base au calcul
+  // par défaut des seuils ci-dessous (50%) ; modifiable ensuite indépendamment, ainsi que
+  // les seuils eux-mêmes (page Stock → Seuils).
+  stockMax Int @default(140)
+
+  // Seuils déclenchant un réassort préventif sur `available` (indépendant des commandes) :
+  purchaseThreshold   Int @default(70) // liste d'achat — pertinent si mode ACHETE ou LES_DEUX
+  productionThreshold Int @default(70) // liste de production — pertinent si mode FABRIQUE ou LES_DEUX
+
+  // Statuts de stock (une seule ligne par référence, pas de variantes) :
+  available  Float @default(0) // Disponible — prêt à être vendu/utilisé, pas rattaché à une commande
+  reserved   Float @default(0) // Réservé — rattaché à une commande confirmée, aucun mouvement réel encore
+  inDelivery Float @default(0) // En livraison — physiquement chez le transporteur / en cours de livraison
+  returned   Float @default(0) // En retour — colis revenu, en attente de décision
+
+  recipeItems         RecipeItem[]
+  stockAssignments    StockAssignment[]
+  purchaseListItems   PurchaseListItem[]
+  productionListItems ProductionListItem[]
+}
+
+enum ProductMode {
+  ACHETE
+  FABRIQUE
+  LES_DEUX
+}
+
+// ─── STOCK & PRODUCTION ────────────────────────────────────────────────────────
+
+// Matière première entrant dans la composition d'un produit fabriqué (ex: film TPE, coating, mandrin).
+model RawMaterial {
+  id                String             @id @default(cuid())
+  reference         String             @unique
+  name              String
+  unit              String // unité de mesure libre : bobine, g, kg, m, unité...
+  price             Float
+  stockMax          Int                @default(140) // stock max visé — base du calcul par défaut du seuil (50%) à la création
+  purchaseThreshold Int                @default(70) // seuil sur `available` déclenchant le réassort préventif en liste d'achat
+  available         Float              @default(0) // Disponible
+  reserved          Float              @default(0) // Réservé (rattaché à une recette/commande en cours, aucun mouvement réel encore)
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  recipeItems       RecipeItem[]
+  purchaseListItems PurchaseListItem[]
+}
+
+// Ligne de recette : quantité d'une matière première nécessaire pour fabriquer 1 unité d'un produit.
+model RecipeItem {
+  id            String      @id @default(cuid())
+  product       Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
+  productId     String
+  rawMaterial   RawMaterial @relation(fields: [rawMaterialId], references: [id])
+  rawMaterialId String
+  quantity      Float
+
+  @@unique([productId, rawMaterialId])
+}
+
+// Quantité de stock d'un produit fini attribuée à un employé (commercial) qui la transporte.
+// État courant de l'attribution (pas un journal) : un retrait partiel diminue `quantity`,
+// un retrait total supprime la ligne.
+model StockAssignment {
+  id         String   @id @default(cuid())
+  product    Product  @relation(fields: [productId], references: [id])
+  productId  String
+  employee   User     @relation(fields: [employeeId], references: [id])
+  employeeId String
+  quantity   Float
+  assignedAt DateTime @default(now())
+  createdAt  DateTime @default(now())
+}
+
+// ─── LISTE D'ACHAT & LISTE DE PRODUCTION (Phase 1 : alimentation manuelle + par seuil) ───
+
+enum PurchaseItemStatus {
+  A_COMMANDER
+  COMMANDE
+  RECU
+}
+
+// Ligne de la liste d'achat — matière première OU produit fini "Acheté" à commander
+// auprès d'un fournisseur externe. `auto: true` = générée par un seuil de réassort
+// (peut être re-synchronisée/supprimée automatiquement) ; `auto: false` = ajoutée à
+// la main (persiste jusqu'à action explicite de l'utilisateur).
+model PurchaseListItem {
+  id               String             @id @default(cuid())
+  product          Product?           @relation(fields: [productId], references: [id], onDelete: Cascade)
+  productId        String?
+  rawMaterial      RawMaterial?       @relation(fields: [rawMaterialId], references: [id], onDelete: Cascade)
+  rawMaterialId    String?
+  neededQuantity   Float // quantité manquante réelle (commande/manuel), pré-remplie
+  // Rattrapage préventif ajouté PAR-DESSUS `neededQuantity` (pas à sa place) pour reconstituer
+  // le stock disponible jusqu'au stock max — géré par syncPurchaseList tant que la ligne n'a
+  // pas encore été commandée (statut A_COMMANDER) ; replié dans `neededQuantity` (remis à 0)
+  // dès que l'utilisateur clique "Commander", puisqu'à partir de là c'est un engagement réel.
+  bufferQuantity   Float              @default(0)
+  // Part de `neededQuantity` ajoutée à la main (bouton "+ Ajouter ligne"), PERSISTANTE — le
+  // recalcul dérivé (resyncMaterialPurchaseNeed / resyncPurchaseLineForProduct) l'AJOUTE au
+  // besoin réel des commandes au lieu de l'écraser, pour ne jamais la perdre silencieusement.
+  manualQuantity   Float              @default(0)
+  orderedQuantity  Float              @default(0) // quantité indiquée au clic "Commander"
+  receivedQuantity Float              @default(0) // quantité indiquée au clic "Valider réception"
+  status           PurchaseItemStatus @default(A_COMMANDER)
+  auto             Boolean            @default(false)
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  orderItems OrderItem[]
+  quoteItems QuoteItem[]
+}
+
+enum ProductionItemStatus {
+  A_PRODUIRE
+  BLOQUE // en attente de réception d'une matière première manquante
+  EN_COURS
+  PRODUIT
+}
+
+// Ligne de la liste de production — produit fini "Fabriqué"/"Les deux" à fabriquer.
+model ProductionListItem {
+  id               String               @id @default(cuid())
+  product          Product              @relation(fields: [productId], references: [id], onDelete: Cascade)
+  productId        String
+  neededQuantity   Float // quantité à produire réelle (commande/manuel), pré-remplie
+  // Rattrapage préventif ajouté PAR-DESSUS `neededQuantity` — même logique que sur
+  // PurchaseListItem (cf. commentaire là-bas), replié dans `neededQuantity` dès que
+  // l'utilisateur clique "Marquer fabriquée".
+  bufferQuantity   Float                @default(0)
+  // Part de `neededQuantity` ajoutée à la main, PERSISTANTE — cf. commentaire sur
+  // PurchaseListItem.manualQuantity, même principe.
+  manualQuantity   Float                @default(0)
+  producedQuantity Float                @default(0) // quantité indiquée au clic "Marquer fabriquée"
+  status           ProductionItemStatus @default(A_PRODUIRE)
+  auto             Boolean              @default(false)
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+
+  orderItems OrderItem[]
+  quoteItems QuoteItem[]
 }
 
 // Valeurs des champs custom pour chaque produit
@@ -73,7 +221,7 @@ model ProductCustomField {
 // Définition des champs custom (créés par l'admin depuis les paramètres)
 model ProductFieldDef {
   id        String               @id @default(cuid())
-  label     String               // ex: "Grammage", "Diamètre mandrin"
+  label     String // ex: "Grammage", "Diamètre mandrin"
   type      FieldType            @default(TEXT)
   required  Boolean              @default(false)
   order     Int                  @default(0)
@@ -89,30 +237,34 @@ enum FieldType {
 
 // ─── CLIENT ──────────────────────────────────────────────────────────────────
 model Client {
-  id        String           @id @default(cuid())
-  ref       String?          @unique // référence auto : CL0001, CL0002…
-  name      String
-  company   String?
-  email     String?
-  wilaya    String
-  commune   String?
-  address   String?
-  photo     String?
-  sector    Sector?          @relation(fields: [sectorId], references: [id])
-  sectorId  String?          // secteur d'activité (pharmacie, banque…)
+  id                String           @id @default(cuid())
+  ref               String?          @unique // référence auto : CL0001, CL0002…
+  name              String
+  company           String?
+  email             String?
+  wilaya            String
+  commune           String?
+  address           String?
+  photo             String?
+  sector            Sector?          @relation(fields: [sectorId], references: [id])
+  sectorId          String? // secteur d'activité (pharmacie, banque…)
   // Désactivation (au lieu d'une suppression réelle — l'historique reste)
-  active            Boolean   @default(true)
+  active            Boolean          @default(true)
   deactivatedReason String?
   deactivatedById   String?
-  deactivatedBy     User?     @relation("ClientDeactivatedBy", fields: [deactivatedById], references: [id])
+  deactivatedBy     User?            @relation("ClientDeactivatedBy", fields: [deactivatedById], references: [id])
   deactivatedAt     DateTime?
-  phones    ClientPhone[]
-  orders    Order[]
-  quotes    Quote[]
-  contacts  ContactRequest[]
-  notes     ClientNote[]
-  createdAt DateTime         @default(now())
-  updatedAt DateTime         @updatedAt
+  phones            ClientPhone[]
+  orders            Order[]
+  quotes            Quote[]
+  contacts          ContactRequest[]
+  notes             ClientNote[]
+  // Responsable habituel du client (hors période de congé — cf. LeaveAssignment).
+  // Restauré automatiquement au retour de congé de son titulaire.
+  assignedTo        User?            @relation("ClientAssignedTo", fields: [assignedToId], references: [id])
+  assignedToId      String?
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
 }
 
 // Numéros de téléphone (plusieurs par client, chacun avec un label)
@@ -156,42 +308,72 @@ model Order {
   ref             String?        @unique
   client          Client?        @relation(fields: [clientId], references: [id], onDelete: SetNull)
   clientId        String?
-  clientName      String?        // snapshot au moment de la création
+  clientName      String? // snapshot au moment de la création
   clientCompany   String?
   clientWilaya    String?
-  clientCommune   String?        // snapshot de la commune saisie POUR cette demande
+  clientCommune   String? // snapshot de la commune saisie POUR cette demande
   items           OrderItem[]
   status          RequestStatus  @default(EN_ATTENTE)
   source          OrderSource    @default(SITE)
   cancelReason    String?
   notes           String?
+  // Commande prioritaire : passe devant toutes les autres dans les simulations FIFO du stock
+  // (distribution, réaffectation, reprise de couverture, badge "Bloqué"...), comme si elle
+  // avait été créée en premier — cf. src/lib/order-stock.ts `fifoCompare`. Togglable tant que
+  // la commande n'est pas encore entièrement produite/livrée (uniquement pertinent si VALIDE).
+  priority        Boolean        @default(false)
   // ── Facturation / règlement (renseignés à l'import Excel ou à la validation) ──
-  invoiceNumber String?        // N° de facture (en plus de la référence auto)
-  paymentMethod String?        // Espèces, Chèque, Virement, Versement, À crédit, Dépensé, Offert
-  paymentDate   DateTime?      // date de règlement (facultative, modifiable après validation)
-  vatEnabled    Boolean        @default(false) // TVA appliquée (info seule — le montant saisi est final)
-  salesRepName  String?        // nom du commercial importé, avant rattachement à un compte
-  createdBy     User?          @relation("OrderCreatedBy", fields: [createdById], references: [id])
-  createdById   String?        // null si commande du site public
-  assignedTo    User?          @relation("OrderAssignedTo", fields: [assignedToId], references: [id])
-  assignedToId  String?        // "pris en charge par"
-  notifications Notification[]
-  auditLogs     AuditLog[]     @relation("AuditOrder")
-  requestNotes  RequestNote[]
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
+  invoiceNumber   String? // N° de facture (en plus de la référence auto)
+  paymentMethod   String? // Espèces, Chèque, Virement, Versement, À crédit, Dépensé, Offert
+  paymentDate     DateTime? // date de règlement (facultative, modifiable après validation)
+  vatEnabled      Boolean        @default(false) // TVA appliquée (info seule — le montant saisi est final)
+  salesRepName    String? // nom du commercial importé, avant rattachement à un compte
+  createdBy       User?          @relation("OrderCreatedBy", fields: [createdById], references: [id])
+  createdById     String? // null si commande du site public
+  assignedTo      User?          @relation("OrderAssignedTo", fields: [assignedToId], references: [id])
+  assignedToId    String? // "pris en charge par"
+  // Case à cocher (RequestPanel) — dès que du stock est réservé pour cette commande, la même
+  // quantité est automatiquement créditée dans StockAssignment pour `assignedToId` (cf.
+  // syncCommercialAssignment, order-stock.ts). Statuts EN_ATTENTE et VALIDE uniquement.
+  autoAssignStock Boolean        @default(false)
+  notifications   Notification[]
+  auditLogs       AuditLog[]     @relation("AuditOrder")
+  requestNotes    RequestNote[]
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
 }
 
 model OrderItem {
-  id          String  @id @default(cuid())
-  order       Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  id          String   @id @default(cuid())
+  order       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
   orderId     String
   product     Product? @relation(fields: [productId], references: [id])
   productId   String?
-  description String?  // réf libre (hors catalogue)
-  metrage     Float?   // longueur en mètres (facultatif)
+  description String? // réf libre (hors catalogue)
+  metrage     Float? // longueur en mètres (facultatif)
   quantity    Int
-  unitPrice   Float   // snapshot du prix au moment de la commande
+  unitPrice   Float // snapshot du prix au moment de la commande
+
+  // ─── Stock (cf. features/stock — logique de confirmation de commande) ───
+  stockPath            ItemStockPath       @default(NONE) // chemin suivi à la confirmation
+  resolvedQuantity     Float               @default(0) // quantité déjà produite/reçue (fabrication/achat partiels)
+  purchaseListItem     PurchaseListItem?   @relation(fields: [purchaseListItemId], references: [id])
+  purchaseListItemId   String?
+  productionListItem   ProductionListItem? @relation(fields: [productionListItemId], references: [id])
+  productionListItemId String?
+  // Auto-attribution au commercial (cf. Order.autoAssignStock / syncCommercialAssignment,
+  // order-stock.ts) : `assignedQuantity` = combien de `resolvedQuantity` a déjà été crédité à
+  // `assignedEmployeeId` — commercial VERROUILLÉ sur cet article dès son premier crédit, ne
+  // suit plus un changement ultérieur de "Pris en charge par" (cf. commentaire de la fonction).
+  assignedQuantity     Float               @default(0)
+  assignedEmployeeId   String?
+}
+
+enum ItemStockPath {
+  NONE // pas encore confirmé
+  FROM_STOCK // pris directement sur le stock disponible à la confirmation
+  IN_PRODUCTION // envoyé en liste de production
+  PURCHASE_PENDING // produit "Acheté" non en stock, envoyé en liste d'achat
 }
 
 enum OrderSource {
@@ -200,44 +382,48 @@ enum OrderSource {
   WHATSAPP
   TELEPHONE
   AUTRE
+  ROLLINK
 }
 
 // ─── DEVIS ───────────────────────────────────────────────────────────────────
 model Quote {
-  id               String         @id @default(cuid())
-  ref              String?        @unique
-  client           Client?        @relation(fields: [clientId], references: [id], onDelete: SetNull)
-  clientId         String?
-  clientName       String?        // snapshot au moment de la création
-  clientCompany    String?
-  clientWilaya     String?
-  clientCommune    String?
-  items            QuoteItem[]
-  message          String         // description libre du client
-  status           RequestStatus  @default(EN_ATTENTE)
-  source           OrderSource    @default(SITE)
-  cancelReason     String?
+  id              String         @id @default(cuid())
+  ref             String?        @unique
+  client          Client?        @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  clientId        String?
+  clientName      String? // snapshot au moment de la création
+  clientCompany   String?
+  clientWilaya    String?
+  clientCommune   String?
+  items           QuoteItem[]
+  message         String // description libre du client
+  status          RequestStatus  @default(EN_ATTENTE)
+  source          OrderSource    @default(SITE)
+  cancelReason    String?
+  // Devis prioritaire : même logique que Order.priority (cf. commentaire là-bas).
+  priority        Boolean        @default(false)
   // Champs admin (remplis après discussion avec le client)
-  proposedPrice    Float?
-  deliveryDelay    String?        // ex: "5 à 7 jours"
-  paymentTerms     String?        // ex: "50% à la commande"
-  adminRemarks     String?
-  notes            String?        // notes internes
+  proposedPrice   Float?
+  deliveryDelay   String? // ex: "5 à 7 jours"
+  paymentTerms    String? // ex: "50% à la commande"
+  adminRemarks    String?
+  notes           String? // notes internes
   // ── Facturation / règlement (mêmes champs que Order) ──
-  invoiceNumber    String?
-  paymentMethod    String?
-  paymentDate      DateTime?
-  vatEnabled       Boolean        @default(false)
-  salesRepName     String?
-  createdBy        User?          @relation("QuoteCreatedBy", fields: [createdById], references: [id])
-  createdById      String?
-  assignedTo       User?          @relation("QuoteAssignedTo", fields: [assignedToId], references: [id])
-  assignedToId     String?        // "pris en charge par"
-  notifications    Notification[]
-  auditLogs        AuditLog[]     @relation("AuditQuote")
-  requestNotes     RequestNote[]
-  createdAt        DateTime       @default(now())
-  updatedAt        DateTime       @updatedAt
+  invoiceNumber   String?
+  paymentMethod   String?
+  paymentDate     DateTime?
+  vatEnabled      Boolean        @default(false)
+  salesRepName    String?
+  createdBy       User?          @relation("QuoteCreatedBy", fields: [createdById], references: [id])
+  createdById     String?
+  assignedTo      User?          @relation("QuoteAssignedTo", fields: [assignedToId], references: [id])
+  assignedToId    String? // "pris en charge par"
+  autoAssignStock Boolean        @default(false) // cf. Order.autoAssignStock
+  notifications   Notification[]
+  auditLogs       AuditLog[]     @relation("AuditQuote")
+  requestNotes    RequestNote[]
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
 }
 
 model QuoteItem {
@@ -246,19 +432,32 @@ model QuoteItem {
   quoteId     String
   product     Product? @relation(fields: [productId], references: [id])
   productId   String?
-  description String?  // si produit hors catalogue ou format spécial
+  description String? // si produit hors catalogue ou format spécial
   width       Int?
   length      Int?
-  metrage     Float?   // longueur en mètres (facultatif)
+  metrage     Float? // longueur en mètres (facultatif)
   quantity    Int
-  unitPrice   Float?   // prix unitaire proposé (facultatif ; conservé pour détail/PDF/Excel)
+  unitPrice   Float? // prix unitaire proposé (facultatif ; conservé pour détail/PDF/Excel)
+
+  // ─── Stock (cf. features/stock — même logique que OrderItem une fois le devis confirmé) ───
+  stockPath            ItemStockPath       @default(NONE)
+  resolvedQuantity     Float               @default(0)
+  purchaseListItem     PurchaseListItem?   @relation(fields: [purchaseListItemId], references: [id])
+  purchaseListItemId   String?
+  productionListItem   ProductionListItem? @relation(fields: [productionListItemId], references: [id])
+  productionListItemId String?
+  // cf. OrderItem.assignedQuantity/assignedEmployeeId
+  assignedQuantity     Float               @default(0)
+  assignedEmployeeId   String?
 }
 
 enum RequestStatus {
   EN_ATTENTE
   CONTACTE
   VALIDE
+  PRODUITE // tous les articles sont prêts (déjà en stock, fabriqués ou reçus) — en attente de préparation
   LIVRE
+  RETOURNE // colis revenu — remise en stock disponible manuelle (cf. page Stock, Correction)
   ANNULE
 }
 
@@ -284,7 +483,7 @@ enum ContactStatus {
 model CustomStatus {
   id        String   @id @default(cuid())
   name      String   @unique
-  color     String   // ex: "#F59E0B"
+  color     String // ex: "#F59E0B"
   order     Int      @default(0)
   createdAt DateTime @default(now())
 }
@@ -293,7 +492,7 @@ model CustomStatus {
 model MessageTemplate {
   id        String           @id @default(cuid())
   title     String
-  content   String           // avec variables : [Nom], [Référence], [Wilaya]
+  content   String // avec variables : [Nom], [Référence], [Wilaya]
   category  TemplateCategory @default(AUTRE)
   order     Int              @default(0)
   createdAt DateTime         @default(now())
@@ -325,40 +524,76 @@ model CustomRole {
 }
 
 model User {
-  id              String             @id @default(cuid())
-  name            String
-  email           String             @unique
-  password        String
-  role            Role               @default(EMPLOYEE)
-  active          Boolean            @default(true)
-  phone           String?
-  photo           String?
-  permissions     String[]           @default([])
-  sessionVersion  Int                @default(0) // incrémenté pour invalider tous les cookies
-  resetRequested  Boolean            @default(false) // l'utilisateur a demandé une réinit. de mot de passe
-  resetRequestedAt DateTime?
-  twoFactorCode     String?          // code 2FA à 6 chiffres en attente de validation (usage unique)
-  twoFactorExpires  DateTime?        // expiration du code 2FA (5 min)
-  twoFactorAttempts Int      @default(0) // tentatives échouées sur le code courant (invalide après 5)
-  recapDaily      Boolean            @default(true)  // reçoit le récap quotidien (20h) — désactivable dans le profil
-  recapWeekly     Boolean            @default(true)  // reçoit le bilan hebdomadaire (jeudi 23h59)
-  ordersCreated   Order[]            @relation("OrderCreatedBy")
-  quotesCreated   Quote[]            @relation("QuoteCreatedBy")
-  ordersAssigned  Order[]            @relation("OrderAssignedTo")
-  quotesAssigned  Quote[]            @relation("QuoteAssignedTo")
-  clientNotes     ClientNote[]       @relation("ClientNoteAuthor")
-  clientsDeactivated Client[]        @relation("ClientDeactivatedBy")
-  requestNotes    RequestNote[]      @relation("RequestNoteAuthor")
-  notifications   NotificationRead[]
-  auditLogs       AuditLog[]
-  pushSubscriptions PushSubscription[]
-  createdAt       DateTime           @default(now())
-  updatedAt       DateTime           @updatedAt
+  id                 String             @id @default(cuid())
+  name               String
+  email              String             @unique
+  password           String
+  role               Role               @default(EMPLOYEE)
+  active             Boolean            @default(true)
+  phone              String?
+  photo              String?
+  permissions        String[]           @default([])
+  sessionVersion     Int                @default(0) // incrémenté pour invalider tous les cookies
+  resetRequested     Boolean            @default(false) // l'utilisateur a demandé une réinit. de mot de passe
+  resetRequestedAt   DateTime?
+  twoFactorCode      String? // code 2FA à 6 chiffres en attente de validation (usage unique)
+  twoFactorExpires   DateTime? // expiration du code 2FA (5 min)
+  twoFactorAttempts  Int                @default(0) // tentatives échouées sur le code courant (invalide après 5)
+  recapDaily         Boolean            @default(true) // reçoit le récap quotidien (20h) — désactivable dans le profil
+  recapWeekly        Boolean            @default(true) // reçoit le bilan hebdomadaire (jeudi 23h59)
+  ordersCreated      Order[]            @relation("OrderCreatedBy")
+  quotesCreated      Quote[]            @relation("QuoteCreatedBy")
+  ordersAssigned     Order[]            @relation("OrderAssignedTo")
+  quotesAssigned     Quote[]            @relation("QuoteAssignedTo")
+  clientNotes        ClientNote[]       @relation("ClientNoteAuthor")
+  clientsDeactivated Client[]           @relation("ClientDeactivatedBy")
+  requestNotes       RequestNote[]      @relation("RequestNoteAuthor")
+  notifications      NotificationRead[]
+  auditLogs          AuditLog[]
+  pushSubscriptions  PushSubscription[]
+  stockAssignments   StockAssignment[] // stock de produits finis attribué en tant que commercial
+  clientsAssigned    Client[]           @relation("ClientAssignedTo") // clients dont il est le responsable habituel
+  leavesAsEmployee   LeaveAssignment[]  @relation("LeaveEmployee") // congés le concernant
+  leavesAsSubstitute LeaveAssignment[]  @relation("LeaveSubstitute") // congés où il est intérimaire
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
 }
 
 enum Role {
   ADMIN
   EMPLOYEE
+}
+
+// ─── CONGÉS & INTÉRIM ────────────────────────────────────────────────────────
+// Un employé en congé confie temporairement une partie (ou tout) de ses clients
+// à un remplaçant. À la reprise (automatique dès que endDate est dépassée, ou
+// manuelle via "Terminer maintenant"), les clients repartent à l'employé titulaire.
+// Le statut "actif" du congé est calculé à la volée (cf. src/lib/leave.ts) —
+// pas de tâche planifiée : endedAt/status ENDED ne servent qu'à la clôture manuelle
+// ou pour figer l'historique une fois le congé terminé.
+model LeaveAssignment {
+  id               String       @id @default(cuid())
+  employee         User         @relation("LeaveEmployee", fields: [employeeId], references: [id])
+  employeeId       String
+  substitute       User         @relation("LeaveSubstitute", fields: [substituteId], references: [id])
+  substituteId     String
+  startDate        DateTime
+  endDate          DateTime
+  // Clients de `employee` confiés à `substitute` pour la durée du congé.
+  clientIds        String[]
+  // Coché par l'admin à la création : le remplaçant voit aussi l'historique des
+  // commandes/devis passés de ces clients (pas seulement ceux créés pendant l'intérim).
+  allowFullHistory Boolean      @default(false)
+  status           LeaveStatus  @default(ACTIVE)
+  endedAt          DateTime? // renseigné si terminé manuellement avant endDate
+  endedById        String? // admin ayant terminé manuellement
+  createdById      String // admin ayant créé le congé
+  createdAt        DateTime     @default(now())
+}
+
+enum LeaveStatus {
+  ACTIVE
+  ENDED
 }
 
 // ─── ABONNEMENTS PUSH (notifications système Web Push) ───────────────────────
@@ -380,9 +615,9 @@ model PushSubscription {
 // Un seul objectif par (month, userId) grâce à l'index unique.
 model MonthlyGoal {
   id        String   @id @default(cuid())
-  month     String   // format "YYYY-MM"
-  userId    String?  // null = objectif global entreprise
-  amount    Float    // montant cible en DA
+  month     String // format "YYYY-MM"
+  userId    String? // null = objectif global entreprise
+  amount    Float // montant cible en DA
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -397,8 +632,8 @@ model Notification {
   message   String
   orderId   String?
   quoteId   String?
-  clientId  String?            // pour deep-link vers la fiche client (ex: client désactivé)
-  link      String?            // lien libre (ex: '/admin/dashboard' pour les objectifs)
+  clientId  String? // pour deep-link vers la fiche client (ex: client désactivé)
+  link      String? // lien libre (ex: '/admin/dashboard' pour les objectifs)
   order     Order?             @relation(fields: [orderId], references: [id], onDelete: SetNull)
   quote     Quote?             @relation(fields: [quoteId], references: [id], onDelete: SetNull)
   reads     NotificationRead[]
@@ -420,10 +655,10 @@ model NotificationRead {
 
 enum NotifType {
   SITE_COMMANDE // bleu — nouvelle commande site public
-  SITE_DEVIS    // bleu — nouveau devis site public
-  ACTION_PERSO  // gris — action de l'utilisateur lui-même
-  ACTION_AUTRE  // orange — action d'un autre utilisateur (admin only)
-  ANNULATION    // rouge — annulation proposée (admin only)
+  SITE_DEVIS // bleu — nouveau devis site public
+  ACTION_PERSO // gris — action de l'utilisateur lui-même
+  ACTION_AUTRE // orange — action d'un autre utilisateur (admin only)
+  ANNULATION // rouge — annulation proposée (admin only)
 }
 
 // ─── HISTORIQUE DES ACTIONS ──────────────────────────────────────────────────
@@ -431,9 +666,9 @@ model AuditLog {
   id        String      @id @default(cuid())
   user      User        @relation(fields: [userId], references: [id])
   userId    String
-  action    String      // ex: "Commande validée", "Produit modifié"
+  action    String // ex: "Commande validée", "Produit modifié"
   entity    AuditEntity
-  entityId  String?     // id de l'entité concernée
+  entityId  String? // id de l'entité concernée
   detail    String?
   orderId   String?
   quoteId   String?
@@ -451,4 +686,6 @@ enum AuditEntity {
   CONTENU
   TEMPLATE
   STATUT
+  STOCK
+  MATIERE
 }

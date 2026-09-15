@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { requirePermission } from '@/lib/permissions';
 import { createAudit } from '@/lib/audit';
+import { cancelStock } from '@/lib/order-stock';
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -41,6 +42,9 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
     });
 
     createAudit({ userId: session.user.id, action: 'Devis annulé', entity: 'DEVIS', entityId: id, detail: body.cancelReason, quoteId: id });
+
+    try { await cancelStock('quote', id); } catch (stockError) { console.error('[quotes/cancel] Erreur de mise à jour du stock :', stockError); }
+
     return NextResponse.json(quote);
   } catch (e) {
     console.error(e);

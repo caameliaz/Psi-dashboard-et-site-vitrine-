@@ -14,6 +14,14 @@ export const ALL_PERMISSIONS = [
   { key: 'modifier_clients',   label: 'Modifier / ajouter des clients', short: 'Modifier clients'    },
   { key: 'voir_produits',      label: 'Voir les produits',              short: 'Voir produits'       },
   { key: 'modifier_produits',  label: 'Modifier les produits',          short: 'Modifier produits'   },
+  { key: 'voir_stock',         label: 'Voir le stock',                  short: 'Voir stock'          },
+  { key: 'modifier_stock',     label: 'Modifier le stock',              short: 'Modifier stock'      },
+  // Distincte de voir_stock : un employé "production" peut voir/gérer les listes
+  // d'achat et de production sans forcément voir les chiffres de stock global.
+  { key: 'voir_listes_stock',  label: "Voir les listes d'achat & production", short: 'Listes stock'  },
+  // Onglet "Stock par commercial" (page Stock) — réservé, pas ouvert à tous ceux
+  // qui ont voir_stock (cf. STOCK-MOBILE.md).
+  { key: 'voir_stock_commercial', label: 'Voir le stock par commercial', short: 'Stock commercial'   },
   { key: 'voir_historique',    label: "Voir l'historique",              short: 'Voir historique'     },
   { key: 'recevoir_recaps',    label: 'Recevoir les récaps par email',  short: 'Récaps email'        },
   { key: 'modifier_contenu',   label: 'Modifier le contenu du site',    short: 'Modifier contenu'    },

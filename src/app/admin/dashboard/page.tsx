@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { StatusPill } from '@/components/ui/StatusPill';
 import { RequestPanel, type RequestDetail } from '@/components/ui/RequestPanel';
-import { orderToDetail, quoteToDetail, DB_TO_UI } from '@/lib/request-detail';
+import { orderToDetail, quoteToDetail, DB_TO_UI, UI_TO_DB } from '@/lib/request-detail';
 import dynamic from 'next/dynamic';
 import type { Order, Quote } from '@/types';
 import { notifBell } from '@/lib/notif-bell-store';
@@ -13,13 +13,11 @@ import { useSession } from 'next-auth/react';
 import { Modal } from '@/components/ui/Modal';
 import { MobileNavbar } from '@/components/MobileNavbar';
 import { DateRangePicker } from '@/components/ui/DateRangePicker';
+import { StockListsWidget } from '@/components/ui/StockListsWidget';
 
 // Graphiques Recharts chargés à la demande (ssr:false) → aucun poids ailleurs
 const WilayaBarChart = dynamic(() => import('@/components/ui/DashboardCharts').then((m) => m.WilayaBarChart), {
   ssr: false, loading: () => <ChartSkeleton title="Commandes par wilaya" />,
-});
-const ConversionRateChart = dynamic(() => import('@/components/ui/DashboardCharts').then((m) => m.ConversionRateChart), {
-  ssr: false, loading: () => <ChartSkeleton title="Taux de conversion" />,
 });
 const TrendLineChart = dynamic(() => import('@/components/ui/DashboardCharts').then((m) => m.TrendLineChart), {
   ssr: false, loading: () => <ChartSkeleton title="Évolution sur 6 mois" />,
@@ -86,6 +84,10 @@ function SourceChart({ stats }: { stats: { site: number; manuel: number } }) {
 function PieChart({ data }: { data: { ref: string; qty: number; label: string; color: string }[] }) {
   const [hovered, setHovered] = useState<number | null>(null);
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
+  // Largeur du conteneur du graphique — sert à savoir si la carte flottante (tooltip) a la
+  // place de s'ouvrir à droite du point survolé, ou si elle doit basculer à gauche pour ne
+  // pas sortir de l'écran (cf. handleMove / tooltipWidth ci-dessous).
+  const [containerWidth, setContainerWidth] = useState(0);
   const total = data.reduce((s, d) => s + d.qty, 0);
   if (total === 0) return <p className="text-[11px] md:text-[12px] text-[#8A9BB5] py-4">Aucune commande</p>;
   const R = 70, stroke = 24, cx = 88, cy = 88, gap = 0.015;
@@ -102,13 +104,31 @@ function PieChart({ data }: { data: { ref: string; qty: number; label: string; c
   });
   const hov = hovered !== null ? slices[hovered] : null;
 
+  const TOOLTIP_WIDTH = 130; // minWidth (110) + marge de sécurité
+  // Bascule le tooltip à GAUCHE du point s'il n'y a pas la place de l'ouvrir à droite
+  // sans dépasser le conteneur (cf. bug : tooltip qui sortait de l'écran sur mobile).
+  const opensLeft = containerWidth > 0 && mousePos.x + 14 + TOOLTIP_WIDTH > containerWidth;
+
   const handleMove = (e: React.MouseEvent<HTMLDivElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
+    if (rect.width !== containerWidth) setContainerWidth(rect.width);
     setMousePos({ x: e.clientX - rect.left, y: e.clientY - rect.top });
   };
 
+  // Sur mobile, le tap déclenche onMouseEnter sans passer par onMouseMove avant —
+  // il faut donc aussi capter la position au toucher, sinon mousePos reste à {0,0}
+  // et le tooltip s'affiche dans le coin plutôt qu'au bon endroit.
+  const handleTouch = (e: React.TouchEvent<HTMLDivElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const touch = e.touches[0] ?? e.changedTouches[0];
+    if (!touch) return;
+    if (rect.width !== containerWidth) setContainerWidth(rect.width);
+    setMousePos({ x: touch.clientX - rect.left, y: touch.clientY - rect.top });
+  };
+
   return (
-    <div className="relative flex flex-row-reverse md:flex-row items-center gap-3 md:gap-8 mt-10 md:mt-0 mr-4 md:mr-0" onMouseMove={handleMove}>
+    <div className="relative flex flex-row-reverse md:flex-row items-center gap-3 md:gap-8 mt-10 md:mt-0 mr-4 md:mr-0"
+      onMouseMove={handleMove} onTouchStart={handleTouch}>
       <svg width="176" height="176" viewBox="0 0 176 176" className="flex-shrink-0">
         {slices.map((s, i) => (
           <path key={i} d={s.path} fill="none" stroke={s.color} strokeWidth={stroke} strokeLinecap="butt"
@@ -130,10 +150,14 @@ function PieChart({ data }: { data: { ref: string; qty: number; label: string; c
         ))}
       </div>
 
-      {/* Carte blanche flottante qui suit la souris au survol d'un segment */}
+      {/* Carte blanche flottante qui suit la souris au survol d'un segment — bascule à
+          gauche du point si elle n'a pas la place de s'ouvrir à droite (cf. opensLeft),
+          pour ne jamais sortir du conteneur/de l'écran sur mobile. */}
       {hov && (
         <div className="absolute z-10 pointer-events-none bg-white rounded-xl shadow-2xl border border-[#F2F4F7] px-3 md:px-4 py-2 md:py-3"
-          style={{ left: mousePos.x + 14, top: mousePos.y + 14, minWidth: 110 }}>
+          style={opensLeft
+            ? { right: containerWidth - mousePos.x + 14, top: mousePos.y + 14, minWidth: 110 }
+            : { left: mousePos.x + 14, top: mousePos.y + 14, minWidth: 110 }}>
           <div className="flex items-center gap-1.5 md:gap-2 mb-1">
             <span className="w-2 md:w-2.5 h-2 md:h-2.5 rounded-full flex-shrink-0" style={{ background: hov.color }} />
             <p className="text-[10px] md:text-[12px] font-bold text-[#0F172A] truncate">{hov.label}</p>
@@ -622,43 +646,38 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Top produits + Origine en 2 colonnes sur mobile */}
-      <div className="grid grid-cols-2 gap-3 mt-4 md:hidden">
+      {/* Top produits + Origine : chacun sa ligne (pleine largeur) sur mobile — trop
+          serrés côte à côte en 2 colonnes (légende/tooltip illisibles, graphe écrasé). */}
+      <div className="flex flex-col gap-3 mt-4 md:hidden">
         {/* Camembert — Top produits */}
-        <div className="bg-white rounded-2xl border border-[#E2E8F0] p-2.5 shadow-sm flex flex-col">
+        <div className="bg-white rounded-2xl border border-[#E2E8F0] p-3.5 shadow-sm flex flex-col">
           <div className="flex items-center justify-between mb-1">
-            <p className="text-[9px] font-bold text-[#ABBED1] uppercase tracking-widest">Top produits</p>
-            <div className="scale-75 origin-right">
-              <DateRangePicker onDateChange={(start, end) => {
-                setTopProduitsDateRange({ start, end });
-                fetchData(false, { containerId: 'topProduits', startDate: start, endDate: end });
-              }} />
-            </div>
+            <p className="text-[10px] font-bold text-[#ABBED1] uppercase tracking-widest">Top produits</p>
+            <DateRangePicker onDateChange={(start, end) => {
+              setTopProduitsDateRange({ start, end });
+              fetchData(false, { containerId: 'topProduits', startDate: start, endDate: end });
+            }} />
           </div>
-          <p className="text-[11px] font-semibold text-[#0F172A] mb-2">Par produit</p>
+          <p className="text-[12px] font-semibold text-[#0F172A] mb-2">Par produit</p>
           {loading ? <p className="text-[11px] text-[#8A9BB5] py-4">Chargement…</p> : (
-            <div className="flex items-center justify-center flex-1 min-h-[120px]">
-              <div className="scale-[0.65] origin-center">
-                <PieChart data={filteredTopProduits || topProduits} />
-              </div>
+            <div className="flex items-center justify-center flex-1 min-h-[140px]">
+              <PieChart data={filteredTopProduits || topProduits} />
             </div>
           )}
         </div>
 
         {/* Source — Visites du site */}
-        <div className="bg-white rounded-2xl border border-[#E2E8F0] p-2.5 shadow-sm flex flex-col">
-          <div className="flex items-center justify-between mb-0.5">
-            <p className="text-[9px] font-bold text-[#ABBED1] uppercase tracking-widest">Site public</p>
-            <div className="scale-75 origin-right">
-              <DateRangePicker onDateChange={(start, end) => {
-                setVisitesDateRange({ start, end });
-                fetchData(false, { containerId: 'visites', startDate: start, endDate: end });
-              }} />
-            </div>
+        <div className="bg-white rounded-2xl border border-[#E2E8F0] p-3.5 shadow-sm flex flex-col">
+          <div className="flex items-center justify-between mb-1">
+            <p className="text-[10px] font-bold text-[#ABBED1] uppercase tracking-widest">Site public</p>
+            <DateRangePicker onDateChange={(start, end) => {
+              setVisitesDateRange({ start, end });
+              fetchData(false, { containerId: 'visites', startDate: start, endDate: end });
+            }} />
           </div>
-          <div className="flex items-end gap-2 mb-1.5">
-            <span className="text-[18px] font-extrabold text-[#0F172A] leading-none">{(filteredAnalyticsData || analyticsData).monthly.total.toLocaleString('fr-FR')}</span>
-            <span className="text-[9px] font-semibold text-[#8A9BB5] pb-0.5">visites ce mois</span>
+          <div className="flex items-end gap-2 mb-2">
+            <span className="text-[20px] font-extrabold text-[#0F172A] leading-none">{(filteredAnalyticsData || analyticsData).monthly.total.toLocaleString('fr-FR')}</span>
+            <span className="text-[10px] font-semibold text-[#8A9BB5] pb-0.5">visites ce mois</span>
           </div>
           {loading ? <p className="text-[11px] text-[#8A9BB5]">Chargement…</p> : <CategoryPageViewsChart data={(filteredAnalyticsData || analyticsData).weekly} />}
         </div>
@@ -752,29 +771,32 @@ export default function DashboardPage() {
       <div className="grid grid-cols-2 gap-3 md:gap-6 mt-6 md:mt-8">
         {/* Carte 1 : toggle Commandes ce mois / Devis ce mois + Graphique évolution */}
         <div className="bg-white rounded-2xl border border-[#E4EBF5] p-3 md:p-5 shadow-sm">
-          {/* Mobile: titre + boutons sur une ligne, DateRangePicker en dessous */}
+          {/* Mobile : toggle, puis filtre, puis titre — chacun sa ligne (pas de
+              graphe sur mobile, cf. plus bas). */}
           <div className="md:hidden">
-            <div className="flex items-center gap-2 mb-2">
-              <p className="text-[9px] font-bold text-[#ABBED1] uppercase tracking-widest truncate">
-                {moisTab === 'commandes' ? 'Commandes' : 'Devis'}
-              </p>
-              <div className="flex items-center gap-0.5 bg-[#F2F4F7] rounded-lg p-0.5">
-                <button onClick={() => setMoisTab('commandes')}
-                  className={`px-1.5 py-0.5 rounded-md text-[9px] font-bold transition-colors ${moisTab === 'commandes' ? 'bg-white text-[#0F172A] shadow-sm' : 'text-[#8A9BB5]'}`}>
-                  Cmd
-                </button>
-                <button onClick={() => setMoisTab('devis')}
-                  className={`px-1.5 py-0.5 rounded-md text-[9px] font-bold transition-colors ${moisTab === 'devis' ? 'bg-white text-[#0F172A] shadow-sm' : 'text-[#8A9BB5]'}`}>
-                  Devis
-                </button>
-              </div>
+            {/* "Cmd" plutôt que "Commandes" : à côté de "Devis" ça touchait/dépassait
+                le bord droit de la carte sur mobile (p-3, peu de largeur disponible).
+                Texte inactif assombri (#64748B au lieu de #8A9BB5) — trop pâle avant,
+                illisible sur le fond gris clair de la pilule. */}
+            <div className="flex items-center gap-0.5 bg-[#F2F4F7] rounded-lg p-0.5 w-fit mb-2">
+              <button onClick={() => setMoisTab('commandes')}
+                className={`px-3 py-1 rounded-md text-[11px] font-bold transition-colors ${moisTab === 'commandes' ? 'bg-white text-[#0F172A] shadow-sm' : 'text-[#64748B]'}`}>
+                Cmd
+              </button>
+              <button onClick={() => setMoisTab('devis')}
+                className={`px-3 py-1 rounded-md text-[11px] font-bold transition-colors ${moisTab === 'devis' ? 'bg-white text-[#0F172A] shadow-sm' : 'text-[#64748B]'}`}>
+                Devis
+              </button>
             </div>
-            <div className="mb-3">
+            <div className="mb-2">
               <DateRangePicker onDateChange={(start, end) => {
                 setCommandesDevisDateRange({ start, end });
                 fetchData(false, { containerId: 'commandesDevis', startDate: start, endDate: end });
               }} />
             </div>
+            <p className="text-[10px] font-bold text-[#ABBED1] uppercase tracking-widest mb-2">
+              {moisTab === 'commandes' ? 'Commandes' : 'Devis'}
+            </p>
           </div>
 
           {/* Desktop: layout original */}
@@ -828,8 +850,9 @@ export default function DashboardPage() {
             </>
           )}
           
-          {/* Graphique d'évolution sur 6 mois */}
-          <div className="mt-2 md:mt-6">
+          {/* Graphique d'évolution sur 6 mois — desktop uniquement (carte mobile
+              volontairement épurée : juste le chiffre, pas de graphe). */}
+          <div className="hidden md:block md:mt-6">
             <TrendLineChart data={serie6Mois} />
           </div>
         </div>
@@ -847,31 +870,28 @@ export default function DashboardPage() {
           const atteint = objectif > 0 && ventes >= objectif;
           return (
             <div className="bg-white rounded-2xl border border-[#E4EBF5] p-3 md:p-5 shadow-sm">
-              {/* Mobile: titre + sélecteur sur une ligne, DateRangePicker en dessous */}
+              {/* Mobile : dropdown commercial, puis filtre, puis titre — chacun sa
+                  ligne (pas de graphe sur mobile, cf. plus bas). */}
               <div className="md:hidden">
-                <div className="flex items-center gap-2 mb-2">
-                  <p className="text-[9px] font-bold text-[#ABBED1] uppercase tracking-widest truncate">
-                    {filteredVentesMois !== null ? 'Ventes' : 'Ventes'}
-                  </p>
-                  {isAdmin && (
-                    <div className="relative max-w-[100px]">
-                      <select value={selectedCommercial} onChange={(e) => setSelectedCommercial(e.target.value)}
-                        className="w-full appearance-none text-[9px] font-bold text-[#374151] border border-[#E2E8F0] rounded-lg pl-2 pr-5 py-1 bg-white cursor-pointer focus:outline-none focus:border-[#4CAF4F] transition-all">
-                        <option value="">Tous</option>
-                        {myId && <option value={myId}>Moi</option>}
-                        {parCommercial.filter((c) => c.id !== myId).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                        {allUsers.filter((u) => u.id !== myId && !parCommercial.find((c) => c.id === u.id)).map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
-                      </select>
-                      <svg className="absolute right-1 top-1/2 -translate-y-1/2 pointer-events-none text-[#8A9BB5]" width={10} height={10} viewBox="0 0 24 24" fill="none"><path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                    </div>
-                  )}
-                </div>
-                <div className="mb-3">
+                {isAdmin && (
+                  <div className="relative w-full mb-2">
+                    <select value={selectedCommercial} onChange={(e) => setSelectedCommercial(e.target.value)}
+                      className="w-full appearance-none text-[11px] font-bold text-[#374151] border border-[#E2E8F0] rounded-lg pl-2.5 pr-7 py-1.5 bg-white cursor-pointer focus:outline-none focus:border-[#4CAF4F] transition-all">
+                      <option value="">Toute l&apos;entreprise</option>
+                      {myId && <option value={myId}>Mes ventes</option>}
+                      {parCommercial.filter((c) => c.id !== myId).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                      {allUsers.filter((u) => u.id !== myId && !parCommercial.find((c) => c.id === u.id)).map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+                    </select>
+                    <svg className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-[#8A9BB5]" width={12} height={12} viewBox="0 0 24 24" fill="none"><path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                  </div>
+                )}
+                <div className="mb-2">
                   <DateRangePicker onDateChange={(start, end) => {
                     setVentesDateRange({ start, end });
                     fetchData(false, { containerId: 'ventes', startDate: start, endDate: end, userId: selectedCommercial || null });
                   }} />
                 </div>
+                <p className="text-[10px] font-bold text-[#ABBED1] uppercase tracking-widest mb-2">Ventes</p>
               </div>
 
               {/* Desktop: layout original */}
@@ -932,9 +952,10 @@ export default function DashboardPage() {
                 </p>
               )}
               
-              {/* Graphique d'évolution des ventes sur 6 mois */}
+              {/* Graphique d'évolution des ventes sur 6 mois — desktop uniquement
+                  (carte mobile volontairement épurée : juste le chiffre, pas de graphe). */}
               {isTotal && (
-                <div className="mt-2 md:mt-6">
+                <div className="hidden md:block md:mt-6">
                   <SalesLineChart data={filteredSerie6MoisVentes || serie6MoisVentes} />
                 </div>
               )}
@@ -956,8 +977,8 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* Wilaya Chart */}
-          <div className="relative">
+          {/* Wilaya Chart — caché sur mobile uniquement, reste visible sur desktop */}
+          <div className="relative hidden md:block">
             <div className="absolute top-5 right-5 z-10">
               <DateRangePicker onDateChange={(start, end) => {
                 setWilayaDateRange({ start, end });
@@ -968,15 +989,9 @@ export default function DashboardPage() {
           </div>
         </div>
         
-        {/* Colonne droite : Conversion */}
-        <div className="relative">
-          <div className="absolute top-5 right-5 z-10">
-            <DateRangePicker onDateChange={(start, end) => {
-              setConversionDateRange({ start, end });
-              fetchData(false, { containerId: 'conversion', startDate: start, endDate: end });
-            }} />
-          </div>
-          <ConversionRateChart data={filteredConversionRates || conversionRates} />
+        {/* Colonne droite : Liste d'achat / Liste de production */}
+        <div>
+          <StockListsWidget />
         </div>
       </div>
 
@@ -1041,7 +1056,6 @@ export default function DashboardPage() {
           onStatusChange={async (_ref, newStatut) => {
             const item = selectedRequest;
             if (!item?.id) return;
-            const UI_TO_DB: Record<string, string> = { 'En attente': 'EN_ATTENTE', 'Confirmé': 'VALIDE', 'Livré': 'LIVRE', 'Annulé': 'ANNULE' };
             const endpoint = item.type === 'Devis' ? `/api/quotes/${item.id}` : `/api/orders/${item.id}`;
             await fetch(endpoint, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: UI_TO_DB[newStatut] ?? newStatut }) });
             setSelectedRequest(null);

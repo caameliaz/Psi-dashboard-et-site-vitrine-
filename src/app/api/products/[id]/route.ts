@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { requirePermission } from '@/lib/permissions';
 import { createAudit } from '@/lib/audit';
+import { resyncProductionLine, resyncPurchaseLineForProduct, reallocateAvailableStock } from '@/lib/order-stock';
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -15,6 +16,7 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
 
   try {
     const body = await request.json();
+    const before = body.available !== undefined ? await prisma.product.findUnique({ where: { id }, select: { available: true } }) : null;
 
     const product = await prisma.product.update({
       where: { id },
@@ -28,9 +30,19 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
         ...(body.price !== undefined && { price: Number(body.price) }),
         ...(body.photo !== undefined && { photo: body.photo }),
         ...(body.active !== undefined && { active: body.active }),
+        ...(body.visibleOnSite !== undefined && { visibleOnSite: body.visibleOnSite }),
         ...(body.categoryId !== undefined && { categoryId: body.categoryId }),
+        ...(body.mode !== undefined && { mode: body.mode }),
+        ...(body.purchasePrice !== undefined && { purchasePrice: body.purchasePrice != null ? Number(body.purchasePrice) : null }),
+        ...(body.stockMax !== undefined && { stockMax: Number(body.stockMax) }),
+        ...(body.available !== undefined && { available: Number(body.available) }),
+        ...(body.reserved !== undefined && { reserved: Number(body.reserved) }),
+        ...(body.inDelivery !== undefined && { inDelivery: Number(body.inDelivery) }),
+        ...(body.returned !== undefined && { returned: Number(body.returned) }),
+        ...(body.purchaseThreshold !== undefined && { purchaseThreshold: Number(body.purchaseThreshold) }),
+        ...(body.productionThreshold !== undefined && { productionThreshold: Number(body.productionThreshold) }),
       },
-      include: { category: true, customFields: { include: { definition: true } } },
+      include: { category: true, customFields: { include: { definition: true } }, recipeItems: { include: { rawMaterial: true } } },
     });
 
     const action = body.active !== undefined && !body.reference
@@ -38,6 +50,21 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
       : 'Produit modifié';
     const prodLabel = product.name ? `${product.name} (${product.reference})` : product.reference;
     createAudit({ userId: session?.user?.id, action, entity: 'PRODUIT', entityId: id, detail: prodLabel });
+
+    // Champs qui influent sur le besoin/buffer (stock max/seuils ou `available` modifié
+    // directement ici) → recalcul immédiat, uniquement sur ce produit.
+    if (body.stockMax !== undefined || body.purchaseThreshold !== undefined || body.productionThreshold !== undefined || body.available !== undefined) {
+      if (before && body.available !== undefined && Number(body.available) > before.available) {
+        // Disponible en hausse → sert d'abord les commandes en attente (FIFO) avant de
+        // laisser le reliquat compter comme simple buffer (reallocate recalcule aussi les
+        // deux lignes à la fin).
+        await reallocateAvailableStock(id);
+      } else {
+        await resyncProductionLine(id);
+        await resyncPurchaseLineForProduct(id);
+      }
+    }
+
     return NextResponse.json(product);
   } catch (e) {
     console.error(e);

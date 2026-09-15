@@ -4,6 +4,10 @@ import { requirePermission, hasPermission } from '@/lib/permissions';
 import { createAudit, statusLabel } from '@/lib/audit';
 import { createNotif } from '@/lib/notifications';
 import { notifyStatusChange, notifyAssignment } from '@/lib/notify-activity';
+import { confirmStock, cancelStock, deliverStock, returnStock, releaseOrderItemStock, adjustOrderItemQuantity, forceCompleteOrder, previewForceCompleteShortfall, syncCommercialAssignmentForParent } from '@/lib/order-stock';
+
+// Statuts où les lignes ne peuvent plus être modifiées (déjà sorties du stock/annulées)
+const LOCKED_STATUSES = ['LIVRE', 'ANNULE', 'RETOURNE'];
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -55,29 +59,107 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
       return NextResponse.json({ error: "Vous n'avez pas la permission de ré-assigner le client" }, { status: 403 });
     }
 
+    // Devis prioritaire — même règle que pour les commandes (cf. orders/[id]/route.ts). Ne
+    // déclenche rien d'immédiat : compte juste comme "le plus ancien" au prochain calcul FIFO.
+    if (body.priority !== undefined) {
+      const statusNow = body.status !== undefined ? body.status : (await prisma.quote.findUnique({ where: { id }, select: { status: true } }))?.status;
+      if (statusNow !== 'VALIDE') {
+        return NextResponse.json({ error: 'La priorité ne peut être définie que sur un devis confirmé (Validé) et pas encore produit' }, { status: 400 });
+      }
+    }
+
+    // Auto-attribution au commercial — même règle que pour les commandes (cf. orders/[id]/route.ts).
+    if (body.autoAssignStock !== undefined) {
+      const current = await prisma.quote.findUnique({ where: { id }, select: { status: true, assignedToId: true } });
+      const statusNow = body.status !== undefined ? body.status : current?.status;
+      if (statusNow !== 'EN_ATTENTE' && statusNow !== 'VALIDE') {
+        return NextResponse.json({ error: "L'auto-attribution au commercial n'est modifiable qu'en attente ou confirmé" }, { status: 400 });
+      }
+      const assignedToIdNow = body.assignedToId !== undefined ? body.assignedToId : current?.assignedToId;
+      if (body.autoAssignStock && !assignedToIdNow) {
+        return NextResponse.json({ error: "Assigne d'abord un commercial (Pris en charge par) avant d'activer l'auto-attribution" }, { status: 400 });
+      }
+    }
+
+    // "Marquer Produit" — même vérification préalable que pour les commandes (cf. plus haut) :
+    // blocage (409), sauf si `body.force` (l'utilisateur a choisi de continuer quand même —
+    // cf. orders/[id]/route.ts pour le détail du comportement).
+    if (body.status === 'PRODUITE' && !body.force) {
+      const shortfall = await previewForceCompleteShortfall('quote', id);
+      if (shortfall.length > 0) {
+        return NextResponse.json({ error: 'PRODUCT_SHORTFALL', shortfall }, { status: 409 });
+      }
+    }
+
     // Modification des produits du devis (comme pour les commandes).
     // Un devis peut porter un prix unitaire par ligne (facultatif) → conservé
     // pour le détail, le PDF et l'Excel, en plus du total global (proposedPrice).
+    let current: { status: string } | null = null;
     if (body.items && Array.isArray(body.items)) {
-      const current = await prisma.quote.findUnique({ where: { id }, select: { status: true } });
-      if (current && (current.status === 'LIVRE' || current.status === 'ANNULE')) {
-        return NextResponse.json({ error: 'Impossible de modifier un devis livré ou annulé' }, { status: 409 });
+      current = await prisma.quote.findUnique({ where: { id }, select: { status: true } });
+      if (current && LOCKED_STATUSES.includes(current.status)) {
+        return NextResponse.json({ error: 'Impossible de modifier un devis livré, retourné ou annulé' }, { status: 409 });
       }
       // Une référence LIBRE n'a pas de productId : son libellé est dans `description`.
       const validItems = (body.items as { productId?: string; description?: string; quantity?: number; metrage?: number; unitPrice?: number }[])
         .filter((it) => (it.productId || (it.description && it.description.trim() !== '')) && (it.quantity ?? 0) > 0);
-      await prisma.quoteItem.deleteMany({ where: { quoteId: id } });
-      if (validItems.length > 0) {
-        await prisma.quoteItem.createMany({
-          data: validItems.map((it) => ({
-            quoteId: id,
-            productId: it.productId || null,
-            description: it.productId ? null : (it.description ?? null),
-            quantity: it.quantity!,
-            metrage: it.metrage ?? null,
-            unitPrice: it.unitPrice != null ? Number(it.unitPrice) : null,
-          })),
-        });
+
+      const isConfirmed = current && (current.status === 'VALIDE' || current.status === 'PRODUITE');
+      if (isConfirmed) {
+        // Devis déjà confirmé : on ne rejoue le moteur de stock QUE pour ce qui change
+        // réellement (cf. même correctif que pour les commandes, order-stock.ts) — sinon
+        // une simple hausse/baisse de quantité peut fusionner avec la ligne de liste
+        // d'une AUTRE commande/devis du même produit (une seule ligne partagée par produit).
+        const existingItems = await prisma.quoteItem.findMany({ where: { quoteId: id } });
+        const existingByProduct = new Map(existingItems.filter((e) => e.productId).map((e) => [e.productId as string, e]));
+        const newProductIds = new Set(validItems.filter((it) => it.productId).map((it) => it.productId as string));
+
+        for (const [productId, existing] of existingByProduct) {
+          if (!newProductIds.has(productId)) await releaseOrderItemStock('quote', existing.id);
+        }
+        await prisma.quoteItem.deleteMany({ where: { quoteId: id, productId: null } });
+        await prisma.quoteItem.deleteMany({ where: { quoteId: id, productId: { notIn: Array.from(newProductIds) } } });
+
+        for (const it of validItems) {
+          if (it.productId) {
+            const existing = existingByProduct.get(it.productId);
+            if (existing) {
+              if (existing.quantity !== it.quantity) await adjustOrderItemQuantity('quote', existing.id, it.quantity!);
+              await prisma.quoteItem.update({
+                where: { id: existing.id },
+                data: {
+                  metrage: it.metrage ?? existing.metrage,
+                  unitPrice: it.unitPrice != null ? Number(it.unitPrice) : existing.unitPrice,
+                },
+              });
+              continue;
+            }
+          }
+          await prisma.quoteItem.create({
+            data: {
+              quoteId: id,
+              productId: it.productId || null,
+              description: it.productId ? null : (it.description ?? null),
+              quantity: it.quantity!,
+              metrage: it.metrage ?? null,
+              unitPrice: it.unitPrice != null ? Number(it.unitPrice) : null,
+            },
+          });
+        }
+      } else {
+        await prisma.quoteItem.deleteMany({ where: { quoteId: id } });
+        if (validItems.length > 0) {
+          await prisma.quoteItem.createMany({
+            data: validItems.map((it) => ({
+              quoteId: id,
+              productId: it.productId || null,
+              description: it.productId ? null : (it.description ?? null),
+              quantity: it.quantity!,
+              metrage: it.metrage ?? null,
+              unitPrice: it.unitPrice != null ? Number(it.unitPrice) : null,
+            })),
+          });
+        }
       }
     }
 
@@ -108,6 +190,8 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
       where: { id },
       data: {
         ...(body.status !== undefined && { status: body.status }),
+        ...(body.priority !== undefined && { priority: Boolean(body.priority) }),
+        ...(body.autoAssignStock !== undefined && { autoAssignStock: Boolean(body.autoAssignStock) }),
         // Facturation / règlement — modifiables après validation
         ...(body.invoiceNumber !== undefined && { invoiceNumber: body.invoiceNumber || null }),
         ...(body.paymentMethod !== undefined && { paymentMethod: body.paymentMethod || null }),
@@ -129,9 +213,50 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
       },
     });
 
-    const action = body.status !== undefined ? `Statut devis : ${statusLabel(body.status)}` : 'Devis modifié';
+    const action = body.status !== undefined ? `Statut devis : ${statusLabel(body.status)}`
+      : body.priority !== undefined ? (body.priority ? 'Devis marqué prioritaire' : 'Priorité retirée du devis')
+      : body.autoAssignStock !== undefined ? (body.autoAssignStock ? 'Auto-attribution au commercial activée' : 'Auto-attribution au commercial désactivée')
+      : 'Devis modifié';
     const quoteLabel = quote.clientCompany || quote.clientName || quote.client?.name || '';
     createAudit({ userId: session.user.id, action, entity: 'DEVIS', entityId: id, detail: quoteLabel ? `${quote.ref} — ${quoteLabel}` : (quote.ref ?? id), quoteId: id });
+
+    // ── Répercussion sur le stock selon la transition de statut ────────────────
+    try {
+      if (body.autoAssignStock !== undefined) {
+        await syncCommercialAssignmentForParent('quote', id);
+      }
+
+      if (body.status === 'VALIDE') {
+        await confirmStock('quote', id);
+      } else if (body.status === 'PRODUITE') {
+        // "Marquer Produit" — résout la part manquante de chaque article (matière première
+        // + liste d'achat/production), la confirmation d'un éventuel manquant a déjà eu lieu
+        // plus haut (cf. previewForceCompleteShortfall). `force: true` accepte l'écart restant
+        // sans stock fictif — tracé dans l'audit si un manquant a réellement été accepté.
+        const phantom = await forceCompleteOrder('quote', id, { force: !!body.force });
+        if (phantom.length > 0) {
+          createAudit({
+            userId: session.user.id, action: 'Marqué produit malgré un manquant (forcé)', entity: 'DEVIS', entityId: id,
+            detail: phantom.map((p) => `${p.reference} — ${p.missing} manquant(s)`).join(', '), quoteId: id,
+          });
+        }
+      } else if (body.status === 'ANNULE') {
+        await cancelStock('quote', id);
+      } else if (body.status === 'LIVRE') {
+        await deliverStock('quote', id);
+      } else if (body.status === 'RETOURNE') {
+        await returnStock('quote', id);
+      } else if (body.items !== undefined && (current?.status === 'VALIDE' || current?.status === 'PRODUITE')) {
+        await confirmStock('quote', id);
+        if (current.status === 'PRODUITE') {
+          const items = await prisma.quoteItem.findMany({ where: { quoteId: id } });
+          const allResolved = items.every((i) => i.stockPath === 'FROM_STOCK' || i.resolvedQuantity >= i.quantity);
+          if (!allResolved) await prisma.quote.update({ where: { id }, data: { status: 'VALIDE' } });
+        }
+      }
+    } catch (stockError) {
+      console.error('[quotes] Erreur de mise à jour du stock :', stockError);
+    }
 
     // Modification des PRODUITS (sans changement de statut) → notification aussi.
     if (body.items !== undefined && body.status === undefined) {

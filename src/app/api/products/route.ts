@@ -16,10 +16,14 @@ export async function GET(request: NextRequest) {
 
   try {
     const products = await prisma.product.findMany({
-      where: all ? undefined : { active: true },
+      // Dashboard (?all=true) : tous les produits, quel que soit leur statut.
+      // Site public : actif ET visible sur le site — deux cases indépendantes
+      // (un produit peut être actif/géré au dashboard sans être affiché en vitrine).
+      where: all ? undefined : { active: true, visibleOnSite: true },
       include: {
         category: true,
         customFields: { include: { definition: true } },
+        recipeItems: { include: { rawMaterial: true } },
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -61,6 +65,11 @@ export async function POST(request: NextRequest) {
       reference = body.reference;
     }
 
+    // Stock max : fourni, sinon valeur par défaut du schéma (140). Sert de base au
+    // calcul des seuils par défaut (50%) quand ils ne sont pas fournis explicitement.
+    const stockMax = body.stockMax != null ? Number(body.stockMax) : 140;
+    const defaultThreshold = Math.round(stockMax * 0.5);
+
     const product = await prisma.product.create({
       data: {
         reference,
@@ -72,9 +81,16 @@ export async function POST(request: NextRequest) {
         price: Number(body.price),
         photo: body.photo ?? null,
         active: body.active ?? true,
+        visibleOnSite: body.visibleOnSite ?? true,
         categoryId: body.categoryId,
+        stockMax,
+        ...(body.mode !== undefined && { mode: body.mode }),
+        ...(body.purchasePrice !== undefined && { purchasePrice: body.purchasePrice != null ? Number(body.purchasePrice) : null }),
+        ...(body.available !== undefined && { available: Number(body.available) }),
+        purchaseThreshold: body.purchaseThreshold != null ? Number(body.purchaseThreshold) : defaultThreshold,
+        productionThreshold: body.productionThreshold != null ? Number(body.productionThreshold) : defaultThreshold,
       },
-      include: { category: true, customFields: { include: { definition: true } } },
+      include: { category: true, customFields: { include: { definition: true } }, recipeItems: { include: { rawMaterial: true } } },
     });
 
     const prodLabel = product.name ? `${product.name} (${product.reference})` : product.reference;

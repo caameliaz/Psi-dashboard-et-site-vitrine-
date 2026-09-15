@@ -54,13 +54,14 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      // 2FA ACTIVÉ - envoi du code OTP
-      if (step === 'credentials') {
-        await sendOtp();
-        setLoading(false);
-        return;
-      }
-      
+      // 2FA TEMPORAIREMENT DÉSACTIVÉ (dev en cours) — on saute l'étape OTP
+      // et on se connecte directement après email + mot de passe.
+      // if (step === 'credentials') {
+      //   await sendOtp();
+      //   setLoading(false);
+      //   return;
+      // }
+
       // Vérification du code OTP (step === 'otp')
       const res = await signIn('credentials', {
         email,
@@ -72,7 +73,10 @@ export default function LoginPage() {
 
       // NextAuth v5 : identifiants faux → res.error présent OU res.ok === false
       if (!res || res.error || res.ok === false) {
-        setError('Code incorrect ou expiré.');
+        // Le 2FA étant désactivé (cf. commentaire plus haut), on n'atteint jamais
+        // vraiment l'étape OTP ici — l'échec ne peut venir que d'un email/mot de
+        // passe invalide, pas d'un code de vérification.
+        setError(step === 'otp' ? 'Code incorrect ou expiré.' : 'Identifiant ou mot de passe incorrect.');
         setLoading(false);
         return;
       }

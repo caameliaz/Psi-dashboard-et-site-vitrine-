@@ -12,7 +12,9 @@ export const DB_TO_UI: Record<string, string> = {
   EN_ATTENTE: 'En attente',
   CONTACTE: 'En attente',
   VALIDE: 'Confirmé',
+  PRODUITE: 'Disponible',
   LIVRE: 'Livré',
+  RETOURNE: 'Retourné',
   ANNULE: 'Annulé',
 };
 
@@ -20,7 +22,9 @@ export const DB_TO_UI: Record<string, string> = {
 export const UI_TO_DB: Record<string, string> = {
   'En attente': 'EN_ATTENTE',
   'Confirmé': 'VALIDE',
+  'Disponible': 'PRODUITE',
   'Livré': 'LIVRE',
+  'Retourné': 'RETOURNE',
   'Annulé': 'ANNULE',
 };
 
@@ -82,6 +86,9 @@ export function orderToDetail(o: any, fallback?: ClientFallback): RequestDetail 
     statut: DB_TO_UI[o.status] ?? o.status,
     assignedToId: o.assignedTo?.id ?? o.assignedToId ?? null,
     assignedToName: o.assignedTo?.name ?? null,
+    // Le nom est résolu côté appelant (liste `users` déjà chargée) — cf. requests/page.tsx.
+    clientAssignedToId: o.client?.assignedToId ?? null,
+    autoAssignStock: Boolean(o.autoAssignStock),
     invoiceNumber: o.invoiceNumber ?? null,
     paymentMethod: o.paymentMethod ?? null,
     paymentDate: o.paymentDate ? new Date(o.paymentDate).toLocaleDateString('fr-FR') : null,
@@ -90,6 +97,7 @@ export function orderToDetail(o: any, fallback?: ClientFallback): RequestDetail 
     // renseigne depuis vatEnabled pour n'avoir QU'UNE source de vérité.
     tva: Boolean(o.vatEnabled),
     salesRepName: o.salesRepName ?? null,
+    priority: Boolean(o.priority),
     date: new Date(o.createdAt).toLocaleDateString('fr-FR'),
     heure: new Date(o.createdAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
   };
@@ -130,6 +138,8 @@ export function quoteToDetail(q: any, fallback?: ClientFallback): RequestDetail 
     statut: DB_TO_UI[q.status] ?? q.status,
     assignedToId: q.assignedTo?.id ?? q.assignedToId ?? null,
     assignedToName: q.assignedTo?.name ?? null,
+    clientAssignedToId: q.client?.assignedToId ?? null,
+    autoAssignStock: Boolean(q.autoAssignStock),
     invoiceNumber: q.invoiceNumber ?? null,
     paymentMethod: q.paymentMethod ?? null,
     paymentDate: q.paymentDate ? new Date(q.paymentDate).toLocaleDateString('fr-FR') : null,
@@ -138,6 +148,7 @@ export function quoteToDetail(q: any, fallback?: ClientFallback): RequestDetail 
     // renseigne depuis vatEnabled pour n'avoir QU'UNE source de vérité.
     tva: Boolean(q.vatEnabled),
     salesRepName: q.salesRepName ?? null,
+    priority: Boolean(q.priority),
     date: new Date(q.createdAt).toLocaleDateString('fr-FR'),
     heure: new Date(q.createdAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
     message: q.message ?? '',

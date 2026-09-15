@@ -19,6 +19,11 @@ export function AdminSelect({ value, onChange, options, className = '' }: AdminS
 
   const selected = options.find((o) => o.value === value);
 
+  // Sur desktop : clic en dehors du menu = fermeture (comportement dropdown classique).
+  // Sur mobile, le menu devient une pop-up centrée avec son propre overlay qui gère déjà
+  // la fermeture au clic à côté — ce handler-ci ne doit alors pas interférer, mais comme
+  // le menu mobile est rendu DANS le même DOM que le bouton (ref.current le contient),
+  // il n'y a pas de conflit : un tap sur l'overlay mobile est hors de `ref`.
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
@@ -50,23 +55,52 @@ export function AdminSelect({ value, onChange, options, className = '' }: AdminS
       </button>
 
       {open && (
-        <div className="absolute left-0 top-[calc(100%+6px)] z-[9999] bg-white border border-[#E2E8F0] rounded-xl shadow-[0_8px_32px_rgba(171,190,209,0.45)] overflow-hidden min-w-full">
-          {options.map((opt) => (
-            <button
-              key={opt.value}
-              type="button"
-              onClick={() => { onChange(opt.value); setOpen(false); }}
-              className="w-full text-left px-4 py-2.5 text-[14px] transition-colors hover:bg-[#F0FDF4] hover:text-[#166534]"
-              style={{
-                background: opt.value === value ? '#F0FDF4' : 'transparent',
-                color: opt.value === value ? '#166534' : '#263238',
-                fontWeight: opt.value === value ? 600 : 400,
-              }}
+        <>
+          {/* Mobile : pop-up centrée à l'écran, par-dessus tout (évite le menu qui
+              dépasse du bord quand le bouton est proche du bord de l'écran). */}
+          <div className="md:hidden fixed inset-0 z-[9999] flex items-center justify-center px-6" onClick={() => setOpen(false)}>
+            <div className="absolute inset-0 bg-black/30" />
+            <div
+              className="relative w-full max-w-xs max-h-[70vh] overflow-y-auto bg-white border border-[#E2E8F0] rounded-2xl shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
             >
-              {opt.label}
-            </button>
-          ))}
-        </div>
+              {options.map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => { onChange(opt.value); setOpen(false); }}
+                  className="w-full text-left px-4 py-3 text-[14px] transition-colors hover:bg-[#F0FDF4] hover:text-[#166534] border-b border-[#F2F4F7] last:border-0"
+                  style={{
+                    background: opt.value === value ? '#F0FDF4' : 'transparent',
+                    color: opt.value === value ? '#166534' : '#263238',
+                    fontWeight: opt.value === value ? 600 : 400,
+                  }}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Desktop : dropdown classique positionné sous le bouton. */}
+          <div className="hidden md:block absolute left-0 top-[calc(100%+6px)] z-[9999] bg-white border border-[#E2E8F0] rounded-xl shadow-[0_8px_32px_rgba(171,190,209,0.45)] overflow-hidden min-w-full">
+            {options.map((opt) => (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => { onChange(opt.value); setOpen(false); }}
+                className="w-full text-left px-4 py-2.5 text-[14px] transition-colors hover:bg-[#F0FDF4] hover:text-[#166534]"
+                style={{
+                  background: opt.value === value ? '#F0FDF4' : 'transparent',
+                  color: opt.value === value ? '#166534' : '#263238',
+                  fontWeight: opt.value === value ? 600 : 400,
+                }}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </>
       )}
     </div>
   );

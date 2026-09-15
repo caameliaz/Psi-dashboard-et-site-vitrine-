@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { StatusPill } from '@/components/ui/StatusPill';
+import { Modal } from '@/components/ui/Modal';
 import { RequestPanel, type RequestDetail } from '@/components/ui/RequestPanel';
 import { AdminSelect } from '@/components/ui/AdminSelect';
 import { WilayaSelect } from '@/components/ui/WilayaSelect';
@@ -85,8 +86,8 @@ function sortItems(items: RequestDetail[]): RequestDetail[] {
   });
 }
 
-const ALL_STATUTS_COMMANDE = ['En attente', 'Confirmé', 'Livré', 'Annulé'];
-const ALL_STATUTS_DEVIS    = ['En attente', 'Confirmé', 'Livré', 'Annulé'];
+const ALL_STATUTS_COMMANDE = ['En attente', 'Confirmé', 'Disponible', 'Livré', 'Retourné', 'Annulé'];
+const ALL_STATUTS_DEVIS    = ['En attente', 'Confirmé', 'Disponible', 'Livré', 'Retourné', 'Annulé'];
 
 interface Ligne { categoryId: string; ref: string; productId: string | null; qte: number; pu: number; metrage: string; }
 const emptyLigne = (): Ligne => ({ categoryId: '', ref: '', productId: null, qte: 1, pu: 0, metrage: '' });
@@ -182,6 +183,20 @@ export function CreateForm({ defaultType, onClose, onSave, users, currentUserId,
     // Si l'utilisateur ne peut pas assigner de commercial, s'assigner automatiquement
     return canAssignCommercial ? (currentUserId ?? '') : (currentUserId ?? '');
   });
+  // Responsable habituel du client sélectionné via l'autocomplete (si un client existant
+  // a été choisi) — sert à demander confirmation si l'admin assigne à quelqu'un d'autre
+  // (cf. handleAssignedToChange plus bas).
+  const [clientUsualOwnerId, setClientUsualOwnerId] = useState<string | null>(null);
+  const [clientUsualOwnerName, setClientUsualOwnerName] = useState<string | null>(null);
+  const [pendingAssignChange, setPendingAssignChange] = useState<string | null>(null);
+
+  const handleAssignedToChange = (newId: string) => {
+    if (clientUsualOwnerId && newId !== clientUsualOwnerId && newId !== '') {
+      setPendingAssignChange(newId); // demande confirmation avant d'appliquer
+    } else {
+      setAssignedToId(newId);
+    }
+  };
   // Infos de facturation / règlement (toutes facultatives)
   const [invoiceNumber, setInvoiceNumber] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('');
@@ -306,6 +321,12 @@ export function CreateForm({ defaultType, onClose, onSave, users, currentUserId,
                   setEmail(c.email ?? '');
                   setWilaya(c.wilaya ?? '');
                   setCommune(c.commune ?? '');
+                  setClientUsualOwnerId(c.assignedToId ?? null);
+                  setClientUsualOwnerName(c.assignedToId ? (users.find((u) => u.id === c.assignedToId)?.name ?? null) : null);
+                  // Un client existant a un responsable habituel → on l'assigne par
+                  // défaut à lui (cohérent avec l'auto-assignation côté serveur), sauf
+                  // si l'admin change ensuite explicitement (cf. handleAssignedToChange).
+                  if (c.assignedToId) setAssignedToId(c.assignedToId);
                 }}
               />
               {fieldErrors.entreprise && <p className="text-[11px] text-[#EF4444] font-medium mt-1 flex items-center gap-1"><svg width="12" height="12" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" stroke="currentColor" strokeWidth="1.5"/><path d="M8 4v5M8 11v1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>{fieldErrors.entreprise}</p>}
@@ -341,10 +362,30 @@ export function CreateForm({ defaultType, onClose, onSave, users, currentUserId,
               <AdminSelect
                 className="w-full"
                 value={assignedToId}
-                onChange={setAssignedToId}
+                onChange={handleAssignedToChange}
                 options={[{ value: '', label: '— Non assigné —' }, ...users.map(u => ({ value: u.id, label: u.name }))]}
               />
+              {clientUsualOwnerId && assignedToId === clientUsualOwnerId && (
+                <p className="text-[11px] text-[#8A9BB5] mt-1">Responsable habituel de ce client{clientUsualOwnerName ? ` : ${clientUsualOwnerName}` : ''}.</p>
+              )}
             </div>
+          )}
+
+          {pendingAssignChange && (
+            <Modal title="Changer le responsable ?" onClose={() => setPendingAssignChange(null)}>
+              <p className="text-[13px] text-[#374151] mb-1">
+                Ce client est habituellement géré par <span className="font-semibold">{clientUsualOwnerName ?? 'un autre commercial'}</span>.
+              </p>
+              <p className="text-[12px] text-[#8A9BB5] mb-5">Assigner quand même cette demande à <span className="font-semibold">{users.find((u) => u.id === pendingAssignChange)?.name ?? 'ce commercial'}</span> ?</p>
+              <div className="flex gap-3">
+                <button onClick={() => setPendingAssignChange(null)} className="flex-1 px-4 py-2.5 rounded-xl border border-[#E2E8F0] text-[13px] font-semibold text-[#374151]">Annuler</button>
+                <button
+                  onClick={() => { setAssignedToId(pendingAssignChange); setPendingAssignChange(null); }}
+                  className="flex-1 px-4 py-2.5 rounded-xl text-[13px] font-bold text-white bg-[#4CAF4F]">
+                  Oui, changer
+                </button>
+              </div>
+            </Modal>
           )}
 
           {/* ── Facturation / règlement (facultatif) ── */}
@@ -572,14 +613,12 @@ function RequestsPageInner() {
     if (!silent) setLoading(true);
     try {
       // Perf : on ne charge que la période sélectionnée (le serveur filtre par ?from)
+      // La restriction "mes commandes/clients" pour un non-admin est appliquée côté
+      // serveur (cf. src/lib/leave.ts + /api/orders, /api/quotes) — pas besoin de la
+      // repasser en query param ici.
       const from = periodeToFrom(filterPeriode);
-      let qs = from ? `?from=${encodeURIComponent(from)}` : '';
-      
-      // Si pas admin, filtrer par utilisateur actuel
-      if (!isAdmin && currentUserId) {
-        qs += (qs ? '&' : '?') + `assignedToId=${currentUserId}`;
-      }
-      
+      const qs = from ? `?from=${encodeURIComponent(from)}` : '';
+
       const [ordRes, quoRes] = await Promise.all([
         fetch(`/api/orders${qs}`),
         fetch(`/api/quotes${qs}`),
@@ -717,17 +756,39 @@ function RequestsPageInner() {
     return matchSearch && matchStatut && matchAssigne && matchPeriode;
   });
 
-  const handleStatusChange = async (ref: string, newStatut: string) => {
+  const handleStatusChange = async (ref: string, newStatut: string, force = false) => {
     const item = selected ?? rawItems.find((r) => r.ref === ref || r.id === ref);
     if (!item?.id) return;
     const dbStatus = UI_TO_DB[newStatut] ?? newStatut;
     const isItemDevis = item.type === 'Devis';
     const endpoint = isItemDevis ? `/api/quotes/${item.id}` : `/api/orders/${item.id}`;
+
     const res = await fetch(endpoint, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: dbStatus }),
+      body: JSON.stringify({ status: dbStatus, ...(force && { force: true }) }),
     });
+
+    // "Marquer Produit" avec un manquant (rien pour le couvrir, même après avoir cherché dans
+    // le disponible et chez les commandes déjà Produites) → proposé à l'utilisateur avec le
+    // détail du manquant, plutôt qu'un simple blocage : "Continuer quand même" relance la même
+    // action avec `force`, qui marque la part manquante résolue SANS inventer de stock fictif
+    // (cf. forceCompleteOrder, order-stock.ts) — un écart assumé, tracé dans l'audit.
+    if (res.status === 409) {
+      const data = await res.json().catch(() => null);
+      if (data?.error === 'PRODUCT_SHORTFALL') {
+        const shortfall: { reference: string; name: string | null; missing: number }[] = data.shortfall ?? [];
+        const detail = shortfall.map((w) => `• ${w.name ?? w.reference} — ${w.missing} manquant(s)`).join('\n');
+        if (window.confirm(
+          `Il manque du produit fini pour marquer ${isItemDevis ? 'ce devis' : 'cette commande'} produit(e) :\n${detail}\n\n` +
+          'Continuer quand même ? Le manquant sera marqué résolu sans stock réel derrière (écart assumé, visible en audit).'
+        )) {
+          await handleStatusChange(ref, newStatut, true);
+        }
+        return;
+      }
+    }
+
     if (!res.ok) console.error('PATCH failed', await res.text());
     // fetchAll resynchronise le détail ouvert : on ne ferme jamais le panneau,
     // l'utilisateur enchaîne ses actions et ferme lui-même quand il a fini.
@@ -746,6 +807,20 @@ function RequestsPageInner() {
     await fetchAll(true);
     // Met à jour le panneau ouvert avec le nouvel assigné
     setSelected(prev => prev ? { ...prev, assignedToId, assignedToName: users.find(u => u.id === assignedToId)?.name ?? null } : prev);
+  };
+
+  // Coche/décoche "Attribuer automatiquement au commercial" (cf. RequestPanel.tsx) — le
+  // serveur refuse si aucun commercial n'est assigné ou si le statut n'est pas En attente/Confirmé.
+  const handleToggleAutoAssign = async (id: string, type: string, value: boolean) => {
+    const endpoint = type === 'Devis' ? `/api/quotes/${id}` : `/api/orders/${id}`;
+    const res = await fetch(endpoint, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ autoAssignStock: value }),
+    });
+    if (!res.ok) { const err = await res.json().catch(() => ({})); alert(err.error ?? "Échec de l'action"); return; }
+    setSelected(prev => prev ? { ...prev, autoAssignStock: value } : prev);
+    await fetchAll(true);
   };
 
   // Enregistre le prix d'un devis SANS changer son statut. Le prix peut être
@@ -822,7 +897,9 @@ function RequestsPageInner() {
 
   return (
     <div className="w-full max-w-full overflow-x-hidden">
-      {/* Titre + boutons export/création en haut à droite */}
+      {/* Titre + boutons export/création en haut à droite. Sur mobile : "Mes commandes"
+          (raccourci admin) sur la même ligne que le titre, à droite — pas mélangé
+          avec les filtres en dessous. */}
       <div className="flex items-start justify-between flex-wrap gap-3 mb-4">
         <div>
           <h1 className="text-[20px] md:text-[22px] font-bold text-[#0F172A]">Commandes</h1>
@@ -831,6 +908,20 @@ function RequestsPageInner() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          {/* "Mes commandes" — mobile uniquement ici (desktop : reste dans la ligne de
+              filtres, cf. plus bas). Compact : bordure fine, texte réduit. */}
+          {isAdmin && currentUserId && (
+            <button
+              onClick={() => setFilterAssigne((v) => v === currentUserId ? 'all' : currentUserId)}
+              className={`md:hidden px-2.5 py-1.5 rounded-lg text-[11px] font-bold border transition-colors whitespace-nowrap ${
+                filterAssigne === currentUserId
+                  ? 'bg-[#4CAF4F] border-[#4CAF4F] text-white'
+                  : 'bg-white border-[#4CAF4F] text-[#4CAF4F] hover:bg-[#F0FDF4]'
+              }`}
+            >
+              Mes commandes
+            </button>
+          )}
           <button
             onClick={() => exportVentesExcel(activeFilters.join(' | '))}
             className="hidden md:flex items-center gap-1.5 px-3 py-2 rounded-xl text-[13px] font-semibold border border-[#E2E8F0] text-[#374151] hover:bg-[#F8FAFC] hover:border-[#4CAF4F] hover:text-[#4CAF4F] transition-colors"
@@ -859,8 +950,13 @@ function RequestsPageInner() {
             <svg width={14} height={14} fill="none" viewBox="0 0 24 24"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
             Importer
           </button>
+          {/* Mobile : rond + (compact). Desktop : bouton "+ Nouveau" texte. */}
+          <button onClick={() => setShowCreate(true)} title="Nouveau"
+            className="md:hidden w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-full border-2 border-[#4CAF4F] text-[#4CAF4F] hover:bg-[#F0FDF4] transition-colors">
+            <svg width={16} height={16} viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"/></svg>
+          </button>
           <button onClick={() => setShowCreate(true)}
-            className="px-4 py-2 rounded-xl text-[13px] font-bold border border-[#4CAF4F] text-[#4CAF4F] hover:bg-[#F0FDF4] transition-colors whitespace-nowrap">
+            className="hidden md:block px-4 py-2 rounded-xl text-[13px] font-bold border border-[#4CAF4F] text-[#4CAF4F] hover:bg-[#F0FDF4] transition-colors whitespace-nowrap">
             + Nouveau
           </button>
         </div>
@@ -932,6 +1028,21 @@ function RequestsPageInner() {
               ...users.map((u) => ({ value: u.id, label: u.name })),
             ]}
           />
+          {/* Raccourci "Mes commandes" — admin uniquement, DESKTOP seulement (sur
+              mobile, il est maintenant dans la ligne du titre, cf. plus haut).
+              Poussé à droite (ml-auto) ; off = fond blanc/bordure+texte vert, on = vert plein. */}
+          {isAdmin && currentUserId && (
+            <button
+              onClick={() => setFilterAssigne((v) => v === currentUserId ? 'all' : currentUserId)}
+              className={`hidden md:block ml-auto px-3 py-2.5 rounded-xl text-[13px] font-bold border-2 transition-colors whitespace-nowrap flex-shrink-0 ${
+                filterAssigne === currentUserId
+                  ? 'bg-[#4CAF4F] border-[#4CAF4F] text-white'
+                  : 'bg-white border-[#4CAF4F] text-[#4CAF4F] hover:bg-[#F0FDF4]'
+              }`}
+            >
+              Mes commandes
+            </button>
+          )}
         </div>
         {(search || filterStatut !== 'all' || filterPeriode !== 'mois' || filterAssigne !== 'all') && (
           <button onClick={() => { setSearch(''); setFilterStatut('all'); setFilterPeriode('mois'); setFilterAssigne('all'); }} className="text-[12px] font-semibold text-[#8A9BB5] hover:text-[#374151] self-start md:self-auto">Effacer</button>
@@ -1002,6 +1113,7 @@ function RequestsPageInner() {
           users={users}
           onAssign={handleAssign}
           onReassigned={() => { fetchAll(true); }}
+          onToggleAutoAssign={handleToggleAutoAssign}
         />
       )}
       {showImportVentes && (

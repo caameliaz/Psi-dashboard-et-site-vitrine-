@@ -64,6 +64,8 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
         ...(body.sectorId !== undefined && { sectorId: body.sectorId || null }),
         ...(body.address !== undefined && { address: body.address }),
         ...(body.photo !== undefined && { photo: body.photo }),
+        // Responsable habituel du client (cf. src/lib/leave.ts pour la bascule pendant un congé)
+        ...(body.assignedToId !== undefined && { assignedToId: body.assignedToId || null }),
         // Réactivation → efface les infos de désactivation
         ...(body.active === true && { active: true, deactivatedReason: null, deactivatedById: null, deactivatedAt: null }),
       },

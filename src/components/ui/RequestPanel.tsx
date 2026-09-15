@@ -79,12 +79,22 @@ export interface RequestDetail {
   message?: string;
   assignedToId?: string | null;
   assignedToName?: string | null;
+  // Responsable HABITUEL du client (Client.assignedToId — distinct de assignedToId
+  // ci-dessus, qui est le "pris en charge par" DE CETTE demande précise). Sert à
+  // avertir l'admin quand il assigne à quelqu'un d'autre que ce responsable — son
+  // nom est résolu via la prop `users` (déjà chargée par l'appelant).
+  clientAssignedToId?: string | null;
+  // Auto-attribution au commercial (case à cocher, uniquement En attente/Confirmé) — dès que
+  // du stock est réservé pour cette commande/devis, la même quantité est automatiquement
+  // créditée à `assignedToId` (cf. syncCommercialAssignment, order-stock.ts).
+  autoAssignStock?: boolean;
   // Facturation / règlement
   invoiceNumber?: string | null;
   paymentMethod?: string | null;
   paymentDate?: string | null;
   vatEnabled?: boolean;
   salesRepName?: string | null;   // commercial importé, avant rattachement à un compte
+  priority?: boolean;             // commande/devis prioritaire (passe en tête des FIFO du stock)
 }
 
 function getSourceLabel(src: string) { return src === 'SITE' ? 'Site web' : 'Manuel'; }
@@ -858,6 +868,8 @@ interface RequestPanelProps {
   users?: { id: string; name: string }[];
   onAssign?: (id: string, type: string, assignedToId: string | null) => void;
   onReassigned?: () => void; // appelé après un changement de client (refresh SANS toucher au statut)
+  // Case "Attribuer automatiquement au commercial" — cf. RequestDetail.autoAssignStock.
+  onToggleAutoAssign?: (id: string, type: string, value: boolean) => void;
 }
 
 // ── Bouton icône rond ────────────────────────────────────────────────────────
@@ -935,7 +947,7 @@ function ContactDropdown({ title, color, hoverColor, children, options }: {
   );
 }
 
-export function RequestPanel({ item, onClose, onStatusChange, onConfirmQuoteWithPrice, users, onAssign, onReassigned }: RequestPanelProps) {
+export function RequestPanel({ item, onClose, onStatusChange, onConfirmQuoteWithPrice, users, onAssign, onReassigned, onToggleAutoAssign }: RequestPanelProps) {
   // Bloquer le scroll du body quand le panneau est ouvert
   useLockBodyScroll();
   
@@ -950,8 +962,30 @@ export function RequestPanel({ item, onClose, onStatusChange, onConfirmQuoteWith
   const [showPriceModal, setShowPriceModal] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
   const [editingNotes, setEditingNotes] = useState(false);
+  // Confirmation avant d'assigner à quelqu'un de différent du responsable habituel
+  // du client (cf. select "Pris en charge par" plus bas).
+  const [pendingAssignChange, setPendingAssignChange] = useState<string | null>(null);
+
+  const handleAssignChange = (newId: string) => {
+    if (item.clientAssignedToId && newId !== item.clientAssignedToId && newId !== '' && item.id) {
+      setPendingAssignChange(newId);
+    } else if (item.id) {
+      onAssign?.(item.id, item.type, newId || null);
+    }
+  };
 
   const openReassign = () => { setReassignSearch(''); setReassignPicked(null); setReassignReason(''); setShowReassign(true); };
+
+  // Bascule "prioritaire" (togglable tant que Confirmé/pas encore produite) — ne change rien
+  // au reste de la commande, juste son ordre dans les simulations FIFO du stock (cf.
+  // src/lib/order-stock.ts `fifoCompare`). Refresh pur, comme la ré-assignation client.
+  const togglePriority = async () => {
+    if (!item.id) return;
+    const endpoint = item.type === 'Devis' ? `/api/quotes/${item.id}` : `/api/orders/${item.id}`;
+    const res = await fetch(endpoint, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ priority: !item.priority }) });
+    if (!res.ok) { const err = await res.json().catch(() => ({})); alert(err.error ?? 'Action impossible'); return; }
+    onReassigned?.();
+  };
 
   // Ré-assigner la demande à un autre client (permission reassigner_client)
   // Les non-admins doivent justifier → la raison est enregistrée en note interne.
@@ -977,7 +1011,7 @@ export function RequestPanel({ item, onClose, onStatusChange, onConfirmQuoteWith
   const [templateMode, setTemplateMode] = useState<'wa' | 'mail' | 'sms' | null>(null);
   const [emailOverride, setEmailOverride] = useState('');
   const isCommande = item.type === 'Commande';
-  const isArchived = item.statut === 'Livré' || item.statut === 'Annulé';
+  const isArchived = item.statut === 'Livré' || item.statut === 'Annulé' || item.statut === 'Retourné';
 
   // Fil de notes (auteur + date) — table RequestNote
   const notesBase = isCommande ? `/api/orders/${item.id}/notes` : `/api/quotes/${item.id}/notes`;
@@ -1190,7 +1224,7 @@ export function RequestPanel({ item, onClose, onStatusChange, onConfirmQuoteWith
                   <div className="relative">
                     <select
                       value={item.assignedToId ?? ''}
-                      onChange={(e) => item.id && onAssign(item.id, item.type, e.target.value || null)}
+                      onChange={(e) => handleAssignChange(e.target.value)}
                       className="w-full appearance-none pl-3 pr-9 py-2.5 rounded-xl border border-[#E2E8F0] text-[13px] font-medium text-[#374151] focus:outline-none focus:border-[#4CAF4F] focus:ring-[3px] focus:ring-[#4CAF4F]/15 transition-all bg-white cursor-pointer">
                       <option value="">— Non assigné —</option>
                       {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
@@ -1248,6 +1282,29 @@ export function RequestPanel({ item, onClose, onStatusChange, onConfirmQuoteWith
                   </div>
                 );
               })()}
+
+              {/* Auto-attribution au commercial — uniquement En attente/Confirmé (cf.
+                  Order.autoAssignStock), et seulement si un commercial est assigné. */}
+              {(item.statut === 'En attente' || item.statut === 'Confirmé') && canModifierStatuts && onToggleAutoAssign && (
+                <label
+                  title={item.assignedToId ? undefined : "Assigne d'abord un commercial (\"Pris en charge par\") pour activer ceci"}
+                  className={`flex items-start gap-2.5 px-4 py-3 rounded-xl border border-[#F2F4F7] ${item.assignedToId ? 'cursor-pointer' : 'opacity-50 cursor-not-allowed'}`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={Boolean(item.autoAssignStock)}
+                    disabled={!item.assignedToId}
+                    onChange={(e) => onToggleAutoAssign(item.id!, item.type, e.target.checked)}
+                    className="w-4 h-4 mt-0.5 flex-shrink-0"
+                  />
+                  <span>
+                    <span className="block text-[12px] font-bold text-[#0F172A]">Attribuer automatiquement au commercial</span>
+                    <span className="block text-[11px] text-[#8A9BB5] mt-0.5">
+                      Dès que du stock est réservé pour {isCommande ? 'cette commande' : 'ce devis'}, il est crédité à {item.assignedToName ?? 'son commercial'} automatiquement.
+                    </span>
+                  </span>
+                </label>
+              )}
 
             </div>
           </div>
@@ -1323,6 +1380,13 @@ export function RequestPanel({ item, onClose, onStatusChange, onConfirmQuoteWith
 
               {/* Droite : actions statut (côte à côte, toujours alignées à droite) */}
               <div className="flex flex-row items-center gap-2 flex-wrap justify-end ml-auto">
+                {/* Prioritaire — togglable uniquement tant que Confirmé (pas encore Produit) */}
+                {item.statut === 'Confirmé' && canModifierStatuts && (
+                  <button onClick={togglePriority}
+                    className={`px-3 py-1.5 rounded-lg text-[12px] font-bold border transition-colors ${item.priority ? 'border-[#DC2626] text-[#DC2626] bg-[#FEF2F2] hover:bg-[#FEE2E2]' : 'border-[#E2E8F0] text-[#374151] hover:bg-[#F8FAFC]'}`}>
+                    {item.priority ? '★ Prioritaire' : '☆ Marquer prioritaire'}
+                  </button>
+                )}
                 {!isArchived && onStatusChange && canModifierStatuts && (
                   <>
                     {/* Commande en attente → Confirmer (garde le détail ouvert) */}
@@ -1332,8 +1396,15 @@ export function RequestPanel({ item, onClose, onStatusChange, onConfirmQuoteWith
                         Confirmer
                       </button>
                     )}
-                    {/* Commande confirmée → Marquer Livré (statut final → ferme) */}
+                    {/* Commande confirmée → Marquer Disponible (avant la livraison) */}
                     {isCommande && item.statut === 'Confirmé' && (
+                      <button onClick={() => onStatusChange(item.ref, 'Disponible')}
+                        className="px-4 py-2 rounded-lg text-[13px] font-bold border border-[#4CAF4F] text-[#4CAF4F] hover:bg-[#F0FDF4] transition-colors">
+                        Marquer Disponible
+                      </button>
+                    )}
+                    {/* Commande déjà disponible → Marquer Livré (statut final → ferme) */}
+                    {isCommande && item.statut === 'Disponible' && (
                       <button onClick={() => onStatusChange(item.ref, 'Livré')}
                         className="px-4 py-2 rounded-lg text-[13px] font-bold border border-[#4CAF4F] text-[#4CAF4F] hover:bg-[#F0FDF4] transition-colors">
                         Marquer Livré
@@ -1346,8 +1417,15 @@ export function RequestPanel({ item, onClose, onStatusChange, onConfirmQuoteWith
                         Confirmer
                       </button>
                     )}
-                    {/* Devis confirmé → Marquer Livré (statut final → ferme) */}
+                    {/* Devis confirmé → Marquer Disponible (avant la livraison) */}
                     {!isCommande && item.statut === 'Confirmé' && (
+                      <button onClick={() => onStatusChange(item.ref, 'Disponible')}
+                        className="px-4 py-2 rounded-lg text-[13px] font-bold border border-[#4CAF4F] text-[#4CAF4F] hover:bg-[#F0FDF4] transition-colors">
+                        Marquer Disponible
+                      </button>
+                    )}
+                    {/* Devis déjà disponible → Marquer Livré (statut final → ferme) */}
+                    {!isCommande && item.statut === 'Disponible' && (
                       <button onClick={() => onStatusChange(item.ref, 'Livré')}
                         className="px-4 py-2 rounded-lg text-[13px] font-bold border border-[#4CAF4F] text-[#4CAF4F] hover:bg-[#F0FDF4] transition-colors">
                         Marquer Livré
@@ -1364,6 +1442,14 @@ export function RequestPanel({ item, onClose, onStatusChange, onConfirmQuoteWith
                   <button onClick={() => onStatusChange(item.ref, 'En attente')}
                     className="px-4 py-2 rounded-lg text-[13px] font-semibold border border-[#ABBED1]/60 text-[#374151] hover:border-[#374151]/40 transition-colors">
                     Restaurer
+                  </button>
+                )}
+
+                {/* Livré → possibilité de signaler un retour colis (remise en stock manuelle ensuite) */}
+                {item.statut === 'Livré' && onStatusChange && canModifierStatuts && (
+                  <button onClick={() => { if (window.confirm('Signaler ce colis comme retourné ?')) onStatusChange(item.ref, 'Retourné'); }}
+                    className="px-4 py-2 rounded-lg text-[13px] font-semibold border border-[#FDE68A] text-[#92400E] hover:bg-[#FFFBEB] transition-colors">
+                    Signaler un retour
                   </button>
                 )}
               </div>
@@ -1503,6 +1589,29 @@ export function RequestPanel({ item, onClose, onStatusChange, onConfirmQuoteWith
                   disabled={!reassignPicked || (!isAdmin && !reassignReason.trim())}
                   className="flex-1 px-4 py-2.5 rounded-xl text-[13px] font-bold text-white bg-[#8B5CF6] hover:bg-[#7C3AED] disabled:opacity-50 disabled:cursor-not-allowed">
                   Confirmer
+                </button>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+
+      {pendingAssignChange !== null && (
+        <>
+          <div className="fixed inset-0 z-[150] bg-black/40 backdrop-blur-sm" onClick={() => setPendingAssignChange(null)} />
+          <div className="fixed inset-0 z-[160] flex items-center justify-center p-4 pointer-events-none">
+            <div className="pointer-events-auto bg-white rounded-2xl shadow-2xl p-5 w-[420px] max-w-[94vw]">
+              <p className="text-[15px] font-bold text-[#0F172A] mb-1">Changer le responsable ?</p>
+              <p className="text-[12px] text-[#8A9BB5] mb-4">
+                Ce client est habituellement géré par un autre commercial. Assigner quand même cette demande à{' '}
+                <span className="font-semibold text-[#374151]">{users?.find((u) => u.id === pendingAssignChange)?.name ?? 'ce commercial'}</span> ?
+              </p>
+              <div className="flex gap-2">
+                <button onClick={() => setPendingAssignChange(null)} className="flex-1 px-4 py-2.5 rounded-xl border border-[#E2E8F0] text-[13px] font-semibold text-[#374151] hover:bg-[#F8FAFC]">Annuler</button>
+                <button
+                  onClick={() => { if (item.id && pendingAssignChange !== null) onAssign?.(item.id, item.type, pendingAssignChange || null); setPendingAssignChange(null); }}
+                  className="flex-1 px-4 py-2.5 rounded-xl text-[13px] font-bold text-white bg-[#4CAF4F] hover:bg-[#43A047]">
+                  Oui, changer
                 </button>
               </div>
             </div>

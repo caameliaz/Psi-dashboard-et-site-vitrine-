@@ -4,11 +4,13 @@ export const DB_TO_UI: Record<string, string> = {
   EN_ATTENTE: 'En attente',
   CONTACTE: 'En attente',
   VALIDE: 'Confirmé',
+  PRODUITE: 'Disponible',
   LIVRE: 'Livré',
+  RETOURNE: 'Retourné',
   ANNULE: 'Annulé',
 };
 
-const STATUS_ORDER = ['En attente', 'Confirmé', 'Livré', 'Annulé'];
+const STATUS_ORDER = ['En attente', 'Confirmé', 'Disponible', 'Livré', 'Retourné', 'Annulé'];
 
 /** Carte récap : total + répartition par statut (uniquement les statuts présents). */
 export function buildCard(records: { status: string }[]): RecapCardData {

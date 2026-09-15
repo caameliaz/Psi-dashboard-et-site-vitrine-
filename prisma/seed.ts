@@ -1,5 +1,6 @@
-import { PrismaClient, OrderSource, RequestStatus, TemplateCategory, AuditEntity, NotifType } from '@prisma/client';
+import { PrismaClient, OrderSource, RequestStatus, TemplateCategory, AuditEntity, NotifType, ProductMode } from '@prisma/client';
 import bcrypt from 'bcryptjs';
+import { confirmStock, deliverStock, returnStock } from '../src/lib/order-stock';
 
 const prisma = new PrismaClient();
 
@@ -18,6 +19,9 @@ async function main() {
   await prisma.clientNote.deleteMany();
   await prisma.clientPhone.deleteMany();
   await prisma.client.deleteMany();
+  await prisma.stockAssignment.deleteMany();
+  await prisma.recipeItem.deleteMany();
+  await prisma.rawMaterial.deleteMany();
   await prisma.productCustomField.deleteMany();
   await prisma.productFieldDef.deleteMany();
   await prisma.product.deleteMany();
@@ -70,6 +74,16 @@ async function main() {
     },
   });
 
+  await prisma.user.create({
+    data: {
+      name: 'Youcef',
+      email: 'yms211201@gmail.com',
+      password: hash('password'),
+      role: 'ADMIN',
+      active: true,
+    },
+  });
+
   console.log('✅ Utilisateurs créés');
 
   // ─── CHAMPS CUSTOM PRODUITS ───────────────────────────────────────────────────
@@ -89,13 +103,17 @@ async function main() {
   });
 
   // ─── PRODUITS ────────────────────────────────────────────────────────────────
+  // mode : ACHETE (revendu tel quel, réassort via liste d'achat) — FABRIQUE
+  // (fabriqué en interne via recette de matières premières) — LES_DEUX (les 2
+  // voies possibles, ex: dépannage acheté en attendant la prod).
+  // ⚠️ Tous en FABRIQUE pour l'instant — le cas ACHETE/LES_DEUX sera retesté plus tard.
   const produitsData = [
-    { reference: '80/80', width: 80, length: 79, usage: 'Imprimantes thermiques – Caisse grand format – Commerces',      price: 680 },
-    { reference: '80/75', width: 75, length: 74, usage: 'Imprimantes thermiques – Caisse grand format – Commerce & banque', price: 650 },
-    { reference: '80/60', width: 60, length: 45, usage: 'Usage mixte',                                                    price: 520 },
-    { reference: '57/50', width: 50, length: 30, usage: 'Terminal compact',                                               price: 390 },
-    { reference: '57/40', width: 40, length: 20, usage: 'Restaurant & pharmacie',                                         price: 310 },
-    { reference: '57/30', width: 30, length:  9, usage: 'Petit terminal mobile',                                          price: 220 },
+    { reference: '80/80', width: 80, length: 79, usage: 'Imprimantes thermiques – Caisse grand format – Commerces',      price: 680, mode: 'FABRIQUE' as ProductMode },
+    { reference: '80/75', width: 75, length: 74, usage: 'Imprimantes thermiques – Caisse grand format – Commerce & banque', price: 650, mode: 'FABRIQUE' as ProductMode },
+    { reference: '80/60', width: 60, length: 45, usage: 'Usage mixte',                                                    price: 520, mode: 'FABRIQUE' as ProductMode },
+    { reference: '57/50', width: 50, length: 30, usage: 'Terminal compact',                                               price: 390, mode: 'FABRIQUE' as ProductMode },
+    { reference: '57/40', width: 40, length: 20, usage: 'Restaurant & pharmacie',                                         price: 310, mode: 'FABRIQUE' as ProductMode },
+    { reference: '57/30', width: 30, length:  9, usage: 'Petit terminal mobile',                                          price: 220, mode: 'FABRIQUE' as ProductMode },
   ];
 
   const products: Record<string, { id: string }> = {};
@@ -108,6 +126,7 @@ async function main() {
         length: p.length,
         usage: p.usage,
         price: p.price,
+        mode: p.mode,
         active: true,
         categoryId: cat.id,
         customFields: {
@@ -123,6 +142,55 @@ async function main() {
   }
 
   console.log('✅ Produits créés');
+
+  // ─── MATIÈRES PREMIÈRES + RECETTES DE PRODUCTION ─────────────────────────────
+  const matieresData = [
+    { reference: 'FILM-TPE-57', name: 'Film TPE 57 mm',   unit: 'bobine', price: 850,  stockMax: 40,   purchaseThreshold: 20, available: 120 },
+    { reference: 'FILM-TPE-80', name: 'Film TPE 80 mm',   unit: 'bobine', price: 1100, stockMax: 40,   purchaseThreshold: 20, available: 90 },
+    { reference: 'COAT-THERM',  name: 'Coating thermique', unit: 'g',      price: 4,    stockMax: 10000, purchaseThreshold: 5000, available: 42000 },
+    { reference: 'CORE-57',     name: 'Mandrin 57 mm',    unit: 'unité',  price: 15,   stockMax: 400,  purchaseThreshold: 200, available: 1500 },
+    { reference: 'CORE-80',     name: 'Mandrin 80 mm',    unit: 'unité',  price: 20,   stockMax: 400,  purchaseThreshold: 200, available: 1300 },
+    // Matière volontairement en stock faible → sert à démontrer le blocage
+    // d'une ligne de production (statut BLOQUE) faute de matière première.
+    { reference: 'FILM-TPE-30', name: 'Film TPE 30 mm',   unit: 'bobine', price: 700,  stockMax: 40,   purchaseThreshold: 20, available: 8 },
+    { reference: 'CORE-30',     name: 'Mandrin 30 mm',    unit: 'unité',  price: 10,   stockMax: 200,  purchaseThreshold: 100, available: 50 },
+  ];
+  const matieres: Record<string, { id: string }> = {};
+  for (const m of matieresData) {
+    matieres[m.reference] = await prisma.rawMaterial.create({ data: m });
+  }
+
+  // Recette : 1 unité de "57/40" consomme 1 bobine de film 57mm + 50g de coating + 1 mandrin 57mm
+  await prisma.recipeItem.createMany({
+    data: [
+      { productId: products['57/40'].id, rawMaterialId: matieres['FILM-TPE-57'].id, quantity: 1 },
+      { productId: products['57/40'].id, rawMaterialId: matieres['COAT-THERM'].id,  quantity: 50 },
+      { productId: products['57/40'].id, rawMaterialId: matieres['CORE-57'].id,     quantity: 1 },
+      { productId: products['80/80'].id, rawMaterialId: matieres['FILM-TPE-80'].id, quantity: 1 },
+      { productId: products['80/80'].id, rawMaterialId: matieres['COAT-THERM'].id,  quantity: 80 },
+      { productId: products['80/80'].id, rawMaterialId: matieres['CORE-80'].id,     quantity: 1 },
+      // "57/30" : recette dont une matière (FILM-TPE-30) est volontairement
+      // en stock trop faible → démontre le statut BLOQUE en liste de production.
+      { productId: products['57/30'].id, rawMaterialId: matieres['FILM-TPE-30'].id, quantity: 1 },
+      { productId: products['57/30'].id, rawMaterialId: matieres['COAT-THERM'].id,  quantity: 20 },
+      { productId: products['57/30'].id, rawMaterialId: matieres['CORE-30'].id,     quantity: 1 },
+    ],
+  });
+
+  // Stock initial de démo sur les produits finis (tous FABRIQUE) :
+  // - 80/80, 57/40 : bien approvisionnés, recette couverte par les matières
+  // - 80/75, 57/50, 80/60 : stock partiel, pas de recette définie → production
+  //   directe sans réservation de matière (toujours A_PRODUIRE, jamais bloqué)
+  // - 57/30 : stock faible, recette dont une matière est rare → démontre le
+  //   statut BLOQUE en liste de production (cf. section matières ci-dessus)
+  await prisma.product.update({ where: { id: products['57/40'].id }, data: { available: 340, stockMax: 100, productionThreshold: 50 } });
+  await prisma.product.update({ where: { id: products['80/80'].id }, data: { available: 210, stockMax: 100, productionThreshold: 50 } });
+  await prisma.product.update({ where: { id: products['80/75'].id }, data: { available: 5,   stockMax: 60,  productionThreshold: 30 } });
+  await prisma.product.update({ where: { id: products['57/50'].id }, data: { available: 200, stockMax: 60,  productionThreshold: 30 } });
+  await prisma.product.update({ where: { id: products['80/60'].id }, data: { available: 40,  stockMax: 40,  productionThreshold: 20 } });
+  await prisma.product.update({ where: { id: products['57/30'].id }, data: { available: 10,  stockMax: 60,  productionThreshold: 30 } });
+
+  console.log('✅ Matières premières + recettes créées');
 
   // ─── CLIENTS ─────────────────────────────────────────────────────────────────
   const clientsData = [
@@ -289,6 +357,147 @@ async function main() {
   });
 
   console.log('✅ Devis créés');
+
+  // ─── SCÉNARIOS STOCK (démo) ────────────────────────────────────────────────────
+  // Commandes/devis passés par le vrai moteur de stock (confirmStock / deliverStock /
+  // returnStock, cf. src/lib/order-stock.ts) pour peupler des cas concrets à tester :
+  //   S1 — produit ACHETE bien stocké  → tout pris sur stock, commande passe PRODUITE
+  //   S2 — produit ACHETE en rupture   → partiel stock + reste en liste d'achat
+  //   S3 — produit FABRIQUE, matière OK → reste en production (A_PRODUIRE)
+  //   S4 — produit FABRIQUE, matière rare → production BLOQUÉE (manque matière)
+  //   S5 — commande mixte (ACHETE stocké + LES_DEUX sans recette → production directe)
+  //   S6 — cycle complet jusqu'à LIVRÉ
+  //   S7 — cycle complet jusqu'à RETOURNÉ
+  //   Q1 — devis confirmé qui vient s'ajouter à la même ligne d'achat que S2
+
+  const s1 = await prisma.order.create({
+    data: {
+      clientId: clients['Ahmed Benali'].id,
+      status: 'VALIDE' as RequestStatus,
+      source: 'SITE' as OrderSource,
+      createdAt: new Date('2026-09-01T09:00:00'),
+      items: { create: [{ productId: products['57/50'].id, quantity: 20, unitPrice: 390 }] },
+    },
+  });
+  await confirmStock('order', s1.id); // → entièrement pris sur stock → PRODUITE
+
+  const s2 = await prisma.order.create({
+    data: {
+      clientId: clients['Sara Mansouri'].id,
+      status: 'VALIDE' as RequestStatus,
+      source: 'SITE' as OrderSource,
+      createdAt: new Date('2026-09-01T10:00:00'),
+      items: { create: [{ productId: products['80/75'].id, quantity: 30, unitPrice: 650 }] },
+    },
+  });
+  await confirmStock('order', s2.id); // → 5 pris sur stock, 25 en liste d'achat
+
+  const s3 = await prisma.order.create({
+    data: {
+      clientId: clients['Lynda Cherifi'].id,
+      status: 'VALIDE' as RequestStatus,
+      source: 'WHATSAPP' as OrderSource,
+      createdById: amira.id,
+      createdAt: new Date('2026-09-02T09:30:00'),
+      items: { create: [{ productId: products['57/40'].id, quantity: 400, unitPrice: 310 }] },
+    },
+  });
+  await confirmStock('order', s3.id); // → 340 pris sur stock, 60 en production (matières suffisantes)
+
+  const s4 = await prisma.order.create({
+    data: {
+      clientId: clients['Nadia Berber'].id,
+      status: 'VALIDE' as RequestStatus,
+      source: 'SITE' as OrderSource,
+      createdAt: new Date('2026-09-02T11:00:00'),
+      items: { create: [{ productId: products['57/30'].id, quantity: 25, unitPrice: 220 }] },
+    },
+  });
+  await confirmStock('order', s4.id); // → 10 pris sur stock, 15 en production BLOQUÉE (film 30mm insuffisant)
+
+  const s5 = await prisma.order.create({
+    data: {
+      clientId: clients['Rania Touati'].id,
+      status: 'VALIDE' as RequestStatus,
+      source: 'SITE' as OrderSource,
+      createdAt: new Date('2026-09-02T15:00:00'),
+      items: {
+        create: [
+          { productId: products['57/50'].id, quantity: 15, unitPrice: 390 },
+          { productId: products['80/60'].id, quantity: 50, unitPrice: 520 },
+        ],
+      },
+    },
+  });
+  await confirmStock('order', s5.id); // → 57/50 entièrement sur stock, 80/60 : 40 stock + 10 en production directe
+
+  const s6 = await prisma.order.create({
+    data: {
+      clientId: clients['Sofiane Mekki'].id,
+      status: 'VALIDE' as RequestStatus,
+      source: 'SITE' as OrderSource,
+      createdAt: new Date('2026-09-03T09:00:00'),
+      items: { create: [{ productId: products['57/50'].id, quantity: 5, unitPrice: 390 }] },
+    },
+  });
+  await confirmStock('order', s6.id); // → PRODUITE (tout sur stock)
+  await deliverStock('order', s6.id);
+  await prisma.order.update({
+    where: { id: s6.id },
+    data: { status: 'LIVRE' as RequestStatus, paymentMethod: 'Espèces', paymentDate: new Date('2026-09-03T15:00:00') },
+  });
+
+  const s7 = await prisma.order.create({
+    data: {
+      clientId: clients['Hocine Belkacem'].id,
+      status: 'VALIDE' as RequestStatus,
+      source: 'TELEPHONE' as OrderSource,
+      createdAt: new Date('2026-09-02T14:00:00'),
+      items: { create: [{ productId: products['57/50'].id, quantity: 8, unitPrice: 390 }] },
+    },
+  });
+  await confirmStock('order', s7.id); // → PRODUITE
+  await deliverStock('order', s7.id);
+  await returnStock('order', s7.id);
+  await prisma.order.update({ where: { id: s7.id }, data: { status: 'RETOURNE' as RequestStatus } });
+
+  const q1 = await prisma.quote.create({
+    data: {
+      clientId: clients['Meriem Saadi'].id,
+      message: 'Devis validé — test du circuit stock sur un devis (80/75).',
+      status: 'VALIDE' as RequestStatus,
+      source: 'SITE' as OrderSource,
+      proposedPrice: 7800,
+      createdAt: new Date('2026-09-03T10:00:00'),
+      items: { create: [{ productId: products['80/75'].id, quantity: 10, unitPrice: 650 }] },
+    },
+  });
+  await confirmStock('quote', q1.id); // → vient s'ajouter à la ligne d'achat 80/75 déjà ouverte par S2
+
+  // Lignes manuelles supplémentaires, pour voir tous les statuts sur les pages
+  // Liste d'achat / Liste de production (au-delà de ce que confirmStock a généré).
+  await prisma.productionListItem.create({
+    data: { productId: products['80/80'].id, neededQuantity: 40, status: 'EN_COURS', auto: false },
+  });
+  await prisma.productionListItem.create({
+    data: { productId: products['57/40'].id, neededQuantity: 60, producedQuantity: 60, status: 'PRODUIT', auto: false },
+  });
+  await prisma.purchaseListItem.create({
+    data: { rawMaterialId: matieres['FILM-TPE-80'].id, neededQuantity: 30, orderedQuantity: 30, status: 'COMMANDE', auto: false },
+  });
+  await prisma.purchaseListItem.create({
+    data: { productId: products['57/50'].id, neededQuantity: 50, orderedQuantity: 50, receivedQuantity: 50, status: 'RECU', auto: false },
+  });
+
+  // Stock de produits finis attribué à des commerciaux (transporté sur le terrain).
+  await prisma.stockAssignment.createMany({
+    data: [
+      { productId: products['57/40'].id, employeeId: amira.id, quantity: 25 },
+      { productId: products['80/80'].id, employeeId: tariq.id, quantity: 15 },
+    ],
+  });
+
+  console.log('✅ Scénarios stock créés (commandes S1-S7, devis Q1)');
 
   // ─── MESSAGES CONTACT ─────────────────────────────────────────────────────────
   await prisma.contactRequest.create({
