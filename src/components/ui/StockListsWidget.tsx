@@ -76,14 +76,25 @@ function linkedParts(link: LinkedRef) {
 // (bufferSources, cf. resyncMaterialPurchaseNeed/stock-traceability.ts) — pour que le total
 // affiché sur la carte (needed+buffer) soit entièrement traçable, pas seulement sa part "commandes".
 function LinkedOrdersList({ linked, unit, bufferQuantity, manualQuantity, bufferSources }: { linked: LinkedRef[]; unit?: string; bufferQuantity?: number; manualQuantity?: number; bufferSources?: BufferSource[] }) {
+  const [open, setOpen] = useState(false);
   const hasBuffer = (bufferQuantity ?? 0) > 0;
   const hasManual = (manualQuantity ?? 0) > 0;
   const sources = bufferSources ?? [];
-  if (linked.length === 0 && !hasBuffer && !hasManual && sources.length === 0) return null;
+  const count = linked.length + (hasManual ? 1 : 0) + sources.length + (hasBuffer ? 1 : 0);
+  if (count === 0) return null;
   return (
     <div className="mt-2 pt-2 border-t border-[#F0F4F8]">
-      <p className="text-[10px] font-bold text-[#8A9BB5] uppercase tracking-wide mb-1.5">Commandes concernées</p>
-      <div className="flex flex-col gap-1.5">
+      {/* Repliée par défaut — prend trop de place dépliée d'office sur mobile,
+          surtout avec plusieurs lignes liées. */}
+      <button onClick={(e) => { e.stopPropagation(); setOpen((v) => !v); }}
+        className="w-full flex items-center justify-between">
+        <span className="text-[10px] font-bold text-[#8A9BB5] uppercase tracking-wide">Commandes concernées ({count})</span>
+        <svg width={12} height={12} viewBox="0 0 24 24" fill="none" className={`transition-transform ${open ? 'rotate-180' : ''}`}>
+          <path d="M6 9l6 6 6-6" stroke="#8A9BB5" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+      </button>
+      {open && (
+      <div className="flex flex-col gap-1.5 mt-1.5">
         {linked.map((lk, i) => {
           const { ref, client, qty, product } = linkedParts(lk);
           return (
@@ -120,6 +131,7 @@ function LinkedOrdersList({ linked, unit, bufferQuantity, manualQuantity, buffer
           </div>
         )}
       </div>
+      )}
     </div>
   );
 }
@@ -223,7 +235,7 @@ function BulkActionModal({ title, candidates, onClose, onConfirm }: {
 
   return (
     <Modal title={title} onClose={onClose}>
-      <div className="space-y-3 max-h-[50vh] overflow-y-auto pr-1">
+      <div className="space-y-3 max-h-[50vh] overflow-y-auto pr-1 no-scrollbar">
         {candidates.length === 0 && <p className="text-[13px] text-[#8A9BB5] text-center py-6">Aucune ligne disponible pour cette action.</p>}
         {candidates.map((c) => {
           const isSelected = c.id in selected;
@@ -251,6 +263,10 @@ function BulkActionModal({ title, candidates, onClose, onConfirm }: {
 
 export function StockListsWidget() {
   const [mode, setMode] = useState<'achat' | 'production'>('achat');
+  // Plein écran (mobile surtout — la carte est normalement contrainte en hauteur sur
+  // la page Stock mobile, cf. src/app/admin/stock/mobile/page.tsx) : un bouton expand
+  // la fait passer en overlay fixe qui couvre tout l'écran, un autre bouton la réduit.
+  const [fullscreen, setFullscreen] = useState(false);
   const [purchaseItems, setPurchaseItems] = useState<PurchaseItem[]>([]);
   const [productionItems, setProductionItems] = useState<ProductionItem[]>([]);
   const [urgentNeeds, setUrgentNeeds] = useState<UrgentNeed[]>([]);
@@ -366,20 +382,37 @@ export function StockListsWidget() {
   const bulkTitle = bulkAction === 'order' ? 'Commander' : bulkAction === 'receive' ? 'Valider réception' : 'Marquer fabriquée';
 
   return (
-    <div className="bg-white rounded-2xl border border-[#E2E8F0] shadow-sm p-5 h-full flex flex-col">
-      <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
-        <h3 className="text-[14px] font-bold text-[#0F172A]">{mode === 'achat' ? "Liste d'achat" : 'Liste de production'}</h3>
+    <div className={fullscreen
+      ? 'fixed inset-0 z-[300] bg-white p-5 flex flex-col'
+      : 'bg-white rounded-2xl border border-[#E2E8F0] shadow-sm p-5 h-full flex flex-col'
+    }>
+      {/* Titre retiré : le toggle seul suffit à indiquer la liste active, gagne de la
+          place verticale (utile sur la page Stock mobile, fixe en hauteur).
+          Ligne 1 : toggle seul. Ligne 2 : "+ Ajouter ligne" + plein écran ensemble. */}
+      <div className="flex items-center justify-center mb-2">
         <div className="flex gap-2 p-1 rounded-lg bg-[#F1F5F9]">
           <button onClick={() => setMode('achat')} className={`px-3 py-1.5 rounded-md text-[12px] font-bold transition-colors ${mode === 'achat' ? 'bg-white text-[#0F172A] shadow-sm' : 'text-[#8A9BB5]'}`}>Liste d&apos;achat</button>
           <button onClick={() => setMode('production')} className={`px-3 py-1.5 rounded-md text-[12px] font-bold transition-colors ${mode === 'production' ? 'bg-white text-[#0F172A] shadow-sm' : 'text-[#8A9BB5]'}`}>Liste de production</button>
         </div>
       </div>
 
-      <button onClick={() => setShowAdd(true)} className="mb-4 self-start px-3 py-1.5 rounded-lg border border-[#E2E8F0] text-[12px] font-bold text-[#374151] hover:bg-[#F8FAFC] transition-colors">
-        + Ajouter ligne
-      </button>
+      <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+        <button onClick={() => setShowAdd(true)} className="px-3 py-1.5 rounded-lg border border-[#E2E8F0] text-[12px] font-bold text-[#374151] hover:bg-[#F8FAFC] transition-colors flex-shrink-0">
+          + Ajouter ligne
+        </button>
+        {/* Plein écran / réduire — surtout utile sur mobile où la carte est normalement
+            contrainte en hauteur (cf. page Stock mobile). */}
+        <button onClick={() => setFullscreen((v) => !v)} title={fullscreen ? 'Réduire' : 'Plein écran'}
+          className="w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-lg border border-[#E2E8F0] text-[#8A9BB5] hover:bg-[#F8FAFC] transition-colors">
+          {fullscreen ? (
+            <svg width={14} height={14} viewBox="0 0 24 24" fill="none"><path d="M9 3v4a2 2 0 01-2 2H3M15 3v4a2 2 0 002 2h4M9 21v-4a2 2 0 00-2-2H3M15 21v-4a2 2 0 012-2h4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          ) : (
+            <svg width={14} height={14} viewBox="0 0 24 24" fill="none"><path d="M8 3H5a2 2 0 00-2 2v3M16 3h3a2 2 0 012 2v3M8 21H5a2 2 0 01-2-2v-3M16 21h3a2 2 0 002-2v-3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          )}
+        </button>
+      </div>
 
-      <div className="flex-1 overflow-y-auto max-h-[360px] flex flex-col gap-3 pr-1">
+      <div className={`flex-1 overflow-y-auto flex flex-col gap-3 pr-1 no-scrollbar ${fullscreen ? '' : 'max-h-[360px]'}`}>
         {/* Placée en haut de la liste de production — carte neutre comme les autres, seuls
             les statuts ("Prioritaire", la quantité) restent en rouge. Une ombre portée la
             distingue légèrement du reste de la liste sans recolorer toute la carte. */}
@@ -424,7 +457,7 @@ export function StockListsWidget() {
               ? 'En attente de réception'
               : severitySubtitle({ urgent, belowThreshold: available < threshold, auto: item.auto, manual: item.manualQuantity > 0, isMaterial: !!item.rawMaterial });
             return (
-              <div key={item.id} className="rounded-xl border border-[#E2E8F0] p-3">
+              <div key={item.id} className="rounded-xl border border-[#E2E8F0] p-4 md:p-3">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <div className="flex items-center gap-1.5 flex-wrap">
@@ -475,14 +508,16 @@ export function StockListsWidget() {
               manual: item.manualQuantity > 0,
             });
             return (
-              <div key={item.id} className="rounded-xl border border-[#E2E8F0] p-3">
+              <div key={item.id} className="rounded-xl border border-[#E2E8F0] p-4 md:p-3">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <div className="flex items-center gap-1.5 flex-wrap">
                       <p className="text-[11px] font-bold text-[#4F46E5]">{item.product.reference}</p>
                       {urgent && <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-[#FEF2F2] text-[#DC2626] uppercase tracking-wide">Urgent</span>}
                     </div>
-                    <p className="text-[13px] font-bold text-[#0F172A] truncate">{item.product.name ?? item.product.reference}</p>
+                    {/* Pas de nom personnalisé → rien à afficher en plus de la référence
+                        déjà visible juste au-dessus (même correction que la liste d'achat). */}
+                    {item.product.name && <p className="text-[13px] font-bold text-[#0F172A] truncate">{item.product.name}</p>}
                     <p className="text-[11px] text-[#8A9BB5] italic mt-0.5">{subtitle}</p>
                   </div>
                   <div className="text-right flex-shrink-0">

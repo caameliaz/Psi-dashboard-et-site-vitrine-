@@ -862,19 +862,42 @@ function ClientsPageInner() {
 
   return (
     <div className="w-full">
-      {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-[20px] md:text-[22px] font-bold text-[#0F172A]">Clients</h1>
-        <p className="text-[13px] text-[#8A9BB5] mt-0.5">
-          {loading ? 'Chargement…' : filtered.length === clients.length
-            ? `${clients.length} clients enregistrés`
-            : `${filtered.length} sur ${clients.length} clients`}
-        </p>
+      {/* Header — sur mobile : "Mes clients" + rond "+" sur la même ligne que le titre. */}
+      <div className="mb-6 flex items-start justify-between gap-3">
+        <div>
+          <h1 className="text-[20px] md:text-[22px] font-bold text-[#0F172A]">Clients</h1>
+          <p className="text-[13px] text-[#8A9BB5] mt-0.5">
+            {loading ? 'Chargement…' : filtered.length === clients.length
+              ? `${clients.length} clients enregistrés`
+              : `${filtered.length} sur ${clients.length} clients`}
+          </p>
+        </div>
+        <div className="flex items-center gap-2 md:hidden flex-shrink-0">
+          {isAdmin && currentUserId && (
+            <button
+              onClick={() => setOnlyMine((v) => !v)}
+              className={`px-2.5 py-1.5 rounded-lg text-[11px] font-bold border transition-colors whitespace-nowrap ${
+                onlyMine
+                  ? 'bg-[#4CAF4F] border-[#4CAF4F] text-white'
+                  : 'bg-white border-[#4CAF4F] text-[#4CAF4F] hover:bg-[#F0FDF4]'
+              }`}
+            >
+              Mes clients
+            </button>
+          )}
+          {canEditClients && (
+            <button onClick={() => { setAddForm({ ...emptyClient }); setShowAdd(true); }} title="Nouveau client"
+              className="w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-full text-white transition-colors" style={{ background: '#4CAF4F' }}>
+              <svg width={16} height={16} viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"/></svg>
+            </button>
+          )}
+        </div>
       </div>
 
-      {/* Actions : Nouveau client + Secteurs (+ Import Excel sur ordi seulement) */}
+      {/* Actions : Nouveau client + Secteurs (+ Import Excel sur ordi seulement) —
+          DESKTOP seulement (mobile : rond "+" dans le header, cf. plus haut). */}
       {canEditClients && (
-        <div className="flex items-center gap-2 mb-3 flex-wrap">
+        <div className="hidden md:flex items-center gap-2 mb-3 flex-wrap">
           <button onClick={() => { setAddForm({ ...emptyClient }); setShowAdd(true); }} className="flex items-center gap-2 px-4 py-2 rounded-xl text-[13px] font-semibold text-white transition-colors whitespace-nowrap" style={{ background: '#4CAF4F' }}>
             + Nouveau client
           </button>
@@ -885,6 +908,15 @@ function ClientsPageInner() {
           <button onClick={() => setShowImport(true)} className="hidden md:flex items-center gap-1.5 px-4 py-2 rounded-xl text-[13px] font-semibold text-[#374151] border border-[#E2E8F0] bg-white hover:bg-[#F8FAFC] transition-colors whitespace-nowrap">
             <svg width={15} height={15} fill="none" viewBox="0 0 24 24"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg>
             Importer Excel
+          </button>
+        </div>
+      )}
+      {/* Secteurs reste accessible sur mobile aussi (pas de bouton "+ Nouveau client"
+          en double, mais Secteurs n'a pas d'équivalent rond) */}
+      {canEditClients && (
+        <div className="md:hidden mb-3">
+          <button onClick={() => setShowSectors(true)} className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-[13px] font-semibold text-[#374151] border border-[#E2E8F0] bg-white hover:bg-[#F8FAFC] transition-colors whitespace-nowrap">
+            Secteurs
           </button>
         </div>
       )}
@@ -935,13 +967,13 @@ function ClientsPageInner() {
             ]}
           />
         </div>
-        {/* Raccourci "Mes clients" — admin uniquement (les employés voient déjà une
-            liste restreinte par défaut côté serveur, pas besoin de ce bouton).
+        {/* Raccourci "Mes clients" — admin uniquement, DESKTOP seulement (sur mobile,
+            il est maintenant dans le header, à côté du titre, cf. plus haut).
             Off = fond blanc/bordure+texte vert, on = vert plein. */}
         {isAdmin && currentUserId && (
           <button
             onClick={() => setOnlyMine((v) => !v)}
-            className={`px-3 py-2.5 rounded-xl text-[13px] font-bold border-2 transition-colors whitespace-nowrap flex-shrink-0 md:ml-auto ${
+            className={`hidden md:block px-3 py-2.5 rounded-xl text-[13px] font-bold border-2 transition-colors whitespace-nowrap flex-shrink-0 md:ml-auto ${
               onlyMine
                 ? 'bg-[#4CAF4F] border-[#4CAF4F] text-white'
                 : 'bg-white border-[#4CAF4F] text-[#4CAF4F] hover:bg-[#F0FDF4]'
