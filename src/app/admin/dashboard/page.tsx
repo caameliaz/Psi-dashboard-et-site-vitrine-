@@ -774,13 +774,17 @@ export default function DashboardPage() {
           {/* Mobile : toggle, puis filtre, puis titre — chacun sa ligne (pas de
               graphe sur mobile, cf. plus bas). */}
           <div className="md:hidden">
+            {/* "Cmd" plutôt que "Commandes" : à côté de "Devis" ça touchait/dépassait
+                le bord droit de la carte sur mobile (p-3, peu de largeur disponible).
+                Texte inactif assombri (#64748B au lieu de #8A9BB5) — trop pâle avant,
+                illisible sur le fond gris clair de la pilule. */}
             <div className="flex items-center gap-0.5 bg-[#F2F4F7] rounded-lg p-0.5 w-fit mb-2">
               <button onClick={() => setMoisTab('commandes')}
-                className={`px-3 py-1 rounded-md text-[11px] font-bold transition-colors ${moisTab === 'commandes' ? 'bg-white text-[#0F172A] shadow-sm' : 'text-[#8A9BB5]'}`}>
-                Commandes
+                className={`px-3 py-1 rounded-md text-[11px] font-bold transition-colors ${moisTab === 'commandes' ? 'bg-white text-[#0F172A] shadow-sm' : 'text-[#64748B]'}`}>
+                Cmd
               </button>
               <button onClick={() => setMoisTab('devis')}
-                className={`px-3 py-1 rounded-md text-[11px] font-bold transition-colors ${moisTab === 'devis' ? 'bg-white text-[#0F172A] shadow-sm' : 'text-[#8A9BB5]'}`}>
+                className={`px-3 py-1 rounded-md text-[11px] font-bold transition-colors ${moisTab === 'devis' ? 'bg-white text-[#0F172A] shadow-sm' : 'text-[#64748B]'}`}>
                 Devis
               </button>
             </div>
