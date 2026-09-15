@@ -199,7 +199,7 @@ ${c.active === false ? `<div class="banner">Client désactivé${c.deactivatedRea
 </div>
 <div class="footer">
   <span>${clientLabel(c)} · PSI Paper Solutions Industry</span>
-  <span>psi-algerie.com</span>
+  <span>www.psi.dz</span>
 </div>
 </body></html>`;
 
