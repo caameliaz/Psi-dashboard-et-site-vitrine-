@@ -8,27 +8,40 @@ import { pushSSE } from '@/lib/sse-bus';
 import { createAudit } from '@/lib/audit';
 import { rateLimit } from '@/lib/rate-limit';
 import { validateEmail, validatePhone, validateText, validateQuantity, validatePositiveNumber, firstError } from '@/lib/validation';
+import { resolveClientVisibility } from '@/lib/leave';
 
 export async function GET(request: NextRequest) {
   const guard = await requirePermission('voir_commandes');
   if (guard.error) return guard.error;
 
   // ?from=<ISO> → ne renvoie que les commandes créées depuis cette date (perf : filtre par période)
-  // ?assignedToId=<userId> → filtre par commercial assigné (pour les employés non-admin)
   const fromParam = request.nextUrl.searchParams.get('from');
-  const assignedToIdParam = request.nextUrl.searchParams.get('assignedToId');
   const from = fromParam ? new Date(fromParam) : null;
 
   const whereClause: any = {};
-  
+
   // Filtre par date si fourni
   if (from && !isNaN(from.getTime())) {
     whereClause.createdAt = { gte: from };
   }
-  
-  // Filtre par assignation si fourni (sécurité pour employés)
-  if (assignedToIdParam) {
-    whereClause.assignedToId = assignedToIdParam;
+
+  // Sécurité serveur (PAS un filtre front) : un EMPLOYEE ne voit que les commandes de
+  // ses clients assignés (+ ceux confiés le temps d'un congé dont il est remplaçant),
+  // et pour ces derniers, seulement depuis le début de l'intérim sauf si l'admin a
+  // coché "voir tout l'historique" sur ce congé (cf. src/lib/leave.ts).
+  if (guard.session!.user.role !== 'ADMIN') {
+    const userId = guard.session!.user.id;
+    const { historyClientIds, interimSince } = await resolveClientVisibility(userId);
+
+    const orConditions: any[] = [
+      { assignedToId: userId }, // ses propres commandes (ex: passées pour un client non-assigné)
+      { clientId: { in: historyClientIds } },
+      ...interimSince.map(({ clientId, since }) => ({
+        clientId,
+        createdAt: { gte: since },
+      })),
+    ];
+    whereClause.AND = [...(whereClause.AND ?? []), { OR: orConditions }];
   }
 
   try {
@@ -167,8 +180,9 @@ export async function POST(request: NextRequest) {
         clientCommune: body.client?.commune || client.commune || null,
         source: source as any,
         createdById: session?.user?.id ?? null,
-        // Assignation : valeur fournie, sinon le créateur (utilisateur connecté)
-        assignedToId: body.assignedToId ?? session?.user?.id ?? null,
+        // Assignation : valeur fournie explicitement, sinon le responsable habituel du
+        // client (Client.assignedToId), sinon le créateur (utilisateur connecté).
+        assignedToId: body.assignedToId ?? client.assignedToId ?? session?.user?.id ?? null,
         // Facturation / règlement (facultatifs)
         invoiceNumber: body.invoiceNumber ?? null,
         paymentMethod: body.paymentMethod ?? null,
