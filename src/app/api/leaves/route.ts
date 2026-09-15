@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requirePermission } from '@/lib/permissions';
 import { prisma } from '@/lib/prisma';
 import { createAudit } from '@/lib/audit';
+import { createNotif } from '@/lib/notifications';
 import { reclaimAllExpiredLeaves, isLeaveCurrentlyActive } from '@/lib/leave';
 
 // GET /api/leaves — liste des congés (permission gerer_utilisateurs, réservé admin/RH)
@@ -101,6 +102,18 @@ export async function POST(request: NextRequest) {
       entityId: employeeId,
       detail: `${employee.name} → remplacé par ${substitute.name} (${validClientIds.length} client(s), du ${startDate.toLocaleDateString('fr-FR')} au ${endDate.toLocaleDateString('fr-FR')})`,
     });
+
+    // Le remplaçant est prévenu qu'il vient de recevoir des clients en intérim
+    // (assignedToId sans orderId/quoteId → notif ciblée sur lui uniquement ;
+    // actorId = l'admin créateur, exclu ensuite des destinataires persistés).
+    createNotif({
+      type: 'ACTION_AUTRE',
+      title: 'Clients confiés en intérim',
+      message: `${employee.name} est en congé du ${startDate.toLocaleDateString('fr-FR')} au ${endDate.toLocaleDateString('fr-FR')} — ${validClientIds.length} client(s) vous sont confiés.`,
+      actorId: session.user.id,
+      assignedToId: substituteId,
+      link: '/admin/clients',
+    }).catch(() => {});
 
     return NextResponse.json(leave, { status: 201 });
   } catch (e) {
