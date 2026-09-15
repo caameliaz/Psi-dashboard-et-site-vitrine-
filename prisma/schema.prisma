@@ -49,6 +49,10 @@ model Product {
   price        Float
   photo        String?
   active       Boolean              @default(true)
+  // Indépendant de `active` : un produit peut être actif dans le dashboard (stock,
+  // commandes...) sans être affiché sur le site vitrine public. Le site public filtre
+  // sur active ET visibleOnSite ; le dashboard continue de n'utiliser que `active`.
+  visibleOnSite Boolean             @default(true)
   category     Category             @relation(fields: [categoryId], references: [id])
   categoryId   String
   customFields ProductCustomField[]

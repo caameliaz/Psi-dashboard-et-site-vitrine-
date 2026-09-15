@@ -16,7 +16,10 @@ export async function GET(request: NextRequest) {
 
   try {
     const products = await prisma.product.findMany({
-      where: all ? undefined : { active: true },
+      // Dashboard (?all=true) : tous les produits, quel que soit leur statut.
+      // Site public : actif ET visible sur le site — deux cases indépendantes
+      // (un produit peut être actif/géré au dashboard sans être affiché en vitrine).
+      where: all ? undefined : { active: true, visibleOnSite: true },
       include: {
         category: true,
         customFields: { include: { definition: true } },
@@ -78,6 +81,7 @@ export async function POST(request: NextRequest) {
         price: Number(body.price),
         photo: body.photo ?? null,
         active: body.active ?? true,
+        visibleOnSite: body.visibleOnSite ?? true,
         categoryId: body.categoryId,
         stockMax,
         ...(body.mode !== undefined && { mode: body.mode }),
