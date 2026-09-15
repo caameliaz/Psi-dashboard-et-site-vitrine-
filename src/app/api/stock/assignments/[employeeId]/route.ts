@@ -12,7 +12,7 @@ export async function GET(_request: Request, { params }: Ctx) {
   const { employeeId } = await params;
 
   try {
-    const employee = await prisma.user.findFirst({ where: { id: employeeId, role: 'EMPLOYEE' }, select: { id: true, name: true } });
+    const employee = await prisma.user.findFirst({ where: { id: employeeId }, select: { id: true, name: true } });
     if (!employee) return NextResponse.json({ error: 'Employé introuvable' }, { status: 404 });
 
     const assignments = await prisma.stockAssignment.findMany({

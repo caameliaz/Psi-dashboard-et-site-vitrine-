@@ -93,7 +93,6 @@ function LinkedOrdersList({ linked, unit, bufferQuantity, manualQuantity, buffer
                 {/* Produit affiché seulement pour une matière partagée par plusieurs produits
                     — sinon on sait déjà de quel produit il s'agit (la carte elle-même). */}
                 {product && <span className="text-[11px] text-[#8A9BB5]">({product})</span>}
-                {lk.blocked && <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-[#FEF3C7] text-[#92400E] uppercase tracking-wide">Bloqué</span>}
               </span>
               <span className="text-[12px] text-[#4F46E5]">
                 {client} · <span className="font-bold text-[#0F172A]">{qty}{unit ? ` ${unit}` : ''}</span>
@@ -115,7 +114,7 @@ function LinkedOrdersList({ linked, unit, bufferQuantity, manualQuantity, buffer
         ))}
         {hasBuffer && (
           <div className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg bg-[#F8FAFC]">
-            <span className="text-[12px] font-bold text-[#0F172A]">Réassort préventif (buffer)</span>
+            <span className="text-[12px] font-bold text-[#0F172A]">Réassort préventif</span>
             <span className="text-[12px] font-bold text-[#0F172A]">{bufferQuantity}{unit ? ` ${unit}` : ''}</span>
           </div>
         )}
@@ -248,6 +247,9 @@ export function StockListsWidget() {
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
   const [bulkAction, setBulkAction] = useState<'order' | 'receive' | 'produce' | null>(null);
+  // Popup de confirmation affichée après une action groupée entièrement réussie (Commander /
+  // Valider réception / Produire) — une ligne par sélection, avec sa quantité exacte.
+  const [successResult, setSuccessResult] = useState<{ title: string; lines: string[] } | null>(null);
 
   // `silent` évite le flash "Chargement…" pour les rafraîchissements en arrière-plan
   // (polling, retour sur l'onglet) — seul le premier chargement doit bloquer l'affichage.
@@ -300,11 +302,25 @@ export function StockListsWidget() {
     // ça, une ligne qui échoue silencieusement donne l'impression que rien ne s'est passé,
     // alors que l'API renvoie déjà le détail de ce qui manque.
     const failures: string[] = [];
+    // Avertissements sur une action RÉUSSIE (ex: "Marquer fabriquée" sans recette définie —
+    // la production a bien été enregistrée, mais sans aucune vérification/consommation de
+    // matière première) — pas un échec, juste à signaler après coup.
+    const warnings: string[] = [];
+    // Une ligne de confirmation par succès (quantité + unité) — affichée dans une popup dédiée
+    // une fois l'action terminée, pour ne jamais laisser l'utilisateur dans le doute sur ce qui
+    // a réellement été enregistré.
+    const successes: string[] = [];
     const labelFor = (id: string) => {
       const item = productionItems.find((i) => i.id === id) ?? purchaseItems.find((i) => i.id === id);
       if (!item) return id;
       return 'product' in item && item.product ? (item.product.name ?? item.product.reference) : itemLabel(item as PurchaseItem).name;
     };
+    const unitFor = (id: string) => {
+      const item = purchaseItems.find((i) => i.id === id);
+      return item ? itemLabel(item).unit : '';
+    };
+    const verbFor = (action: 'order' | 'receive' | 'produce') =>
+      action === 'order' ? 'commandée(s)' : action === 'receive' ? 'reçue(s)' : 'produite(s)';
 
     if (bulkAction === 'order' || bulkAction === 'receive') {
       await Promise.all(selections.map(async (s) => {
@@ -315,6 +331,8 @@ export function StockListsWidget() {
         if (!res.ok) {
           const err = await res.json().catch(() => ({}));
           failures.push(`${labelFor(s.id)} : ${err.error ?? 'échec'}`);
+        } else {
+          successes.push(`${labelFor(s.id)} — ${s.quantity} ${unitFor(s.id) || 'unité(s)'} ${verbFor(bulkAction)} avec succès`);
         }
       }));
     } else if (bulkAction === 'produce') {
@@ -326,11 +344,17 @@ export function StockListsWidget() {
         if (!res.ok) {
           const err = await res.json().catch(() => ({}));
           failures.push(`${labelFor(s.id)} : ${err.error ?? 'échec'}`);
+        } else {
+          const data = await res.json().catch(() => ({}));
+          if (data?.warning) warnings.push(data.warning);
+          successes.push(`${labelFor(s.id)} — ${s.quantity} unité(s) produite(s) avec succès`);
         }
       }));
     }
     await fetchAll();
     if (failures.length > 0) alert(failures.join('\n\n'));
+    else if (warnings.length > 0) alert(warnings.join('\n\n'));
+    else if (successes.length > 0) setSuccessResult({ title: bulkTitle, lines: successes });
   };
 
   const bulkCandidates = bulkAction === 'order'
@@ -507,6 +531,22 @@ export function StockListsWidget() {
       )}
       {bulkAction && (
         <BulkActionModal title={bulkTitle} candidates={bulkCandidates} onClose={() => setBulkAction(null)} onConfirm={runBulk} />
+      )}
+      {successResult && (
+        <Modal title={successResult.title} onClose={() => setSuccessResult(null)}>
+          <div className="space-y-2">
+            {successResult.lines.map((line, i) => (
+              <p key={i} className="text-[13px] text-[#374151] flex items-start gap-2">
+                <span className="text-[#4CAF4F] font-bold flex-shrink-0">✓</span>
+                <span>{line}</span>
+              </p>
+            ))}
+          </div>
+          <button onClick={() => setSuccessResult(null)}
+            className="mt-5 w-full px-4 py-2.5 rounded-lg text-sm font-bold text-white transition-colors" style={{ background: '#4CAF4F' }}>
+            OK
+          </button>
+        </Modal>
       )}
     </div>
   );

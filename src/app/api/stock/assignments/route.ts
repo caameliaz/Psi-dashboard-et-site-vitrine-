@@ -4,14 +4,16 @@ import { auth } from '@/lib/auth';
 import { requirePermission } from '@/lib/permissions';
 import { createAudit } from '@/lib/audit';
 
-// GET /api/stock/assignments — liste des employés actifs avec le total de stock attribué
+// GET /api/stock/assignments — liste des commerciaux actifs (tout rôle — "Pris en charge par"
+// sur une commande/devis n'est pas réservé aux comptes EMPLOYEE, cf. /api/users?assignable=true)
+// avec le total de stock attribué.
 export async function GET() {
   const session = await auth();
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   try {
     const [employees, groups] = await Promise.all([
-      prisma.user.findMany({ where: { role: 'EMPLOYEE', active: true }, select: { id: true, name: true }, orderBy: { name: 'asc' } }),
+      prisma.user.findMany({ where: { active: true }, select: { id: true, name: true }, orderBy: { name: 'asc' } }),
       prisma.stockAssignment.groupBy({ by: ['employeeId'], _sum: { quantity: true } }),
     ]);
     const totals = new Map(groups.map((g) => [g.employeeId, g._sum.quantity ?? 0]));
@@ -35,7 +37,7 @@ export async function POST(request: NextRequest) {
     if (!body.employeeId) return NextResponse.json({ error: 'Employé requis' }, { status: 400 });
     if (lines.length === 0) return NextResponse.json({ error: 'Sélectionne au moins un produit' }, { status: 400 });
 
-    const employee = await prisma.user.findFirst({ where: { id: body.employeeId, role: 'EMPLOYEE' } });
+    const employee = await prisma.user.findFirst({ where: { id: body.employeeId, active: true } });
     if (!employee) return NextResponse.json({ error: 'Employé introuvable' }, { status: 404 });
 
     // `available`/`reserved` ne sont PLUS touchés par l'attribution (décision produit) : le

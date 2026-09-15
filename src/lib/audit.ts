@@ -4,7 +4,7 @@ const STATUS_LABELS: Record<string, string> = {
   EN_ATTENTE: 'En attente',
   CONTACTE: 'Contacté',
   VALIDE: 'Validé',
-  PRODUITE: 'Produit',
+  PRODUITE: 'Disponible',
   LIVRE: 'Livré',
   RETOURNE: 'Retourné',
   ANNULE: 'Annulé',

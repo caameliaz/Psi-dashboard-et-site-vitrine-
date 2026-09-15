@@ -63,15 +63,22 @@ export async function reserveRawMaterialsForProduction(productId: string, qty: n
 // Symétrique de reserveRawMaterialsForProduction : relâche les matières réservées
 // pour `qty` unités d'un produit (reserved → available). Le manquant éventuel en liste
 // d'achat matière n'est pas géré ici (recalculé à neuf par resyncMaterialsForProduct).
-export async function releaseRawMaterialsForProduction(productId: string, qty: number) {
+// Renvoie les matières PREMIÈRES effectivement touchées (dont `available` vient d'augmenter) —
+// à l'appelant de décider s'il doit ensuite proposer ce dispo fraîchement libéré à d'AUTRES
+// produits Bloqués partageant la même matière (cf. unblockProductionForMaterial), ce que cette
+// fonction ne fait jamais elle-même (elle ne connaît que CE produit).
+export async function releaseRawMaterialsForProduction(productId: string, qty: number): Promise<string[]> {
   const recipe = await prisma.recipeItem.findMany({ where: { productId }, include: { rawMaterial: true } });
+  const touchedMaterialIds: string[] = [];
   for (const r of recipe) {
     const needed = r.quantity * qty;
     const releasedFromReserved = Math.min(needed, r.rawMaterial.reserved);
     if (releasedFromReserved > 0) {
       await prisma.rawMaterial.update({ where: { id: r.rawMaterialId }, data: { reserved: { decrement: releasedFromReserved }, available: { increment: releasedFromReserved } } }).catch(() => {});
+      touchedMaterialIds.push(r.rawMaterialId);
     }
   }
+  return touchedMaterialIds;
 }
 
 // ── Recalcule le besoin réel + buffer d'UNE matière première entièrement à neuf (jamais
@@ -210,7 +217,7 @@ async function realPurchaseNeed(productId: string): Promise<number> {
 // directe à chaque appel — jamais déduite de "qu'est-ce qui a été tenté cette fois", pour ne
 // pas rester bloqué sur un vieux statut périmé (ex: le buffer bouge mais l'ancien manquant sur
 // le besoin réel, lui, n'a jamais été revérifié).
-async function isProductionBlocked(productId: string, realNeeded: number): Promise<boolean> {
+export async function isProductionBlocked(productId: string, realNeeded: number): Promise<boolean> {
   if (realNeeded <= 0) return false;
   const recipe = await prisma.recipeItem.findMany({ where: { productId }, include: { rawMaterial: true } });
   return recipe.some((r) => r.rawMaterial.reserved < r.quantity * realNeeded);
@@ -681,7 +688,10 @@ export async function releaseOrderItemStock(kind: Kind, itemId: string) {
     // explicitement ici (jamais plus que ce qui est effectivement réservé). resyncProductionLine,
     // appelée juste après, ne relâche JAMAIS automatiquement pour une baisse de besoin — sinon
     // ce serait compté deux fois (cf. son commentaire) — c'est donc à cet appel-ci de le faire.
-    await releaseRawMaterialsForProduction(item.productId!, stillNeeded);
+    // Cette matière libérée peut débloquer un AUTRE produit qui la partage et attendait —
+    // sinon il resterait Bloqué jusqu'au prochain évènement qui touche cette matière.
+    const releasedMaterialIds = await releaseRawMaterialsForProduction(item.productId!, stillNeeded);
+    for (const rawMaterialId of releasedMaterialIds) await unblockProductionForMaterial(rawMaterialId);
   }
 
   // On marque l'article NONE AVANT de recalculer — sinon il compterait encore dans son propre
@@ -751,8 +761,11 @@ export async function reallocateAvailableStock(productId: string) {
 
     if (it.stockPath === 'IN_PRODUCTION') {
       // Cette part ne sera plus fabriquée (satisfaite directement par le stock) → la matière
-      // première qui lui était réservée n'est plus nécessaire, on la relâche.
-      await releaseRawMaterialsForProduction(productId, take);
+      // première qui lui était réservée n'est plus nécessaire, on la relâche — et on la
+      // propose à d'AUTRES produits Bloqués qui la partagent, sinon elle resterait invisible
+      // pour eux jusqu'au prochain évènement qui touche cette matière.
+      const releasedMaterialIds = await releaseRawMaterialsForProduction(productId, take);
+      for (const rawMaterialId of releasedMaterialIds) await unblockProductionForMaterial(rawMaterialId);
       touchedProduction = true;
     } else if (it.stockPath === 'PURCHASE_PENDING') {
       touchedPurchase = true;
@@ -908,7 +921,10 @@ export async function adjustOrderItemQuantity(kind: Kind, itemId: string, newQua
       const oldOutstanding = oldQuantity - item.resolvedQuantity;
       const newOutstanding = newQuantity - newResolved;
       const outstandingDelta = oldOutstanding - newOutstanding;
-      if (outstandingDelta > 0) await releaseRawMaterialsForProduction(item.productId, outstandingDelta);
+      if (outstandingDelta > 0) {
+        const releasedMaterialIds = await releaseRawMaterialsForProduction(item.productId, outstandingDelta);
+        for (const rawMaterialId of releasedMaterialIds) await unblockProductionForMaterial(rawMaterialId);
+      }
     }
     const line = await resyncProductionLine(item.productId);
     await (itemDelegate(kind) as any).update({ where: { id: item.id }, data: { productionListItemId: line?.id ?? null } });
@@ -1015,6 +1031,43 @@ export async function distributePurchase(purchaseListItemId: string, receivedQty
   await distributeToLinkedItems('purchaseListItemId', purchaseListItemId, receivedQty, productId);
 }
 
+// Clé FIFO d'UNE ligne de production, pour la comparer à des lignes d'AUTRES PRODUITS sur une
+// même matière (cf. unblockProductionForMaterial/reassessProductionForMaterial ci-dessous) :
+// la commande/devis la plus prioritaire au sens `fifoCompare` (priorité d'abord, puis la plus
+// ancienne) PARMI CELLES qui ont encore un besoin réel dessus — jamais la date de création de
+// la ligne elle-même. Cette date peut diverger de la vraie commande la plus ancienne encore en
+// attente (ex: ligne supprimée puis recréée après un passage à 0 besoin, elle "renaît" avec une
+// date fraîche alors que la commande qui la fait renaître peut être ancienne) — sans ça, une
+// commande récente profiterait à tort de l'ancienneté du PRODUIT plutôt que de la sienne.
+// Repli sur la date de création de la ligne si elle n'a aucune commande/devis avec un besoin
+// restant (ex: pur besoin ajouté à la main, sans commande liée).
+async function productionLineFifoKey(line: { id: string; createdAt: Date }): Promise<{ priority: boolean; createdAt: Date }> {
+  const [orderItems, quoteItems] = await Promise.all([
+    prisma.orderItem.findMany({
+      where: { productionListItemId: line.id },
+      select: { quantity: true, resolvedQuantity: true, order: { select: { createdAt: true, priority: true } } },
+    }),
+    prisma.quoteItem.findMany({
+      where: { productionListItemId: line.id },
+      select: { quantity: true, resolvedQuantity: true, quote: { select: { createdAt: true, priority: true } } },
+    }),
+  ]);
+  const claims = [
+    ...orderItems.filter((i) => i.quantity > i.resolvedQuantity).map((i) => ({ priority: i.order.priority, createdAt: i.order.createdAt })),
+    ...quoteItems.filter((i) => i.quantity > i.resolvedQuantity).map((i) => ({ priority: i.quote.priority, createdAt: i.quote.createdAt })),
+  ].sort(fifoCompare);
+  return claims[0] ?? { priority: false, createdAt: line.createdAt };
+}
+
+// Trie des lignes de production ENTRE ELLES (produits potentiellement différents) par leur
+// productionLineFifoKey — factorisé, utilisé par unblockProductionForMaterial et
+// reassessProductionForMaterial.
+export async function sortLinesByFifo<T extends { id: string; createdAt: Date }>(lines: T[]): Promise<T[]> {
+  const keyed = await Promise.all(lines.map(async (line) => ({ line, key: await productionLineFifoKey(line) })));
+  keyed.sort((a, b) => fifoCompare(a.key, b.key));
+  return keyed.map((k) => k.line);
+}
+
 // ── Étape 3 point 4 : déblocage des lignes de production en attente de matière ──────────────
 // À appeler après qu'une matière première a reçu du stock. Réserve d'un coup, sur le pot
 // commun, tout ce qui manque réellement pour les lignes "Bloquées" (borné par ce qui est
@@ -1026,12 +1079,14 @@ export async function unblockProductionForMaterial(rawMaterialId: string) {
   const material = await prisma.rawMaterial.findUnique({ where: { id: rawMaterialId } });
   if (!material) return;
 
-  const blockedLines = await prisma.productionListItem.findMany({
+  const blockedLinesRaw = await prisma.productionListItem.findMany({
     where: { status: 'BLOQUE', product: { recipeItems: { some: { rawMaterialId } } } },
-    orderBy: { createdAt: 'asc' },
     include: { product: { include: { recipeItems: true } } },
   });
-  if (blockedLines.length === 0) return;
+  if (blockedLinesRaw.length === 0) return;
+  // FIFO cross-produit par commande réelle la plus ancienne/prioritaire, pas par la ligne
+  // elle-même — cf. productionLineFifoKey.
+  const blockedLines = await sortLinesByFifo(blockedLinesRaw);
 
   const ratioByLine = new Map(blockedLines.map((l) => [l.id, l.product.recipeItems.find((r) => r.rawMaterialId === rawMaterialId)?.quantity ?? 0]));
   const totalOwed = blockedLines.reduce((sum, l) => sum + (ratioByLine.get(l.id) ?? 0) * l.neededQuantity, 0);
@@ -1081,12 +1136,14 @@ export async function reassessProductionForMaterial(rawMaterialId: string) {
   const material = await prisma.rawMaterial.findUnique({ where: { id: rawMaterialId } });
   if (!material) return;
 
-  const openLines = await prisma.productionListItem.findMany({
+  const openLinesRaw = await prisma.productionListItem.findMany({
     where: { status: 'A_PRODUIRE', product: { recipeItems: { some: { rawMaterialId } } } },
-    orderBy: { createdAt: 'asc' },
     include: { product: { include: { recipeItems: true } } },
   });
-  if (openLines.length === 0) { await resyncMaterialPurchaseNeed(rawMaterialId); return; }
+  if (openLinesRaw.length === 0) { await resyncMaterialPurchaseNeed(rawMaterialId); return; }
+  // FIFO cross-produit par commande réelle la plus ancienne/prioritaire, pas par la ligne
+  // elle-même — cf. productionLineFifoKey.
+  const openLines = await sortLinesByFifo(openLinesRaw);
 
   let poolLeft = material.reserved;
   let stillCovered = true;
@@ -1100,6 +1157,59 @@ export async function reassessProductionForMaterial(rawMaterialId: string) {
     }
     stillCovered = false; // dès qu'une ligne n'est plus couverte, toutes les suivantes (plus récentes) non plus
     await prisma.productionListItem.update({ where: { id: line.id }, data: { status: 'BLOQUE' } });
+  }
+
+  await resyncMaterialPurchaseNeed(rawMaterialId);
+}
+
+// ── Réconciliation GLOBALE d'une matière — RÉSERVÉE au changement de RECETTE ────────────────
+// Contrairement à unblockProductionForMaterial/reassessProductionForMaterial (qui ne retouchent
+// jamais une ligne déjà "À produire" — un choix délibéré ailleurs : on ne vole jamais un
+// `reserved` déjà accordé en réaction passive à une réception de stock ou une fabrication),
+// une recette qui change redéfinit légitimement qui a besoin de quoi : ça justifie de TOUT
+// recalculer à neuf, y compris rétrograder une ligne "À produire" plus récente pour couvrir une
+// ligne plus ancienne devenue plus gourmande. Comme `reserved` est un pot commun jamais itemisé
+// par ligne, rétrograder une ligne ne "prend" rien physiquement — ça ne fait que refléter
+// honnêtement qui a vraiment la priorité sur ce qui existe.
+//
+// Prend TOUTES les lignes (Bloquées ET À produire) qui utilisent cette matière et ont un besoin
+// réel > 0, les trie par ancienneté/priorité de leur VRAIE commande (productionLineFifoKey), et
+// couvre dans cet ordre jusqu'à épuisement du stock total (available + reserved) de la matière —
+// jamais plus. `reserved` est réécrit intégralement (pas un delta) pour refléter exactement ce
+// qui est dû aux lignes couvertes ; le reste redevient `available`.
+export async function reconcileMaterialAcrossAllLines(rawMaterialId: string) {
+  const material = await prisma.rawMaterial.findUnique({ where: { id: rawMaterialId } });
+  if (!material) return;
+
+  const linesRaw = await prisma.productionListItem.findMany({
+    where: { status: { in: ['A_PRODUIRE', 'BLOQUE'] }, neededQuantity: { gt: 0 }, product: { recipeItems: { some: { rawMaterialId } } } },
+    include: { product: { include: { recipeItems: { include: { rawMaterial: true } } } } },
+  });
+  if (linesRaw.length === 0) { await resyncMaterialPurchaseNeed(rawMaterialId); return; }
+
+  const lines = await sortLinesByFifo(linesRaw);
+  const ratioByLine = new Map(lines.map((l) => [l.id, l.product.recipeItems.find((r) => r.rawMaterialId === rawMaterialId)?.quantity ?? 0]));
+
+  const totalStock = material.available + material.reserved;
+  let cumulative = 0;
+  const coveredLineIds = new Set<string>();
+  for (const line of lines) {
+    const owed = (ratioByLine.get(line.id) ?? 0) * line.neededQuantity;
+    if (cumulative + owed > totalStock) break; // FIFO : s'arrête à la première non couverte pour cette matière
+    cumulative += owed;
+    coveredLineIds.add(line.id);
+  }
+
+  await prisma.rawMaterial.update({ where: { id: rawMaterialId }, data: { reserved: cumulative, available: totalStock - cumulative } });
+
+  for (const line of lines) {
+    // Couverte pour CETTE matière — vérifie encore les AUTRES ingrédients de sa recette avant de
+    // déclarer la ligne définitivement "À produire" (même garde-fou que unblockProductionForMaterial).
+    const finalBlocked = !coveredLineIds.has(line.id)
+      || line.product.recipeItems.some((r) => r.rawMaterialId !== rawMaterialId && r.rawMaterial.available < r.quantity * line.neededQuantity);
+    if (finalBlocked !== (line.status === 'BLOQUE')) {
+      await prisma.productionListItem.update({ where: { id: line.id }, data: { status: finalBlocked ? 'BLOQUE' : 'A_PRODUIRE' } });
+    }
   }
 
   await resyncMaterialPurchaseNeed(rawMaterialId);

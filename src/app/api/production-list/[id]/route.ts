@@ -30,6 +30,12 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
     // On collecte le manquant de TOUTES les matières en cause (pas juste la première) pour
     // que l'appelant puisse afficher exactement ce qu'il manque pour produire cette quantité.
     const recipe = await prisma.recipeItem.findMany({ where: { productId: item.productId }, include: { rawMaterial: true } });
+    // Aucune recette définie pour ce produit → le contrôle ci-dessous porte sur un tableau vide,
+    // donc rien n'est vérifié ni consommé — pas un blocage (juste demandé), une simple alerte
+    // renvoyée avec la réponse pour que l'appelant prévienne l'utilisateur après coup.
+    const noRecipeWarning = recipe.length === 0
+      ? `Aucune recette définie pour ${item.product.reference} — la production a été enregistrée sans vérifier/consommer de matière première.`
+      : null;
     const shortfalls = recipe
       .map((r) => {
         const totalNeeded = r.quantity * qty;
@@ -94,7 +100,7 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
 
     const updated = await prisma.productionListItem.findUnique({ where: { id } });
     createAudit({ userId: session?.user?.id, action: `Production réalisée (+${qty})`, entity: 'STOCK', entityId: id, detail: item.product.reference });
-    return NextResponse.json(updated);
+    return NextResponse.json({ ...updated, warning: noRecipeWarning });
   } catch (e) {
     console.error(e);
     return NextResponse.json({ error: 'Failed to update production list item' }, { status: 500 });

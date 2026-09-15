@@ -211,7 +211,7 @@ function RecipesPageInner() {
               : `${materials.length} matière${materials.length !== 1 ? 's' : ''} première${materials.length !== 1 ? 's' : ''}`}
           </p>
         </div>
-        {canEditStock && view === 'matieres' && (
+        {canEditStock && (
           <button onClick={() => setMaterialModal('new')} className="px-4 py-2 rounded-lg text-sm font-semibold text-white transition-colors" style={{ background: '#4CAF4F' }}>
             + Nouvelle matière première
           </button>

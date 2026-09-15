@@ -821,6 +821,9 @@ function ProductsPageInner() {
                           {/* Code référence (auto PTT-001 si préfixe, sinon dimensions) */}
                           <span className="text-[11px] font-bold px-2 py-0.5 rounded-md bg-[#EEF2FF] text-[#4F46E5] tabular-nums flex-shrink-0">{r.reference}</span>
                           <p className="text-[13px] font-bold text-[#0F172A] truncate">{r.name || `${r.width}/${r.length} mm`}</p>
+                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-[#F1F5F9] text-[#8A9BB5] uppercase tracking-wide flex-shrink-0">
+                            {r.mode === 'ACHETE' ? 'Acheté' : r.mode === 'FABRIQUE' ? 'Fabriqué' : 'Les deux'}
+                          </span>
                         </div>
                         {/* Ligne 2 : dimensions + métrage, puis l'usage */}
                         <p className="text-[12px] text-[#8A9BB5] mt-0.5">

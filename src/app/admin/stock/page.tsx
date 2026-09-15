@@ -390,8 +390,8 @@ function StockPageInner() {
                 <th className="px-4 py-3 text-[11px] font-bold text-[#8A9BB5] uppercase">Mode</th>
                 <th className="px-4 py-3 text-[11px] font-bold text-[#8A9BB5] uppercase text-right">Disponible</th>
                 <th className="px-4 py-3 text-[11px] font-bold text-[#8A9BB5] uppercase text-right">Réservé</th>
+                <th className="px-4 py-3 text-[11px] font-bold text-[#8A9BB5] uppercase text-right">Total</th>
                 <th className="px-4 py-3 text-[11px] font-bold text-[#8A9BB5] uppercase text-right">Hors commerciaux</th>
-                <th className="px-4 py-3 text-[11px] font-bold text-[#8A9BB5] uppercase text-right">En livraison</th>
                 <th className="px-4 py-3 text-[11px] font-bold text-[#8A9BB5] uppercase text-right">En retour</th>
                 <th className="px-4 py-3 text-[11px] font-bold text-[#8A9BB5] uppercase">Statut</th>
                 {canEdit && <th className="px-4 py-3"></th>}
@@ -407,12 +407,12 @@ function StockPageInner() {
                   <td className="px-4 py-3 text-[12px] text-[#8A9BB5]">{p.mode === 'ACHETE' ? 'Acheté' : p.mode === 'FABRIQUE' ? 'Fabriqué' : 'Les deux'}</td>
                   <td className="px-4 py-3 text-[13px] font-semibold text-[#0F172A] text-right tabular-nums">{p.available}</td>
                   <td className="px-4 py-3 text-[13px] text-[#374151] text-right tabular-nums">{p.reserved}</td>
+                  <td className="px-4 py-3 text-[13px] font-semibold text-[#0F172A] text-right tabular-nums">{p.available + p.reserved}</td>
                   {/* Disponible + Réservé (tout ce qui est en entrepôt ou engagé sur une commande)
                       moins ce qui est actuellement chez un commercial (StockAssignment) —
                       jamais négatif à l'affichage (une incohérence de données ne doit jamais
                       remonter un total halluciné). */}
                   <td className="px-4 py-3 text-[13px] text-[#374151] text-right tabular-nums">{Math.max(0, p.available + p.reserved - p.assignedToCommercials)}</td>
-                  <td className="px-4 py-3 text-[13px] text-[#374151] text-right tabular-nums">{p.inDelivery}</td>
                   <td className="px-4 py-3 text-[13px] text-[#374151] text-right tabular-nums">{p.returned}</td>
                   <td className="px-4 py-3">{statusBadge(p.available, p.mode === 'ACHETE' ? p.purchaseThreshold : p.productionThreshold)}</td>
                   {canEdit && (
@@ -442,6 +442,7 @@ function StockPageInner() {
                 <th className="px-4 py-3 text-[11px] font-bold text-[#8A9BB5] uppercase">Nom</th>
                 <th className="px-4 py-3 text-[11px] font-bold text-[#8A9BB5] uppercase text-right">Disponible</th>
                 <th className="px-4 py-3 text-[11px] font-bold text-[#8A9BB5] uppercase text-right">Réservé</th>
+                <th className="px-4 py-3 text-[11px] font-bold text-[#8A9BB5] uppercase text-right">Total</th>
                 <th className="px-4 py-3 text-[11px] font-bold text-[#8A9BB5] uppercase">Statut</th>
                 {canEdit && <th className="px-4 py-3"></th>}
               </tr>
@@ -455,6 +456,7 @@ function StockPageInner() {
                   <td className="px-4 py-3 text-[13px] font-semibold text-[#0F172A]">{m.name}</td>
                   <td className="px-4 py-3 text-[13px] font-semibold text-[#0F172A] text-right tabular-nums">{m.available} {m.unit}</td>
                   <td className="px-4 py-3 text-[13px] text-[#374151] text-right tabular-nums">{m.reserved} {m.unit}</td>
+                  <td className="px-4 py-3 text-[13px] font-semibold text-[#0F172A] text-right tabular-nums">{m.available + m.reserved} {m.unit}</td>
                   <td className="px-4 py-3">{statusBadge(m.available, m.purchaseThreshold)}</td>
                   {canEdit && (
                     <td className="px-4 py-3 text-right">
@@ -467,7 +469,7 @@ function StockPageInner() {
                 </tr>
               ))}
               {filteredMaterials.length === 0 && !loading && (
-                <tr><td colSpan={6} className="px-4 py-10 text-center text-[13px] text-[#8A9BB5]">Aucune matière première. Ajoutez-en une depuis la page Recettes de production.</td></tr>
+                <tr><td colSpan={7} className="px-4 py-10 text-center text-[13px] text-[#8A9BB5]">Aucune matière première. Ajoutez-en une depuis la page Recettes de production.</td></tr>
               )}
             </tbody>
           </table>

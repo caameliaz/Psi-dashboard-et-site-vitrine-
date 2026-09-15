@@ -217,6 +217,26 @@ Deux produits différents partageant la même matière, tous deux bloqués (A cr
 - [ ] Réceptionnez juste assez pour couvrir ENTIÈREMENT A → seule sa ligne se débloque
   ("À produire"), B reste "Bloquée", inchangée.
 - [ ] Complétez pour B → elle se débloque à son tour.
+- [ ] **FIFO par vraie commande, pas par date de ligne** : supprimez puis recréez la ligne de A
+  (ex: en annulant sa dernière commande jusqu'à 0 besoin, puis en repassant une commande dessus)
+  — sa ligne "renaît" avec une date fraîche, mais sa commande réelle peut être plus ancienne que
+  celle de B. Réceptionnez juste assez pour couvrir UNE des deux → c'est bien celle dont la VRAIE
+  commande est la plus ancienne qui se débloque en premier, peu importe la date de la ligne.
+
+## 11 bis. Changement de recette — réconciliation globale
+Produit A (ligne "À produire", ratio 1, besoin réel 20, matière M `reserved=20`) et produit B
+(ligne "Bloquée" sur la même matière M, ratio 1, besoin réel 15, `available=0`). Recette de A
+ratio 1 → 3.
+- [ ] Après le changement : M `reserved` recalculé à neuf pour couvrir en FIFO (par vraie
+  commande, pas par ligne) A (nouveau besoin 60) et B (15) dans l'ordre de leur ancienneté
+  réelle — pas juste A qui rafle tout en premier parce que c'est lui qu'on vient de modifier.
+- [ ] Si le total (60+15=75) dépasse le stock total de M (`available+reserved` d'avant), la
+  ligne la plus ancienne des deux (par vraie commande) reste/passe "À produire" en premier, la
+  plus récente peut être rétrogradée "Bloquée" — même si elle ne l'était pas avant.
+- [ ] Retirez complètement M de la recette de A → la part de M due à A retombe à 0 (ligne
+  d'achat de M recalculée sans lui), B reprend sa part normalement.
+- [ ] Liste d'achat de M recalculée immédiatement après le changement (pas besoin d'une autre
+  action pour déclencher le recalcul).
 
 ## 12. "Commandes concernées" — précision (lien réel + besoin restant réel)
 - [ ] Une commande "En attente" (jamais confirmée) n'apparaît PAS dans "Commandes concernées".
@@ -280,12 +300,85 @@ prioritaires ou pas).
   resolvedQuantity=5/5 stockPath=FROM_STOCK`) — aucun vol, aucune réouverture. B ne récupère du
   stock qu'au prochain évènement qui recalcule le stock (réception, correction, etc.), et à ce
   moment-là seulement en tant que "la plus ancienne".
+
 - [ ] Carte "Production urgente" (en bas de la liste de production) : affiche le produit avec
   la quantité manquante des commandes prioritaires ; **disparaît d'elle-même** une fois
   entièrement produite.
+
 - [ ] Retirer la priorité sur une commande déjà "Produite" → refusé (rien à prioriser dessus).
+
 - [ ] Marquer prioritaire une commande "Annulée" (ou tout statut ≠ Confirmé) → refusé,
   message clair.
+
+## 16. Stock commercial (attribution, hors commerciaux, auto-attribution, livraison)
+Depuis ce chantier, l'attribution à un commercial (page Stock) ne touche PLUS `available`/
+`reserved` — seul `StockAssignment` bouge. La colonne **"Hors commerciaux"** (produits finis
+seulement) = `available + reserved − Σ StockAssignment(produit)` ; c'est elle qui doit toujours
+servir de plafond, jamais `available` seul. Prenez un produit fabriqué ou acheté avec
+`available=30`, `reserved=50` pour retomber sur les chiffres ci-dessous (hors commerciaux de
+départ = 80), et un employé (rôle EMPLOYEE actif) pour l'attribution.
+
+### 16a. Attribution manuelle — bornée sur le stock hors commerciaux
+
+- [ ] Page Stock → tableau Produits : colonnes dans l'ordre Disponible (30) → Réservé (50) →
+  **Hors commerciaux (80)** → En livraison → En retour.
+
+- [ ] Bouton "+ Attribuer du stock" visible tout de suite, sans passer par l'onglet "Stock par
+  commercial".
+
+- [ ] Modale "Attribuer" : le produit n'apparaît QUE si hors commerciaux > 0, et affiche "X hors
+  commerciaux" (pas "X dispo"). Le champ quantité est plafonné à cette valeur (80 ici).
+
+- [ ] Attribuez 80 à l'employé A → `available` et `reserved` restent 30/50 (inchangés) ;
+  "Hors commerciaux" retombe à 0 (80 − 80).
+
+- [ ] Retentez d'attribuer ne serait-ce que 1 unité (même à un AUTRE employé) → refusé, message
+  "Stock hors commerciaux insuffisant pour RÉF : 0 disponible, 1 manquant(s)" — **rien n'est
+  modifié**.
+- [ ] Onglet "Stock par commercial" : l'employé A apparaît avec 80 sur ce produit.
+
+### 16b. Retrait d'attribution
+- [ ] Retirez 30 des 80 attribués à A → `StockAssignment` passe à 50 ; `available`/`reserved`
+  **ne bougent toujours pas** ; "Hors commerciaux" remonte à 30 (30 remis en circulation).
+- [ ] Retrait total (les 50 restants) → la ligne d'attribution disparaît complètement (pas de
+  ligne à 0 qui traîne) ; "Hors commerciaux" revient à 80.
+
+### 16c. Auto-attribution au commercial (case à cocher, RequestPanel)
+Commande CMD-X pour le produit ci-dessus, `available=30 reserved=0` avant confirmation.
+- [ ] Commande "En attente" SANS "Pris en charge par" → case visible mais grisée/désactivée,
+  infobulle expliquant qu'il faut d'abord assigner un commercial.
+- [ ] Assignez "Pris en charge par" = employé B, cochez la case → réussit (autoAssignStock=true).
+- [ ] Confirmez la commande (qty=20, tout pris sur dispo) → produit `available=10 reserved=20` ;
+  **`StockAssignment(B, produit)` créé/incrémenté de 20 automatiquement**, sans action manuelle
+  sur la page Stock.
+- [ ] Statut passe à "Produit" ou "Livré" → la case n'est plus modifiable (que En attente /
+  Confirmé).
+- [ ] Décochez la case (retour à Confirmé) → **le crédit de B est retiré immédiatement** (0
+  tout de suite, pas seulement pour le futur) ; `available`/`reserved` inchangés.
+- [ ] Recochez, puis annulez la commande → `releaseOrderItemStock` relâche le stock ET reprend
+  le crédit de B en même temps (les deux tombent à 0/remontent ensemble).
+- [ ] Changez "Pris en charge par" de B vers C APRÈS un premier crédit à B (case toujours
+  cochée) → le crédit déjà donné à B reste chez B (pas transféré) ; seule une AUGMENTATION
+  ultérieure du besoin (ex: ajustement de quantité à la hausse) doit créditer C, pas B.
+
+### 16d. Livraison
+Reprenez CMD-X (qty=20 livrées à terme, B a bien 20 en `StockAssignment`).
+- [ ] Marquez "Livré" avec B disposant de ses 20 pleins → `reserved` baisse de 20 comme
+  toujours ; 
+  `StockAssignment(B)` supprimé (tombé à 0) ; `available` **inchangé** ; "Hors
+  commerciaux" **inchangé** par cette livraison (les 20 n'y comptaient déjà plus)
+- [ ] Même scénario mais B n'a plus que 12 sur ce produit (retiré ailleurs entretemps) → à la
+  livraison, `reserved` baisse quand même des 20 pleins, B tombe à 0 (ses 12 retirés, jamais
+  négatif), et "Hors commerciaux" **baisse de 8** (20 − 12) — sans qu'`available` soit touché
+  explicitement (l'écart passe par la formule).
+- [ ] Article livré SANS commercial verrouillé (case jamais cochée) → seul `reserved` baisse,
+  rien d'autre ne bouge (comportement identique à avant ce chantier).
+
+### 16e. Angle mort connu (à vérifier, pas forcément à corriger)
+- [ ] "Marquer Produit" avec un manquant, en forçant ("Continuer quand même", cf. section 7) sur
+  une commande où l'auto-attribution est cochée → le manquant phantom (jamais couvert par du
+  vrai stock) est quand même crédité au commercial. Vérifiez que ça se voit clairement (le
+  commercial semble avoir plus que ce qui existe réellement) — pas encore traité spécifiquement.
 
 ## Notes
 Pour chaque étape qui échoue, notez les valeurs exactes observées (disponible/réservé produit

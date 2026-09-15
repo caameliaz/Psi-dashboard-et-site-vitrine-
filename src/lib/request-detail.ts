@@ -12,7 +12,7 @@ export const DB_TO_UI: Record<string, string> = {
   EN_ATTENTE: 'En attente',
   CONTACTE: 'En attente',
   VALIDE: 'Confirmé',
-  PRODUITE: 'Produit',
+  PRODUITE: 'Disponible',
   LIVRE: 'Livré',
   RETOURNE: 'Retourné',
   ANNULE: 'Annulé',
@@ -22,7 +22,7 @@ export const DB_TO_UI: Record<string, string> = {
 export const UI_TO_DB: Record<string, string> = {
   'En attente': 'EN_ATTENTE',
   'Confirmé': 'VALIDE',
-  'Produit': 'PRODUITE',
+  'Disponible': 'PRODUITE',
   'Livré': 'LIVRE',
   'Retourné': 'RETOURNE',
   'Annulé': 'ANNULE',

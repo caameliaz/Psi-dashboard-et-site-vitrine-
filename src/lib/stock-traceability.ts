@@ -1,5 +1,5 @@
 import { prisma } from './prisma';
-import { fifoCompare } from './order-stock';
+import { fifoCompare, sortLinesByFifo } from './order-stock';
 
 // ── "Commandes concernées" (précis) pour les listes d'achat / production ──────────────────
 // Ne montre QUE les commandes/devis réellement rattachés (productionListItemId /
@@ -39,10 +39,16 @@ type Claim = {
   // `stillNeeded` = manquant en unités de PRODUIT (quantity − resolvedQuantity, brut) ; sert au
   // statut "Bloqué" par commande (checkCompletion, ailleurs) et n'est jamais affiché tel quel.
   // `materialQty` = ce même manquant converti en unités de CETTE matière (× ratio de recette) —
-  // c'est la seule quantité qui doit être affichée sur une carte de matière première, sinon on
-  // montre le manquant produit à la place du manquant matière (faux dès que le ratio ≠ 1, ou
-  // que la matière est partagée par plusieurs produits à des ratios différents).
-  stillNeeded: number; materialQty: number; owed: number;
+  // jamais affiché tel quel non plus sur une carte matière (cf. `missingQty` ci-dessous) : ça
+  // montrerait TOUT ce que cette commande doit, même la part déjà couverte par ce qu'il reste
+  // du pool avant elle dans l'ordre FIFO.
+  // `missingQty` = uniquement la part de CETTE commande qui dépasse le réservé actuel, une fois
+  // les commandes plus anciennes servies en premier — calculée en différence de cumul (cf.
+  // materialClaims). C'est la seule quantité honnête à afficher : le reste (materialQty −
+  // missingQty) est déjà couvert, peu importe que la commande porte quand même le badge
+  // "Bloqué" (dès qu'UNE partie manque, toute la commande reste bloquée tant que ce n'est pas
+  // réglé — mais on n'affiche que ce qui manque VRAIMENT).
+  stillNeeded: number; materialQty: number; missingQty: number; owed: number;
   product: { reference: string; name: string | null };
 };
 
@@ -83,7 +89,7 @@ async function materialClaims(rawMaterialId: string): Promise<{ claims: Claim[];
       const stillNeeded = i.quantity - i.resolvedQuantity;
       return {
         id: i.id, kind: 'order' as const, parent: i.order, createdAt: i.order.createdAt, priority: i.order.priority,
-        stillNeeded, materialQty: ratio * stillNeeded, owed: ratio * stillNeeded,
+        stillNeeded, materialQty: ratio * stillNeeded, missingQty: 0, owed: ratio * stillNeeded,
         product: productByLineId.get(i.productionListItemId!)!,
       };
     }),
@@ -92,17 +98,25 @@ async function materialClaims(rawMaterialId: string): Promise<{ claims: Claim[];
       const stillNeeded = i.quantity - i.resolvedQuantity;
       return {
         id: i.id, kind: 'quote' as const, parent: i.quote, createdAt: i.quote.createdAt, priority: i.quote.priority,
-        stillNeeded, materialQty: ratio * stillNeeded, owed: ratio * stillNeeded,
+        stillNeeded, materialQty: ratio * stillNeeded, missingQty: 0, owed: ratio * stillNeeded,
         product: productByLineId.get(i.productionListItemId!)!,
       };
     }),
   ].filter((c) => c.stillNeeded > 0).sort(fifoCompare);
 
+  // Simulation FIFO cumulée : chaque commande est servie dans l'ordre (les plus anciennes
+  // d'abord) par ce qui reste du réservé. `missingQty` = uniquement la part de CETTE commande
+  // qui dépasse ce que le cumul peut encore couvrir (différence de cumul avant/après elle) —
+  // jamais son besoin total, dont une partie peut être déjà couverte par le reliquat du pool.
   const blockedKeys = new Set<string>();
   let cumulative = 0;
   for (const c of claims) {
+    const before = cumulative;
     cumulative += c.owed;
-    if (cumulative > material.reserved) blockedKeys.add(`${c.kind}:${c.id}`);
+    if (cumulative > material.reserved) {
+      blockedKeys.add(`${c.kind}:${c.id}`);
+      c.missingQty = Math.max(0, cumulative - material.reserved) - Math.max(0, before - material.reserved);
+    }
   }
   return { claims, blockedKeys };
 }
@@ -145,26 +159,58 @@ export function createLinkResolver() {
     // Ligne d'achat MATIÈRE : directement la simulation FIFO de cette matière, PLUS la part du
     // besoin qui vient du buffer de chaque produit fabriqué en aval (pas d'une commande — cf.
     // resyncMaterialPurchaseNeed qui cascade needed+buffer des lignes de production).
+    //
+    // Le "manquant" affiché par source de buffer n'est PAS la cascade brute (ratio × buffer du
+    // produit) : c'est UNIQUEMENT la part qui dépasserait le coussin de sécurité de la matière
+    // elle-même (available − purchaseThreshold) — le buffer produit peut "dépenser" librement
+    // le surplus au-dessus du seuil de la matière, sans jamais entamer son seuil propre ; seul
+    // ce qui irait EN DESSOUS de ce seuil compte comme un vrai manquant à acheter. Simulation
+    // cumulée en FIFO (même clé que pour les commandes, cf. sortLinesByFifo) si plusieurs
+    // produits cascadent sur la même matière — sinon on compterait deux fois le même coussin.
     async materialPurchaseLinks(rawMaterialId: string): Promise<Links> {
       const { claims, blockedKeys } = await getMaterialClaims(rawMaterialId);
 
+      const material = await prisma.rawMaterial.findUnique({ where: { id: rawMaterialId } });
+      const spendableSurplus = material ? Math.max(0, material.available - material.purchaseThreshold) : 0;
+
       const recipeUses = await prisma.recipeItem.findMany({ where: { rawMaterialId }, select: { productId: true, quantity: true } });
       const ratioByProduct = new Map(recipeUses.map((r) => [r.productId, r.quantity]));
-      const lines = recipeUses.length > 0
+      const linesRaw = recipeUses.length > 0
         ? await prisma.productionListItem.findMany({
             where: { productId: { in: recipeUses.map((r) => r.productId) }, status: { in: ['A_PRODUIRE', 'BLOQUE'] }, bufferQuantity: { gt: 0 } },
-            select: { productId: true, bufferQuantity: true, product: { select: { reference: true, name: true } } },
+            select: { id: true, createdAt: true, productId: true, bufferQuantity: true, product: { select: { reference: true, name: true } } },
           })
         : [];
-      const bufferSources: BufferSource[] = lines
-        .map((l) => ({ productId: l.productId, reference: l.product.reference, name: l.product.name, quantity: (ratioByProduct.get(l.productId) ?? 0) * l.bufferQuantity }))
-        .filter((s) => s.quantity > 0);
+      const sortedLines = await sortLinesByFifo(linesRaw);
 
+      let cumulativeBuffer = 0;
+      const bufferSources: BufferSource[] = [];
+      for (const l of sortedLines) {
+        const quantity = (ratioByProduct.get(l.productId) ?? 0) * l.bufferQuantity;
+        if (quantity <= 0) continue;
+        const before = cumulativeBuffer;
+        cumulativeBuffer += quantity;
+        const missing = Math.max(0, cumulativeBuffer - spendableSurplus) - Math.max(0, before - spendableSurplus);
+        if (missing > 0) {
+          bufferSources.push({ productId: l.productId, reference: l.product.reference, name: l.product.name, quantity: missing });
+        }
+      }
+
+      // N'affiche QUE les commandes/devis réellement "Bloqués" (non couverts par le réservé
+      // actuel, cf. materialClaims) — une commande couverte n'a, par définition, pas de manque
+      // sur CETTE matière : ce n'est jamais elle qui justifie la présence de cette carte,
+      // même si la carte existe à cause d'une autre commande/du buffer. `blocked` reste
+      // toujours `true` ici puisque ne sont gardées que celles qui le sont — le champ est
+      // conservé dans le type pour l'affichage (badge) et par cohérence avec productionLineLinks.
+      const isBlocked = (kind: 'order' | 'quote', id: string) => blockedKeys.has(`${kind}:${id}`);
       return {
-        // `materialQty` (jamais `stillNeeded`, le manquant produit brut) : cf. commentaire du
-        // type Claim — sinon on affiche le manquant PRODUIT sur une carte de MATIÈRE.
-        orderItems: claims.filter((c) => c.kind === 'order').map((c) => ({ quantity: c.materialQty, order: c.parent, blocked: blockedKeys.has(`order:${c.id}`), product: c.product })),
-        quoteItems: claims.filter((c) => c.kind === 'quote').map((c) => ({ quantity: c.materialQty, quote: c.parent, blocked: blockedKeys.has(`quote:${c.id}`), product: c.product })),
+        // `missingQty` (jamais `materialQty`, le besoin matière TOTAL de la commande) : cf.
+        // commentaire du type Claim — sinon on affiche tout ce que la commande doit, même la
+        // part déjà couverte par le reliquat du pool avant elle dans l'ordre FIFO.
+        orderItems: claims.filter((c) => c.kind === 'order' && isBlocked('order', c.id))
+          .map((c) => ({ quantity: c.missingQty, order: c.parent, blocked: true, product: c.product })),
+        quoteItems: claims.filter((c) => c.kind === 'quote' && isBlocked('quote', c.id))
+          .map((c) => ({ quantity: c.missingQty, quote: c.parent, blocked: true, product: c.product })),
         bufferSources,
       };
     },

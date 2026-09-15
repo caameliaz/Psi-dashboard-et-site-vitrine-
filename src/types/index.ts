@@ -14,7 +14,7 @@ export const STATUS_LABELS: Record<RequestStatus, string> = {
   EN_ATTENTE: 'En attente',
   CONTACTE:   'Contacté',
   VALIDE:     'Confirmé',
-  PRODUITE:   'Produit',
+  PRODUITE:   'Disponible',
   LIVRE:      'Livré',
   RETOURNE:   'Retourné',
   ANNULE:     'Annulé',

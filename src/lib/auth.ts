@@ -5,6 +5,13 @@ import { prisma } from './prisma';
 import { isBlocked, recordFail, recordSuccess } from './login-guard';
 import type { Role } from '@/types';
 
+// Durée de session selon la case "Se souvenir de moi" à la connexion (cf. jwt callback) —
+// contrôle directement l'expiration EMBARQUÉE dans le token (`exp`), vérifiée à chaque requête
+// indépendamment du cookie lui-même : décochée, la session reste volontairement courte plutôt
+// que de suivre les 15 jours glissants habituels.
+const REMEMBERED_MAX_AGE = 15 * 24 * 60 * 60; // 15 jours, glissant (cf. session.maxAge/updateAge)
+const UNREMEMBERED_MAX_AGE = 24 * 60 * 60; // 1 jour
+
 export const { handlers, auth, signIn, signOut } = NextAuth({
   // Fait confiance à l'hôte de la requête (localhost OU IP réseau du tel)
   // → indispensable pour se connecter depuis un mobile sur le même WiFi.
@@ -78,10 +85,18 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       }
     })
   ],
-  // Session valable 30 jours (glissante) : tant que l'utilisateur revient dans les 30 jours,
-  // il reste connecté (évite de repasser par le 2FA à chaque fois). "Rester connecté"
-  // garde le cookie même après fermeture du navigateur.
-  session: { strategy: 'jwt', maxAge: 30 * 24 * 60 * 60 },
+  // Session GLISSANTE, jusqu'à 15 jours si "Se souvenir de moi" est coché (1 jour sinon, cf.
+  // REMEMBERED_MAX_AGE/UNREMEMBERED_MAX_AGE + jwt callback) : tant que l'utilisateur revient
+  // dans cette fenêtre, il reste connecté (évite de repasser par le 2FA à chaque fois). Le
+  // glissement est géré par NextAuth lui-même en JWT — pas besoin d'un refresh token séparé :
+  // `maxAge` ici n'est que l'enveloppe MAXIMALE du cookie (le plafond pour "mémorisé") ;
+  // l'expiration réellement vérifiée à chaque requête est `token.exp`, positionnée nous-mêmes
+  // dans le jwt callback selon le choix fait à la connexion. NextAuth RÉ-ÉMET le cookie
+  // (nouvelle signature, `token.exp` repoussé) dès que l'utilisateur revient après `updateAge`
+  // écoulé depuis la dernière émission — au plus une fois par jour d'activité ici, ce qui
+  // repousse la fenêtre à chaque jour où l'utilisateur revient. "Rester connecté" garde le
+  // cookie même après fermeture du navigateur (cookie persistant, pas de session).
+  session: { strategy: 'jwt', maxAge: 15 * 24 * 60 * 60, updateAge: 24 * 60 * 60 },
   callbacks: {
     async jwt({ token, user }) {
       if (user) {
@@ -90,6 +105,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         // Stocker sessionVersion initial pour pouvoir détecter une invalidation
         const dbUser = await prisma.user.findUnique({ where: { id: user.id } });
         token.sessionVersion = dbUser?.sessionVersion ?? 0;
+        // "Se souvenir de moi" — mémorisé sur le token lui-même (pas seulement lu une fois à la
+        // connexion) pour que chaque ré-émission glissante (updateAge, branche else ci-dessous)
+        // sache quelle durée reconduire, pas seulement la toute première émission.
+        token.remember = (user as { remember?: boolean }).remember ?? true;
+        token.exp = Math.floor(Date.now() / 1000) + (token.remember ? REMEMBERED_MAX_AGE : UNREMEMBERED_MAX_AGE);
       } else {
         // À chaque requête : vérifier que sessionVersion n'a pas changé
         // + rafraîchir rôle ET permissions depuis la base.
@@ -104,6 +124,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         }
         token.role = dbUser.role as Role;
         token.permissions = dbUser.permissions ?? [];
+        // Reconduit l'expiration selon le choix fait à LA CONNEXION (glissant, comme le reste
+        // de la session) — jamais l'inverse : un token émis "non mémorisé" ne doit jamais se
+        // remettre à durer 15 jours juste parce qu'il a été ré-émis une fois.
+        token.exp = Math.floor(Date.now() / 1000) + (token.remember ?? true ? REMEMBERED_MAX_AGE : UNREMEMBERED_MAX_AGE);
       }
       return token;
     },
