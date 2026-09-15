@@ -7,23 +7,11 @@ import { AdminSelect } from '@/components/ui/AdminSelect';
 import { RequirePerm } from '@/components/RequirePerm';
 import { LeaveModal } from '@/components/ui/LeaveModal';
 import { ClientAssignmentPanel } from '@/components/ui/ClientAssignmentPanel';
-
-const ALL_PERMISSIONS = [
-  { key: 'voir_commandes',     label: 'Voir les commandes & devis',    short: 'Voir commandes'      },
-  { key: 'modifier_statuts',   label: 'Modifier les statuts',          short: 'Modifier statuts'    },
-  { key: 'assign_commandes',   label: 'Assigner les commandes & devis', short: 'Assigner'           },
-  { key: 'reassigner_client',  label: 'Ré-assigner une demande à un autre client', short: 'Ré-assigner client' },
-  { key: 'voir_clients',       label: 'Voir les fiches clients',        short: 'Voir clients'        },
-  { key: 'modifier_clients',   label: 'Modifier / ajouter des clients', short: 'Modifier clients'   },
-  { key: 'voir_produits',      label: 'Voir les produits',              short: 'Voir produits'       },
-  { key: 'modifier_produits',  label: 'Modifier les produits',          short: 'Modifier produits'  },
-  { key: 'voir_historique',    label: "Voir l'historique",              short: 'Voir historique'     },
-  { key: 'recevoir_recaps',    label: 'Recevoir les récaps par email',  short: 'Récaps email'        },
-  { key: 'modifier_contenu',   label: 'Modifier le contenu du site',   short: 'Modifier contenu'    },
-  { key: 'gerer_utilisateurs', label: 'Gérer les utilisateurs',         short: 'Gérer utilisateurs' },
-] as const;
-
-type PermKey = typeof ALL_PERMISSIONS[number]['key'];
+// Source de vérité UNIQUE des permissions (src/lib/permissions.ts) — avant, cette
+// page maintenait sa propre copie qui avait divergé (voir_stock/modifier_stock et
+// les permissions stock plus récentes n'y apparaissaient plus du tout, impossible
+// de les cocher à la création d'un compte). Ne plus jamais dupliquer cette liste ici.
+import { ALL_PERMISSIONS, type PermKey } from '@/lib/permissions';
 
 const ADMIN_PERMS: PermKey[]   = ALL_PERMISSIONS.map((p) => p.key);
 const EMPLOYE_PERMS: PermKey[] = ['voir_commandes', 'modifier_statuts', 'voir_clients', 'voir_produits', 'voir_historique'];
