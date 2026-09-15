@@ -19,6 +19,7 @@ interface ClientRecord {
   devis: number;
   derniere: string;
   active?: boolean;
+  assignedToId?: string | null;
   deactivatedReason?: string | null;
   deactivatedByName?: string | null;
   deactivatedAt?: string | null;
@@ -611,6 +612,7 @@ function dbClientToRecord(c: any): ClientRecord {
     devis: quotesCount,
     derniere: lastDate,
     active: c.active ?? true,
+    assignedToId: c.assignedToId ?? null,
     deactivatedReason: c.deactivatedReason ?? null,
     deactivatedByName: c.deactivatedBy?.name ?? null,
     deactivatedAt: c.deactivatedAt ? new Date(c.deactivatedAt).toLocaleDateString('fr-FR') : null,
@@ -619,7 +621,7 @@ function dbClientToRecord(c: any): ClientRecord {
 }
 
 function ClientsPageInner() {
-  const { can } = useRole();
+  const { can, isAdmin } = useRole();
   const canEditClients = can('modifier_clients');
   const [clients, setClients] = useState<ClientRecord[]>([]);
   const [loading, setLoading]   = useState(true);
@@ -640,6 +642,9 @@ function ClientsPageInner() {
   const [sectors, setSectors]   = useState<{ id: string; name: string }[]>([]);
   const [showSectors, setShowSectors] = useState(false);
   const [showImport, setShowImport] = useState(false);
+  // Raccourci "Mes clients" — admin uniquement (cf. bouton dans la barre de filtres).
+  const [onlyMine, setOnlyMine] = useState(false);
+  const currentUserId = (session?.user as { id?: string } | undefined)?.id;
 
   const fetchUsers = useCallback(async () => {
     const r = await fetch('/api/users?assignable=true');
@@ -722,7 +727,9 @@ function ClientsPageInner() {
       // Par défaut on n'affiche que les clients actifs
       const estActif = c.active !== false;
       const matchActif = filterActif === 'tous' || (filterActif === 'inactifs' ? !estActif : estActif);
-      return matchSearch && matchSector && matchActif;
+      // "Mes clients" (admin uniquement) : uniquement les clients dont il est responsable.
+      const matchMine = !onlyMine || c.assignedToId === currentUserId;
+      return matchSearch && matchSector && matchActif && matchMine;
     })
     .sort((a, b) => {
       switch (sortBy) {
@@ -858,7 +865,11 @@ function ClientsPageInner() {
       {/* Header */}
       <div className="mb-6">
         <h1 className="text-[20px] md:text-[22px] font-bold text-[#0F172A]">Clients</h1>
-        <p className="text-[13px] text-[#8A9BB5] mt-0.5">{loading ? 'Chargement…' : `${clients.length} clients enregistrés`}</p>
+        <p className="text-[13px] text-[#8A9BB5] mt-0.5">
+          {loading ? 'Chargement…' : filtered.length === clients.length
+            ? `${clients.length} clients enregistrés`
+            : `${filtered.length} sur ${clients.length} clients`}
+        </p>
       </div>
 
       {/* Actions : Nouveau client + Secteurs (+ Import Excel sur ordi seulement) */}
@@ -924,8 +935,27 @@ function ClientsPageInner() {
         />
       </div>
 
+      {/* Raccourci "Mes clients" — admin uniquement (les employés voient déjà une
+          liste restreinte par défaut côté serveur, pas besoin de ce bouton). */}
+      {isAdmin && currentUserId && (
+        <button
+          onClick={() => setOnlyMine((v) => !v)}
+          className={`mb-6 -mt-4 px-3 py-2 rounded-xl text-[13px] font-bold border transition-colors ${
+            onlyMine
+              ? 'bg-[#F0FDF4] border-[#4CAF4F] text-[#166534]'
+              : 'bg-white border-[#E2E8F0] text-[#374151] hover:bg-[#F8FAFC]'
+          }`}
+        >
+          Mes clients
+        </button>
+      )}
+
       {/* Grille */}
-      {filtered.length === 0 ? (
+      {loading ? (
+        <div className="text-center py-20 text-[#8A9BB5]">
+          <p className="text-[13px]">Chargement…</p>
+        </div>
+      ) : filtered.length === 0 ? (
         <div className="text-center py-20 text-[#8A9BB5]">
           <p className="text-[15px] font-semibold">Aucun client trouvé</p>
         </div>
