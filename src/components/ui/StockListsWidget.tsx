@@ -126,8 +126,19 @@ function LinkedOrdersList({ linked, unit, bufferQuantity, manualQuantity, buffer
 interface PickableProduct { id: string; reference: string; name: string | null; mode: string; }
 interface PickableMaterial { id: string; reference: string; name: string; unit: string; }
 
-function itemLabel(item: PurchaseItem) {
-  return item.product ? { ref: item.product.reference, name: item.product.name ?? item.product.reference, unit: '' } : { ref: item.rawMaterial!.reference, name: item.rawMaterial!.name, unit: item.rawMaterial!.unit };
+// `name` reste `null` si le produit n'a pas de nom personnalisé (juste une référence) —
+// affiché seul ensuite (jamais "REF — REF", qui n'apporte aucune info en plus).
+// ProductionItem n'a jamais de rawMaterial (que des produits finis) — 'rawMaterial' in item
+// sert de garde de type pour le distinguer de PurchaseItem, qui peut avoir l'un ou l'autre.
+function itemLabel(item: PurchaseItem | ProductionItem) {
+  if (item.product) return { ref: item.product.reference, name: item.product.name, unit: '' };
+  const rm = ('rawMaterial' in item ? item.rawMaterial : null)!;
+  return { ref: rm.reference, name: rm.name, unit: rm.unit };
+}
+
+// Combine réf + nom en un seul libellé, sans répéter la référence si aucun nom n'est défini.
+function refAndName(l: { ref: string; name: string | null }) {
+  return l.name ? `${l.ref} — ${l.name}` : l.ref;
 }
 
 // ── Overlay : ajouter une ligne manuelle ────────────────────────────────────
@@ -336,7 +347,7 @@ export function StockListsWidget() {
   const bulkCandidates = bulkAction === 'order'
     // Inclut aussi les lignes déjà "Commandé" tant qu'il leur reste un manquant (nouveau
     // besoin apparu depuis, ou commande fournisseur fractionnée) — pas seulement "À commander".
-    ? purchaseItems.filter((i) => (i.status === 'A_COMMANDER' || i.status === 'COMMANDE') && totalQty(i) > 0).map((i) => { const l = itemLabel(i); return { id: i.id, label: `${l.ref} — ${l.name} (${totalQty(i)} manquant${i.status === 'COMMANDE' ? ', déjà commandé en partie' : ''})`, suggested: totalQty(i), max: totalQty(i), unit: l.unit }; })
+    ? purchaseItems.filter((i) => (i.status === 'A_COMMANDER' || i.status === 'COMMANDE') && totalQty(i) > 0).map((i) => { const l = itemLabel(i); return { id: i.id, label: `${refAndName(l)} (${totalQty(i)} manquant${i.status === 'COMMANDE' ? ', déjà commandé en partie' : ''})`, suggested: totalQty(i), max: totalQty(i), unit: l.unit }; })
     : bulkAction === 'receive'
     // Exclut les lignes déjà entièrement reçues (rien de plus à réceptionner dessus), et la
     // quantité suggérée/max est le restant RÉELLEMENT commandé non encore reçu — jamais tout
@@ -346,10 +357,10 @@ export function StockListsWidget() {
         .map((i) => {
           const l = itemLabel(i);
           const remaining = (i.orderedQuantity ?? 0) - (i.receivedQuantity ?? 0);
-          return { id: i.id, label: `${l.ref} — ${l.name} (${remaining} restant sur ${i.orderedQuantity} commandé)`, suggested: remaining, max: remaining, unit: l.unit };
+          return { id: i.id, label: `${refAndName(l)} (${remaining} restant sur ${i.orderedQuantity} commandé)`, suggested: remaining, max: remaining, unit: l.unit };
         })
     : bulkAction === 'produce'
-    ? productionItems.filter((i) => i.status !== 'PRODUIT').map((i) => ({ id: i.id, label: `${i.product.reference} — ${i.product.name ?? i.product.reference} (${totalQty(i)} à produire)`, suggested: totalQty(i), unit: '' }))
+    ? productionItems.filter((i) => i.status !== 'PRODUIT').map((i) => { const l = itemLabel(i); return { id: i.id, label: `${refAndName(l)} (${totalQty(i)} à produire)`, suggested: totalQty(i), unit: '' }; })
     : [];
 
   const bulkTitle = bulkAction === 'order' ? 'Commander' : bulkAction === 'receive' ? 'Valider réception' : 'Marquer fabriquée';
@@ -420,7 +431,9 @@ export function StockListsWidget() {
                       <p className="text-[11px] font-bold text-[#4F46E5]">{l.ref}</p>
                       {urgent && <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-[#FEF2F2] text-[#DC2626] uppercase tracking-wide">Urgent</span>}
                     </div>
-                    <p className="text-[13px] font-bold text-[#0F172A] truncate">{l.name}</p>
+                    {/* Pas de nom personnalisé → rien à afficher en plus de la référence
+                        déjà visible juste au-dessus (évite la référence répétée). */}
+                    {l.name && <p className="text-[13px] font-bold text-[#0F172A] truncate">{l.name}</p>}
                     <p className="text-[11px] text-[#8A9BB5] italic mt-0.5">{subtitle}</p>
                   </div>
                   <div className="text-right flex-shrink-0">
