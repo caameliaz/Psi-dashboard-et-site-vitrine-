@@ -900,55 +900,57 @@ function ClientsPageInner() {
         />
       </div>
 
-      {/* Les 3 filtres — toujours sur une seule ligne */}
-      <div className="grid grid-cols-3 gap-2 mb-6">
-        <AdminSelect
-          className="w-full"
-          value={filterSector}
-          onChange={setFilterSector}
-          options={[
-            { value: 'all', label: 'Tous les secteurs' },
-            ...sectors.map((s) => ({ value: s.id, label: s.name })),
-            { value: 'none', label: 'Sans secteur' },
-          ]}
-        />
-        <AdminSelect
-          className="w-full"
-          value={filterActif}
-          onChange={setFilterActif}
-          options={[
-            { value: 'actifs', label: 'Clients actifs' },
-            { value: 'inactifs', label: 'Désactivés' },
-            { value: 'tous', label: 'Tous' },
-          ]}
-        />
-        <AdminSelect
-          className="w-full"
-          value={sortBy}
-          onChange={setSortBy}
-          options={[
-            { value: 'recent', label: 'Tri : plus récents' },
-            { value: 'commandes', label: 'Tri : plus de commandes' },
-            { value: 'nom', label: 'Tri : nom (A→Z)' },
-            { value: 'wilaya', label: 'Tri : wilaya' },
-          ]}
-        />
+      {/* Les 3 filtres + raccourci "Mes clients" (admin, poussé à droite) — même ligne */}
+      <div className="flex flex-col md:flex-row md:items-center gap-2 mb-6">
+        <div className="grid grid-cols-3 gap-2 flex-1 min-w-0">
+          <AdminSelect
+            className="w-full"
+            value={filterSector}
+            onChange={setFilterSector}
+            options={[
+              { value: 'all', label: 'Tous les secteurs' },
+              ...sectors.map((s) => ({ value: s.id, label: s.name })),
+              { value: 'none', label: 'Sans secteur' },
+            ]}
+          />
+          <AdminSelect
+            className="w-full"
+            value={filterActif}
+            onChange={setFilterActif}
+            options={[
+              { value: 'actifs', label: 'Clients actifs' },
+              { value: 'inactifs', label: 'Désactivés' },
+              { value: 'tous', label: 'Tous' },
+            ]}
+          />
+          <AdminSelect
+            className="w-full"
+            value={sortBy}
+            onChange={setSortBy}
+            options={[
+              { value: 'recent', label: 'Tri : plus récents' },
+              { value: 'commandes', label: 'Tri : plus de commandes' },
+              { value: 'nom', label: 'Tri : nom (A→Z)' },
+              { value: 'wilaya', label: 'Tri : wilaya' },
+            ]}
+          />
+        </div>
+        {/* Raccourci "Mes clients" — admin uniquement (les employés voient déjà une
+            liste restreinte par défaut côté serveur, pas besoin de ce bouton).
+            Off = fond blanc/bordure+texte vert, on = vert plein. */}
+        {isAdmin && currentUserId && (
+          <button
+            onClick={() => setOnlyMine((v) => !v)}
+            className={`px-3 py-2.5 rounded-xl text-[13px] font-bold border-2 transition-colors whitespace-nowrap flex-shrink-0 md:ml-auto ${
+              onlyMine
+                ? 'bg-[#4CAF4F] border-[#4CAF4F] text-white'
+                : 'bg-white border-[#4CAF4F] text-[#4CAF4F] hover:bg-[#F0FDF4]'
+            }`}
+          >
+            Mes clients
+          </button>
+        )}
       </div>
-
-      {/* Raccourci "Mes clients" — admin uniquement (les employés voient déjà une
-          liste restreinte par défaut côté serveur, pas besoin de ce bouton). */}
-      {isAdmin && currentUserId && (
-        <button
-          onClick={() => setOnlyMine((v) => !v)}
-          className={`mb-6 -mt-4 px-3 py-2 rounded-xl text-[13px] font-bold border transition-colors ${
-            onlyMine
-              ? 'bg-[#F0FDF4] border-[#4CAF4F] text-[#166534]'
-              : 'bg-white border-[#E2E8F0] text-[#374151] hover:bg-[#F8FAFC]'
-          }`}
-        >
-          Mes clients
-        </button>
-      )}
 
       {/* Grille */}
       {loading ? (

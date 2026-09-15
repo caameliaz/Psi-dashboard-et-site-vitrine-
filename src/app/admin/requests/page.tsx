@@ -1008,14 +1008,15 @@ function RequestsPageInner() {
             ]}
           />
           {/* Raccourci "Mes commandes" — admin uniquement (les employés voient déjà
-              une liste restreinte par défaut côté serveur, pas besoin de ce bouton). */}
+              une liste restreinte par défaut côté serveur, pas besoin de ce bouton).
+              Poussé à droite (ml-auto) ; off = fond blanc/bordure+texte vert, on = vert plein. */}
           {isAdmin && currentUserId && (
             <button
               onClick={() => setFilterAssigne((v) => v === currentUserId ? 'all' : currentUserId)}
-              className={`px-3 py-2.5 rounded-xl text-[13px] font-bold border transition-colors whitespace-nowrap ${
+              className={`ml-auto px-3 py-2.5 rounded-xl text-[13px] font-bold border-2 transition-colors whitespace-nowrap flex-shrink-0 ${
                 filterAssigne === currentUserId
-                  ? 'bg-[#F0FDF4] border-[#4CAF4F] text-[#166534]'
-                  : 'bg-white border-[#E2E8F0] text-[#374151] hover:bg-[#F8FAFC]'
+                  ? 'bg-[#4CAF4F] border-[#4CAF4F] text-white'
+                  : 'bg-white border-[#4CAF4F] text-[#4CAF4F] hover:bg-[#F0FDF4]'
               }`}
             >
               Mes commandes
