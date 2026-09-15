@@ -6,7 +6,35 @@ de l'entreprise avant/au moment du déploiement de cette branche.
 
 ---
 
-## 1. Migration Prisma — `add_client_assignment_and_leave`
+## 0. TOUTES les migrations Prisma de cette branche — ⚠️ à ne jamais oublier
+
+**Avant tout déploiement de cette branche sur la vraie base de prod**, il faut
+appliquer TOUTES les migrations créées sur cette branche, pas seulement celle
+détaillée au point 1 ci-dessous. Une seule commande les applique toutes, dans
+l'ordre, automatiquement :
+
+```bash
+npx prisma migrate deploy
+```
+
+(jamais `migrate dev` en prod — `dev` peut proposer un reset si Prisma détecte
+une divergence entre le schéma et la base).
+
+**Migrations créées sur cette branche à ce jour :**
+- `20260913192116_add_client_assignment_and_leave` (détail au point 1)
+
+Si d'autres migrations sont ajoutées plus tard sur cette branche, elles seront
+listées ici aussi — mais `prisma migrate deploy` les applique de toute façon
+toutes automatiquement, dans l'ordre, sans qu'il faille les lister une par une
+à la main pour que ça marche. Cette liste sert juste à savoir ce qui a changé.
+
+**Vérifier AVANT de lancer la commande** : que `DATABASE_URL`/`DIRECT_URL`
+pointent bien vers la vraie base de prod (pas la base de test), sinon la
+commande s'exécute sur la mauvaise base.
+
+---
+
+## 1. Migration Prisma — `add_client_assignment_and_leave` (détail)
 
 **Quoi :** ajoute la notion de client assigné à un employé + la gestion des congés/intérim.
 
