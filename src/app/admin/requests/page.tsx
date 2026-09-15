@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { StatusPill } from '@/components/ui/StatusPill';
+import { Modal } from '@/components/ui/Modal';
 import { RequestPanel, type RequestDetail } from '@/components/ui/RequestPanel';
 import { AdminSelect } from '@/components/ui/AdminSelect';
 import { WilayaSelect } from '@/components/ui/WilayaSelect';
@@ -182,6 +183,20 @@ export function CreateForm({ defaultType, onClose, onSave, users, currentUserId,
     // Si l'utilisateur ne peut pas assigner de commercial, s'assigner automatiquement
     return canAssignCommercial ? (currentUserId ?? '') : (currentUserId ?? '');
   });
+  // Responsable habituel du client sélectionné via l'autocomplete (si un client existant
+  // a été choisi) — sert à demander confirmation si l'admin assigne à quelqu'un d'autre
+  // (cf. handleAssignedToChange plus bas).
+  const [clientUsualOwnerId, setClientUsualOwnerId] = useState<string | null>(null);
+  const [clientUsualOwnerName, setClientUsualOwnerName] = useState<string | null>(null);
+  const [pendingAssignChange, setPendingAssignChange] = useState<string | null>(null);
+
+  const handleAssignedToChange = (newId: string) => {
+    if (clientUsualOwnerId && newId !== clientUsualOwnerId && newId !== '') {
+      setPendingAssignChange(newId); // demande confirmation avant d'appliquer
+    } else {
+      setAssignedToId(newId);
+    }
+  };
   // Infos de facturation / règlement (toutes facultatives)
   const [invoiceNumber, setInvoiceNumber] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('');
@@ -306,6 +321,12 @@ export function CreateForm({ defaultType, onClose, onSave, users, currentUserId,
                   setEmail(c.email ?? '');
                   setWilaya(c.wilaya ?? '');
                   setCommune(c.commune ?? '');
+                  setClientUsualOwnerId(c.assignedToId ?? null);
+                  setClientUsualOwnerName(c.assignedToId ? (users.find((u) => u.id === c.assignedToId)?.name ?? null) : null);
+                  // Un client existant a un responsable habituel → on l'assigne par
+                  // défaut à lui (cohérent avec l'auto-assignation côté serveur), sauf
+                  // si l'admin change ensuite explicitement (cf. handleAssignedToChange).
+                  if (c.assignedToId) setAssignedToId(c.assignedToId);
                 }}
               />
               {fieldErrors.entreprise && <p className="text-[11px] text-[#EF4444] font-medium mt-1 flex items-center gap-1"><svg width="12" height="12" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" stroke="currentColor" strokeWidth="1.5"/><path d="M8 4v5M8 11v1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>{fieldErrors.entreprise}</p>}
@@ -341,10 +362,30 @@ export function CreateForm({ defaultType, onClose, onSave, users, currentUserId,
               <AdminSelect
                 className="w-full"
                 value={assignedToId}
-                onChange={setAssignedToId}
+                onChange={handleAssignedToChange}
                 options={[{ value: '', label: '— Non assigné —' }, ...users.map(u => ({ value: u.id, label: u.name }))]}
               />
+              {clientUsualOwnerId && assignedToId === clientUsualOwnerId && (
+                <p className="text-[11px] text-[#8A9BB5] mt-1">Responsable habituel de ce client{clientUsualOwnerName ? ` : ${clientUsualOwnerName}` : ''}.</p>
+              )}
             </div>
+          )}
+
+          {pendingAssignChange && (
+            <Modal title="Changer le responsable ?" onClose={() => setPendingAssignChange(null)}>
+              <p className="text-[13px] text-[#374151] mb-1">
+                Ce client est habituellement géré par <span className="font-semibold">{clientUsualOwnerName ?? 'un autre commercial'}</span>.
+              </p>
+              <p className="text-[12px] text-[#8A9BB5] mb-5">Assigner quand même cette demande à <span className="font-semibold">{users.find((u) => u.id === pendingAssignChange)?.name ?? 'ce commercial'}</span> ?</p>
+              <div className="flex gap-3">
+                <button onClick={() => setPendingAssignChange(null)} className="flex-1 px-4 py-2.5 rounded-xl border border-[#E2E8F0] text-[13px] font-semibold text-[#374151]">Annuler</button>
+                <button
+                  onClick={() => { setAssignedToId(pendingAssignChange); setPendingAssignChange(null); }}
+                  className="flex-1 px-4 py-2.5 rounded-xl text-[13px] font-bold text-white bg-[#4CAF4F]">
+                  Oui, changer
+                </button>
+              </div>
+            </Modal>
           )}
 
           {/* ── Facturation / règlement (facultatif) ── */}
@@ -572,14 +613,12 @@ function RequestsPageInner() {
     if (!silent) setLoading(true);
     try {
       // Perf : on ne charge que la période sélectionnée (le serveur filtre par ?from)
+      // La restriction "mes commandes/clients" pour un non-admin est appliquée côté
+      // serveur (cf. src/lib/leave.ts + /api/orders, /api/quotes) — pas besoin de la
+      // repasser en query param ici.
       const from = periodeToFrom(filterPeriode);
-      let qs = from ? `?from=${encodeURIComponent(from)}` : '';
-      
-      // Si pas admin, filtrer par utilisateur actuel
-      if (!isAdmin && currentUserId) {
-        qs += (qs ? '&' : '?') + `assignedToId=${currentUserId}`;
-      }
-      
+      const qs = from ? `?from=${encodeURIComponent(from)}` : '';
+
       const [ordRes, quoRes] = await Promise.all([
         fetch(`/api/orders${qs}`),
         fetch(`/api/quotes${qs}`),
@@ -858,7 +897,9 @@ function RequestsPageInner() {
 
   return (
     <div className="w-full max-w-full overflow-x-hidden">
-      {/* Titre + boutons export/création en haut à droite */}
+      {/* Titre + boutons export/création en haut à droite. Sur mobile : "Mes commandes"
+          (raccourci admin) sur la même ligne que le titre, à droite — pas mélangé
+          avec les filtres en dessous. */}
       <div className="flex items-start justify-between flex-wrap gap-3 mb-4">
         <div>
           <h1 className="text-[20px] md:text-[22px] font-bold text-[#0F172A]">Commandes</h1>
@@ -867,6 +908,20 @@ function RequestsPageInner() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          {/* "Mes commandes" — mobile uniquement ici (desktop : reste dans la ligne de
+              filtres, cf. plus bas). Compact : bordure fine, texte réduit. */}
+          {isAdmin && currentUserId && (
+            <button
+              onClick={() => setFilterAssigne((v) => v === currentUserId ? 'all' : currentUserId)}
+              className={`md:hidden px-2.5 py-1.5 rounded-lg text-[11px] font-bold border transition-colors whitespace-nowrap ${
+                filterAssigne === currentUserId
+                  ? 'bg-[#4CAF4F] border-[#4CAF4F] text-white'
+                  : 'bg-white border-[#4CAF4F] text-[#4CAF4F] hover:bg-[#F0FDF4]'
+              }`}
+            >
+              Mes commandes
+            </button>
+          )}
           <button
             onClick={() => exportVentesExcel(activeFilters.join(' | '))}
             className="hidden md:flex items-center gap-1.5 px-3 py-2 rounded-xl text-[13px] font-semibold border border-[#E2E8F0] text-[#374151] hover:bg-[#F8FAFC] hover:border-[#4CAF4F] hover:text-[#4CAF4F] transition-colors"
@@ -895,8 +950,13 @@ function RequestsPageInner() {
             <svg width={14} height={14} fill="none" viewBox="0 0 24 24"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
             Importer
           </button>
+          {/* Mobile : rond + (compact). Desktop : bouton "+ Nouveau" texte. */}
+          <button onClick={() => setShowCreate(true)} title="Nouveau"
+            className="md:hidden w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-full border-2 border-[#4CAF4F] text-[#4CAF4F] hover:bg-[#F0FDF4] transition-colors">
+            <svg width={16} height={16} viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"/></svg>
+          </button>
           <button onClick={() => setShowCreate(true)}
-            className="px-4 py-2 rounded-xl text-[13px] font-bold border border-[#4CAF4F] text-[#4CAF4F] hover:bg-[#F0FDF4] transition-colors whitespace-nowrap">
+            className="hidden md:block px-4 py-2 rounded-xl text-[13px] font-bold border border-[#4CAF4F] text-[#4CAF4F] hover:bg-[#F0FDF4] transition-colors whitespace-nowrap">
             + Nouveau
           </button>
         </div>
@@ -968,6 +1028,21 @@ function RequestsPageInner() {
               ...users.map((u) => ({ value: u.id, label: u.name })),
             ]}
           />
+          {/* Raccourci "Mes commandes" — admin uniquement, DESKTOP seulement (sur
+              mobile, il est maintenant dans la ligne du titre, cf. plus haut).
+              Poussé à droite (ml-auto) ; off = fond blanc/bordure+texte vert, on = vert plein. */}
+          {isAdmin && currentUserId && (
+            <button
+              onClick={() => setFilterAssigne((v) => v === currentUserId ? 'all' : currentUserId)}
+              className={`hidden md:block ml-auto px-3 py-2.5 rounded-xl text-[13px] font-bold border-2 transition-colors whitespace-nowrap flex-shrink-0 ${
+                filterAssigne === currentUserId
+                  ? 'bg-[#4CAF4F] border-[#4CAF4F] text-white'
+                  : 'bg-white border-[#4CAF4F] text-[#4CAF4F] hover:bg-[#F0FDF4]'
+              }`}
+            >
+              Mes commandes
+            </button>
+          )}
         </div>
         {(search || filterStatut !== 'all' || filterPeriode !== 'mois' || filterAssigne !== 'all') && (
           <button onClick={() => { setSearch(''); setFilterStatut('all'); setFilterPeriode('mois'); setFilterAssigne('all'); }} className="text-[12px] font-semibold text-[#8A9BB5] hover:text-[#374151] self-start md:self-auto">Effacer</button>

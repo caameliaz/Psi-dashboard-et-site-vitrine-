@@ -86,6 +86,8 @@ export function orderToDetail(o: any, fallback?: ClientFallback): RequestDetail 
     statut: DB_TO_UI[o.status] ?? o.status,
     assignedToId: o.assignedTo?.id ?? o.assignedToId ?? null,
     assignedToName: o.assignedTo?.name ?? null,
+    // Le nom est résolu côté appelant (liste `users` déjà chargée) — cf. requests/page.tsx.
+    clientAssignedToId: o.client?.assignedToId ?? null,
     autoAssignStock: Boolean(o.autoAssignStock),
     invoiceNumber: o.invoiceNumber ?? null,
     paymentMethod: o.paymentMethod ?? null,
@@ -136,6 +138,7 @@ export function quoteToDetail(q: any, fallback?: ClientFallback): RequestDetail 
     statut: DB_TO_UI[q.status] ?? q.status,
     assignedToId: q.assignedTo?.id ?? q.assignedToId ?? null,
     assignedToName: q.assignedTo?.name ?? null,
+    clientAssignedToId: q.client?.assignedToId ?? null,
     autoAssignStock: Boolean(q.autoAssignStock),
     invoiceNumber: q.invoiceNumber ?? null,
     paymentMethod: q.paymentMethod ?? null,

@@ -920,7 +920,7 @@ function ProductsPageInner() {
 
       {showNewRef && (
         <Modal title="Nouvelle référence" onClose={() => setShowNewRef(false)}>
-          <div className="space-y-4">
+          <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-1">
             <RefFormFields form={newRefForm} setForm={setNewRefForm} fieldDefs={fieldDefs} />
             <div className="flex gap-3 pt-2">
               <button onClick={() => setShowNewRef(false)} className="flex-1 px-4 py-2.5 rounded-lg border border-[#E2E8F0] text-sm font-semibold text-[#374151] hover:bg-[#F8FAFC] transition-colors">Annuler</button>
@@ -932,7 +932,7 @@ function ProductsPageInner() {
 
       {editRef && (
         <Modal title="Modifier la référence" onClose={() => setEditRef(null)}>
-          <div className="space-y-4">
+          <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-1">
             <RefFormFields form={editRefForm} setForm={setEditRefForm} fieldDefs={fieldDefs} />
             {(editRefForm.mode === 'FABRIQUE' || editRefForm.mode === 'LES_DEUX') && (
               <RecipeSection

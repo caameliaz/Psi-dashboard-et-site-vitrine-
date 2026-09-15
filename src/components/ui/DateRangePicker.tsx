@@ -73,8 +73,8 @@ export function DateRangePicker({ onDateChange }: DateRangePickerProps) {
         </button>
       )}
 
-      {isOpen && (
-        <div className="absolute top-full right-0 mt-2 z-50 bg-white rounded-lg border border-[#E2E8F0] shadow-lg p-3 min-w-[240px]">
+      {isOpen && (() => {
+        const panel = (
           <div className="space-y-3">
             <div>
               <label className="text-[10px] font-semibold text-[#8A9BB5] uppercase">Date début</label>
@@ -110,8 +110,24 @@ export function DateRangePicker({ onDateChange }: DateRangePickerProps) {
               </button>
             </div>
           </div>
-        </div>
-      )}
+        );
+        return (
+          <>
+            {/* Mobile : pop-up centrée à l'écran (évite le panneau qui dépassait du
+                bord quand le bouton "Filtrer" est proche du bord de sa carte). */}
+            <div className="md:hidden fixed inset-0 z-[9999] flex items-center justify-center px-6" onClick={() => setIsOpen(false)}>
+              <div className="absolute inset-0 bg-black/30" />
+              <div className="relative w-full max-w-xs bg-white rounded-xl border border-[#E2E8F0] shadow-2xl p-4" onClick={(e) => e.stopPropagation()}>
+                {panel}
+              </div>
+            </div>
+            {/* Desktop : panneau classique sous le bouton. */}
+            <div className="hidden md:block absolute top-full right-0 mt-2 z-50 bg-white rounded-lg border border-[#E2E8F0] shadow-lg p-3 min-w-[240px]">
+              {panel}
+            </div>
+          </>
+        );
+      })()}
     </div>
   );
 }

@@ -19,6 +19,7 @@ interface ClientRecord {
   devis: number;
   derniere: string;
   active?: boolean;
+  assignedToId?: string | null;
   deactivatedReason?: string | null;
   deactivatedByName?: string | null;
   deactivatedAt?: string | null;
@@ -611,6 +612,7 @@ function dbClientToRecord(c: any): ClientRecord {
     devis: quotesCount,
     derniere: lastDate,
     active: c.active ?? true,
+    assignedToId: c.assignedToId ?? null,
     deactivatedReason: c.deactivatedReason ?? null,
     deactivatedByName: c.deactivatedBy?.name ?? null,
     deactivatedAt: c.deactivatedAt ? new Date(c.deactivatedAt).toLocaleDateString('fr-FR') : null,
@@ -619,7 +621,7 @@ function dbClientToRecord(c: any): ClientRecord {
 }
 
 function ClientsPageInner() {
-  const { can } = useRole();
+  const { can, isAdmin } = useRole();
   const canEditClients = can('modifier_clients');
   const [clients, setClients] = useState<ClientRecord[]>([]);
   const [loading, setLoading]   = useState(true);
@@ -640,6 +642,9 @@ function ClientsPageInner() {
   const [sectors, setSectors]   = useState<{ id: string; name: string }[]>([]);
   const [showSectors, setShowSectors] = useState(false);
   const [showImport, setShowImport] = useState(false);
+  // Raccourci "Mes clients" — admin uniquement (cf. bouton dans la barre de filtres).
+  const [onlyMine, setOnlyMine] = useState(false);
+  const currentUserId = (session?.user as { id?: string } | undefined)?.id;
 
   const fetchUsers = useCallback(async () => {
     const r = await fetch('/api/users?assignable=true');
@@ -722,7 +727,9 @@ function ClientsPageInner() {
       // Par défaut on n'affiche que les clients actifs
       const estActif = c.active !== false;
       const matchActif = filterActif === 'tous' || (filterActif === 'inactifs' ? !estActif : estActif);
-      return matchSearch && matchSector && matchActif;
+      // "Mes clients" (admin uniquement) : uniquement les clients dont il est responsable.
+      const matchMine = !onlyMine || c.assignedToId === currentUserId;
+      return matchSearch && matchSector && matchActif && matchMine;
     })
     .sort((a, b) => {
       switch (sortBy) {
@@ -855,15 +862,42 @@ function ClientsPageInner() {
 
   return (
     <div className="w-full">
-      {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-[20px] md:text-[22px] font-bold text-[#0F172A]">Clients</h1>
-        <p className="text-[13px] text-[#8A9BB5] mt-0.5">{loading ? 'Chargement…' : `${clients.length} clients enregistrés`}</p>
+      {/* Header — sur mobile : "Mes clients" + rond "+" sur la même ligne que le titre. */}
+      <div className="mb-6 flex items-start justify-between gap-3">
+        <div>
+          <h1 className="text-[20px] md:text-[22px] font-bold text-[#0F172A]">Clients</h1>
+          <p className="text-[13px] text-[#8A9BB5] mt-0.5">
+            {loading ? 'Chargement…' : filtered.length === clients.length
+              ? `${clients.length} clients enregistrés`
+              : `${filtered.length} sur ${clients.length} clients`}
+          </p>
+        </div>
+        <div className="flex items-center gap-2 md:hidden flex-shrink-0">
+          {isAdmin && currentUserId && (
+            <button
+              onClick={() => setOnlyMine((v) => !v)}
+              className={`px-2.5 py-1.5 rounded-lg text-[11px] font-bold border transition-colors whitespace-nowrap ${
+                onlyMine
+                  ? 'bg-[#4CAF4F] border-[#4CAF4F] text-white'
+                  : 'bg-white border-[#4CAF4F] text-[#4CAF4F] hover:bg-[#F0FDF4]'
+              }`}
+            >
+              Mes clients
+            </button>
+          )}
+          {canEditClients && (
+            <button onClick={() => { setAddForm({ ...emptyClient }); setShowAdd(true); }} title="Nouveau client"
+              className="w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-full text-white transition-colors" style={{ background: '#4CAF4F' }}>
+              <svg width={16} height={16} viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"/></svg>
+            </button>
+          )}
+        </div>
       </div>
 
-      {/* Actions : Nouveau client + Secteurs (+ Import Excel sur ordi seulement) */}
+      {/* Actions : Nouveau client + Secteurs (+ Import Excel sur ordi seulement) —
+          DESKTOP seulement (mobile : rond "+" dans le header, cf. plus haut). */}
       {canEditClients && (
-        <div className="flex items-center gap-2 mb-3 flex-wrap">
+        <div className="hidden md:flex items-center gap-2 mb-3 flex-wrap">
           <button onClick={() => { setAddForm({ ...emptyClient }); setShowAdd(true); }} className="flex items-center gap-2 px-4 py-2 rounded-xl text-[13px] font-semibold text-white transition-colors whitespace-nowrap" style={{ background: '#4CAF4F' }}>
             + Nouveau client
           </button>
@@ -874,6 +908,15 @@ function ClientsPageInner() {
           <button onClick={() => setShowImport(true)} className="hidden md:flex items-center gap-1.5 px-4 py-2 rounded-xl text-[13px] font-semibold text-[#374151] border border-[#E2E8F0] bg-white hover:bg-[#F8FAFC] transition-colors whitespace-nowrap">
             <svg width={15} height={15} fill="none" viewBox="0 0 24 24"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg>
             Importer Excel
+          </button>
+        </div>
+      )}
+      {/* Secteurs reste accessible sur mobile aussi (pas de bouton "+ Nouveau client"
+          en double, mais Secteurs n'a pas d'équivalent rond) */}
+      {canEditClients && (
+        <div className="md:hidden mb-3">
+          <button onClick={() => setShowSectors(true)} className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-[13px] font-semibold text-[#374151] border border-[#E2E8F0] bg-white hover:bg-[#F8FAFC] transition-colors whitespace-nowrap">
+            Secteurs
           </button>
         </div>
       )}
@@ -889,43 +932,64 @@ function ClientsPageInner() {
         />
       </div>
 
-      {/* Les 3 filtres — toujours sur une seule ligne */}
-      <div className="grid grid-cols-3 gap-2 mb-6">
-        <AdminSelect
-          className="w-full"
-          value={filterSector}
-          onChange={setFilterSector}
-          options={[
-            { value: 'all', label: 'Tous les secteurs' },
-            ...sectors.map((s) => ({ value: s.id, label: s.name })),
-            { value: 'none', label: 'Sans secteur' },
-          ]}
-        />
-        <AdminSelect
-          className="w-full"
-          value={filterActif}
-          onChange={setFilterActif}
-          options={[
-            { value: 'actifs', label: 'Clients actifs' },
-            { value: 'inactifs', label: 'Désactivés' },
-            { value: 'tous', label: 'Tous' },
-          ]}
-        />
-        <AdminSelect
-          className="w-full"
-          value={sortBy}
-          onChange={setSortBy}
-          options={[
-            { value: 'recent', label: 'Tri : plus récents' },
-            { value: 'commandes', label: 'Tri : plus de commandes' },
-            { value: 'nom', label: 'Tri : nom (A→Z)' },
-            { value: 'wilaya', label: 'Tri : wilaya' },
-          ]}
-        />
+      {/* Les 3 filtres + raccourci "Mes clients" (admin, poussé à droite) — même ligne */}
+      <div className="flex flex-col md:flex-row md:items-center gap-2 mb-6">
+        <div className="grid grid-cols-3 gap-2 flex-1 min-w-0">
+          <AdminSelect
+            className="w-full"
+            value={filterSector}
+            onChange={setFilterSector}
+            options={[
+              { value: 'all', label: 'Tous les secteurs' },
+              ...sectors.map((s) => ({ value: s.id, label: s.name })),
+              { value: 'none', label: 'Sans secteur' },
+            ]}
+          />
+          <AdminSelect
+            className="w-full"
+            value={filterActif}
+            onChange={setFilterActif}
+            options={[
+              { value: 'actifs', label: 'Clients actifs' },
+              { value: 'inactifs', label: 'Désactivés' },
+              { value: 'tous', label: 'Tous' },
+            ]}
+          />
+          <AdminSelect
+            className="w-full"
+            value={sortBy}
+            onChange={setSortBy}
+            options={[
+              { value: 'recent', label: 'Tri : plus récents' },
+              { value: 'commandes', label: 'Tri : plus de commandes' },
+              { value: 'nom', label: 'Tri : nom (A→Z)' },
+              { value: 'wilaya', label: 'Tri : wilaya' },
+            ]}
+          />
+        </div>
+        {/* Raccourci "Mes clients" — admin uniquement, DESKTOP seulement (sur mobile,
+            il est maintenant dans le header, à côté du titre, cf. plus haut).
+            Off = fond blanc/bordure+texte vert, on = vert plein. */}
+        {isAdmin && currentUserId && (
+          <button
+            onClick={() => setOnlyMine((v) => !v)}
+            className={`hidden md:block px-3 py-2.5 rounded-xl text-[13px] font-bold border-2 transition-colors whitespace-nowrap flex-shrink-0 md:ml-auto ${
+              onlyMine
+                ? 'bg-[#4CAF4F] border-[#4CAF4F] text-white'
+                : 'bg-white border-[#4CAF4F] text-[#4CAF4F] hover:bg-[#F0FDF4]'
+            }`}
+          >
+            Mes clients
+          </button>
+        )}
       </div>
 
       {/* Grille */}
-      {filtered.length === 0 ? (
+      {loading ? (
+        <div className="text-center py-20 text-[#8A9BB5]">
+          <p className="text-[13px]">Chargement…</p>
+        </div>
+      ) : filtered.length === 0 ? (
         <div className="text-center py-20 text-[#8A9BB5]">
           <p className="text-[15px] font-semibold">Aucun client trouvé</p>
         </div>

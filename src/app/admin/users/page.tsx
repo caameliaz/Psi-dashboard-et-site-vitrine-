@@ -5,23 +5,13 @@ import { initials } from '@/lib/utils';
 import { Modal } from '@/components/ui/Modal';
 import { AdminSelect } from '@/components/ui/AdminSelect';
 import { RequirePerm } from '@/components/RequirePerm';
-
-const ALL_PERMISSIONS = [
-  { key: 'voir_commandes',     label: 'Voir les commandes & devis',    short: 'Voir commandes'      },
-  { key: 'modifier_statuts',   label: 'Modifier les statuts',          short: 'Modifier statuts'    },
-  { key: 'assign_commandes',   label: 'Assigner les commandes & devis', short: 'Assigner'           },
-  { key: 'reassigner_client',  label: 'Ré-assigner une demande à un autre client', short: 'Ré-assigner client' },
-  { key: 'voir_clients',       label: 'Voir les fiches clients',        short: 'Voir clients'        },
-  { key: 'modifier_clients',   label: 'Modifier / ajouter des clients', short: 'Modifier clients'   },
-  { key: 'voir_produits',      label: 'Voir les produits',              short: 'Voir produits'       },
-  { key: 'modifier_produits',  label: 'Modifier les produits',          short: 'Modifier produits'  },
-  { key: 'voir_historique',    label: "Voir l'historique",              short: 'Voir historique'     },
-  { key: 'recevoir_recaps',    label: 'Recevoir les récaps par email',  short: 'Récaps email'        },
-  { key: 'modifier_contenu',   label: 'Modifier le contenu du site',   short: 'Modifier contenu'    },
-  { key: 'gerer_utilisateurs', label: 'Gérer les utilisateurs',         short: 'Gérer utilisateurs' },
-] as const;
-
-type PermKey = typeof ALL_PERMISSIONS[number]['key'];
+import { LeaveModal } from '@/components/ui/LeaveModal';
+import { ClientAssignmentPanel } from '@/components/ui/ClientAssignmentPanel';
+// Source de vérité UNIQUE des permissions (src/lib/permissions.ts) — avant, cette
+// page maintenait sa propre copie qui avait divergé (voir_stock/modifier_stock et
+// les permissions stock plus récentes n'y apparaissaient plus du tout, impossible
+// de les cocher à la création d'un compte). Ne plus jamais dupliquer cette liste ici.
+import { ALL_PERMISSIONS, type PermKey } from '@/lib/permissions';
 
 const ADMIN_PERMS: PermKey[]   = ALL_PERMISSIONS.map((p) => p.key);
 const EMPLOYE_PERMS: PermKey[] = ['voir_commandes', 'modifier_statuts', 'voir_clients', 'voir_produits', 'voir_historique'];
@@ -406,6 +396,14 @@ function CreateUserForm({ onSubmit, onClose, customRoles, onAddCustomRole, onDel
 
 /* ─── Formulaire de modification ─── */
 /* ─── Fiche utilisateur (slide-in) ─── */
+interface LeaveInfo {
+  id: string;
+  substitute: { id: string; name: string };
+  endDate: string;
+  clientIds: string[];
+  allowFullHistory: boolean;
+}
+
 function UserSlideIn({ user, onClose, onDelete, onPermChange, onPermSetAll, customRoles, onSaveProfile, onResetPassword, onReactivate, initialEditing = false }: {
   user: User; onClose: () => void; onDelete: () => void;
   onPermChange: (userId: number, perm: PermKey, value: boolean) => void;
@@ -428,6 +426,41 @@ function UserSlideIn({ user, onClose, onDelete, onPermChange, onPermSetAll, cust
   const [fEmail, setFEmail] = useState(user.email);
   const [fRole, setFRole] = useState<string>(user.role); // 'Admin' | 'Employe' | id rôle perso
   const [fPwd, setFPwd] = useState('');
+
+  // ── Congés / intérim (uniquement pertinent pour un employé) ──
+  const [activeLeave, setActiveLeave] = useState<LeaveInfo | null | undefined>(undefined); // undefined = pas encore chargé
+  const [showLeaveModal, setShowLeaveModal] = useState(false);
+  const [showEndLeaveConfirm, setShowEndLeaveConfirm] = useState(false);
+  const [endingLeave, setEndingLeave] = useState(false);
+
+  const fetchActiveLeave = () => {
+    if (isAdmin) { setActiveLeave(null); return; }
+    fetch(`/api/leaves?employeeId=${user.id}`)
+      .then((r) => r.ok ? r.json() : [])
+      .then((leaves: any[]) => {
+        const active = leaves.find((l) => l.status === 'ACTIVE' && new Date(l.endDate).getTime() > Date.now());
+        setActiveLeave(active ?? null);
+      })
+      .catch(() => setActiveLeave(null));
+  };
+
+  useEffect(() => { fetchActiveLeave(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [user.id]);
+
+  const handleEndLeaveNow = async () => {
+    if (!activeLeave) return;
+    setEndingLeave(true);
+    try {
+      const res = await fetch(`/api/leaves/${activeLeave.id}/end`, { method: 'POST' });
+      if (res.ok) {
+        setShowEndLeaveConfirm(false);
+        fetchActiveLeave();
+      } else {
+        alert('Impossible de terminer le congé.');
+      }
+    } finally {
+      setEndingLeave(false);
+    }
+  };
 
   const inputCls = "w-full px-3 py-2 rounded-lg border border-[#E2E8F0] text-[14px] text-[#0F172A] focus:outline-none focus:border-[#4CAF4F] focus:ring-[3px] focus:ring-[#4CAF4F]/15 transition-all bg-white";
 
@@ -496,10 +529,54 @@ function UserSlideIn({ user, onClose, onDelete, onPermChange, onPermSetAll, cust
                 <div className="flex items-center gap-2 mt-2">
                   <RoleBadge role={user.role} />
                   <StatutBadge statut={user.statut} />
+                  {activeLeave && (
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-[#FFF7ED] text-[#9A3412]">
+                      <span className="w-1.5 h-1.5 rounded-full bg-[#F59E0B]" />
+                      En congé jusqu&apos;au {new Date(activeLeave.endDate).toLocaleDateString('fr-FR')}
+                    </span>
+                  )}
                 </div>
               </div>
             )}
           </div>
+
+          {/* Clients assignés (employé uniquement, pas en mode édition) */}
+          {!isAdmin && !editing && (
+            <ClientAssignmentPanel userId={String(user.id)} />
+          )}
+
+          {/* Congés / intérim (employé uniquement, pas en mode édition) */}
+          {!isAdmin && !editing && user.statut === 'Actif' && (
+            <div className="rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] p-4">
+              {activeLeave === undefined ? (
+                <p className="text-[12px] text-[#8A9BB5]">Chargement…</p>
+              ) : activeLeave ? (
+                <>
+                  <p className="text-[12px] font-bold text-[#8A9BB5] uppercase tracking-widest mb-1.5">Congé en cours</p>
+                  <p className="text-[13px] text-[#374151]">
+                    Remplacé par <span className="font-semibold">{activeLeave.substitute.name}</span> jusqu&apos;au{' '}
+                    <span className="font-semibold">{new Date(activeLeave.endDate).toLocaleDateString('fr-FR')}</span>
+                  </p>
+                  <p className="text-[11px] text-[#8A9BB5] mt-1">
+                    {activeLeave.clientIds.length} client(s) confié(s) · {activeLeave.allowFullHistory ? 'historique complet visible' : 'historique masqué'}
+                  </p>
+                  <button onClick={() => setShowEndLeaveConfirm(true)}
+                    className="mt-3 px-3 py-2 rounded-lg border border-[#E2E8F0] text-[12px] font-semibold text-[#374151] hover:bg-white transition-colors">
+                    Terminer le congé maintenant
+                  </button>
+                </>
+              ) : (
+                <>
+                  <p className="text-[12px] font-bold text-[#8A9BB5] uppercase tracking-widest mb-1.5">Congé</p>
+                  <p className="text-[12px] text-[#8A9BB5] mb-3">Cet employé n&apos;est pas actuellement en congé.</p>
+                  <button onClick={() => setShowLeaveModal(true)}
+                    className="px-3 py-2 rounded-lg border border-[#E2E8F0] text-[12px] font-semibold text-[#374151] hover:bg-white transition-colors">
+                    Mettre en congé
+                  </button>
+                </>
+              )}
+            </div>
+          )}
 
           <div className="h-px bg-[#F2F4F7]" />
 
@@ -583,6 +660,32 @@ function UserSlideIn({ user, onClose, onDelete, onPermChange, onPermSetAll, cust
           )}
         </div>
       </div>
+
+      {showLeaveModal && (
+        <LeaveModal
+          employeeId={String(user.id)}
+          employeeName={user.nom}
+          onClose={() => setShowLeaveModal(false)}
+          onCreated={() => { setShowLeaveModal(false); fetchActiveLeave(); }}
+        />
+      )}
+
+      {showEndLeaveConfirm && activeLeave && (
+        <Modal title="Terminer le congé ?" onClose={() => setShowEndLeaveConfirm(false)}>
+          <p className="text-[13px] text-[#374151] mb-1">
+            <span className="font-semibold">{user.nom}</span> redeviendra responsable de ses {activeLeave.clientIds.length} client(s) immédiatement.
+          </p>
+          <p className="text-[12px] text-[#8A9BB5] mb-5">Vous êtes sûr ?</p>
+          <div className="flex gap-3">
+            <button onClick={() => setShowEndLeaveConfirm(false)} disabled={endingLeave}
+              className="flex-1 px-4 py-2.5 rounded-xl border border-[#E2E8F0] text-[13px] font-semibold text-[#374151]">Annuler</button>
+            <button onClick={handleEndLeaveNow} disabled={endingLeave}
+              className="flex-1 px-4 py-2.5 rounded-xl text-[13px] font-bold text-white bg-[#4CAF4F] disabled:opacity-60">
+              {endingLeave ? 'Traitement…' : 'Oui, terminer'}
+            </button>
+          </div>
+        </Modal>
+      )}
     </>
   );
 }

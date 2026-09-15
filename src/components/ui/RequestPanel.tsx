@@ -79,6 +79,11 @@ export interface RequestDetail {
   message?: string;
   assignedToId?: string | null;
   assignedToName?: string | null;
+  // Responsable HABITUEL du client (Client.assignedToId — distinct de assignedToId
+  // ci-dessus, qui est le "pris en charge par" DE CETTE demande précise). Sert à
+  // avertir l'admin quand il assigne à quelqu'un d'autre que ce responsable — son
+  // nom est résolu via la prop `users` (déjà chargée par l'appelant).
+  clientAssignedToId?: string | null;
   // Auto-attribution au commercial (case à cocher, uniquement En attente/Confirmé) — dès que
   // du stock est réservé pour cette commande/devis, la même quantité est automatiquement
   // créditée à `assignedToId` (cf. syncCommercialAssignment, order-stock.ts).
@@ -957,6 +962,17 @@ export function RequestPanel({ item, onClose, onStatusChange, onConfirmQuoteWith
   const [showPriceModal, setShowPriceModal] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
   const [editingNotes, setEditingNotes] = useState(false);
+  // Confirmation avant d'assigner à quelqu'un de différent du responsable habituel
+  // du client (cf. select "Pris en charge par" plus bas).
+  const [pendingAssignChange, setPendingAssignChange] = useState<string | null>(null);
+
+  const handleAssignChange = (newId: string) => {
+    if (item.clientAssignedToId && newId !== item.clientAssignedToId && newId !== '' && item.id) {
+      setPendingAssignChange(newId);
+    } else if (item.id) {
+      onAssign?.(item.id, item.type, newId || null);
+    }
+  };
 
   const openReassign = () => { setReassignSearch(''); setReassignPicked(null); setReassignReason(''); setShowReassign(true); };
 
@@ -1208,7 +1224,7 @@ export function RequestPanel({ item, onClose, onStatusChange, onConfirmQuoteWith
                   <div className="relative">
                     <select
                       value={item.assignedToId ?? ''}
-                      onChange={(e) => item.id && onAssign(item.id, item.type, e.target.value || null)}
+                      onChange={(e) => handleAssignChange(e.target.value)}
                       className="w-full appearance-none pl-3 pr-9 py-2.5 rounded-xl border border-[#E2E8F0] text-[13px] font-medium text-[#374151] focus:outline-none focus:border-[#4CAF4F] focus:ring-[3px] focus:ring-[#4CAF4F]/15 transition-all bg-white cursor-pointer">
                       <option value="">— Non assigné —</option>
                       {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
@@ -1573,6 +1589,29 @@ export function RequestPanel({ item, onClose, onStatusChange, onConfirmQuoteWith
                   disabled={!reassignPicked || (!isAdmin && !reassignReason.trim())}
                   className="flex-1 px-4 py-2.5 rounded-xl text-[13px] font-bold text-white bg-[#8B5CF6] hover:bg-[#7C3AED] disabled:opacity-50 disabled:cursor-not-allowed">
                   Confirmer
+                </button>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+
+      {pendingAssignChange !== null && (
+        <>
+          <div className="fixed inset-0 z-[150] bg-black/40 backdrop-blur-sm" onClick={() => setPendingAssignChange(null)} />
+          <div className="fixed inset-0 z-[160] flex items-center justify-center p-4 pointer-events-none">
+            <div className="pointer-events-auto bg-white rounded-2xl shadow-2xl p-5 w-[420px] max-w-[94vw]">
+              <p className="text-[15px] font-bold text-[#0F172A] mb-1">Changer le responsable ?</p>
+              <p className="text-[12px] text-[#8A9BB5] mb-4">
+                Ce client est habituellement géré par un autre commercial. Assigner quand même cette demande à{' '}
+                <span className="font-semibold text-[#374151]">{users?.find((u) => u.id === pendingAssignChange)?.name ?? 'ce commercial'}</span> ?
+              </p>
+              <div className="flex gap-2">
+                <button onClick={() => setPendingAssignChange(null)} className="flex-1 px-4 py-2.5 rounded-xl border border-[#E2E8F0] text-[13px] font-semibold text-[#374151] hover:bg-[#F8FAFC]">Annuler</button>
+                <button
+                  onClick={() => { if (item.id && pendingAssignChange !== null) onAssign?.(item.id, item.type, pendingAssignChange || null); setPendingAssignChange(null); }}
+                  className="flex-1 px-4 py-2.5 rounded-xl text-[13px] font-bold text-white bg-[#4CAF4F] hover:bg-[#43A047]">
+                  Oui, changer
                 </button>
               </div>
             </div>

@@ -31,7 +31,8 @@ async function getCategories(): Promise<Cat[]> {
 async function getProducts(): Promise<Prod[]> {
   try {
     const products = await prisma.product.findMany({
-      where: { active: true },
+      // Actif ET visible sur le site — indépendant l'un de l'autre (cf. Product.visibleOnSite).
+      where: { active: true, visibleOnSite: true },
       include: { category: true },
       orderBy: { createdAt: 'desc' },
     });

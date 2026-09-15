@@ -30,6 +30,7 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
         ...(body.price !== undefined && { price: Number(body.price) }),
         ...(body.photo !== undefined && { photo: body.photo }),
         ...(body.active !== undefined && { active: body.active }),
+        ...(body.visibleOnSite !== undefined && { visibleOnSite: body.visibleOnSite }),
         ...(body.categoryId !== undefined && { categoryId: body.categoryId }),
         ...(body.mode !== undefined && { mode: body.mode }),
         ...(body.purchasePrice !== undefined && { purchasePrice: body.purchasePrice != null ? Number(body.purchasePrice) : null }),

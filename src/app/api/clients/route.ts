@@ -2,42 +2,39 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requirePermission } from '@/lib/permissions';
 import { prisma } from '@/lib/prisma';
 import { createAudit } from '@/lib/audit';
+import { resolveClientVisibility } from '@/lib/leave';
 
 // GET /api/clients — liste tous les clients (permission voir_clients)
 // GET /api/clients?light=true — liste légère (autocomplete lors de la création
 //   d'une commande), accessible avec voir_commandes. Les employés ne voient que leurs clients.
 export async function GET(request: NextRequest) {
   const light = request.nextUrl.searchParams.get('light') === 'true';
-  const assignedToIdParam = request.nextUrl.searchParams.get('assignedToId');
 
   if (light) {
     const guard = await requirePermission('voir_commandes');
     if (guard.error) return guard.error;
-    
+
     try {
       let whereClause: any = {};
-      
-      // Si assignedToId est fourni, filtrer les clients qui ont des commandes/devis assignés à cet utilisateur
-      if (assignedToIdParam) {
-        whereClause = {
-          OR: [
-            { orders: { some: { assignedToId: assignedToIdParam } } },
-            { quotes: { some: { assignedToId: assignedToIdParam } } },
-          ],
-        };
+
+      // Sécurité serveur : un EMPLOYEE ne voit que ses clients assignés (+ ceux
+      // confiés pour la durée d'un congé dont il est remplaçant) — cf. src/lib/leave.ts.
+      if (guard.session!.user.role !== 'ADMIN') {
+        const { visibleClientIds } = await resolveClientVisibility(guard.session!.user.id);
+        whereClause = { id: { in: visibleClientIds } };
       }
-      
+
       const clients = await prisma.client.findMany({
         where: whereClause,
         select: {
-          id: true, name: true, company: true, email: true, wilaya: true, commune: true,
+          id: true, name: true, company: true, email: true, wilaya: true, commune: true, assignedToId: true,
           phones: { where: { primary: true }, select: { number: true } },
         },
         orderBy: { name: 'asc' },
       });
       return NextResponse.json(clients.map((c) => ({
         id: c.id, name: c.name, company: c.company, email: c.email,
-        wilaya: c.wilaya, commune: c.commune,
+        wilaya: c.wilaya, commune: c.commune, assignedToId: c.assignedToId,
         phone: c.phones[0]?.number ?? '',
       })));
     } catch (e) {
@@ -52,9 +49,19 @@ export async function GET(request: NextRequest) {
   // Par défaut on masque les clients désactivés ; ?inactifs=true pour les inclure
   const includeInactifs = request.nextUrl.searchParams.get('inactifs') === 'true';
 
+  // Sécurité serveur : un EMPLOYEE ne voit que ses clients assignés (+ intérim) —
+  // cf. commentaire équivalent sur la branche ?light=true plus haut.
+  let visibilityFilter: any = undefined;
+  if (guard.session!.user.role !== 'ADMIN') {
+    const { visibleClientIds } = await resolveClientVisibility(guard.session!.user.id);
+    visibilityFilter = { id: { in: visibleClientIds } };
+  }
+
   try {
     const clients = await prisma.client.findMany({
-      where: includeInactifs ? undefined : { active: true },
+      where: includeInactifs
+        ? visibilityFilter
+        : { active: true, ...(visibilityFilter ?? {}) },
       include: {
         deactivatedBy: { select: { name: true } },
         sector: { select: { id: true, name: true } },
