@@ -629,7 +629,7 @@ function PriceModal({ item, onConfirm, onClose }: {
 }
 
 // ── Modale "Modifier la commande" — édition complète des lignes ──────────────
-interface ProdOption { id: string; reference: string; price: number; metrage?: number | null; categoryId?: string; category?: { id: string; name: string } | null; }
+interface ProdOption { id: string; reference: string; name?: string | null; price: number; metrage?: number | null; categoryId?: string; category?: { id: string; name: string } | null; }
 interface EditLine { categoryId: string; productId: string | null; designation: string; quantite: number; prixUnitaire: number; metrage: number | null; }
 
 function EditOrderModal({ item, onClose, onSaved }: {

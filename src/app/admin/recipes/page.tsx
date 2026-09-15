@@ -44,7 +44,7 @@ function RecipeEditModal({ product, materials, onClose, onSave }: {
               <div key={i} className="flex gap-2 items-center">
                 <select value={l.rawMaterialId} onChange={(e) => setLine(i, { rawMaterialId: e.target.value })} className={inputClass}>
                   <option value="">Choisir une matière première</option>
-                  {materials.map((m) => <option key={m.id} value={m.id}>{m.reference} — {m.name}</option>)}
+                  {materials.map((m) => <option key={m.id} value={m.id}>{m.name} ({m.reference})</option>)}
                 </select>
                 <input value={l.quantity} onChange={(e) => setLine(i, { quantity: e.target.value.replace(/[^\d.]/g, '') })} inputMode="decimal"
                   placeholder="Qté" style={{ width: 90 }} className={inputClass} />

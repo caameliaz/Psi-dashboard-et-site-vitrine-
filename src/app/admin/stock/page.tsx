@@ -180,7 +180,7 @@ function AssignModal({ employees, products, onClose, onSave }: {
                 <div key={i} className="flex gap-2 items-center">
                   <select value={l.productId} onChange={(e) => setLine(i, { productId: e.target.value })} className={inputClass}>
                     <option value="">Choisir une référence</option>
-                    {availableProducts.map((p) => <option key={p.id} value={p.id}>{p.reference} — {horsCommerciaux(p)} hors commerciaux</option>)}
+                    {availableProducts.map((p) => <option key={p.id} value={p.id}>{p.name || p.reference} ({p.reference}) — {horsCommerciaux(p)} hors commerciaux</option>)}
                   </select>
                   <input value={l.quantity} onChange={(e) => setLine(i, { quantity: e.target.value.replace(/[^\d.]/g, '') })} inputMode="decimal"
                     placeholder="Qté" max={prod ? horsCommerciaux(prod) : undefined} style={{ width: 80 }} className={inputClass} />
@@ -236,8 +236,8 @@ function RestockOnlyModal({ products, materials, onClose, onRestock }: {
           <select value={id} onChange={(e) => setId(e.target.value)} className={inputClass}>
             <option value="">Choisir une référence</option>
             {type === 'product'
-              ? products.map((p) => <option key={p.id} value={p.id}>{p.reference} — {p.available} disponible</option>)
-              : materials.map((m) => <option key={m.id} value={m.id}>{m.reference} — {m.available} disponible</option>)}
+              ? products.map((p) => <option key={p.id} value={p.id}>{p.name || p.reference} ({p.reference}) — {p.available} disponible</option>)
+              : materials.map((m) => <option key={m.id} value={m.id}>{m.name || m.reference} ({m.reference}) — {m.available} disponible</option>)}
           </select>
         </div>
         {needsMode && (

@@ -186,8 +186,8 @@ function AddLineModal({ mode, products, materials, onClose, onSave }: {
           <select value={targetId} onChange={(e) => setTargetId(e.target.value)} className={inputClass}>
             <option value="">Choisir une référence</option>
             {targetType === 'product'
-              ? products.map((p) => <option key={p.id} value={p.id}>{p.reference} — {p.name ?? p.reference}</option>)
-              : materials.map((m) => <option key={m.id} value={m.id}>{m.reference} — {m.name}</option>)}
+              ? products.map((p) => <option key={p.id} value={p.id}>{p.name || p.reference} ({p.reference})</option>)
+              : materials.map((m) => <option key={m.id} value={m.id}>{m.name} ({m.reference})</option>)}
           </select>
         </div>
         <div>

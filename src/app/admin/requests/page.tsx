@@ -202,12 +202,12 @@ export function CreateForm({ defaultType, onClose, onSave, users, currentUserId,
   const [paymentMethod, setPaymentMethod] = useState('');
   const [paymentDate, setPaymentDate] = useState('');
   const [vatEnabled, setVatEnabled] = useState(false);
-  const [products, setProducts] = useState<{ id: string; reference: string; price: number; categoryId: string; metrage?: number | null }[]>([]);
+  const [products, setProducts] = useState<{ id: string; reference: string; name?: string | null; price: number; categoryId: string; metrage?: number | null }[]>([]);
   const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
 
   useEffect(() => {
     fetch('/api/products?all=true').then(r => r.json()).then((data: any[]) => {
-      setProducts(data.map(p => ({ id: p.id, reference: p.reference, price: p.price ?? 0, categoryId: p.categoryId ?? p.category?.id ?? '' })));
+      setProducts(data.map(p => ({ id: p.id, reference: p.reference, name: p.name ?? null, price: p.price ?? 0, categoryId: p.categoryId ?? p.category?.id ?? '' })));
     }).catch(() => {});
     fetch('/api/categories').then(r => r.ok ? r.json() : []).then((data: any[]) => {
       setCategories(data.map((c) => ({ id: c.id, name: c.name })));

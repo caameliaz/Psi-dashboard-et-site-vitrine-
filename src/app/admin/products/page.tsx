@@ -442,7 +442,7 @@ function RecipeSection({ productId, initialItems, materials, canEdit, onSaved }:
             <div key={i} className="flex gap-2 items-center">
               <select disabled={!canEdit} value={l.rawMaterialId} onChange={(e) => setLine(i, { rawMaterialId: e.target.value })} className={inputClass}>
                 <option value="">Choisir une référence</option>
-                {materials.map((m) => <option key={m.id} value={m.id}>{m.reference} — {m.name}</option>)}
+                {materials.map((m) => <option key={m.id} value={m.id}>{m.name} ({m.reference})</option>)}
               </select>
               <input disabled={!canEdit} value={l.quantity} onChange={(e) => setLine(i, { quantity: e.target.value.replace(/[^\d.]/g, '') })} inputMode="decimal"
                 placeholder="Qté" style={{ width: 80 }} className={inputClass} />
