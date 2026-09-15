@@ -255,6 +255,10 @@ model Client {
   quotes            Quote[]
   contacts          ContactRequest[]
   notes             ClientNote[]
+  // Responsable habituel du client (hors période de congé — cf. LeaveAssignment).
+  // Restauré automatiquement au retour de congé de son titulaire.
+  assignedTo        User?            @relation("ClientAssignedTo", fields: [assignedToId], references: [id])
+  assignedToId      String?
   createdAt         DateTime         @default(now())
   updatedAt         DateTime         @updatedAt
 }
@@ -544,6 +548,9 @@ model User {
   auditLogs          AuditLog[]
   pushSubscriptions  PushSubscription[]
   stockAssignments   StockAssignment[] // stock de produits finis attribué en tant que commercial
+  clientsAssigned    Client[]           @relation("ClientAssignedTo") // clients dont il est le responsable habituel
+  leavesAsEmployee   LeaveAssignment[]  @relation("LeaveEmployee") // congés le concernant
+  leavesAsSubstitute LeaveAssignment[]  @relation("LeaveSubstitute") // congés où il est intérimaire
   createdAt          DateTime           @default(now())
   updatedAt          DateTime           @updatedAt
 }
@@ -551,6 +558,38 @@ model User {
 enum Role {
   ADMIN
   EMPLOYEE
+}
+
+// ─── CONGÉS & INTÉRIM ────────────────────────────────────────────────────────
+// Un employé en congé confie temporairement une partie (ou tout) de ses clients
+// à un remplaçant. À la reprise (automatique dès que endDate est dépassée, ou
+// manuelle via "Terminer maintenant"), les clients repartent à l'employé titulaire.
+// Le statut "actif" du congé est calculé à la volée (cf. src/lib/leave.ts) —
+// pas de tâche planifiée : endedAt/status ENDED ne servent qu'à la clôture manuelle
+// ou pour figer l'historique une fois le congé terminé.
+model LeaveAssignment {
+  id               String       @id @default(cuid())
+  employee         User         @relation("LeaveEmployee", fields: [employeeId], references: [id])
+  employeeId       String
+  substitute       User         @relation("LeaveSubstitute", fields: [substituteId], references: [id])
+  substituteId     String
+  startDate        DateTime
+  endDate          DateTime
+  // Clients de `employee` confiés à `substitute` pour la durée du congé.
+  clientIds        String[]
+  // Coché par l'admin à la création : le remplaçant voit aussi l'historique des
+  // commandes/devis passés de ces clients (pas seulement ceux créés pendant l'intérim).
+  allowFullHistory Boolean      @default(false)
+  status           LeaveStatus  @default(ACTIVE)
+  endedAt          DateTime? // renseigné si terminé manuellement avant endDate
+  endedById        String? // admin ayant terminé manuellement
+  createdById      String // admin ayant créé le congé
+  createdAt        DateTime     @default(now())
+}
+
+enum LeaveStatus {
+  ACTIVE
+  ENDED
 }
 
 // ─── ABONNEMENTS PUSH (notifications système Web Push) ───────────────────────
