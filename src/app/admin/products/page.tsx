@@ -48,6 +48,7 @@ interface Ref {
   usage: string;
   price: number;
   active: boolean;
+  visibleOnSite: boolean;
   categoryId: string;
   customFields: { definitionId: string; label: string; value: string }[];
   mode: 'ACHETE' | 'FABRIQUE' | 'LES_DEUX';
@@ -79,6 +80,7 @@ function dbToRef(p: any): Ref {
     usage: p.usage ?? '',
     price: p.price ?? 0,
     active: p.active ?? true,
+    visibleOnSite: p.visibleOnSite ?? true,
     categoryId: p.categoryId ?? p.category?.id ?? '',
     customFields: (p.customFields ?? []).map((cf: any) => ({
       definitionId: cf.definitionId, label: cf.definition?.label ?? '', value: cf.value,
@@ -93,8 +95,8 @@ function dbToRef(p: any): Ref {
 const inputClass = "w-full px-3 py-2.5 rounded-lg border border-[#E2E8F0] text-sm text-[#0F172A] focus:outline-none focus:border-[#4CAF4F] focus:ring-1 focus:ring-[#4CAF4F] transition-colors bg-[#F8FAFC]";
 
 // ── Modale "Nouvelle référence" — pour la catégorie sélectionnée ────────────
-interface RefForm { name: string; width: string; length: string; metrage: string; usage: string; price: string; customFields: Record<string, string>; mode: 'ACHETE' | 'FABRIQUE' | 'LES_DEUX'; purchasePrice: string; stockMax: string; }
-const emptyRefForm: RefForm = { name: '', width: '', length: '', metrage: '', usage: '', price: '', customFields: {}, mode: 'FABRIQUE', purchasePrice: '', stockMax: '' };
+interface RefForm { name: string; width: string; length: string; metrage: string; usage: string; price: string; customFields: Record<string, string>; mode: 'ACHETE' | 'FABRIQUE' | 'LES_DEUX'; purchasePrice: string; stockMax: string; visibleOnSite: boolean; }
+const emptyRefForm: RefForm = { name: '', width: '', length: '', metrage: '', usage: '', price: '', customFields: {}, mode: 'FABRIQUE', purchasePrice: '', stockMax: '', visibleOnSite: true };
 
 const MODE_OPTIONS: { value: RefForm['mode']; label: string }[] = [
   { value: 'FABRIQUE', label: 'Fabriqué' },
@@ -154,6 +156,25 @@ function RefFormFields({ form, setForm, fieldDefs }: { form: RefForm; setForm: (
       <div>
         <label className="block text-[12px] font-semibold text-[#374151] mb-1.5">Utilisation</label>
         <input value={form.usage} onChange={(e) => setForm({ ...form, usage: e.target.value })} placeholder="ex: Caisses enregistreuses" className={inputClass} />
+      </div>
+
+      {/* Indépendant du statut Actif/Désactivé : une référence peut être active dans
+          le dashboard (stock, commandes...) sans être affichée sur le site vitrine. */}
+      <div onClick={() => setForm({ ...form, visibleOnSite: !form.visibleOnSite })}
+        className="flex items-start gap-3 px-3 py-2.5 rounded-xl cursor-pointer transition-all"
+        style={{ background: form.visibleOnSite ? '#F0FDF4' : '#F8FAFC', border: `1.5px solid ${form.visibleOnSite ? '#BBF7D0' : '#F2F4F7'}` }}>
+        <div className="w-4 h-4 rounded flex-shrink-0 border-2 flex items-center justify-center mt-0.5"
+          style={{ background: form.visibleOnSite ? '#4CAF4F' : 'white', borderColor: form.visibleOnSite ? '#4CAF4F' : '#D1D5DB' }}>
+          {form.visibleOnSite && <svg width={8} height={8} viewBox="0 0 12 12" fill="none"><path d="M2 6L5 9L10 3" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+        </div>
+        <div>
+          <p className="text-[13px] font-medium" style={{ color: form.visibleOnSite ? '#166534' : '#374151' }}>
+            Visible sur le site public
+          </p>
+          <p className="text-[11px] text-[#8A9BB5] mt-0.5">
+            Décochez pour garder la référence utilisable dans le dashboard (stock, commandes) sans l&apos;afficher en vitrine.
+          </p>
+        </div>
       </div>
 
       {fieldDefs.length > 0 && (
@@ -277,6 +298,7 @@ function NewCategoryModal({ onClose, onCreated, fieldDefs }: { onClose: () => vo
           mode: r.mode,
           purchasePrice: (r.mode === 'ACHETE' || r.mode === 'LES_DEUX') ? (Number(r.purchasePrice) || 0) : null,
           ...(r.stockMax.trim() !== '' && { stockMax: Number(r.stockMax) }),
+          visibleOnSite: r.visibleOnSite,
         }),
       })));
       const failedCount = refResults.filter((r) => !r.ok).length;
@@ -542,7 +564,7 @@ function ProductsPageInner() {
   const openEditRef = (r: Ref) => {
     const customFields: Record<string, string> = {};
     r.customFields.forEach((cf) => { customFields[cf.definitionId] = cf.value; });
-    setEditRefForm({ name: r.name ?? '', width: String(r.width), length: String(r.length), metrage: r.metrage != null ? String(r.metrage) : '', usage: r.usage, price: String(r.price), customFields, mode: r.mode, purchasePrice: r.purchasePrice != null ? String(r.purchasePrice) : '', stockMax: String(r.stockMax) });
+    setEditRefForm({ name: r.name ?? '', width: String(r.width), length: String(r.length), metrage: r.metrage != null ? String(r.metrage) : '', usage: r.usage, price: String(r.price), customFields, mode: r.mode, purchasePrice: r.purchasePrice != null ? String(r.purchasePrice) : '', stockMax: String(r.stockMax), visibleOnSite: r.visibleOnSite });
     setEditRef(r);
   };
 
@@ -574,6 +596,7 @@ function ProductsPageInner() {
         mode: editRefForm.mode,
         purchasePrice: (editRefForm.mode === 'ACHETE' || editRefForm.mode === 'LES_DEUX') ? (Number(editRefForm.purchasePrice) || 0) : null,
         ...(editRefForm.stockMax.trim() !== '' && { stockMax: Number(editRefForm.stockMax) }),
+        visibleOnSite: editRefForm.visibleOnSite,
       }),
     });
     if (!res.ok) {
@@ -600,6 +623,7 @@ function ProductsPageInner() {
         mode: newRefForm.mode,
         purchasePrice: (newRefForm.mode === 'ACHETE' || newRefForm.mode === 'LES_DEUX') ? (Number(newRefForm.purchasePrice) || 0) : null,
         ...(newRefForm.stockMax.trim() !== '' && { stockMax: Number(newRefForm.stockMax) }),
+        visibleOnSite: newRefForm.visibleOnSite,
       }),
     });
     if (!res.ok) {

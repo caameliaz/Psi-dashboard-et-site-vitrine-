@@ -22,6 +22,10 @@ une divergence entre le schéma et la base).
 
 **Migrations créées sur cette branche à ce jour :**
 - `20260913192116_add_client_assignment_and_leave` (détail au point 1)
+- `20260915191048_add_product_visible_on_site` — ajoute `Product.visibleOnSite`
+  (booléen, `DEFAULT true`) : indépendant de `active`, contrôle si le produit
+  est affiché sur le site public sans toucher à sa disponibilité dans le
+  dashboard. Non-destructive, tous les produits existants restent visibles.
 
 Si d'autres migrations sont ajoutées plus tard sur cette branche, elles seront
 listées ici aussi — mais `prisma migrate deploy` les applique de toute façon
