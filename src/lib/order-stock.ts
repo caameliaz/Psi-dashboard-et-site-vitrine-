@@ -1,5 +1,6 @@
 import { prisma } from './prisma';
 import { notifyRollLinkOrderReady } from './rolllink-notify';
+import { createNotif } from './notifications';
 import type { RequestStatus } from '@prisma/client';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -568,6 +569,29 @@ export async function confirmStock(kind: Kind, parentId: string) {
     await (itemDelegate(kind) as any).update({ where: { id: item.id }, data: { stockPath: 'IN_PRODUCTION', productionListItemId: line.id } });
   }
 
+  // Notifie (in-app + push) admins + commercial assigné si du stock manque encore à ce stade
+  // (achat/production en cours) — événement automatique (pas une action manuelle de qqn de
+  // précis), donc une VRAIE notif plutôt qu'un simple toast (cf. discussion 16/09).
+  const stillMissing = await (itemDelegate(kind) as any).findMany({
+    where: { ...itemWhereParent(kind, parentId), stockPath: { in: ['PURCHASE_PENDING', 'IN_PRODUCTION'] } },
+    include: { product: true },
+  });
+  if (stillMissing.length > 0) {
+    const parentForNotif = await (parentDelegate(kind) as any).findUnique({ where: { id: parentId }, select: { ref: true, assignedToId: true, clientName: true, clientCompany: true } });
+    if (parentForNotif) {
+      const clientLabel = parentForNotif.clientCompany ?? parentForNotif.clientName ?? '—';
+      const entityLabel = kind === 'order' ? 'La commande' : 'Le devis';
+      createNotif({
+        type: 'ACTION_AUTRE',
+        title: kind === 'order' ? 'Commande en attente de stock' : 'Devis en attente de stock',
+        message: `${entityLabel} de ${clientLabel} (${parentForNotif.ref ?? parentId.slice(0, 8).toUpperCase()}) reste en attente : ${stillMissing.length} article(s) pas encore disponible(s) (achat/production en cours).`,
+        assignedToId: parentForNotif.assignedToId,
+        orderId: kind === 'order' ? parentId : undefined,
+        quoteId: kind === 'quote' ? parentId : undefined,
+      }).catch(() => {});
+    }
+  }
+
   await checkCompletion(kind, parentId);
 }
 
@@ -650,7 +674,7 @@ export async function resolveFreeTextItems(kind: Kind, parentId: string, opts?: 
 
 // ── Vérifie si tous les articles sont résolus → passe la commande en PRODUITE ─
 export async function checkCompletion(kind: Kind, parentId: string) {
-  const parent = await (parentDelegate(kind) as any).findUnique({ where: { id: parentId }, select: { status: true, source: true, ref: true } });
+  const parent = await (parentDelegate(kind) as any).findUnique({ where: { id: parentId }, select: { status: true, source: true, ref: true, assignedToId: true, clientName: true, clientCompany: true } });
   if (!parent || parent.status !== 'VALIDE') return;
 
   const items = await (itemDelegate(kind) as any).findMany({ where: itemWhereParent(kind, parentId) });
@@ -664,6 +688,19 @@ export async function checkCompletion(kind: Kind, parentId: string) {
   if (!allResolved) return;
 
   await (parentDelegate(kind) as any).update({ where: { id: parentId }, data: { status: 'PRODUITE' } });
+
+  // Transition AUTOMATIQUE (personne n'a cliqué "Marquer Disponible" ici) → notif (in-app +
+  // push) admins + commercial assigné, plutôt qu'un toast (qui ne toucherait que la personne
+  // ayant l'écran ouvert au moment précis où ça se déclenche — souvent personne).
+  const clientLabel = parent.clientCompany ?? parent.clientName ?? '—';
+  createNotif({
+    type: 'ACTION_AUTRE',
+    title: kind === 'order' ? 'Commande disponible' : 'Devis disponible',
+    message: `${kind === 'order' ? 'La commande' : 'Le devis'} de ${clientLabel} (${parent.ref ?? parentId.slice(0, 8).toUpperCase()}) est maintenant disponible — tout le stock nécessaire est réuni.`,
+    assignedToId: parent.assignedToId,
+    orderId: kind === 'order' ? parentId : undefined,
+    quoteId: kind === 'quote' ? parentId : undefined,
+  }).catch(() => {});
 
   // Liaison RollLink (cf. Liaison.md) : commande RollLink prête → notifier RollLink.
   // Best-effort — ne doit jamais faire échouer checkCompletion (cf. rolllink-notify.ts).

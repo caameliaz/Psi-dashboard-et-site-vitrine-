@@ -58,6 +58,11 @@ function IconBox({ color = '#717171' }) {
     <svg width={18} height={18} fill="none"><path d="M9 1.5L16.5 5.5V12.5L9 16.5L1.5 12.5V5.5L9 1.5Z" stroke={color} strokeWidth="1.5" strokeLinejoin="round"/><path d="M1.5 5.5L9 9.5L16.5 5.5M9 9.5V16.5" stroke={color} strokeWidth="1.5" strokeLinejoin="round"/></svg>
   );
 }
+function IconSettings({ color = '#717171' }) {
+  return (
+    <svg width={18} height={18} fill="none"><path d="M9 11.5A2.5 2.5 0 109 6.5a2.5 2.5 0 000 5Z" stroke={color} strokeWidth="1.5"/><path d="M14.9 11.15c-.14.32-.18.68-.1 1.02l.04.16c.16.68-.06 1.4-.58 1.87l-.4.36c-.52.47-1.26.6-1.9.34l-.15-.06a1.66 1.66 0 00-1.02-.03 1.66 1.66 0 00-.75.66l-.09.14c-.38.6-1.06.94-1.77.88l-.54-.04a1.86 1.86 0 01-1.6-1.18l-.06-.16a1.66 1.66 0 00-.66-.79 1.66 1.66 0 00-1.02-.16l-.16.03c-.7.11-1.4-.19-1.79-.78l-.3-.45a1.86 1.86 0 01-.05-1.92l.08-.15c.17-.3.23-.66.16-1a1.66 1.66 0 00-.5-.9l-.12-.11a1.86 1.86 0 01-.5-1.85l.13-.52c.17-.68.71-1.2 1.4-1.35l.16-.03c.34-.08.64-.28.85-.56.2-.28.3-.63.27-.98l-.02-.16a1.86 1.86 0 01.85-1.75l.46-.3c.6-.38 1.36-.4 1.98-.05l.14.08c.3.17.66.23 1 .16.34-.07.64-.26.85-.53l.1-.13c.44-.55 1.14-.82 1.83-.7l.53.09c.69.12 1.25.62 1.46 1.29l.05.16c.11.33.34.6.64.77.3.16.65.21.98.14l.16-.03c.69-.15 1.4.1 1.85.64l.34.42c.44.54.55 1.28.28 1.93l-.06.15c-.13.32-.14.68-.02 1.01.11.33.34.6.64.77Z" stroke={color} strokeWidth="1.3" strokeLinejoin="round"/></svg>
+  );
+}
 function IconFlask({ color = '#717171' }) {
   return (
     <svg width={18} height={18} fill="none"><path d="M7 1.5H11" stroke={color} strokeWidth="1.5" strokeLinecap="round"/><path d="M7.75 1.5V6.5L2.9 14.3C2.35 15.2 3 16.5 4.05 16.5H13.95C15 16.5 15.65 15.2 15.1 14.3L10.25 6.5V1.5" stroke={color} strokeWidth="1.5" strokeLinejoin="round"/><path d="M4.5 11.5H13.5" stroke={color} strokeWidth="1.5" strokeLinecap="round"/></svg>
@@ -71,17 +76,14 @@ function IconChevron({ collapsed }: { collapsed: boolean }) {
   );
 }
 
-const navItems: { href: string; label: string; Icon: typeof IconHome; perm: PermKey | null }[] = [
+const navItems: { href: string; label: string; Icon: typeof IconHome; perm: PermKey | PermKey[] | null }[] = [
   { href: '/admin/dashboard', label: 'Dashboard',    Icon: IconHome,     perm: null },
   { href: '/admin/requests',  label: 'Commandes',    Icon: IconDocument, perm: 'voir_commandes' },
   { href: '/admin/products',  label: 'Produits',     Icon: IconLayers,   perm: 'voir_produits' },
   { href: '/admin/stock',     label: 'Stock',        Icon: IconBox,      perm: 'voir_stock' },
   { href: '/admin/recipes',   label: 'Recettes',     Icon: IconFlask,    perm: 'voir_stock' },
   { href: '/admin/clients',   label: 'Clients',      Icon: IconUsers,    perm: 'voir_clients' },
-  { href: '/admin/history',   label: 'Historique',   Icon: IconHistory,  perm: 'voir_historique' },
-  { href: '/admin/content',   label: 'Contenu',      Icon: IconEdit,     perm: 'modifier_contenu' },
-  { href: '/admin/templates', label: 'Messages',     Icon: IconChat,     perm: 'modifier_contenu' },
-  { href: '/admin/users',     label: 'Utilisateurs', Icon: IconUserPlus, perm: 'gerer_utilisateurs' },
+  { href: '/admin/settings',  label: 'Réglages',     Icon: IconSettings, perm: ['voir_historique', 'modifier_contenu', 'gerer_utilisateurs'] },
 ];
 
 export function Sidebar({ mobileOpen = false, onCloseMobile }: { mobileOpen?: boolean; onCloseMobile?: () => void } = {}) {
@@ -144,7 +146,7 @@ export function Sidebar({ mobileOpen = false, onCloseMobile }: { mobileOpen?: bo
             </div>
           ))
         ) : (
-        navItems.filter(({ perm }) => perm === null || can(perm)).map(({ href, label, Icon }) => {
+        navItems.filter(({ perm }) => perm === null || (Array.isArray(perm) ? perm.some((p) => can(p)) : can(perm))).map(({ href, label, Icon }) => {
           const isActive = pathname === href || pathname.startsWith(href + '/');
           return (
             <Link
