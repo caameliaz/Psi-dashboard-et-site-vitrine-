@@ -20,6 +20,7 @@ interface ClientRecord {
   derniere: string;
   active?: boolean;
   assignedToId?: string | null;
+  assignedToName?: string | null;
   deactivatedReason?: string | null;
   deactivatedByName?: string | null;
   deactivatedAt?: string | null;
@@ -339,11 +340,16 @@ function ClientSlideIn({ client, onClose, onEdit, onDelete, onReactivate, onDele
                   </div>
                 </div>
 
-                {/* Ligne 2 : nom du client + secteur */}
+                {/* Ligne 2 : nom du client + secteur + commercial assigné */}
                 <div className="flex items-center gap-2 flex-wrap">
                   <p className="text-[13px] font-semibold text-[#4CAF4F]">{client.contact}</p>
                   {client.sectorName && (
                     <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#EFF6FF] text-[#1E40AF] border border-[#BFDBFE]">{client.sectorName}</span>
+                  )}
+                  {client.assignedToName ? (
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#FDF4FF] text-[#86198F] border border-[#F5D0FE]">{client.assignedToName}</span>
+                  ) : (
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#F8FAFC] text-[#8A9BB5] border border-[#E2E8F0]">Non assigné</span>
                   )}
                 </div>
 
@@ -613,6 +619,7 @@ function dbClientToRecord(c: any): ClientRecord {
     derniere: lastDate,
     active: c.active ?? true,
     assignedToId: c.assignedToId ?? null,
+    assignedToName: c.assignedTo?.name ?? null,
     deactivatedReason: c.deactivatedReason ?? null,
     deactivatedByName: c.deactivatedBy?.name ?? null,
     deactivatedAt: c.deactivatedAt ? new Date(c.deactivatedAt).toLocaleDateString('fr-FR') : null,

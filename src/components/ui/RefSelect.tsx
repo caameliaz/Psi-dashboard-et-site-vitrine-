@@ -7,7 +7,7 @@ import { useState } from 'react';
 // allowFree : ajoute une option "Référence libre" (pour les devis hors-catalogue).
 export function RefSelect({ value, products, onChange, allowFree = false }: {
   value: string;
-  products: { id: string; reference: string; price: number }[];
+  products: { id: string; reference: string; name?: string | null; price: number }[];
   onChange: (ref: string, isFree?: boolean) => void;
   allowFree?: boolean;
 }) {
@@ -15,7 +15,7 @@ export function RefSelect({ value, products, onChange, allowFree = false }: {
   const [query, setQuery] = useState('');
   const [freeMode, setFreeMode] = useState(false);
   const filtered = products.filter(p =>
-    !query || p.reference.toLowerCase().includes(query.toLowerCase())
+    !query || p.reference.toLowerCase().includes(query.toLowerCase()) || (p.name ?? '').toLowerCase().includes(query.toLowerCase())
   );
 
   // Mode saisie libre : champ texte simple
@@ -37,12 +37,17 @@ export function RefSelect({ value, products, onChange, allowFree = false }: {
     );
   }
 
+  const selected = products.find(p => p.reference === value);
+
   return (
     <div className="relative">
       <button type="button" onClick={() => setOpen(o => !o)}
         className="w-full flex items-center justify-between px-3.5 py-3 rounded-xl border border-[#E2E8F0] bg-white text-[15px] transition-colors hover:border-[#4CAF4F] focus:outline-none"
         style={{ color: value ? '#0F172A' : '#94A3B8' }}>
-        <span className="truncate">{value || '— Réf —'}</span>
+        <span className="truncate flex items-baseline gap-1.5 min-w-0">
+          <span className="truncate">{selected ? (selected.name || selected.reference) : (value || '— Réf —')}</span>
+          {selected?.name && <span className="text-[12px] text-[#ABBED1] flex-shrink-0">{selected.reference}</span>}
+        </span>
         <svg width={14} height={14} fill="none" viewBox="0 0 24 24" className="flex-shrink-0 text-[#ABBED1]" style={{ transform: open ? 'rotate(180deg)' : undefined, transition: 'transform 0.15s' }}>
           <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
         </svg>
@@ -68,8 +73,11 @@ export function RefSelect({ value, products, onChange, allowFree = false }: {
                   onClick={() => { onChange(p.reference, false); setOpen(false); setQuery(''); }}
                   className="w-full text-left px-3.5 py-3 flex items-center justify-between gap-2 hover:bg-[#F0FDF4] transition-colors group"
                   style={{ background: value === p.reference ? '#F0FDF4' : undefined }}>
-                  <span className="text-[14px] font-semibold" style={{ color: value === p.reference ? '#4CAF4F' : '#0F172A' }}>{p.reference}</span>
-                  <span className="text-[12px] text-[#ABBED1]">{p.price.toLocaleString('fr-FR')} DA</span>
+                  <span className="flex items-baseline gap-1.5 min-w-0">
+                    <span className="text-[14px] font-semibold truncate" style={{ color: value === p.reference ? '#4CAF4F' : '#0F172A' }}>{p.name || p.reference}</span>
+                    {p.name && <span className="text-[11px] text-[#ABBED1] flex-shrink-0">{p.reference}</span>}
+                  </span>
+                  <span className="text-[12px] text-[#ABBED1] flex-shrink-0">{p.price.toLocaleString('fr-FR')} DA</span>
                 </button>
               ))}
             </div>

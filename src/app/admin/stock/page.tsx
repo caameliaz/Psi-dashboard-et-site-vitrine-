@@ -180,7 +180,7 @@ function AssignModal({ employees, products, onClose, onSave }: {
                 <div key={i} className="flex gap-2 items-center">
                   <select value={l.productId} onChange={(e) => setLine(i, { productId: e.target.value })} className={inputClass}>
                     <option value="">Choisir une référence</option>
-                    {availableProducts.map((p) => <option key={p.id} value={p.id}>{p.reference} — {horsCommerciaux(p)} hors commerciaux</option>)}
+                    {availableProducts.map((p) => <option key={p.id} value={p.id}>{p.name || p.reference} ({p.reference}) — {horsCommerciaux(p)} hors commerciaux</option>)}
                   </select>
                   <input value={l.quantity} onChange={(e) => setLine(i, { quantity: e.target.value.replace(/[^\d.]/g, '') })} inputMode="decimal"
                     placeholder="Qté" max={prod ? horsCommerciaux(prod) : undefined} style={{ width: 80 }} className={inputClass} />
@@ -236,8 +236,8 @@ function RestockOnlyModal({ products, materials, onClose, onRestock }: {
           <select value={id} onChange={(e) => setId(e.target.value)} className={inputClass}>
             <option value="">Choisir une référence</option>
             {type === 'product'
-              ? products.map((p) => <option key={p.id} value={p.id}>{p.reference} — {p.available} disponible</option>)
-              : materials.map((m) => <option key={m.id} value={m.id}>{m.reference} — {m.available} disponible</option>)}
+              ? products.map((p) => <option key={p.id} value={p.id}>{p.name || p.reference} ({p.reference}) — {p.available} disponible</option>)
+              : materials.map((m) => <option key={m.id} value={m.id}>{m.name || m.reference} ({m.reference}) — {m.available} disponible</option>)}
           </select>
         </div>
         {needsMode && (
@@ -366,6 +366,13 @@ function StockPageInner() {
             </button>
           </div>
         )}
+      </div>
+
+      <div className="flex items-start gap-2.5 px-4 py-3 mb-5 rounded-xl border border-[#FED7AA] bg-[#FFF7ED] text-[#9A3412]">
+        <svg width={16} height={16} viewBox="0 0 24 24" fill="none" className="flex-shrink-0 mt-0.5"><path d="M12 9v4M12 17h.01M10.29 3.86l-8.18 14a1 1 0 00.87 1.5h16.02a1 1 0 00.87-1.5l-8.18-14a1 1 0 00-1.74 0z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
+        <p className="text-[12px] leading-snug">
+          <span className="font-bold">Page en cours de développement.</span> Elle est utilisable au quotidien, mais des ajustements et corrections sont encore en cours — signalez tout comportement inattendu.
+        </p>
       </div>
 
       <div className="flex gap-2 p-1 rounded-lg bg-[#F1F5F9] w-fit mb-5">

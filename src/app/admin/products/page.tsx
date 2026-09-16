@@ -442,7 +442,7 @@ function RecipeSection({ productId, initialItems, materials, canEdit, onSaved }:
             <div key={i} className="flex gap-2 items-center">
               <select disabled={!canEdit} value={l.rawMaterialId} onChange={(e) => setLine(i, { rawMaterialId: e.target.value })} className={inputClass}>
                 <option value="">Choisir une référence</option>
-                {materials.map((m) => <option key={m.id} value={m.id}>{m.reference} — {m.name}</option>)}
+                {materials.map((m) => <option key={m.id} value={m.id}>{m.name} ({m.reference})</option>)}
               </select>
               <input disabled={!canEdit} value={l.quantity} onChange={(e) => setLine(i, { quantity: e.target.value.replace(/[^\d.]/g, '') })} inputMode="decimal"
                 placeholder="Qté" style={{ width: 80 }} className={inputClass} />
@@ -733,7 +733,24 @@ function ProductsPageInner() {
               {editMode ? '✓ Terminer' : '✎ Modifier'}
             </button>
             {editMode && selectedCatId && (
-              <button onClick={() => { setNewRefForm(emptyRefForm); setShowNewRef(true); }}
+              <button onClick={() => {
+                // Pré-remplit depuis une référence existante de la même catégorie (les
+                // réglages sont généralement identiques au sein d'une catégorie) — tout
+                // reste modifiable ensuite, seuls nom/dimensions/métrage restent vides
+                // (propres à chaque référence).
+                const model = catRefs[catRefs.length - 1];
+                setNewRefForm(model ? {
+                  ...emptyRefForm,
+                  usage: model.usage,
+                  price: String(model.price),
+                  mode: model.mode,
+                  purchasePrice: model.purchasePrice != null ? String(model.purchasePrice) : '',
+                  stockMax: String(model.stockMax),
+                  visibleOnSite: model.visibleOnSite,
+                  customFields: Object.fromEntries(model.customFields.map((c) => [c.definitionId, c.value])),
+                } : emptyRefForm);
+                setShowNewRef(true);
+              }}
                 className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold border border-[#4CAF4F] text-[#4CAF4F] hover:bg-[#F0FDF4] transition-colors">
                 + Nouvelle référence
               </button>

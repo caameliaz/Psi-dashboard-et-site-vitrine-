@@ -55,6 +55,13 @@ export interface RequestItem {
   quantite: number;
   prixUnitaire: number;
   metrage?: number | null;
+  // État de résolution du stock pour cet article (cf. confirmStock, order-stock.ts) — sert
+  // uniquement à expliquer pourquoi une demande Confirmée n'est pas encore Disponible.
+  stockPath?: 'NONE' | 'FROM_STOCK' | 'PURCHASE_PENDING' | 'IN_PRODUCTION';
+  resolvedQuantity?: number;
+  // Statut de la ligne d'achat/production liée (A_COMMANDER/COMMANDE/RECU ou
+  // A_PRODUIRE/BLOQUE/EN_COURS/PRODUIT), selon `stockPath`.
+  listItemStatus?: string | null;
 }
 
 export interface RequestDetail {
@@ -629,7 +636,7 @@ function PriceModal({ item, onConfirm, onClose }: {
 }
 
 // ── Modale "Modifier la commande" — édition complète des lignes ──────────────
-interface ProdOption { id: string; reference: string; price: number; metrage?: number | null; categoryId?: string; category?: { id: string; name: string } | null; }
+interface ProdOption { id: string; reference: string; name?: string | null; price: number; metrage?: number | null; categoryId?: string; category?: { id: string; name: string } | null; }
 interface EditLine { categoryId: string; productId: string | null; designation: string; quantite: number; prixUnitaire: number; metrage: number | null; }
 
 function EditOrderModal({ item, onClose, onSaved }: {
@@ -947,6 +954,41 @@ function ContactDropdown({ title, color, hoverColor, children, options }: {
   );
 }
 
+// ── Barre de progression du cycle de vie (En attente → Confirmé → Disponible → Livré) ──
+// N'affiche que le tronc commun : Annulé/Retourné sont des embranchements à part, montrés
+// séparément (cf. appelant) plutôt que comme une étape de plus sur cette ligne.
+const PROGRESS_STEPS = ['En attente', 'Confirmé', 'Disponible', 'Livré'] as const;
+function ProgressSteps({ statut }: { statut: string }) {
+  const currentIndex = PROGRESS_STEPS.indexOf(statut as typeof PROGRESS_STEPS[number]);
+  return (
+    <div className="flex items-center">
+      {PROGRESS_STEPS.map((label, i) => {
+        const done = i < currentIndex;
+        const active = i === currentIndex;
+        const color = done || active ? '#0F172A' : '#CBD5E1';
+        return (
+          <div key={label} className={`flex items-center ${i < PROGRESS_STEPS.length - 1 ? 'flex-1' : ''}`}>
+            <div className="flex flex-col items-center gap-1.5">
+              <div className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0"
+                style={{ background: active ? '#0F172A' : done ? '#EFF6FF' : '#F1F5F9', border: done ? '1.5px solid #93C5FD' : 'none' }}>
+                {done ? (
+                  <svg width={11} height={11} viewBox="0 0 24 24" fill="none"><path d="M20 6L9 17l-5-5" stroke="#3B82F6" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                ) : (
+                  <span className="w-1.5 h-1.5 rounded-full" style={{ background: active ? '#fff' : '#CBD5E1' }} />
+                )}
+              </div>
+              <span className="text-[10px] font-bold whitespace-nowrap" style={{ color: active ? '#0F172A' : done ? '#3B82F6' : '#94A3B8' }}>{label}</span>
+            </div>
+            {i < PROGRESS_STEPS.length - 1 && (
+              <div className="flex-1 h-[2px] mx-1.5 -mt-4" style={{ background: i < currentIndex ? '#3B82F6' : '#E2E8F0' }} />
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export function RequestPanel({ item, onClose, onStatusChange, onConfirmQuoteWithPrice, users, onAssign, onReassigned, onToggleAutoAssign }: RequestPanelProps) {
   // Bloquer le scroll du body quand le panneau est ouvert
   useLockBodyScroll();
@@ -1116,9 +1158,60 @@ export function RequestPanel({ item, onClose, onStatusChange, onConfirmQuoteWith
             </div>
           </div>
 
+          {/* ── Barre de progression — cycle de vie réel (cf. DB_TO_UI, request-detail.ts) ── */}
+          {!isArchived && (
+            <div className="px-4 md:px-8 pt-4 pb-1 flex-shrink-0 border-b border-[#F2F4F7]">
+              <ProgressSteps statut={item.statut} />
+            </div>
+          )}
+          {isArchived && (
+            <div className="px-4 md:px-8 pt-3 pb-3 flex-shrink-0 border-b border-[#F2F4F7]">
+              <span className="text-[12px] font-bold px-2.5 py-1 rounded-full"
+                style={{
+                  background: item.statut === 'Livré' ? '#F0FDF4' : item.statut === 'Retourné' ? '#FFFBEB' : '#FEF2F2',
+                  color: item.statut === 'Livré' ? '#166534' : item.statut === 'Retourné' ? '#92400E' : '#991B1B',
+                }}>
+                {item.statut === 'Livré' ? '✓ Livré' : item.statut === 'Retourné' ? '↩ Retourné' : '✕ Annulé'}
+              </span>
+            </div>
+          )}
+
           {/* ── Corps scrollable ── */}
           <div className="flex-1 overflow-y-auto no-scrollbar">
             <div className="px-4 md:px-8 py-6 flex flex-col gap-6">
+
+              {/* État stock — visible uniquement Confirmé (pas encore Disponible), pour expliquer
+                  ce qui bloque le passage automatique (cf. checkCompletion, order-stock.ts) */}
+              {item.statut === 'Confirmé' && (() => {
+                const blocked = (item.items ?? []).filter(i => (i.resolvedQuantity ?? 0) < i.quantite);
+                if (blocked.length === 0) return null;
+                const LIST_STATUS_LABEL: Record<string, string> = {
+                  A_COMMANDER: 'en attente (pas encore commandé)',
+                  COMMANDE: 'commandé, en attente de réception',
+                  RECU: 'reçu',
+                  A_PRODUIRE: 'en attente (pas encore en production)',
+                  BLOQUE: 'bloqué (matière première manquante)',
+                  EN_COURS: 'en cours de production',
+                  PRODUIT: 'produit',
+                };
+                return (
+                  <div className="rounded-xl border border-[#FDE68A] bg-[#FFFBEB] px-4 py-3">
+                    <p className="text-[12px] font-bold text-[#92400E] mb-1.5">État du stock — pas encore disponible</p>
+                    <ul className="flex flex-col gap-1">
+                      {blocked.map((i, idx) => {
+                        const manquant = i.quantite - (i.resolvedQuantity ?? 0);
+                        const pathLabel = i.stockPath === 'PURCHASE_PENDING' ? "en attente d'achat" : i.stockPath === 'IN_PRODUCTION' ? 'en production' : 'non traité';
+                        const statusLabel = i.listItemStatus ? LIST_STATUS_LABEL[i.listItemStatus] ?? i.listItemStatus : null;
+                        return (
+                          <li key={idx} className="text-[12px] text-[#78350F]">
+                            <span className="font-semibold">{i.designation}</span> : {manquant} {pathLabel}{statusLabel ? ` — ${statusLabel}` : ''}
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
+                );
+              })()}
 
               {/* Infos client */}
               <div>
@@ -1410,9 +1503,9 @@ export function RequestPanel({ item, onClose, onStatusChange, onConfirmQuoteWith
                         Marquer Livré
                       </button>
                     )}
-                    {/* Devis en attente → Confirmer directement sans ouvrir la modale */}
+                    {/* Devis en attente → Confirmer ouvre d'abord la modale de prix (obligatoire) */}
                     {!isCommande && item.statut === 'En attente' && (
-                      <button onClick={() => onStatusChange(item.ref, 'Confirmé')}
+                      <button onClick={() => (onConfirmQuoteWithPrice ? setShowPriceModal(true) : onStatusChange(item.ref, 'Confirmé'))}
                         className="px-4 py-2 rounded-lg text-[13px] font-bold border border-[#4CAF4F] text-[#4CAF4F] hover:bg-[#F0FDF4] transition-colors">
                         Confirmer
                       </button>
@@ -1530,7 +1623,11 @@ export function RequestPanel({ item, onClose, onStatusChange, onConfirmQuoteWith
           onConfirm={(montant, prix, tva) => {
             onConfirmQuoteWithPrice({ ...item, montant, vatEnabled: tva, _prix: prix });
             setShowPriceModal(false);
-            // On garde le panneau ouvert — l'utilisateur confirme ensuite via le bouton "Confirmer"
+            // Le prix est obligatoire pour confirmer un devis (cf. bouton "Confirmer" ci-dessus,
+            // qui ouvre cette modale au lieu de changer le statut directement) — on enchaîne donc
+            // ici sur le passage à "Confirmé", sauf si la modale a été ouverte pour modifier le
+            // prix d'un devis déjà confirmé (icône crayon), où le statut ne doit pas bouger.
+            if (item.statut === 'En attente' && onStatusChange) onStatusChange(item.ref, 'Confirmé');
           }}
         />
       )}
