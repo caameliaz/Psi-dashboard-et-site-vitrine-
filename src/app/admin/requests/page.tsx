@@ -16,7 +16,6 @@ import { useSession } from 'next-auth/react';
 import { useRole } from '@/lib/role-context';
 import { RequirePerm } from '@/components/RequirePerm';
 import { ImportVentesModal } from '@/components/ui/ImportVentesModal';
-import { RecipeEntryModal } from '@/components/ui/NoRecipeModal';
 import { orderToDetail, quoteToDetail, DB_TO_UI, UI_TO_DB } from '@/lib/request-detail';
 import { validateEmail, validatePhone, validateQuantity, validatePositiveNumber, normalizeEmail, normalizePhone, firstError, messageErreur } from '@/lib/validation';
 
@@ -608,9 +607,10 @@ function RequestsPageInner() {
   const [showCreate, setShowCreate] = useState(false);
   const [showImportVentes, setShowImportVentes] = useState(false);
   const [createPrefill, setCreatePrefill] = useState<{ client?: string; entreprise?: string; telephone?: string; email?: string; wilaya?: string; commune?: string } | undefined>(undefined);
-  // Ouvert quand "Marquer Produit" tombe sur un produit fabriqué sans recette (409 "NO_RECIPE")
-  // et que l'utilisateur choisit de la saisir plutôt que de continuer sans elle (cf. handleStatusChange).
-  const [recipeModal, setRecipeModal] = useState<{ ref: string; newStatut: string; productId: string; reference: string; name: string | null } | null>(null);
+  // "Marquer Produit" tombe sur un manquant réel (rien pour le couvrir, même après avoir
+  // cherché dans le disponible et chez les commandes déjà Produites/Confirmées) — jamais résolu
+  // en silence : propose "Annuler" ou "Mettre disponible malgré le manque" (cf. handleStatusChange).
+  const [shortfallChoice, setShortfallChoice] = useState<{ ref: string; newStatut: string; shortfall: { reference: string; name: string | null; missing: number }[] } | null>(null);
 
   // silent = refetch en arrière-plan (SSE temps réel) → pas de spinner, pas de clignotement
   const fetchAll = useCallback(async (silent = false) => {
@@ -760,10 +760,7 @@ function RequestsPageInner() {
     return matchSearch && matchStatut && matchAssigne && matchPeriode;
   });
 
-  const handleStatusChange = async (
-    ref: string, newStatut: string, force = false,
-    opts?: { allowNoRecipe?: boolean; recipeOverride?: { productId: string; items: { rawMaterialId: string; quantity: number }[] }; saveRecipe?: boolean }
-  ) => {
+  const handleStatusChange = async (ref: string, newStatut: string, force = false) => {
     const item = selected ?? rawItems.find((r) => r.ref === ref || r.id === ref);
     if (!item?.id) return;
     const dbStatus = UI_TO_DB[newStatut] ?? newStatut;
@@ -773,70 +770,37 @@ function RequestsPageInner() {
     const res = await fetch(endpoint, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        status: dbStatus, ...(force && { force: true }),
-        ...(opts?.allowNoRecipe && { allowNoRecipe: true }),
-        ...(opts?.recipeOverride && { recipeOverride: opts.recipeOverride, saveRecipe: !!opts.saveRecipe }),
-      }),
+      body: JSON.stringify({ status: dbStatus, ...(force && { force: true }) }),
     });
 
-    if (res.status === 409) {
-      const data = await res.json().catch(() => null);
+    // Le corps de la réponse ne peut être lu qu'UNE SEULE FOIS (`res.json()`/`res.text()`
+    // lèvent sinon "body stream already read") — on le lit ici une bonne fois pour toutes,
+    // qu'on ait besoin de l'inspecter (409) ou juste de le logger (autre échec).
+    const data = !res.ok ? await res.json().catch(() => null) : null;
 
-      // "Marquer Produit" sur un produit fabriqué SANS recette → jamais fabriqué en silence
-      // (cf. order-stock.ts, manufacturableUnits) : on demande explicitement de continuer sans
-      // elle, ou de la saisir maintenant via l'overlay dédié (RecipeEntryModal).
-      if (data?.error === 'NO_RECIPE') {
-        const products: { productId: string; reference: string; name: string | null }[] = data.products ?? [];
-        const first = products[0];
-        if (!first) return;
-        const detail = products.map((p) => `• ${p.name ?? p.reference}`).join('\n');
-        if (window.confirm(
-          `${isItemDevis ? 'Ce devis' : 'Cette commande'} contient un produit fabriqué sans recette enregistrée :\n${detail}\n\n` +
-          'OK pour continuer sans recette (aucune vérification/consommation de matière première).\n' +
-          'Annuler pour saisir sa recette maintenant.'
-        )) {
-          await handleStatusChange(ref, newStatut, force, { allowNoRecipe: true });
-        } else {
-          setRecipeModal({ ref, newStatut, productId: first.productId, reference: first.reference, name: first.name });
-        }
-        return;
-      }
-
-      // "Marquer Produit" avec un manquant (rien pour le couvrir, même après avoir cherché dans
-      // le disponible et chez les commandes déjà Produites) → proposé à l'utilisateur avec le
-      // détail du manquant, plutôt qu'un simple blocage : "Continuer quand même" relance la même
-      // action avec `force`, qui marque la part manquante résolue SANS inventer de stock fictif
-      // (cf. forceCompleteOrder, order-stock.ts) — un écart assumé, tracé dans l'audit.
-      if (data?.error === 'PRODUCT_SHORTFALL') {
-        const shortfall: { reference: string; name: string | null; missing: number }[] = data.shortfall ?? [];
-        const detail = shortfall.map((w) => `• ${w.name ?? w.reference} — ${w.missing} manquant(s)`).join('\n');
-        if (window.confirm(
-          `Il manque du produit fini pour marquer ${isItemDevis ? 'ce devis' : 'cette commande'} produit(e) :\n${detail}\n\n` +
-          'Continuer quand même ? Le manquant sera marqué résolu sans stock réel derrière (écart assumé, visible en audit).'
-        )) {
-          await handleStatusChange(ref, newStatut, true);
-        }
-        return;
-      }
+    // "Marquer Produit" avec un manquant (rien pour le couvrir, même après avoir cherché dans
+    // le disponible et chez les commandes déjà Produites/Confirmées — jamais de fabrication,
+    // cf. forceCompleteOrder) → overlay proposant "Annuler" ou "Mettre disponible malgré le
+    // manque" (force, qui marque la part manquante résolue SANS inventer de stock fictif — un
+    // écart assumé, tracé dans l'audit).
+    if (res.status === 409 && data?.error === 'PRODUCT_SHORTFALL') {
+      setShortfallChoice({ ref, newStatut, shortfall: data.shortfall ?? [] });
+      return;
     }
 
-    if (!res.ok) console.error('PATCH failed', await res.text());
+    if (!res.ok) console.error('PATCH failed', data);
     // fetchAll resynchronise le détail ouvert : on ne ferme jamais le panneau,
     // l'utilisateur enchaîne ses actions et ferme lui-même quand il a fini.
     await fetchAll(true);
   };
 
-  // Soumission de l'overlay de recette ouvert depuis handleStatusChange (produit sans recette) :
-  // relance "Marquer Produit" avec la recette saisie (sauvegardée sur le produit ou juste pour
-  // cette action, cf. RecipeEntryModal) — peut redemander une nouvelle fois si un AUTRE produit
-  // de la commande/du devis n'a lui non plus aucune recette (handleStatusChange rouvrira alors
-  // ce même overlay pour lui).
-  const handleRecipeModalSubmit = async (items: { rawMaterialId: string; quantity: number }[], saveRecipe: boolean) => {
-    if (!recipeModal) return;
-    const { ref, newStatut, productId } = recipeModal;
-    setRecipeModal(null);
-    await handleStatusChange(ref, newStatut, false, { recipeOverride: { productId, items }, saveRecipe });
+  // "Mettre disponible malgré le manque" sur l'overlay de manquant : relance "Marquer Produit"
+  // en acceptant l'écart (force).
+  const handleForceShortfall = async () => {
+    if (!shortfallChoice) return;
+    const { ref, newStatut } = shortfallChoice;
+    setShortfallChoice(null);
+    await handleStatusChange(ref, newStatut, true);
   };
 
   // Change l'assignation ("pris en charge par") d'une commande/devis
@@ -1177,13 +1141,30 @@ function RequestsPageInner() {
           prefill={createPrefill}
         />
       )}
-      {recipeModal && (
-        <RecipeEntryModal
-          productLabel={`${recipeModal.reference}${recipeModal.name ? ' — ' + recipeModal.name : ''}`}
-          confirmLabel="Lancer la production"
-          onClose={() => setRecipeModal(null)}
-          onSubmit={handleRecipeModalSubmit}
-        />
+      {shortfallChoice && (
+        <Modal title="Stock insuffisant" onClose={() => setShortfallChoice(null)}>
+          <div className="space-y-4">
+            <p className="text-[13px] text-[#374151]">
+              Il manque du produit fini pour marquer {rawItems.find((r) => r.ref === shortfallChoice.ref)?.type === 'Devis' ? 'ce devis' : 'cette commande'} produit(e) :
+            </p>
+            <ul className="flex flex-col gap-1">
+              {shortfallChoice.shortfall.map((s, i) => (
+                <li key={i} className="text-[13px] text-[#374151]">• {s.name ?? s.reference} — {s.missing} manquant(s)</li>
+              ))}
+            </ul>
+            <div className="flex flex-col gap-3 pt-1">
+              <button onClick={() => setShortfallChoice(null)}
+                className="text-left px-4 py-3 rounded-lg border border-[#E2E8F0] bg-white hover:bg-[#F8FAFC] transition-colors">
+                <p className="text-sm font-semibold text-[#374151]">Annuler</p>
+              </button>
+              <button onClick={handleForceShortfall}
+                className="text-left px-4 py-3 rounded-lg transition-colors" style={{ background: '#4CAF4F' }}>
+                <p className="text-sm font-bold text-white">Mettre disponible malgré le manque</p>
+                <p className="text-[11px] text-white/85 mt-0.5">Le manquant sera marqué résolu sans stock réel derrière (écart assumé, visible en audit).</p>
+              </button>
+            </div>
+          </div>
+        </Modal>
       )}
 
       <MobileNavbar />

@@ -7,15 +7,57 @@ const inputClass = "w-full px-3 py-2.5 rounded-lg border border-[#E2E8F0] text-s
 
 interface RawMaterialOption { id: string; reference: string; name: string; unit: string; }
 
-// ── Overlay : saisir la recette d'un produit qui n'en a aucune, pour pouvoir la produire ────
+// ── Overlay : premier choix quand un produit/ligne n'a aucune recette ───────────────────────
+// Remplace l'ancien window.confirm() — "Continuer" (fond blanc) produit sans vérifier/consommer
+// de matière, "Ajouter une recette" (fond vert) ouvre RecipeEntryModal pour la saisir et lancer
+// la production avec elle.
+export function NoRecipeChoiceModal({ label, onClose, onContinueWithout, onAddRecipe }: {
+  label: string;
+  onClose: () => void;
+  onContinueWithout: () => void;
+  onAddRecipe: () => void;
+}) {
+  return (
+    <Modal title="Aucune recette" onClose={onClose}>
+      <div className="space-y-4">
+        <p className="text-[13px] text-[#374151]">
+          <span className="font-bold">{label}</span> n&apos;a aucune recette enregistrée.
+        </p>
+        <div className="flex flex-col gap-3 pt-1">
+          <button onClick={onContinueWithout}
+            className="text-left px-4 py-3 rounded-lg border border-[#E2E8F0] bg-white hover:bg-[#F8FAFC] transition-colors">
+            <p className="text-sm font-semibold text-[#374151]">Continuer</p>
+            <p className="text-[11px] text-[#8A9BB5] mt-0.5">
+              Produit sans consommer de matière première — <span className="font-semibold text-[#DC2626]">déconseillé</span> pour la gestion du stock, le stock matière ne sera pas mis à jour.
+            </p>
+          </button>
+          <button onClick={onAddRecipe}
+            className="text-left px-4 py-3 rounded-lg transition-colors" style={{ background: '#4CAF4F' }}>
+            <p className="text-sm font-bold text-white">Ajouter une recette</p>
+            <p className="text-[11px] text-white/85 mt-0.5">
+              Saisissez les matières premières nécessaires — la production consommera automatiquement le stock matière correspondant.
+            </p>
+          </button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+// ── Overlay : saisir la recette d'un produit (ou d'une ligne libre) qui n'en a aucune ───────
 // Utilisé par le bouton "Produire" (liste de production) ET "Marquer Disponible" (commande/
 // devis) quand un produit fabriqué n'a aucune recette enregistrée — cf. order-stock.ts
-// (RecipeOverrideItem) : la case "Enregistrer" décide si la recette saisie est persistée sur
-// le produit (PUT /api/products/[id]/recipe, réutilisable pour toujours) ou seulement utilisée
-// pour CETTE action (jamais écrite en base).
-export function RecipeEntryModal({ productLabel, confirmLabel, onClose, onSubmit }: {
+// (RecipeOverrideItem) : la case "Enregistrer" décide si la recette saisie est persistée —
+// sur le produit (PUT /api/products/[id]/recipe, réutilisable pour toujours), ou, pour une
+// ligne libre sans fiche produit, sous son texte EXACT (saveFreeTextRecipe, réutilisée
+// automatiquement la prochaine fois qu'une ligne libre porte ce même texte) — ou seulement
+// utilisée pour CETTE action si décochée (jamais écrite en base).
+export function RecipeEntryModal({ productLabel, confirmLabel, saveHint, onClose, onSubmit }: {
   productLabel: string;
   confirmLabel: string;
+  // Texte de la case à cocher — adapté selon qu'on sauvegarde sur un produit ou sous le texte
+  // d'une ligne libre (cf. StockListsWidget.tsx / requests/page.tsx).
+  saveHint: string;
   onClose: () => void;
   onSubmit: (items: { rawMaterialId: string; quantity: number }[], saveRecipe: boolean) => Promise<void>;
 }) {
@@ -68,7 +110,7 @@ export function RecipeEntryModal({ productLabel, confirmLabel, onClose, onSubmit
 
         <label className="flex items-center gap-2 text-[12px] font-semibold text-[#374151] cursor-pointer">
           <input type="checkbox" checked={saveRecipe} onChange={(e) => setSaveRecipe(e.target.checked)} className="w-4 h-4" />
-          Enregistrer cette recette sur le produit (sinon utilisée juste cette fois-ci)
+          {saveHint}
         </label>
 
         <div className="flex gap-3 pt-1">

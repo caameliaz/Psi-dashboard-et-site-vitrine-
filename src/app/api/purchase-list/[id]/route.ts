@@ -3,8 +3,40 @@ import { prisma } from '@/lib/prisma';
 import { requirePermission } from '@/lib/permissions';
 import { createAudit } from '@/lib/audit';
 import { distributePurchase, unblockProductionForMaterial, resyncPurchaseLineForProduct, resyncMaterialPurchaseNeed } from '@/lib/order-stock';
+import { createLinkResolver } from '@/lib/stock-traceability';
 
 type Ctx = { params: Promise<{ id: string }> };
+
+// GET /api/purchase-list/[id] — détail d'UNE ligne + "commandes concernées" (qui retient du
+// stock/de la matière) — utilisé par le panneau commande/devis (cf. RequestPanel.tsx).
+export async function GET(_request: NextRequest, { params }: Ctx) {
+  const guard = await requirePermission('voir_stock');
+  if (guard.error) return guard.error;
+
+  const { id } = await params;
+
+  try {
+    const item = await prisma.purchaseListItem.findUnique({
+      where: { id },
+      include: {
+        product: { select: { id: true, reference: true, name: true, available: true, reserved: true, purchaseThreshold: true } },
+        rawMaterial: { select: { id: true, reference: true, name: true, unit: true, available: true, reserved: true, purchaseThreshold: true } },
+      },
+    });
+    if (!item) return NextResponse.json({ error: 'Ligne introuvable' }, { status: 404 });
+
+    const resolver = createLinkResolver();
+    const links = item.rawMaterialId ? await resolver.materialPurchaseLinks(item.rawMaterialId) : await resolver.purchaseLineLinks(item.id);
+    // "Qui retient du stock actuellement" — cf. RequestPanel.tsx. N'a de sens que pour un produit
+    // (une matière n'est jamais réservée directement par un article de commande/devis).
+    const holders = item.productId ? await resolver.productStockHolders(item.productId) : { orderItems: [], quoteItems: [] };
+
+    return NextResponse.json({ ...item, ...links, holders });
+  } catch (e) {
+    console.error(e);
+    return NextResponse.json({ error: 'Failed to fetch purchase list item' }, { status: 500 });
+  }
+}
 
 // PATCH /api/purchase-list/[id] — "Commander" ou "Valider réception"
 // body: { action: 'order', quantity: number } | { action: 'receive', quantity: number }

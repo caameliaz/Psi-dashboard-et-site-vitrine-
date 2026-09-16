@@ -34,6 +34,16 @@ export type LinkedQuoteItem = { quantity: number; quote: LinkedParent; blocked: 
 export type BufferSource = { productId: string; reference: string; name: string | null; quantity: number };
 export type Links = { orderItems: LinkedOrderItem[]; quoteItems: LinkedQuoteItem[]; bufferSources?: BufferSource[] };
 
+// ── "Qui retient du stock actuellement" — différent de "Commandes concernées" ci-dessus, qui
+// ne montre QUE ce qui crée un manquant (badge Bloqué). Ici on veut TOUTES les commandes/devis
+// qui occupent une part du `reserved` actuel du produit, y compris celles déjà entièrement
+// résolues (Produite) — elles ne manquent de rien mais retiennent quand même du stock tant
+// qu'elles ne sont pas Livrées (cf. deliverStock, qui décrémente `reserved` à la livraison).
+// Jamais de badge "Bloqué" ici (n'a de sens que pour une commande encore en attente) — juste le
+// statut de la commande, pour distinguer "en attente d'être couverte" de "déjà produite".
+export type StockHolder = { quantity: number; order?: LinkedParent; quote?: LinkedParent; status: 'Confirmée' | 'Produite' };
+export type Holders = { orderItems: StockHolder[]; quoteItems: StockHolder[] };
+
 type Claim = {
   id: string; kind: 'order' | 'quote'; parent: LinkedParent; createdAt: Date; priority: boolean;
   // `stillNeeded` = manquant en unités de PRODUIT (quantity − resolvedQuantity, brut) ; sert au
@@ -69,7 +79,9 @@ async function materialClaims(rawMaterialId: string): Promise<{ claims: Claim[];
   });
   if (lines.length === 0) return { claims: [], blockedKeys: new Set() };
   const lineIds = lines.map((l) => l.id);
-  const ratioByLineId = new Map(lines.map((l) => [l.id, ratioByProduct.get(l.productId) ?? 0]));
+  // `l.productId` garanti non nul : le filtre ci-dessus exige un productId parmi ceux de
+  // `recipeUses` (une ligne libre n'y correspond jamais).
+  const ratioByLineId = new Map(lines.map((l) => [l.id, ratioByProduct.get(l.productId!) ?? 0]));
   const productByLineId = new Map(lines.map((l) => [l.id, l.product]));
 
   const [orderItems, quoteItems] = await Promise.all([
@@ -186,13 +198,15 @@ export function createLinkResolver() {
       let cumulativeBuffer = 0;
       const bufferSources: BufferSource[] = [];
       for (const l of sortedLines) {
-        const quantity = (ratioByProduct.get(l.productId) ?? 0) * l.bufferQuantity;
+        // `l.productId`/`l.product` garantis non nuls (le filtre ci-dessus exige un productId
+        // parmi ceux de `recipeUses` — une ligne libre n'y correspond jamais).
+        const quantity = (ratioByProduct.get(l.productId!) ?? 0) * l.bufferQuantity;
         if (quantity <= 0) continue;
         const before = cumulativeBuffer;
         cumulativeBuffer += quantity;
         const missing = Math.max(0, cumulativeBuffer - spendableSurplus) - Math.max(0, before - spendableSurplus);
         if (missing > 0) {
-          bufferSources.push({ productId: l.productId, reference: l.product.reference, name: l.product.name, quantity: missing });
+          bufferSources.push({ productId: l.productId!, reference: l.product!.reference, name: l.product!.name, quantity: missing });
         }
       }
 
@@ -212,6 +226,43 @@ export function createLinkResolver() {
         quoteItems: claims.filter((c) => c.kind === 'quote' && isBlocked('quote', c.id))
           .map((c) => ({ quantity: c.missingQty, quote: c.parent, blocked: true, product: c.product })),
         bufferSources,
+      };
+    },
+
+    // Ligne de production LIBRE (sans fiche produit) : jamais partagée entre commandes — un seul
+    // article lié — et pas de notion de "bloqué" par simulation FIFO cross-produit (aucune
+    // recette réutilisable n'existe pour elle, cf. order-stock.ts §"Bouton Produire").
+    async freeTextLineLinks(productionListItemId: string): Promise<Links> {
+      const [orderItems, quoteItems] = await Promise.all([
+        prisma.orderItem.findMany({ where: { productionListItemId }, select: { id: true, quantity: true, resolvedQuantity: true, order: { select: PARENT_SELECT } } }),
+        prisma.quoteItem.findMany({ where: { productionListItemId }, select: { id: true, quantity: true, resolvedQuantity: true, quote: { select: PARENT_SELECT } } }),
+      ]);
+      return {
+        orderItems: orderItems.filter((i) => i.quantity - i.resolvedQuantity > 0).map((i) => ({ quantity: i.quantity - i.resolvedQuantity, order: i.order, blocked: false })),
+        quoteItems: quoteItems.filter((i) => i.quantity - i.resolvedQuantity > 0).map((i) => ({ quantity: i.quantity - i.resolvedQuantity, quote: i.quote, blocked: false })),
+      };
+    },
+
+    // "Qui retient du stock actuellement" pour UN produit — cf. type Holders ci-dessus. Prend
+    // TOUTES les commandes/devis Confirmée (VALIDE) ou Produite (PRODUITE) qui ont une part
+    // résolue (`resolvedQuantity > 0`) sur ce produit, peu importe leur ligne de liste d'achat/
+    // production (même déjà supprimée/soldée pour celles Produite) — recherché directement par
+    // `productId` sur l'article, pas par le lien technique vers une liste (qui ne survit pas
+    // forcément à la résolution complète d'une commande).
+    async productStockHolders(productId: string): Promise<Holders> {
+      const [orderItems, quoteItems] = await Promise.all([
+        prisma.orderItem.findMany({
+          where: { productId, resolvedQuantity: { gt: 0 }, order: { status: { in: ['VALIDE', 'PRODUITE'] } } },
+          select: { resolvedQuantity: true, order: { select: { ...PARENT_SELECT, status: true } } },
+        }),
+        prisma.quoteItem.findMany({
+          where: { productId, resolvedQuantity: { gt: 0 }, quote: { status: { in: ['VALIDE', 'PRODUITE'] } } },
+          select: { resolvedQuantity: true, quote: { select: { ...PARENT_SELECT, status: true } } },
+        }),
+      ]);
+      return {
+        orderItems: orderItems.map((i) => ({ quantity: i.resolvedQuantity, order: i.order, status: i.order.status === 'PRODUITE' ? 'Produite' : 'Confirmée' })),
+        quoteItems: quoteItems.map((i) => ({ quantity: i.resolvedQuantity, quote: i.quote, status: i.quote.status === 'PRODUITE' ? 'Produite' : 'Confirmée' })),
       };
     },
 

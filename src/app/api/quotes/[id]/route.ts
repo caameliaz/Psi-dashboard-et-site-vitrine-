@@ -4,7 +4,11 @@ import { requirePermission, hasPermission } from '@/lib/permissions';
 import { createAudit, statusLabel } from '@/lib/audit';
 import { createNotif } from '@/lib/notifications';
 import { notifyStatusChange, notifyAssignment } from '@/lib/notify-activity';
-import { confirmStock, cancelStock, deliverStock, returnStock, releaseOrderItemStock, adjustOrderItemQuantity, forceCompleteOrder, previewForceCompleteShortfall, syncCommercialAssignmentForParent, saveProductRecipe, type RecipeOverrideItem } from '@/lib/order-stock';
+import {
+  confirmStock, cancelStock, deliverStock, returnStock, releaseOrderItemStock, adjustOrderItemQuantity,
+  forceCompleteOrder, previewForceCompleteShortfall, syncCommercialAssignmentForParent,
+  previewFreeTextResolution, resolveFreeTextItems,
+} from '@/lib/order-stock';
 
 // Statuts où les lignes ne peuvent plus être modifiées (déjà sorties du stock/annulées)
 const LOCKED_STATUSES = ['LIVRE', 'ANNULE', 'RETOURNE'];
@@ -87,26 +91,15 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
       }
     }
 
-    // "Marquer Produit" sur un produit sans recette — cf. orders/[id]/route.ts pour le détail.
-    let recipeOverrides: Map<string, RecipeOverrideItem[]> | undefined;
-    if (body.status === 'PRODUITE' && body.recipeOverride?.productId && Array.isArray(body.recipeOverride.items) && body.recipeOverride.items.length > 0) {
-      if (body.saveRecipe) {
-        await saveProductRecipe(body.recipeOverride.productId, body.recipeOverride.items);
-      } else {
-        recipeOverrides = new Map([[body.recipeOverride.productId, body.recipeOverride.items]]);
-      }
-    }
-
-    // "Marquer Produit" — même vérification préalable que pour les commandes (cf. plus haut) :
-    // blocage (409), sauf si `body.force` (l'utilisateur a choisi de continuer quand même —
-    // cf. orders/[id]/route.ts pour le détail du comportement).
+    // "Marquer Produit" — vérifie AVANT de toucher à quoi que ce soit qu'il y a bien de quoi
+    // couvrir tout le manquant (disponible → vol chez une commande déjà Produite ou Confirmée).
+    // Jamais de fabrication ici — cf. orders/[id]/route.ts pour le détail du comportement.
     if (body.status === 'PRODUITE' && !body.force) {
-      const { shortfalls, noRecipeProducts } = await previewForceCompleteShortfall('quote', id, { allowNoRecipe: !!body.allowNoRecipe, recipeOverrides });
-      if (noRecipeProducts.length > 0) {
-        return NextResponse.json({ error: 'NO_RECIPE', products: noRecipeProducts }, { status: 409 });
-      }
-      if (shortfalls.length > 0) {
-        return NextResponse.json({ error: 'PRODUCT_SHORTFALL', shortfall: shortfalls }, { status: 409 });
+      const { shortfalls } = await previewForceCompleteShortfall('quote', id);
+      const freeText = await previewFreeTextResolution('quote', id);
+      const allShortfalls = [...shortfalls, ...freeText.shortfalls.map((s) => ({ productId: null, reference: s.label, name: null, missing: s.missing }))];
+      if (allShortfalls.length > 0) {
+        return NextResponse.json({ error: 'PRODUCT_SHORTFALL', shortfall: allShortfalls }, { status: 409 });
       }
     }
 
@@ -135,6 +128,13 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
 
         for (const [productId, existing] of existingByProduct) {
           if (!newProductIds.has(productId)) await releaseOrderItemStock('quote', existing.id);
+        }
+        // Lignes "libres" (sans productId) : jamais réutilisées, toujours recréées entièrement —
+        // mais si l'une d'elles avait déjà déclenché sa propre ligne de production (cf.
+        // confirmStock), il faut la supprimer explicitement ici, sinon elle reste orpheline.
+        const freeTextToRemove = existingItems.filter((e) => !e.productId && e.productionListItemId);
+        if (freeTextToRemove.length > 0) {
+          await prisma.productionListItem.deleteMany({ where: { id: { in: freeTextToRemove.map((e) => e.productionListItemId!) }, productId: null } });
         }
         await prisma.quoteItem.deleteMany({ where: { quoteId: id, productId: null } });
         await prisma.quoteItem.deleteMany({ where: { quoteId: id, productId: { notIn: Array.from(newProductIds) } } });
@@ -254,17 +254,18 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
       if (body.status === 'VALIDE') {
         await confirmStock('quote', id);
       } else if (body.status === 'PRODUITE') {
-        // "Marquer Produit" — résout la part manquante de chaque article (matière première
-        // + liste d'achat/production), la confirmation d'un éventuel manquant a déjà eu lieu
-        // plus haut (cf. previewForceCompleteShortfall). `force: true` accepte l'écart restant
-        // sans stock fictif — tracé dans l'audit si un manquant a réellement été accepté.
-        const phantom = await forceCompleteOrder('quote', id, { force: !!body.force, allowNoRecipe: !!body.allowNoRecipe, recipeOverrides });
+        // "Marquer Produit" — résout la part manquante de chaque article (réallocation de stock
+        // produit existant SEULEMENT, jamais de fabrication), la confirmation d'un éventuel
+        // manquant a déjà eu lieu plus haut (cf. previewForceCompleteShortfall). `force: true`
+        // accepte l'écart restant sans stock fictif — tracé dans l'audit si accepté.
+        const phantom = await forceCompleteOrder('quote', id, { force: !!body.force });
         if (phantom.length > 0) {
           createAudit({
             userId: session.user.id, action: 'Marqué produit malgré un manquant (forcé)', entity: 'DEVIS', entityId: id,
             detail: phantom.map((p) => `${p.reference} — ${p.missing} manquant(s)`).join(', '), quoteId: id,
           });
         }
+        await resolveFreeTextItems('quote', id, { force: !!body.force });
       } else if (body.status === 'ANNULE') {
         await cancelStock('quote', id);
       } else if (body.status === 'LIVRE') {
