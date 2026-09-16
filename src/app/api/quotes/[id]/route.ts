@@ -4,7 +4,7 @@ import { requirePermission, hasPermission } from '@/lib/permissions';
 import { createAudit, statusLabel } from '@/lib/audit';
 import { createNotif } from '@/lib/notifications';
 import { notifyStatusChange, notifyAssignment } from '@/lib/notify-activity';
-import { confirmStock, cancelStock, deliverStock, returnStock, releaseOrderItemStock, adjustOrderItemQuantity, forceCompleteOrder, previewForceCompleteShortfall, syncCommercialAssignmentForParent } from '@/lib/order-stock';
+import { confirmStock, cancelStock, deliverStock, returnStock, releaseOrderItemStock, adjustOrderItemQuantity, forceCompleteOrder, previewForceCompleteShortfall, syncCommercialAssignmentForParent, saveProductRecipe, type RecipeOverrideItem } from '@/lib/order-stock';
 
 // Statuts où les lignes ne peuvent plus être modifiées (déjà sorties du stock/annulées)
 const LOCKED_STATUSES = ['LIVRE', 'ANNULE', 'RETOURNE'];
@@ -81,13 +81,26 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
       }
     }
 
+    // "Marquer Produit" sur un produit sans recette — cf. orders/[id]/route.ts pour le détail.
+    let recipeOverrides: Map<string, RecipeOverrideItem[]> | undefined;
+    if (body.status === 'PRODUITE' && body.recipeOverride?.productId && Array.isArray(body.recipeOverride.items) && body.recipeOverride.items.length > 0) {
+      if (body.saveRecipe) {
+        await saveProductRecipe(body.recipeOverride.productId, body.recipeOverride.items);
+      } else {
+        recipeOverrides = new Map([[body.recipeOverride.productId, body.recipeOverride.items]]);
+      }
+    }
+
     // "Marquer Produit" — même vérification préalable que pour les commandes (cf. plus haut) :
     // blocage (409), sauf si `body.force` (l'utilisateur a choisi de continuer quand même —
     // cf. orders/[id]/route.ts pour le détail du comportement).
     if (body.status === 'PRODUITE' && !body.force) {
-      const shortfall = await previewForceCompleteShortfall('quote', id);
-      if (shortfall.length > 0) {
-        return NextResponse.json({ error: 'PRODUCT_SHORTFALL', shortfall }, { status: 409 });
+      const { shortfalls, noRecipeProducts } = await previewForceCompleteShortfall('quote', id, { allowNoRecipe: !!body.allowNoRecipe, recipeOverrides });
+      if (noRecipeProducts.length > 0) {
+        return NextResponse.json({ error: 'NO_RECIPE', products: noRecipeProducts }, { status: 409 });
+      }
+      if (shortfalls.length > 0) {
+        return NextResponse.json({ error: 'PRODUCT_SHORTFALL', shortfall: shortfalls }, { status: 409 });
       }
     }
 
@@ -233,7 +246,7 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
         // + liste d'achat/production), la confirmation d'un éventuel manquant a déjà eu lieu
         // plus haut (cf. previewForceCompleteShortfall). `force: true` accepte l'écart restant
         // sans stock fictif — tracé dans l'audit si un manquant a réellement été accepté.
-        const phantom = await forceCompleteOrder('quote', id, { force: !!body.force });
+        const phantom = await forceCompleteOrder('quote', id, { force: !!body.force, allowNoRecipe: !!body.allowNoRecipe, recipeOverrides });
         if (phantom.length > 0) {
           createAudit({
             userId: session.user.id, action: 'Marqué produit malgré un manquant (forcé)', entity: 'DEVIS', entityId: id,

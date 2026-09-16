@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { requirePermission } from '@/lib/permissions';
 import { createAudit } from '@/lib/audit';
-import { distributeProduction, resyncProductionLine, reassessProductionForMaterial } from '@/lib/order-stock';
+import { distributeProduction, resyncProductionLine, reassessProductionForMaterial, saveProductRecipe, type RecipeOverrideItem } from '@/lib/order-stock';
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -29,13 +29,34 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
     // combinés, tous produits confondus), on arrête tout net, rien n'est modifié.
     // On collecte le manquant de TOUTES les matières en cause (pas juste la première) pour
     // que l'appelant puisse afficher exactement ce qu'il manque pour produire cette quantité.
-    const recipe = await prisma.recipeItem.findMany({ where: { productId: item.productId }, include: { rawMaterial: true } });
-    // Aucune recette définie pour ce produit → le contrôle ci-dessous porte sur un tableau vide,
-    // donc rien n'est vérifié ni consommé — pas un blocage (juste demandé), une simple alerte
-    // renvoyée avec la réponse pour que l'appelant prévienne l'utilisateur après coup.
-    const noRecipeWarning = recipe.length === 0
-      ? `Aucune recette définie pour ${item.product.reference} — la production a été enregistrée sans vérifier/consommer de matière première.`
-      : null;
+    let recipe = await prisma.recipeItem.findMany({ where: { productId: item.productId }, include: { rawMaterial: true } });
+
+    // Aucune recette définie pour ce produit → au lieu de produire en silence sans jamais
+    // vérifier/consommer de matière (ancien comportement), on demande explicitement à
+    // l'utilisateur quoi faire (cf. StockListsWidget.tsx) :
+    // - `recipeOverride` : une recette saisie à la volée pour CETTE production seulement,
+    //   éventuellement sauvegardée sur le produit si `saveRecipe` est vrai (cf. saveProductRecipe).
+    // - `allowNoRecipe` : continuer sans recette, comportement identique à avant (aucune
+    //   vérification/consommation), mais choisi explicitement plutôt que silencieux.
+    // - ni l'un ni l'autre → blocage net avec un code d'erreur dédié, pas un simple avertissement.
+    let noRecipeWarning: string | null = null;
+    if (recipe.length === 0) {
+      const override: RecipeOverrideItem[] = Array.isArray(body.recipeOverride) ? body.recipeOverride : [];
+      if (override.length > 0) {
+        if (body.saveRecipe) {
+          recipe = await saveProductRecipe(item.productId, override);
+        } else {
+          const materials = await prisma.rawMaterial.findMany({ where: { id: { in: override.map((o) => o.rawMaterialId) } } });
+          recipe = override
+            .map((o) => ({ rawMaterialId: o.rawMaterialId, quantity: Number(o.quantity), rawMaterial: materials.find((m) => m.id === o.rawMaterialId)! }))
+            .filter((r) => r.rawMaterial) as typeof recipe;
+        }
+      } else if (!body.allowNoRecipe) {
+        return NextResponse.json({ error: 'NO_RECIPE', productId: item.productId, reference: item.product.reference, name: item.product.name }, { status: 409 });
+      } else {
+        noRecipeWarning = `Aucune recette définie pour ${item.product.reference} — la production a été enregistrée sans vérifier/consommer de matière première.`;
+      }
+    }
     const shortfalls = recipe
       .map((r) => {
         const totalNeeded = r.quantity * qty;

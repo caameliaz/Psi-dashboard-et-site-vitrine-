@@ -4,7 +4,7 @@ import { requirePermission, hasPermission } from '@/lib/permissions';
 import { createAudit, statusLabel } from '@/lib/audit';
 import { createNotif } from '@/lib/notifications';
 import { notifyStatusChange, notifyAssignment } from '@/lib/notify-activity';
-import { confirmStock, cancelStock, deliverStock, returnStock, releaseOrderItemStock, adjustOrderItemQuantity, forceCompleteOrder, previewForceCompleteShortfall, syncCommercialAssignmentForParent } from '@/lib/order-stock';
+import { confirmStock, cancelStock, deliverStock, returnStock, releaseOrderItemStock, adjustOrderItemQuantity, forceCompleteOrder, previewForceCompleteShortfall, syncCommercialAssignmentForParent, saveProductRecipe, type RecipeOverrideItem } from '@/lib/order-stock';
 
 // Statuts où les lignes ne peuvent plus être modifiées (déjà sorties du stock/annulées)
 const LOCKED_STATUSES = ['LIVRE', 'ANNULE', 'RETOURNE'];
@@ -84,16 +84,35 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
       }
     }
 
+    // "Marquer Produit" sur un produit sans recette : `recipeOverride` porte la recette saisie
+    // à la volée par l'utilisateur pour CE produit (cf. requests/page.tsx, "NO_RECIPE") —
+    // sauvegardée sur le produit si `saveRecipe` (auquel cas plus besoin de la repasser ensuite,
+    // le produit a désormais une vraie recette en base), sinon utilisée seulement pour cet appel.
+    let recipeOverrides: Map<string, RecipeOverrideItem[]> | undefined;
+    if (body.status === 'PRODUITE' && body.recipeOverride?.productId && Array.isArray(body.recipeOverride.items) && body.recipeOverride.items.length > 0) {
+      if (body.saveRecipe) {
+        await saveProductRecipe(body.recipeOverride.productId, body.recipeOverride.items);
+      } else {
+        recipeOverrides = new Map([[body.recipeOverride.productId, body.recipeOverride.items]]);
+      }
+    }
+
     // "Marquer Produit" — vérifie AVANT de toucher à quoi que ce soit qu'il y a bien de quoi
     // couvrir tout le manquant (disponible → vol chez une commande déjà Produite → fabrication
     // avec la matière réservée). Blocage (409) si non, SAUF si l'utilisateur a explicitement
     // choisi de continuer quand même (`body.force`) — dans ce cas le manquant restant est
     // marqué résolu SANS qu'aucun stock fictif ne soit inventé (cf. forceCompleteOrder), un
     // écart assumé plutôt qu'un blocage total ou un mensonge silencieux sur le stock.
+    // Un produit fabriqué SANS recette est traité à part (`NO_RECIPE`, jamais fabriqué en
+    // silence) tant que l'utilisateur n'a pas choisi explicitement de continuer sans elle
+    // (`body.allowNoRecipe`) ou d'en saisir une (`recipeOverride` ci-dessus).
     if (body.status === 'PRODUITE' && !body.force) {
-      const shortfall = await previewForceCompleteShortfall('order', id);
-      if (shortfall.length > 0) {
-        return NextResponse.json({ error: 'PRODUCT_SHORTFALL', shortfall }, { status: 409 });
+      const { shortfalls, noRecipeProducts } = await previewForceCompleteShortfall('order', id, { allowNoRecipe: !!body.allowNoRecipe, recipeOverrides });
+      if (noRecipeProducts.length > 0) {
+        return NextResponse.json({ error: 'NO_RECIPE', products: noRecipeProducts }, { status: 409 });
+      }
+      if (shortfalls.length > 0) {
+        return NextResponse.json({ error: 'PRODUCT_SHORTFALL', shortfall: shortfalls }, { status: 409 });
       }
     }
 
@@ -228,7 +247,7 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
         // + liste d'achat/production), la confirmation d'un éventuel manquant a déjà eu lieu
         // plus haut (cf. previewForceCompleteShortfall). `force: true` accepte l'écart restant
         // sans stock fictif — tracé dans l'audit si un manquant a réellement été accepté.
-        const phantom = await forceCompleteOrder('order', id, { force: !!body.force });
+        const phantom = await forceCompleteOrder('order', id, { force: !!body.force, allowNoRecipe: !!body.allowNoRecipe, recipeOverrides });
         if (phantom.length > 0) {
           createAudit({
             userId: session.user.id, action: 'Marqué produit malgré un manquant (forcé)', entity: 'COMMANDE', entityId: id,

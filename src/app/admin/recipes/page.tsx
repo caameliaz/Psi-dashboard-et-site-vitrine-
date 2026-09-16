@@ -200,6 +200,13 @@ function RecipesPageInner() {
     await fetchAll();
   };
 
+  const deleteMaterial = async (m: RawMaterial) => {
+    if (!confirm(`Supprimer la matière première "${m.name}" (${m.reference}) ?`)) return;
+    const res = await fetch(`/api/raw-materials/${m.id}`, { method: 'DELETE' });
+    if (!res.ok) { const err = await res.json().catch(() => ({})); alert(err.error ?? 'Échec de la suppression'); return; }
+    await fetchAll();
+  };
+
   return (
     <div className="w-full">
       <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
@@ -311,7 +318,10 @@ function RecipesPageInner() {
                   <td className="px-4 py-3 text-[13px] text-[#374151] text-right tabular-nums">{m.purchaseThreshold}</td>
                   {canEditStock && (
                     <td className="px-4 py-3 text-right">
-                      <button onClick={() => setMaterialModal(m)} className="px-3 py-1.5 rounded-lg border border-[#E2E8F0] text-[12px] font-semibold text-[#374151] hover:bg-[#F8FAFC]">Modifier</button>
+                      <div className="flex justify-end gap-2">
+                        <button onClick={() => setMaterialModal(m)} className="px-3 py-1.5 rounded-lg border border-[#E2E8F0] text-[12px] font-semibold text-[#374151] hover:bg-[#F8FAFC]">Modifier</button>
+                        <button onClick={() => deleteMaterial(m)} className="px-3 py-1.5 rounded-lg border border-[#FCA5A5] text-[12px] font-semibold text-[#EF4444] hover:bg-[#FEF2F2]">Supprimer</button>
+                      </div>
                     </td>
                   )}
                 </tr>

@@ -16,6 +16,7 @@ import { useSession } from 'next-auth/react';
 import { useRole } from '@/lib/role-context';
 import { RequirePerm } from '@/components/RequirePerm';
 import { ImportVentesModal } from '@/components/ui/ImportVentesModal';
+import { RecipeEntryModal } from '@/components/ui/NoRecipeModal';
 import { orderToDetail, quoteToDetail, DB_TO_UI, UI_TO_DB } from '@/lib/request-detail';
 import { validateEmail, validatePhone, validateQuantity, validatePositiveNumber, normalizeEmail, normalizePhone, firstError, messageErreur } from '@/lib/validation';
 
@@ -607,6 +608,9 @@ function RequestsPageInner() {
   const [showCreate, setShowCreate] = useState(false);
   const [showImportVentes, setShowImportVentes] = useState(false);
   const [createPrefill, setCreatePrefill] = useState<{ client?: string; entreprise?: string; telephone?: string; email?: string; wilaya?: string; commune?: string } | undefined>(undefined);
+  // Ouvert quand "Marquer Produit" tombe sur un produit fabriqué sans recette (409 "NO_RECIPE")
+  // et que l'utilisateur choisit de la saisir plutôt que de continuer sans elle (cf. handleStatusChange).
+  const [recipeModal, setRecipeModal] = useState<{ ref: string; newStatut: string; productId: string; reference: string; name: string | null } | null>(null);
 
   // silent = refetch en arrière-plan (SSE temps réel) → pas de spinner, pas de clignotement
   const fetchAll = useCallback(async (silent = false) => {
@@ -756,7 +760,10 @@ function RequestsPageInner() {
     return matchSearch && matchStatut && matchAssigne && matchPeriode;
   });
 
-  const handleStatusChange = async (ref: string, newStatut: string, force = false) => {
+  const handleStatusChange = async (
+    ref: string, newStatut: string, force = false,
+    opts?: { allowNoRecipe?: boolean; recipeOverride?: { productId: string; items: { rawMaterialId: string; quantity: number }[] }; saveRecipe?: boolean }
+  ) => {
     const item = selected ?? rawItems.find((r) => r.ref === ref || r.id === ref);
     if (!item?.id) return;
     const dbStatus = UI_TO_DB[newStatut] ?? newStatut;
@@ -766,16 +773,41 @@ function RequestsPageInner() {
     const res = await fetch(endpoint, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: dbStatus, ...(force && { force: true }) }),
+      body: JSON.stringify({
+        status: dbStatus, ...(force && { force: true }),
+        ...(opts?.allowNoRecipe && { allowNoRecipe: true }),
+        ...(opts?.recipeOverride && { recipeOverride: opts.recipeOverride, saveRecipe: !!opts.saveRecipe }),
+      }),
     });
 
-    // "Marquer Produit" avec un manquant (rien pour le couvrir, même après avoir cherché dans
-    // le disponible et chez les commandes déjà Produites) → proposé à l'utilisateur avec le
-    // détail du manquant, plutôt qu'un simple blocage : "Continuer quand même" relance la même
-    // action avec `force`, qui marque la part manquante résolue SANS inventer de stock fictif
-    // (cf. forceCompleteOrder, order-stock.ts) — un écart assumé, tracé dans l'audit.
     if (res.status === 409) {
       const data = await res.json().catch(() => null);
+
+      // "Marquer Produit" sur un produit fabriqué SANS recette → jamais fabriqué en silence
+      // (cf. order-stock.ts, manufacturableUnits) : on demande explicitement de continuer sans
+      // elle, ou de la saisir maintenant via l'overlay dédié (RecipeEntryModal).
+      if (data?.error === 'NO_RECIPE') {
+        const products: { productId: string; reference: string; name: string | null }[] = data.products ?? [];
+        const first = products[0];
+        if (!first) return;
+        const detail = products.map((p) => `• ${p.name ?? p.reference}`).join('\n');
+        if (window.confirm(
+          `${isItemDevis ? 'Ce devis' : 'Cette commande'} contient un produit fabriqué sans recette enregistrée :\n${detail}\n\n` +
+          'OK pour continuer sans recette (aucune vérification/consommation de matière première).\n' +
+          'Annuler pour saisir sa recette maintenant.'
+        )) {
+          await handleStatusChange(ref, newStatut, force, { allowNoRecipe: true });
+        } else {
+          setRecipeModal({ ref, newStatut, productId: first.productId, reference: first.reference, name: first.name });
+        }
+        return;
+      }
+
+      // "Marquer Produit" avec un manquant (rien pour le couvrir, même après avoir cherché dans
+      // le disponible et chez les commandes déjà Produites) → proposé à l'utilisateur avec le
+      // détail du manquant, plutôt qu'un simple blocage : "Continuer quand même" relance la même
+      // action avec `force`, qui marque la part manquante résolue SANS inventer de stock fictif
+      // (cf. forceCompleteOrder, order-stock.ts) — un écart assumé, tracé dans l'audit.
       if (data?.error === 'PRODUCT_SHORTFALL') {
         const shortfall: { reference: string; name: string | null; missing: number }[] = data.shortfall ?? [];
         const detail = shortfall.map((w) => `• ${w.name ?? w.reference} — ${w.missing} manquant(s)`).join('\n');
@@ -793,6 +825,18 @@ function RequestsPageInner() {
     // fetchAll resynchronise le détail ouvert : on ne ferme jamais le panneau,
     // l'utilisateur enchaîne ses actions et ferme lui-même quand il a fini.
     await fetchAll(true);
+  };
+
+  // Soumission de l'overlay de recette ouvert depuis handleStatusChange (produit sans recette) :
+  // relance "Marquer Produit" avec la recette saisie (sauvegardée sur le produit ou juste pour
+  // cette action, cf. RecipeEntryModal) — peut redemander une nouvelle fois si un AUTRE produit
+  // de la commande/du devis n'a lui non plus aucune recette (handleStatusChange rouvrira alors
+  // ce même overlay pour lui).
+  const handleRecipeModalSubmit = async (items: { rawMaterialId: string; quantity: number }[], saveRecipe: boolean) => {
+    if (!recipeModal) return;
+    const { ref, newStatut, productId } = recipeModal;
+    setRecipeModal(null);
+    await handleStatusChange(ref, newStatut, false, { recipeOverride: { productId, items }, saveRecipe });
   };
 
   // Change l'assignation ("pris en charge par") d'une commande/devis
@@ -1131,6 +1175,14 @@ function RequestsPageInner() {
           users={users}
           currentUserId={currentUserId}
           prefill={createPrefill}
+        />
+      )}
+      {recipeModal && (
+        <RecipeEntryModal
+          productLabel={`${recipeModal.reference}${recipeModal.name ? ' — ' + recipeModal.name : ''}`}
+          confirmLabel="Lancer la production"
+          onClose={() => setRecipeModal(null)}
+          onSubmit={handleRecipeModalSubmit}
         />
       )}
 

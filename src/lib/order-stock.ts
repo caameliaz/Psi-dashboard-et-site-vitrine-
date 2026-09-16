@@ -14,6 +14,33 @@ import type { RequestStatus } from '@prisma/client';
 
 type Kind = 'order' | 'quote';
 
+// Recette saisie "à la volée" pour une seule action (Produire / Marquer Disponible), quand le
+// produit n'a aucune recette enregistrée et que l'utilisateur choisit de ne PAS la sauvegarder
+// sur le produit — jamais écrite dans `RecipeItem`, valable uniquement pour cet appel.
+export type RecipeOverrideItem = { rawMaterialId: string; quantity: number };
+
+// Remplace entièrement la recette d'un produit et réconcilie chaque matière touchée (ancienne
+// ET nouvelle) sur TOUTES les lignes de production qui l'utilisent — factorisé pour être appelé
+// aussi bien depuis PUT /api/products/[id]/recipe que depuis les flux "produit sans recette"
+// (Produire / Marquer Disponible) quand l'utilisateur choisit d'enregistrer la recette saisie.
+export async function saveProductRecipe(productId: string, items: RecipeOverrideItem[]) {
+  const oldRecipe = await prisma.recipeItem.findMany({ where: { productId }, select: { rawMaterialId: true } });
+  const oldMaterialIds = oldRecipe.map((r) => r.rawMaterialId);
+
+  await prisma.$transaction([
+    prisma.recipeItem.deleteMany({ where: { productId } }),
+    ...(items.length > 0
+      ? [prisma.recipeItem.createMany({ data: items.map((i) => ({ productId, rawMaterialId: i.rawMaterialId, quantity: Number(i.quantity) })) })]
+      : []),
+  ]);
+
+  const newMaterialIds = items.map((i) => i.rawMaterialId);
+  const touchedMaterialIds = new Set([...oldMaterialIds, ...newMaterialIds]);
+  for (const rawMaterialId of touchedMaterialIds) await reconcileMaterialAcrossAllLines(rawMaterialId);
+
+  return prisma.recipeItem.findMany({ where: { productId }, include: { rawMaterial: true } });
+}
+
 function itemDelegate(kind: Kind) {
   return kind === 'order' ? prisma.orderItem : prisma.quoteItem;
 }
@@ -492,14 +519,40 @@ const FORCE_COMPLETE_DONOR_STATUSES: RequestStatus[] = ['VALIDE', 'PRODUITE'];
 
 // Combien d'unités de `productId` peut-on fabriquer MAINTENANT avec la matière déjà réservée,
 // dans la limite de `cap` — bornée par la matière la plus rare de la recette (jamais une
-// recette à moitié suivie). Pas de recette définie → aucune limite matière.
-async function manufacturableUnits(productId: string, cap: number): Promise<number> {
+// recette à moitié suivie).
+// Pas de recette définie → AUCUNE fabrication automatique (sinon on inventerait du produit
+// fini sans jamais avoir vérifié la moindre matière) — sauf si l'utilisateur a explicitement
+// choisi de continuer sans recette (`allowNoRecipe`, cf. route.ts "NO_RECIPE"), auquel cas on
+// revient à l'ancien comportement (aucune limite matière, écart assumé).
+async function manufacturableUnits(productId: string, cap: number, opts?: { allowNoRecipe?: boolean }): Promise<number> {
   if (cap <= 0) return 0;
   const recipe = await prisma.recipeItem.findMany({ where: { productId }, include: { rawMaterial: true } });
-  if (recipe.length === 0) return cap;
+  if (recipe.length === 0) return opts?.allowNoRecipe ? cap : 0;
   let manufacturable = cap;
   for (const r of recipe) {
     manufacturable = Math.min(manufacturable, Math.max(0, Math.floor(r.rawMaterial.reserved / r.quantity)));
+  }
+  return manufacturable;
+}
+
+// Variante "recette ad-hoc" de manufacturableUnits/consommation : utilisée quand l'utilisateur
+// vient de saisir une recette pour CET appel seulement (pas sauvegardée sur le produit — cf.
+// "NO_RECIPE"). Comme cette matière n'a jamais été réservée pour ce besoin (aucune recette
+// n'existait à la confirmation), on consomme directement sur le DISPONIBLE (jamais le réservé
+// d'autrui) — jamais plus que `cap`, borné par la matière la plus rare. `preview=true` ne
+// modifie rien (juste le calcul de faisabilité).
+async function manufactureWithOverride(recipeOverride: RecipeOverrideItem[], cap: number, preview: boolean): Promise<number> {
+  if (cap <= 0 || recipeOverride.length === 0) return 0;
+  const materials = await prisma.rawMaterial.findMany({ where: { id: { in: recipeOverride.map((o) => o.rawMaterialId) } } });
+  let manufacturable = cap;
+  for (const o of recipeOverride) {
+    const mat = materials.find((m) => m.id === o.rawMaterialId);
+    if (!mat || o.quantity <= 0) return 0;
+    manufacturable = Math.min(manufacturable, Math.max(0, Math.floor(mat.available / o.quantity)));
+  }
+  if (manufacturable <= 0 || preview) return manufacturable;
+  for (const o of recipeOverride) {
+    await prisma.rawMaterial.update({ where: { id: o.rawMaterialId }, data: { available: { decrement: o.quantity * manufacturable } } });
   }
   return manufacturable;
 }
@@ -524,15 +577,32 @@ async function findDonorItems(productId: string, excludeKind: Kind, excludeParen
   ].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 }
 
-// Simule (sans RIEN modifier) le plan de résolution complet ci-dessus pour chaque article
-// encore ouvert. Retourne le manquant final par produit (vide = tout est réalisable).
-export async function previewForceCompleteShortfall(kind: Kind, parentId: string): Promise<ProductShortfall[]> {
+export type NoRecipeProduct = { productId: string; reference: string; name: string | null };
+export type ForceCompleteOpts = {
+  force?: boolean;
+  // Produits sans recette pour lesquels l'utilisateur a explicitement choisi de continuer sans
+  // vérifier/consommer de matière première (cf. route.ts, "NO_RECIPE") — jamais le défaut.
+  allowNoRecipe?: boolean;
+  // Recette saisie à la volée pour CET appel seulement (pas enregistrée sur le produit),
+  // clé = productId — cf. RecipeOverrideItem.
+  recipeOverrides?: Map<string, RecipeOverrideItem[]>;
+};
+
+// Simule (sans RIEN modifier) le plan de résolution complet ci-dessous pour chaque article
+// encore ouvert. Retourne le manquant final par produit (vide = tout est réalisable) ET,
+// séparément, les produits fabriqués qui n'ont AUCUNE recette (et pas de recette ad-hoc fournie
+// via `opts.recipeOverrides`) — tant que l'utilisateur n'a pas choisi explicitement quoi faire
+// (continuer sans recette, ou en saisir une), ces produits ne comptent ni comme résolus ni
+// comme un manquant chiffré : impossible de savoir sans recette combien de matière il faudrait.
+export async function previewForceCompleteShortfall(kind: Kind, parentId: string, opts?: ForceCompleteOpts): Promise<{ shortfalls: ProductShortfall[]; noRecipeProducts: NoRecipeProduct[] }> {
   const items = await (itemDelegate(kind) as any).findMany({
     where: { ...itemWhereParent(kind, parentId), stockPath: { in: ['IN_PRODUCTION', 'PURCHASE_PENDING'] } },
     include: { product: true },
   });
 
   const shortfalls: ProductShortfall[] = [];
+  const noRecipeProducts: NoRecipeProduct[] = [];
+  const seenNoRecipe = new Set<string>();
   for (const item of items) {
     const stillNeeded = item.quantity - item.resolvedQuantity;
     if (stillNeeded <= 0 || !item.productId || !item.product) continue;
@@ -548,14 +618,27 @@ export async function previewForceCompleteShortfall(kind: Kind, parentId: string
     }
 
     if (remaining > 0 && item.stockPath === 'IN_PRODUCTION') {
-      remaining -= await manufacturableUnits(item.productId, remaining);
+      const override = opts?.recipeOverrides?.get(item.productId);
+      if (override && override.length > 0) {
+        remaining -= await manufactureWithOverride(override, remaining, true);
+      } else {
+        const hasRecipe = (await prisma.recipeItem.count({ where: { productId: item.productId } })) > 0;
+        if (!hasRecipe && !opts?.allowNoRecipe) {
+          if (!seenNoRecipe.has(item.productId)) {
+            seenNoRecipe.add(item.productId);
+            noRecipeProducts.push({ productId: item.productId, reference: item.product.reference, name: item.product.name });
+          }
+          continue; // en attente d'une décision utilisateur — ni résolu, ni un manquant chiffré
+        }
+        remaining -= await manufacturableUnits(item.productId, remaining, { allowNoRecipe: opts?.allowNoRecipe });
+      }
     }
 
     if (remaining > 0) {
       shortfalls.push({ productId: item.productId, reference: item.product.reference, name: item.product.name, missing: remaining });
     }
   }
-  return shortfalls;
+  return { shortfalls, noRecipeProducts };
 }
 
 // `opts.force` : accepte l'écart quand le manquant persiste même après les 3 étapes ci-dessous
@@ -564,7 +647,11 @@ export async function previewForceCompleteShortfall(kind: Kind, parentId: string
 // La part non couverte est marquée résolue SANS toucher au stock produit fini pour elle : on
 // ne réserve/décrémente jamais que ce qui existe vraiment (fromAvailable + manufactured) —
 // l'écart reste un manquant assumé (visible en audit), jamais un stock fictif inventé.
-export async function forceCompleteOrder(kind: Kind, parentId: string, opts?: { force?: boolean }): Promise<{ productId: string; reference: string; missing: number }[]> {
+//
+// `opts.allowNoRecipe` / `opts.recipeOverrides` : cf. previewForceCompleteShortfall et route.ts
+// ("NO_RECIPE") — la route doit avoir déjà vérifié via le preview qu'il n'y a plus de produit
+// sans recette en attente d'une décision avant d'appeler cette fonction.
+export async function forceCompleteOrder(kind: Kind, parentId: string, opts?: ForceCompleteOpts): Promise<{ productId: string; reference: string; missing: number }[]> {
   const items = await (itemDelegate(kind) as any).findMany({
     where: { ...itemWhereParent(kind, parentId), stockPath: { in: ['IN_PRODUCTION', 'PURCHASE_PENDING'] } },
     include: { product: true },
@@ -595,15 +682,22 @@ export async function forceCompleteOrder(kind: Kind, parentId: string, opts?: { 
       }
     }
 
-    // 3. Fabrication immédiate (fabriqués seulement), dans la limite de la matière réservée.
+    // 3. Fabrication immédiate (fabriqués seulement), dans la limite de la matière réservée —
+    //    ou, pour une recette saisie à la volée (jamais réservée à l'avance), dans la limite du
+    //    disponible (cf. manufactureWithOverride).
     let manufactured = 0;
     if (remaining > 0 && item.stockPath === 'IN_PRODUCTION') {
-      manufactured = await manufacturableUnits(item.productId, remaining);
-      if (manufactured > 0) {
-        const recipe = await prisma.recipeItem.findMany({ where: { productId: item.productId } });
-        for (const r of recipe) {
-          const consume = r.quantity * manufactured;
-          if (consume > 0) await prisma.rawMaterial.update({ where: { id: r.rawMaterialId }, data: { reserved: { decrement: consume } } }).catch(() => {});
+      const override = opts?.recipeOverrides?.get(item.productId);
+      if (override && override.length > 0) {
+        manufactured = await manufactureWithOverride(override, remaining, false);
+      } else {
+        manufactured = await manufacturableUnits(item.productId, remaining, { allowNoRecipe: opts?.allowNoRecipe });
+        if (manufactured > 0) {
+          const recipe = await prisma.recipeItem.findMany({ where: { productId: item.productId } });
+          for (const r of recipe) {
+            const consume = r.quantity * manufactured;
+            if (consume > 0) await prisma.rawMaterial.update({ where: { id: r.rawMaterialId }, data: { reserved: { decrement: consume } } }).catch(() => {});
+          }
         }
       }
       remaining -= manufactured;

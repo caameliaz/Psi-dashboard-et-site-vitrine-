@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { Modal } from './Modal';
+import { RecipeEntryModal } from './NoRecipeModal';
 
 const inputClass = "w-full px-3 py-2.5 rounded-lg border border-[#E2E8F0] text-sm text-[#0F172A] focus:outline-none focus:border-[#4CAF4F] focus:ring-1 focus:ring-[#4CAF4F] transition-colors bg-[#F8FAFC]";
 
@@ -277,6 +278,16 @@ export function StockListsWidget() {
   // Popup de confirmation affichée après une action groupée entièrement réussie (Commander /
   // Valider réception / Produire) — une ligne par sélection, avec sa quantité exacte.
   const [successResult, setSuccessResult] = useState<{ title: string; lines: string[] } | null>(null);
+  // Ouvert quand "Produire" tombe sur un produit sans recette (409 "NO_RECIPE") et que
+  // l'utilisateur a choisi de la saisir plutôt que de continuer sans elle — porte aussi la
+  // file d'attente des sélections encore à traiter (traitées séquentiellement, pas en
+  // parallèle, pour pouvoir s'arrêter sur chaque produit sans recette) et les listes de
+  // résultats déjà accumulées, pour afficher un seul récapitulatif à la toute fin.
+  const [recipeModal, setRecipeModal] = useState<{
+    current: { id: string; productId: string; reference: string; name: string | null; quantity: number };
+    queueRest: { id: string; quantity: number }[];
+    accumFailures: string[]; accumWarnings: string[]; accumSuccesses: string[];
+  } | null>(null);
 
   // `silent` évite le flash "Chargement…" pour les rafraîchissements en arrière-plan
   // (polling, retour sur l'onglet) — seul le premier chargement doit bloquer l'affichage.
@@ -323,31 +334,119 @@ export function StockListsWidget() {
     await fetchAll();
   };
 
+  // Partagé entre les branches "Commander"/"Valider réception"/"Produire" ET le traitement pas
+  // à pas de la file "Produire" (cf. processProduceQueue ci-dessous), qui doit pouvoir s'arrêter
+  // sur un produit sans recette puis reprendre là où elle en était.
+  const labelFor = (id: string) => {
+    const item = productionItems.find((i) => i.id === id) ?? purchaseItems.find((i) => i.id === id);
+    if (!item) return id;
+    return 'product' in item && item.product ? (item.product.name ?? item.product.reference) : itemLabel(item as PurchaseItem).name;
+  };
+  const unitFor = (id: string) => {
+    const item = purchaseItems.find((i) => i.id === id);
+    return item ? itemLabel(item).unit : '';
+  };
+
+  const finishBulk = async (title: string, failures: string[], warnings: string[], successes: string[]) => {
+    await fetchAll();
+    if (failures.length > 0) alert(failures.join('\n\n'));
+    else if (warnings.length > 0) alert(warnings.join('\n\n'));
+    else if (successes.length > 0) setSuccessResult({ title, lines: successes });
+  };
+
+  // "Produire" traité un par un (jamais en parallèle, contrairement à Commander/Valider
+  // réception) : un produit sans recette (409 "NO_RECIPE") doit interrompre la file en cours
+  // pour demander à l'utilisateur quoi faire, puis reprendre avec le reste une fois résolu.
+  const processProduceQueue = async (queue: { id: string; quantity: number }[], failures: string[], warnings: string[], successes: string[]) => {
+    for (let i = 0; i < queue.length; i++) {
+      const s = queue[i];
+      const res = await fetch(`/api/production-list/${s.id}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ quantity: s.quantity }),
+      });
+      if (res.ok) {
+        const data = await res.json().catch(() => ({}));
+        if (data?.warning) warnings.push(data.warning);
+        successes.push(`${labelFor(s.id)} — ${s.quantity} unité(s) produite(s) avec succès`);
+        continue;
+      }
+      const err = await res.json().catch(() => ({}));
+      if (err?.error === 'NO_RECIPE') {
+        const continueWithoutRecipe = window.confirm(
+          `${err.reference}${err.name ? ' — ' + err.name : ''} n'a aucune recette enregistrée.\n\n` +
+          `OK pour produire quand même, sans vérifier ni consommer de matière première.\n` +
+          `Annuler pour saisir sa recette maintenant.`
+        );
+        if (continueWithoutRecipe) {
+          const retry = await fetch(`/api/production-list/${s.id}`, {
+            method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ quantity: s.quantity, allowNoRecipe: true }),
+          });
+          if (retry.ok) {
+            const data = await retry.json().catch(() => ({}));
+            if (data?.warning) warnings.push(data.warning);
+            successes.push(`${labelFor(s.id)} — ${s.quantity} unité(s) produite(s) avec succès`);
+          } else {
+            const e2 = await retry.json().catch(() => ({}));
+            failures.push(`${labelFor(s.id)} : ${e2.error ?? 'échec'}`);
+          }
+          continue;
+        }
+        // Ouvre l'overlay de saisie de recette ; le reste de la file reprend depuis
+        // handleRecipeSubmit/handleRecipeCancel une fois cette décision prise.
+        setRecipeModal({
+          current: { id: s.id, productId: err.productId, reference: err.reference, name: err.name, quantity: s.quantity },
+          queueRest: queue.slice(i + 1),
+          accumFailures: failures, accumWarnings: warnings, accumSuccesses: successes,
+        });
+        return;
+      }
+      failures.push(`${labelFor(s.id)} : ${err.error ?? 'échec'}`);
+    }
+    await finishBulk('Marquer fabriquée', failures, warnings, successes);
+  };
+
+  const handleRecipeSubmit = async (items: { rawMaterialId: string; quantity: number }[], saveRecipe: boolean) => {
+    if (!recipeModal) return;
+    const { current, queueRest, accumFailures, accumWarnings, accumSuccesses } = recipeModal;
+    const res = await fetch(`/api/production-list/${current.id}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ quantity: current.quantity, recipeOverride: items, saveRecipe }),
+    });
+    if (res.ok) {
+      const data = await res.json().catch(() => ({}));
+      if (data?.warning) accumWarnings.push(data.warning);
+      accumSuccesses.push(`${labelFor(current.id)} — ${current.quantity} unité(s) produite(s) avec succès`);
+    } else {
+      const err = await res.json().catch(() => ({}));
+      accumFailures.push(`${labelFor(current.id)} : ${err.error ?? 'échec'}`);
+    }
+    setRecipeModal(null);
+    await processProduceQueue(queueRest, accumFailures, accumWarnings, accumSuccesses);
+  };
+
+  const handleRecipeCancel = () => {
+    if (!recipeModal) return;
+    const { current, queueRest, accumFailures, accumWarnings, accumSuccesses } = recipeModal;
+    accumFailures.push(`${labelFor(current.id)} : recette non saisie, production annulée`);
+    setRecipeModal(null);
+    processProduceQueue(queueRest, accumFailures, accumWarnings, accumSuccesses);
+  };
+
   const runBulk = async (selections: { id: string; quantity: number }[]) => {
     // On garde une trace de chaque échec (ex: matière première insuffisante — disponible +
     // réservé ne suffisent pas — cf. PATCH /api/production-list/[id]) pour l'afficher : sans
     // ça, une ligne qui échoue silencieusement donne l'impression que rien ne s'est passé,
     // alors que l'API renvoie déjà le détail de ce qui manque.
     const failures: string[] = [];
-    // Avertissements sur une action RÉUSSIE (ex: "Marquer fabriquée" sans recette définie —
-    // la production a bien été enregistrée, mais sans aucune vérification/consommation de
-    // matière première) — pas un échec, juste à signaler après coup.
+    // Avertissements sur une action RÉUSSIE (ex: "Marquer fabriquée" sans recette, continuée
+    // explicitement sans elle) — pas un échec, juste à signaler après coup.
     const warnings: string[] = [];
     // Une ligne de confirmation par succès (quantité + unité) — affichée dans une popup dédiée
     // une fois l'action terminée, pour ne jamais laisser l'utilisateur dans le doute sur ce qui
     // a réellement été enregistré.
     const successes: string[] = [];
-    const labelFor = (id: string) => {
-      const item = productionItems.find((i) => i.id === id) ?? purchaseItems.find((i) => i.id === id);
-      if (!item) return id;
-      return 'product' in item && item.product ? (item.product.name ?? item.product.reference) : itemLabel(item as PurchaseItem).name;
-    };
-    const unitFor = (id: string) => {
-      const item = purchaseItems.find((i) => i.id === id);
-      return item ? itemLabel(item).unit : '';
-    };
-    const verbFor = (action: 'order' | 'receive' | 'produce') =>
-      action === 'order' ? 'commandée(s)' : action === 'receive' ? 'reçue(s)' : 'produite(s)';
+    const verbFor = (action: 'order' | 'receive') => action === 'order' ? 'commandée(s)' : 'reçue(s)';
 
     if (bulkAction === 'order' || bulkAction === 'receive') {
       await Promise.all(selections.map(async (s) => {
@@ -362,26 +461,10 @@ export function StockListsWidget() {
           successes.push(`${labelFor(s.id)} — ${s.quantity} ${unitFor(s.id) || 'unité(s)'} ${verbFor(bulkAction)} avec succès`);
         }
       }));
+      await finishBulk(bulkTitle, failures, warnings, successes);
     } else if (bulkAction === 'produce') {
-      await Promise.all(selections.map(async (s) => {
-        const res = await fetch(`/api/production-list/${s.id}`, {
-          method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ quantity: s.quantity }),
-        });
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({}));
-          failures.push(`${labelFor(s.id)} : ${err.error ?? 'échec'}`);
-        } else {
-          const data = await res.json().catch(() => ({}));
-          if (data?.warning) warnings.push(data.warning);
-          successes.push(`${labelFor(s.id)} — ${s.quantity} unité(s) produite(s) avec succès`);
-        }
-      }));
+      await processProduceQueue(selections, failures, warnings, successes);
     }
-    await fetchAll();
-    if (failures.length > 0) alert(failures.join('\n\n'));
-    else if (warnings.length > 0) alert(warnings.join('\n\n'));
-    else if (successes.length > 0) setSuccessResult({ title: bulkTitle, lines: successes });
   };
 
   const bulkCandidates = bulkAction === 'order'
@@ -579,6 +662,14 @@ export function StockListsWidget() {
       )}
       {bulkAction && (
         <BulkActionModal title={bulkTitle} candidates={bulkCandidates} onClose={() => setBulkAction(null)} onConfirm={runBulk} />
+      )}
+      {recipeModal && (
+        <RecipeEntryModal
+          productLabel={`${recipeModal.current.reference}${recipeModal.current.name ? ' — ' + recipeModal.current.name : ''}`}
+          confirmLabel="Lancer la production"
+          onClose={handleRecipeCancel}
+          onSubmit={handleRecipeSubmit}
+        />
       )}
       {successResult && (
         <Modal title={successResult.title} onClose={() => setSuccessResult(null)}>
