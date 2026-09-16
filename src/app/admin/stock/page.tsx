@@ -368,6 +368,13 @@ function StockPageInner() {
         )}
       </div>
 
+      <div className="flex items-start gap-2.5 px-4 py-3 mb-5 rounded-xl border border-[#FED7AA] bg-[#FFF7ED] text-[#9A3412]">
+        <svg width={16} height={16} viewBox="0 0 24 24" fill="none" className="flex-shrink-0 mt-0.5"><path d="M12 9v4M12 17h.01M10.29 3.86l-8.18 14a1 1 0 00.87 1.5h16.02a1 1 0 00.87-1.5l-8.18-14a1 1 0 00-1.74 0z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
+        <p className="text-[12px] leading-snug">
+          <span className="font-bold">Page en cours de développement.</span> Elle est utilisable au quotidien, mais des ajustements et corrections sont encore en cours — signalez tout comportement inattendu.
+        </p>
+      </div>
+
       <div className="flex gap-2 p-1 rounded-lg bg-[#F1F5F9] w-fit mb-5">
         {([['produits', 'Produits finis'], ['matieres', 'Matières premières'], ['commercial', 'Stock par commercial']] as const).map(([val, lbl]) => (
           <button key={val} onClick={() => setTab(val)} className={`px-4 py-1.5 rounded-md text-[13px] font-bold transition-colors ${tab === val ? 'bg-white text-[#0F172A] shadow-sm' : 'text-[#8A9BB5]'}`}>

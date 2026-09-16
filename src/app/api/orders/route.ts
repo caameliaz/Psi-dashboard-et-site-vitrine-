@@ -49,7 +49,13 @@ export async function GET(request: NextRequest) {
       where: Object.keys(whereClause).length > 0 ? whereClause : undefined,
       include: {
         client: { include: { phones: true } },
-        items: { include: { product: { include: { category: true } } } },
+        items: {
+          include: {
+            product: { include: { category: true } },
+            purchaseListItem: { select: { status: true } },
+            productionListItem: { select: { status: true } },
+          },
+        },
         createdBy: { select: { id: true, name: true } },
         assignedTo: { select: { id: true, name: true } },
       },

@@ -733,7 +733,24 @@ function ProductsPageInner() {
               {editMode ? '✓ Terminer' : '✎ Modifier'}
             </button>
             {editMode && selectedCatId && (
-              <button onClick={() => { setNewRefForm(emptyRefForm); setShowNewRef(true); }}
+              <button onClick={() => {
+                // Pré-remplit depuis une référence existante de la même catégorie (les
+                // réglages sont généralement identiques au sein d'une catégorie) — tout
+                // reste modifiable ensuite, seuls nom/dimensions/métrage restent vides
+                // (propres à chaque référence).
+                const model = catRefs[catRefs.length - 1];
+                setNewRefForm(model ? {
+                  ...emptyRefForm,
+                  usage: model.usage,
+                  price: String(model.price),
+                  mode: model.mode,
+                  purchasePrice: model.purchasePrice != null ? String(model.purchasePrice) : '',
+                  stockMax: String(model.stockMax),
+                  visibleOnSite: model.visibleOnSite,
+                  customFields: Object.fromEntries(model.customFields.map((c) => [c.definitionId, c.value])),
+                } : emptyRefForm);
+                setShowNewRef(true);
+              }}
                 className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold border border-[#4CAF4F] text-[#4CAF4F] hover:bg-[#F0FDF4] transition-colors">
                 + Nouvelle référence
               </button>

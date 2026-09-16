@@ -80,41 +80,57 @@ noté pour mémoire, à retirer de ce TODO si confirmé inutile.
 
 ## 3. Fonctionnalité "clients assignés + congés/intérim" — données initiales
 
-Une fois la migration appliquée en prod, il faudra probablement :
-- Assigner manuellement (ou via un script ponctuel) les clients existants à
-  leur commercial habituel (`Client.assignedToId`), sinon ils n'apparaîtront
-  chez personne tant qu'un admin ne les aura pas assignés.
-- Vérifier avec l'équipe si un script de reprise (ex: déduire `assignedToId`
-  depuis les commandes/devis déjà `assignedToId` historiques) est souhaité au
-  lieu d'une ressaisie manuelle.
+**Fait sur la base de test (16/09)** : 93 clients sur 97 assignés automatiquement
+à leur commercial (déduit du commercial unique et cohérent trouvé dans leurs
+commandes/devis historiques). Reste volontairement non assigné :
+- **Aquarium** — 2 commerciaux différents dans son historique (KARIM D. et
+  Bilal B.), à trancher manuellement par l'utilisatrice via le bouton
+  réassigner déjà existant dans l'app (`ClientAssignmentPanel`/`/api/clients/assign`).
+- **3 clients** sans aucune commande/devis avec commercial renseigné (créés
+  sans historique de vente rattaché).
+
+**Une fois la migration appliquée en prod**, il faudra rejouer la même
+opération sur la vraie base (même logique : déduire `assignedToId` du
+commercial unique trouvé dans l'historique commandes/devis de chaque client),
+puis trancher manuellement les cas ambigus comme Aquarium.
 
 ---
 
-## 4. Numérotation des commandes/devis importés — EN ATTENTE de la vraie liste de ventes
+## 4. Numérotation des commandes/devis importés — FAIT (16/09)
 
-**Statut : pas encore implémenté, en attente d'info.**
+**Statut : implémenté et appliqué sur la base de test.**
 
-**Décision actée (15/09)** :
+**Décision actée (15/09), maintenant en place :**
 - Le numéro de référence, une fois attribué, **ne doit jamais être retouché**
   rétroactivement (déjà potentiellement imprimé/envoyé aux clients).
 - L'ordre chronologique réel s'obtient en triant par **date** (`createdAt`,
   déjà correctement réglée à la vraie date de vente lors d'un import — cf.
   `src/app/api/ventes/import/route.ts`), **pas** par le numéro de référence.
   Le numéro sert d'identifiant unique, pas d'indicateur d'ordre.
-- Le fichier Excel importé a normalement un numéro de commande **identique
-  au numéro de facture** (pas de colonne séparée) — à utiliser tel quel comme
-  référence de la commande importée, plutôt que d'en générer un nouveau,
-  **une fois confirmé avec la vraie liste de ventes de l'entreprise**.
+- Quand le fichier Excel importé a un numéro de facture, il est repris **tel
+  quel** comme référence de la commande/devis (si non déjà pris par une autre
+  commande/devis) ; sinon une référence est générée dans le même format que
+  le reste de l'app (`CMD-xx-xxxx` / `DEV-xx-xxxx`).
 
-**Reste à faire une fois la vraie liste de ventes disponible :**
-1. Confirmer le nom exact de la colonne "N° facture / commande" dans le vrai fichier.
-2. Modifier `src/app/api/ventes/import/route.ts` pour utiliser ce numéro comme
-   `ref` de la commande/devis importé (au lieu de laisser `ref: null` comme
-   actuellement) — attention aux doublons/collisions avec des refs déjà
-   attribuées par le système normal (`CMD-xx-xxxx`), à vérifier selon le
-   format réel des numéros historiques de l'entreprise.
-3. Corriger le compteur de `src/lib/generate-ref.ts` (actuellement basé sur
-   `prisma.order.count()`, cassé par les imports sans ref) — cf. discussion
-   du 13-14/09 : soit un compteur dédié en base (solide), soit `MAX` sur les
-   refs existantes (plus simple, léger risque de collision en cas d'accès
-   simultanés). Décision reportée, à trancher avec l'exemple réel en main.
+**Fait :**
+1. `src/lib/generate-ref.ts` corrigé : le compteur reposait sur
+   `prisma.order.count()` (global, toutes wilayas confondues) alors que le
+   numéro généré est **par wilaya** (`CMD-16-0001`) — dès qu'une commande
+   d'une autre wilaya existait, ou qu'un import laissait des `ref: null`, le
+   compteur se désynchronisait (ex. réf `CMD-No-0001` observée en prod de
+   test). Remplacé par un `MAX` sur les refs existantes du même préfixe
+   (`CMD-16-`, `DEV-31-`...), robuste aux trous.
+2. `src/app/api/ventes/import/route.ts` modifié : chaque commande/devis créé
+   reçoit désormais une vraie `ref` à la création (n° de facture repris s'il
+   est libre, sinon généré via `generateOrderRef`/`generateQuoteRef`) — ne
+   laisse plus jamais `ref: null`.
+3. **Rattrapage ponctuel sur les 119 commandes/devis déjà importés
+   manuellement (session du 16/09)** : script one-off exécuté pour leur
+   attribuer une `ref` selon la même règle (facture reprise si libre, sinon
+   générée) — 12 ont repris leur n° de facture, 107 ont reçu une référence
+   générée. Ce rattrapage n'a pas besoin d'être refait : c'est le code
+   ci-dessus qui s'applique pour tout import futur.
+
+**Reste à faire une fois la vraie base de prod migrée** : rejouer le même
+rattrapage ponctuel sur les commandes/devis de prod qui auraient été importés
+sans `ref` avant ce correctif (si applicable).

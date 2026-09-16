@@ -41,6 +41,9 @@ function toItems(rawItems: any[]): NonNullable<RequestDetail['items']> {
       quantite: i.quantity ?? 0,
       prixUnitaire: i.unitPrice ?? 0,
       metrage: i.metrage ?? null,
+      stockPath: i.stockPath ?? 'NONE',
+      resolvedQuantity: i.resolvedQuantity ?? 0,
+      listItemStatus: i.purchaseListItem?.status ?? i.productionListItem?.status ?? null,
     };
   });
 }

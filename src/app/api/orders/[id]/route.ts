@@ -23,7 +23,13 @@ export async function GET(_request: NextRequest, { params }: Ctx) {
       where: { id },
       include: {
         client: { include: { phones: true } },
-        items: { include: { product: { include: { category: true } } } },
+        items: {
+          include: {
+            product: { include: { category: true } },
+            purchaseListItem: { select: { status: true } },
+            productionListItem: { select: { status: true } },
+          },
+        },
         createdBy: { select: { id: true, name: true } },
       },
     });
@@ -199,7 +205,13 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
       },
       include: {
         client: { include: { phones: true } },
-        items: { include: { product: true } },
+        items: {
+          include: {
+            product: true,
+            purchaseListItem: { select: { status: true } },
+            productionListItem: { select: { status: true } },
+          },
+        },
         createdBy: { select: { id: true, name: true } },
         assignedTo: { select: { id: true, name: true } },
       },

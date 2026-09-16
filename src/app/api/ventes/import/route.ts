@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { requirePermission } from '@/lib/permissions';
 import { createAudit } from '@/lib/audit';
+import { generateOrderRef, generateQuoteRef } from '@/lib/generate-ref';
 
 // POST /api/ventes/import — importe des ventes passées depuis un Excel.
 //
@@ -149,10 +150,25 @@ export async function POST(request: NextRequest) {
         createdAt: dateVente,
       };
 
+      // Référence : reprise du n° de facture s'il existe et n'est pas déjà pris,
+      // sinon générée dans le même format que le reste de l'app (CMD-xx-xxxx /
+      // DEV-xx-xxxx) — cf. TODO.md §4 : une commande importée doit avoir une
+      // vraie référence dès sa création, jamais rester à `ref: null`.
+      let ref: string | null = null;
+      if (facture) {
+        const [refDejaPrise, refDejaPriseQ] = await Promise.all([
+          prisma.order.findUnique({ where: { ref: facture } }),
+          prisma.quote.findUnique({ where: { ref: facture } }),
+        ]);
+        if (!refDejaPrise && !refDejaPriseQ) ref = facture;
+      }
+
       if (estCommande) {
+        if (!ref) ref = await generateOrderRef(communs.clientWilaya);
         await prisma.order.create({
           data: {
             ...communs,
+            ref,
             items: {
               create: items.map((i) => ({
                 productId: i.productId,
@@ -164,9 +180,11 @@ export async function POST(request: NextRequest) {
         });
         commandes++;
       } else {
+        if (!ref) ref = await generateQuoteRef(communs.clientWilaya);
         await prisma.quote.create({
           data: {
             ...communs,
+            ref,
             message: '',
             // Montant total de la vente (le prix d'un devis est global)
             proposedPrice: lignes.reduce(
