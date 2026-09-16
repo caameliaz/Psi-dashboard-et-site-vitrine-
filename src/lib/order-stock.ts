@@ -1,5 +1,6 @@
 import { prisma } from './prisma';
 import { notifyRollLinkOrderReady } from './rolllink-notify';
+import { createNotif } from './notifications';
 import type { RequestStatus } from '@prisma/client';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -13,6 +14,113 @@ import type { RequestStatus } from '@prisma/client';
 // ═══════════════════════════════════════════════════════════════════════════
 
 type Kind = 'order' | 'quote';
+
+// Recette saisie "à la volée" pour une seule action (Produire / Marquer Disponible), quand le
+// produit n'a aucune recette enregistrée et que l'utilisateur choisit de ne PAS la sauvegarder
+// sur le produit — jamais écrite dans `RecipeItem`, valable uniquement pour cet appel.
+export type RecipeOverrideItem = { rawMaterialId: string; quantity: number };
+
+// Remplace entièrement la recette d'un produit et réconcilie chaque matière touchée (ancienne
+// ET nouvelle) sur TOUTES les lignes de production qui l'utilisent — factorisé pour être appelé
+// aussi bien depuis PUT /api/products/[id]/recipe que depuis les flux "produit sans recette"
+// (Produire / Marquer Disponible) quand l'utilisateur choisit d'enregistrer la recette saisie.
+export async function saveProductRecipe(productId: string, items: RecipeOverrideItem[]) {
+  const oldRecipe = await prisma.recipeItem.findMany({ where: { productId }, select: { rawMaterialId: true } });
+  const oldMaterialIds = oldRecipe.map((r) => r.rawMaterialId);
+
+  await prisma.$transaction([
+    prisma.recipeItem.deleteMany({ where: { productId } }),
+    ...(items.length > 0
+      ? [prisma.recipeItem.createMany({ data: items.map((i) => ({ productId, rawMaterialId: i.rawMaterialId, quantity: Number(i.quantity) })) })]
+      : []),
+  ]);
+
+  const newMaterialIds = items.map((i) => i.rawMaterialId);
+  const touchedMaterialIds = new Set([...oldMaterialIds, ...newMaterialIds]);
+  for (const rawMaterialId of touchedMaterialIds) await reconcileMaterialAcrossAllLines(rawMaterialId);
+
+  return prisma.recipeItem.findMany({ where: { productId }, include: { rawMaterial: true } });
+}
+
+// Équivalent de saveProductRecipe pour une ligne LIBRE (sans fiche produit) — la recette est
+// mémorisée sous le texte EXACT de la ligne (`label`, unique), retrouvée automatiquement la
+// prochaine fois qu'une ligne libre porte le même texte (cf. getFreeTextRecipe). Pas de
+// réconciliation cross-produit ici : une ligne libre n'est jamais partagée/agrégée avec une
+// autre, contrairement à un vrai produit.
+export async function saveFreeTextRecipe(label: string, items: RecipeOverrideItem[]) {
+  const trimmed = label.trim();
+  if (!trimmed || items.length === 0) return;
+  await prisma.freeTextRecipe.upsert({
+    where: { label: trimmed },
+    create: { label: trimmed, items: { create: items.map((i) => ({ rawMaterialId: i.rawMaterialId, quantity: Number(i.quantity) })) } },
+    update: { items: { deleteMany: {}, create: items.map((i) => ({ rawMaterialId: i.rawMaterialId, quantity: Number(i.quantity) })) } },
+  });
+}
+
+// Recette déjà enregistrée pour une ligne libre (même texte EXACT), le cas échéant — utilisée
+// automatiquement au clic "Produire"/"Marquer Disponible" sans jamais redemander à l'utilisateur
+// (même principe qu'une vraie recette de produit).
+export async function getFreeTextRecipe(label: string | null): Promise<RecipeWithMaterial[]> {
+  if (!label) return [];
+  const recipe = await prisma.freeTextRecipe.findUnique({ where: { label: label.trim() }, include: { items: { include: { rawMaterial: true } } } });
+  return recipe?.items ?? [];
+}
+
+export type MaterialShortfall = { reference: string; name: string; unit: string; missing: number };
+type RecipeWithMaterial = { rawMaterialId: string; quantity: number; rawMaterial: { id: string; reference: string; name: string; unit: string; available: number; reserved: number } };
+
+// ── Vérifie puis consomme la matière nécessaire pour produire `qty` unités, à partir de
+// `recipe` (recette réelle du produit OU saisie à la volée — cf. RecipeOverrideItem) — utilisée
+// aussi bien par le bouton "Produire" (liste de production, tous produits/lignes confondus) que
+// par la résolution d'une ligne LIBRE au "Marquer Disponible" (cf. resolveFreeTextItems), pour
+// que les deux suivent EXACTEMENT la même logique.
+//
+// `ownNeededCap` = jusqu'à quelle quantité le besoin déjà reconnu de CETTE ligne (son propre
+// `neededQuantity`) peut piocher directement dans le réservé PROPRE de la matière — c'est le cas
+// normal d'un vrai produit, dont la matière a déjà été mise de côté pour lui à la confirmation
+// (cf. reserveRawMaterialsForProduction). Toujours 0 pour une ligne LIBRE : rien n'a jamais été
+// réservé à l'avance pour elle (aucune recette n'existe tant qu'on ne la saisit pas à la volée),
+// donc elle ne peut prétendre à AUCUNE part du réservé "à elle" — elle prend sur le disponible
+// en priorité, et ne pioche dans le pot commun réservé qu'en tout dernier recours, exactement
+// comme un surplus de production sur un vrai produit (cf. §1.4 TESTS-STOCK.md).
+//
+// Vérification globale D'ABORD (refus net si une seule matière ne suffit pas, rien n'est
+// modifié) ; `dryRun` ne fait que ce contrôle, sans jamais rien consommer (pour un aperçu avant
+// de bloquer avec un 409).
+export async function checkAndConsumeRecipe(
+  recipe: RecipeWithMaterial[],
+  qty: number,
+  ownNeededCap: number,
+  dryRun: boolean,
+): Promise<{ ok: true; touchedByReserved: Set<string> } | { ok: false; shortfalls: MaterialShortfall[] }> {
+  const shortfalls: MaterialShortfall[] = recipe
+    .map((r) => {
+      const totalNeeded = r.quantity * qty;
+      const totalStock = r.rawMaterial.available + r.rawMaterial.reserved;
+      return { reference: r.rawMaterial.reference, name: r.rawMaterial.name, unit: r.rawMaterial.unit, missing: totalNeeded - totalStock };
+    })
+    .filter((s) => s.missing > 0);
+  if (shortfalls.length > 0) return { ok: false, shortfalls };
+  if (dryRun) return { ok: true, touchedByReserved: new Set() };
+
+  const touchedByReserved = new Set<string>();
+  for (const r of recipe) {
+    const totalNeeded = r.quantity * qty;
+    const ownPortion = r.quantity * Math.min(qty, ownNeededCap);
+
+    const fromReservedOwn = Math.min(ownPortion, r.rawMaterial.reserved);
+    const afterOwn = totalNeeded - fromReservedOwn;
+    const fromAvailable = Math.min(afterOwn, r.rawMaterial.available);
+    const fromReservedExcess = afterOwn - fromAvailable;
+
+    await prisma.rawMaterial.update({
+      where: { id: r.rawMaterialId },
+      data: { available: { decrement: fromAvailable }, reserved: { decrement: fromReservedOwn + fromReservedExcess } },
+    });
+    if (fromReservedExcess > 0) touchedByReserved.add(r.rawMaterialId);
+  }
+  return { ok: true, touchedByReserved };
+}
 
 function itemDelegate(kind: Kind) {
   return kind === 'order' ? prisma.orderItem : prisma.quoteItem;
@@ -119,7 +227,9 @@ export async function resyncMaterialPurchaseNeed(rawMaterialId: string) {
       where: { productId: { in: recipeUses.map((r) => r.productId) }, status: { in: ['A_PRODUIRE', 'BLOQUE'] } },
     });
     for (const line of lines) {
-      demand += (ratioByProduct.get(line.productId) ?? 0) * (line.neededQuantity + line.bufferQuantity);
+      // `line.productId` est garanti non nul ici : la requête ci-dessus filtre déjà sur des
+      // productId réels (ceux de `recipeUses`) — une ligne libre n'y correspond jamais.
+      demand += (ratioByProduct.get(line.productId!) ?? 0) * (line.neededQuantity + line.bufferQuantity);
     }
   }
   const bufferTarget = material.available < material.purchaseThreshold ? Math.max(0, material.stockMax - material.available) : 0;
@@ -442,12 +552,129 @@ export async function confirmStock(kind: Kind, parentId: string) {
     await (itemDelegate(kind) as any).update({ where: { id: item.id }, data: { productionListItemId: line?.id ?? null } });
   }
 
+  // ── Lignes LIBRES (texte tapé à la main, sans fiche produit) ────────────────────────────
+  // Jamais de disponible/réservé à vérifier (rien n'existe pour elles) : toute la quantité part
+  // directement en production, sur une ligne dédiée et jamais partagée avec une autre commande
+  // (contrairement à un vrai produit, dont la ligne de production agrège plusieurs commandes) —
+  // cf. resyncFreeTextProductionLine, previewFreeTextResolution/resolveFreeTextItems (§ "Marquer
+  // Disponible") et PATCH /api/production-list/[id] (bouton "Produire").
+  const freeTextItems = await (itemDelegate(kind) as any).findMany({
+    where: { ...itemWhereParent(kind, parentId), stockPath: 'NONE', productId: null },
+  });
+  for (const item of freeTextItems) {
+    if (!item.description || item.quantity <= 0) continue;
+    const line = await prisma.productionListItem.create({
+      data: { productId: null, description: item.description, neededQuantity: item.quantity, status: 'A_PRODUIRE', auto: false },
+    });
+    await (itemDelegate(kind) as any).update({ where: { id: item.id }, data: { stockPath: 'IN_PRODUCTION', productionListItemId: line.id } });
+  }
+
+  // Notifie (in-app + push) admins + commercial assigné si du stock manque encore à ce stade
+  // (achat/production en cours) — événement automatique (pas une action manuelle de qqn de
+  // précis), donc une VRAIE notif plutôt qu'un simple toast (cf. discussion 16/09).
+  const stillMissing = await (itemDelegate(kind) as any).findMany({
+    where: { ...itemWhereParent(kind, parentId), stockPath: { in: ['PURCHASE_PENDING', 'IN_PRODUCTION'] } },
+    include: { product: true },
+  });
+  if (stillMissing.length > 0) {
+    const parentForNotif = await (parentDelegate(kind) as any).findUnique({ where: { id: parentId }, select: { ref: true, assignedToId: true, clientName: true, clientCompany: true } });
+    if (parentForNotif) {
+      const clientLabel = parentForNotif.clientCompany ?? parentForNotif.clientName ?? '—';
+      const entityLabel = kind === 'order' ? 'La commande' : 'Le devis';
+      createNotif({
+        type: 'ACTION_AUTRE',
+        title: kind === 'order' ? 'Commande en attente de stock' : 'Devis en attente de stock',
+        message: `${entityLabel} de ${clientLabel} (${parentForNotif.ref ?? parentId.slice(0, 8).toUpperCase()}) reste en attente : ${stillMissing.length} article(s) pas encore disponible(s) (achat/production en cours).`,
+        assignedToId: parentForNotif.assignedToId,
+        orderId: kind === 'order' ? parentId : undefined,
+        quoteId: kind === 'quote' ? parentId : undefined,
+      }).catch(() => {});
+    }
+  }
+
   await checkCompletion(kind, parentId);
+}
+
+// ── Équivalent de resyncProductionLine, pour une ligne LIBRE ────────────────────────────────
+// Contrairement à un vrai produit (besoin agrégé de plusieurs commandes, buffer, seuil), une
+// ligne libre est TOUJOURS liée à un seul article (jamais partagée) : son besoin réel est donc
+// juste "quantité de cet article moins ce qui est déjà résolu" — pas de buffer (rien à
+// réassortir pour quelque chose qui n'existe qu'une fois), jamais de statut "Bloqué" (le refus
+// se fait directement au clic "Produire"/"Marquer Disponible", cf. checkAndConsumeRecipe).
+export async function resyncFreeTextProductionLine(productionListItemId: string) {
+  const line = await prisma.productionListItem.findUnique({ where: { id: productionListItemId } });
+  if (!line || line.productId) return; // garde-fou : jamais appelée sur la ligne d'un vrai produit
+
+  const [orderItem, quoteItem] = await Promise.all([
+    prisma.orderItem.findFirst({ where: { productionListItemId } }),
+    prisma.quoteItem.findFirst({ where: { productionListItemId } }),
+  ]);
+  const linked = orderItem ?? quoteItem;
+  const realNeeded = linked ? Math.max(0, linked.quantity - linked.resolvedQuantity) : 0;
+
+  if (realNeeded === 0) {
+    // Une ligne qui a réellement produit quelque chose garde une trace (statut "Produit") ;
+    // sinon (jamais touchée) elle disparaît simplement — même règle que resyncProductionLine.
+    if (line.producedQuantity > 0) {
+      await prisma.productionListItem.update({ where: { id: line.id }, data: { neededQuantity: 0, status: 'PRODUIT' } });
+    } else {
+      await prisma.productionListItem.delete({ where: { id: line.id } }).catch(() => {});
+    }
+    return;
+  }
+  if (line.neededQuantity !== realNeeded) {
+    await prisma.productionListItem.update({ where: { id: line.id }, data: { neededQuantity: realNeeded } });
+  }
+}
+
+// Les lignes LIBRES (sans fiche produit) encore à résoudre d'une commande/d'un devis — jamais
+// partagées entre commandes (contrairement à un vrai produit), une seule ligne = un seul article.
+async function openFreeTextItems(kind: Kind, parentId: string) {
+  const items = await (itemDelegate(kind) as any).findMany({
+    where: { ...itemWhereParent(kind, parentId), stockPath: 'IN_PRODUCTION', productId: null },
+  });
+  return (items as any[]).filter((i) => i.quantity - i.resolvedQuantity > 0);
+}
+
+export type FreeTextShortfall = { itemId: string; label: string; missing: number };
+// `force` : l'utilisateur a choisi "Mettre disponible malgré le manque" — marque résolu SANS
+// rien consommer (écart assumé, jamais de stock fictif inventé), exactement comme un manquant
+// produit forcé (cf. forceCompleteOrder). "Marquer Disponible" ne fabrique JAMAIS (ni recette ni
+// matière première n'entrent en jeu ici — seul le bouton "Produire" fabrique réellement) : une
+// ligne libre n'a ni disponible ni réservé à réallouer, donc soit elle est déjà résolue, soit
+// c'est un manquant net, réglable uniquement en forçant.
+export type FreeTextOpts = { force?: boolean };
+
+// ── "Marquer Disponible" pour les lignes LIBRES — jamais de fabrication ici (cf. FreeTextOpts) :
+// juste un manquant nu, forçable ou non.
+export async function previewFreeTextResolution(kind: Kind, parentId: string): Promise<{ shortfalls: FreeTextShortfall[] }> {
+  const items = await openFreeTextItems(kind, parentId);
+  const shortfalls: FreeTextShortfall[] = items.map((item) => ({
+    itemId: item.id, label: item.description ?? 'Ligne libre', missing: item.quantity - item.resolvedQuantity,
+  }));
+  return { shortfalls };
+}
+
+// Contrepartie qui applique réellement la résolution — seulement en mode `force` (sinon rien à
+// faire, cf. preview ci-dessus) : marque chaque ligne libre encore ouverte résolue SANS toucher
+// au stock matière (écart assumé).
+export async function resolveFreeTextItems(kind: Kind, parentId: string, opts?: FreeTextOpts) {
+  if (!opts?.force) return;
+  const items = await openFreeTextItems(kind, parentId);
+
+  for (const item of items) {
+    const remaining = item.quantity - item.resolvedQuantity;
+    await (itemDelegate(kind) as any).update({ where: { id: item.id }, data: { resolvedQuantity: { increment: remaining } } });
+    if (item.productionListItemId) {
+      await prisma.productionListItem.update({ where: { id: item.productionListItemId }, data: { producedQuantity: { increment: remaining } } });
+      await resyncFreeTextProductionLine(item.productionListItemId);
+    }
+  }
 }
 
 // ── Vérifie si tous les articles sont résolus → passe la commande en PRODUITE ─
 export async function checkCompletion(kind: Kind, parentId: string) {
-  const parent = await (parentDelegate(kind) as any).findUnique({ where: { id: parentId }, select: { status: true, source: true, ref: true } });
+  const parent = await (parentDelegate(kind) as any).findUnique({ where: { id: parentId }, select: { status: true, source: true, ref: true, assignedToId: true, clientName: true, clientCompany: true } });
   if (!parent || parent.status !== 'VALIDE') return;
 
   const items = await (itemDelegate(kind) as any).findMany({ where: itemWhereParent(kind, parentId) });
@@ -461,6 +688,19 @@ export async function checkCompletion(kind: Kind, parentId: string) {
   if (!allResolved) return;
 
   await (parentDelegate(kind) as any).update({ where: { id: parentId }, data: { status: 'PRODUITE' } });
+
+  // Transition AUTOMATIQUE (personne n'a cliqué "Marquer Disponible" ici) → notif (in-app +
+  // push) admins + commercial assigné, plutôt qu'un toast (qui ne toucherait que la personne
+  // ayant l'écran ouvert au moment précis où ça se déclenche — souvent personne).
+  const clientLabel = parent.clientCompany ?? parent.clientName ?? '—';
+  createNotif({
+    type: 'ACTION_AUTRE',
+    title: kind === 'order' ? 'Commande disponible' : 'Devis disponible',
+    message: `${kind === 'order' ? 'La commande' : 'Le devis'} de ${clientLabel} (${parent.ref ?? parentId.slice(0, 8).toUpperCase()}) est maintenant disponible — tout le stock nécessaire est réuni.`,
+    assignedToId: parent.assignedToId,
+    orderId: kind === 'order' ? parentId : undefined,
+    quoteId: kind === 'quote' ? parentId : undefined,
+  }).catch(() => {});
 
   // Liaison RollLink (cf. Liaison.md) : commande RollLink prête → notifier RollLink.
   // Best-effort — ne doit jamais faire échouer checkCompletion (cf. rolllink-notify.ts).
@@ -490,20 +730,6 @@ export type ProductShortfall = { productId: string; reference: string; name: str
 // simplement "Confirmée" (partiellement résolue).
 const FORCE_COMPLETE_DONOR_STATUSES: RequestStatus[] = ['VALIDE', 'PRODUITE'];
 
-// Combien d'unités de `productId` peut-on fabriquer MAINTENANT avec la matière déjà réservée,
-// dans la limite de `cap` — bornée par la matière la plus rare de la recette (jamais une
-// recette à moitié suivie). Pas de recette définie → aucune limite matière.
-async function manufacturableUnits(productId: string, cap: number): Promise<number> {
-  if (cap <= 0) return 0;
-  const recipe = await prisma.recipeItem.findMany({ where: { productId }, include: { rawMaterial: true } });
-  if (recipe.length === 0) return cap;
-  let manufacturable = cap;
-  for (const r of recipe) {
-    manufacturable = Math.min(manufacturable, Math.max(0, Math.floor(r.rawMaterial.reserved / r.quantity)));
-  }
-  return manufacturable;
-}
-
 // Candidats "donneurs" pour un produit : commandes/devis (parmi `donorStatuses`, autres que la
 // commande/devis en cours) qui ont déjà du réservé sur ce produit, triés du plus RÉCEMMENT créé
 // au plus ancien.
@@ -524,9 +750,14 @@ async function findDonorItems(productId: string, excludeKind: Kind, excludeParen
   ].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 }
 
-// Simule (sans RIEN modifier) le plan de résolution complet ci-dessus pour chaque article
-// encore ouvert. Retourne le manquant final par produit (vide = tout est réalisable).
-export async function previewForceCompleteShortfall(kind: Kind, parentId: string): Promise<ProductShortfall[]> {
+export type ForceCompleteOpts = { force?: boolean };
+
+// Simule (sans RIEN modifier) le plan de résolution complet ci-dessous pour chaque article
+// encore ouvert. Retourne le manquant final par produit (vide = tout est réalisable). "Marquer
+// Disponible" ne fabrique JAMAIS (ni recette ni matière première n'entrent en jeu) — seulement
+// une réallocation de stock produit déjà existant (disponible + vol chez une autre commande) ;
+// seul le bouton "Produire" (liste de production) fabrique réellement.
+export async function previewForceCompleteShortfall(kind: Kind, parentId: string): Promise<{ shortfalls: ProductShortfall[] }> {
   const items = await (itemDelegate(kind) as any).findMany({
     where: { ...itemWhereParent(kind, parentId), stockPath: { in: ['IN_PRODUCTION', 'PURCHASE_PENDING'] } },
     include: { product: true },
@@ -547,24 +778,20 @@ export async function previewForceCompleteShortfall(kind: Kind, parentId: string
       }
     }
 
-    if (remaining > 0 && item.stockPath === 'IN_PRODUCTION') {
-      remaining -= await manufacturableUnits(item.productId, remaining);
-    }
-
     if (remaining > 0) {
       shortfalls.push({ productId: item.productId, reference: item.product.reference, name: item.product.name, missing: remaining });
     }
   }
-  return shortfalls;
+  return { shortfalls };
 }
 
-// `opts.force` : accepte l'écart quand le manquant persiste même après les 3 étapes ci-dessous
-// (disponible → vol chez un donneur → fabrication avec la matière réservée) — l'utilisateur a
-// explicitement choisi de continuer malgré l'alerte de manquant (cf. route.ts, PRODUCT_SHORTFALL).
-// La part non couverte est marquée résolue SANS toucher au stock produit fini pour elle : on
-// ne réserve/décrémente jamais que ce qui existe vraiment (fromAvailable + manufactured) —
-// l'écart reste un manquant assumé (visible en audit), jamais un stock fictif inventé.
-export async function forceCompleteOrder(kind: Kind, parentId: string, opts?: { force?: boolean }): Promise<{ productId: string; reference: string; missing: number }[]> {
+// `opts.force` : accepte l'écart quand le manquant persiste même après les 2 étapes ci-dessous
+// (disponible → vol chez un donneur) — l'utilisateur a explicitement choisi de continuer malgré
+// l'alerte de manquant (cf. route.ts, PRODUCT_SHORTFALL). La part non couverte est marquée
+// résolue SANS toucher au stock produit fini pour elle : on ne réserve/décrémente jamais que ce
+// qui existe vraiment (fromAvailable) — l'écart reste un manquant assumé (visible en audit),
+// jamais un stock fictif inventé. Aucune fabrication ici (cf. previewForceCompleteShortfall).
+export async function forceCompleteOrder(kind: Kind, parentId: string, opts?: ForceCompleteOpts): Promise<{ productId: string; reference: string; missing: number }[]> {
   const items = await (itemDelegate(kind) as any).findMany({
     where: { ...itemWhereParent(kind, parentId), stockPath: { in: ['IN_PRODUCTION', 'PURCHASE_PENDING'] } },
     include: { product: true },
@@ -595,22 +822,11 @@ export async function forceCompleteOrder(kind: Kind, parentId: string, opts?: { 
       }
     }
 
-    // 3. Fabrication immédiate (fabriqués seulement), dans la limite de la matière réservée.
-    let manufactured = 0;
-    if (remaining > 0 && item.stockPath === 'IN_PRODUCTION') {
-      manufactured = await manufacturableUnits(item.productId, remaining);
-      if (manufactured > 0) {
-        const recipe = await prisma.recipeItem.findMany({ where: { productId: item.productId } });
-        for (const r of recipe) {
-          const consume = r.quantity * manufactured;
-          if (consume > 0) await prisma.rawMaterial.update({ where: { id: r.rawMaterialId }, data: { reserved: { decrement: consume } } }).catch(() => {});
-        }
-      }
-      remaining -= manufactured;
-    }
     // Le préview vient d'être revérifié juste avant l'appel (côté route) — `remaining` doit
     // être à 0 ici sauf en mode `force` (l'utilisateur a explicitement choisi de continuer
-    // malgré le manquant) ; par sécurité on ne dépasse jamais ce qui a été validé sinon.
+    // malgré le manquant) ; par sécurité on ne dépasse jamais ce qui a été validé sinon. Jamais
+    // de fabrication ici (cf. commentaire en tête de fonction) : le manquant persistant ne peut
+    // être résolu que par ce que le disponible + le vol chez un donneur ont déjà donné.
     if (remaining > 0) {
       if (!opts?.force) continue;
       phantomShortfalls.push({ productId: item.productId, reference: item.product.reference, missing: remaining });
@@ -637,7 +853,7 @@ export async function forceCompleteOrder(kind: Kind, parentId: string, opts?: { 
       }
     }
 
-    const newlyReserved = fromAvailable + manufactured; // le vol chez un donneur ne change pas le total réservé
+    const newlyReserved = fromAvailable; // le vol chez un donneur ne change pas le total réservé
     if (fromAvailable > 0) {
       await prisma.product.update({ where: { id: item.productId }, data: { available: { decrement: fromAvailable } } });
     }
@@ -676,6 +892,19 @@ async function resyncAndRelink(productId: string) {
 export async function releaseOrderItemStock(kind: Kind, itemId: string) {
   const item = await (itemDelegate(kind) as any).findUnique({ where: { id: itemId }, include: { product: true } });
   if (!item || item.stockPath === 'NONE') return;
+
+  // Ligne LIBRE (sans fiche produit) : rien à relâcher sur un produit (n'existe pas). Toute
+  // matière déjà consommée pour elle (recette saisie à la volée) est définitivement perdue —
+  // une fabrication n'est jamais annulable a posteriori, même règle qu'un vrai produit (cf. §13
+  // TESTS-STOCK.md). Sa ligne de production, jamais partagée avec une autre commande, est
+  // supprimée directement (jamais réutilisable).
+  if (!item.productId) {
+    await (itemDelegate(kind) as any).update({ where: { id: item.id }, data: { stockPath: 'NONE', resolvedQuantity: 0, productionListItemId: null } });
+    if (item.productionListItemId) {
+      await prisma.productionListItem.delete({ where: { id: item.productionListItemId } }).catch(() => {});
+    }
+    return;
+  }
 
   if (item.resolvedQuantity > 0) {
     // Portion déjà résolue (stock/production/achat) → repasse en Disponible, peu importe le chemin.
@@ -804,22 +1033,26 @@ export async function reassessProductReserved(productId: string) {
   const [orderItems, quoteItems] = await Promise.all([
     prisma.orderItem.findMany({
       where: { productId, resolvedQuantity: { gt: 0 }, order: { status: { in: ['VALIDE', 'PRODUITE'] } } },
-      include: { order: { select: { createdAt: true, priority: true } } },
+      include: { order: { select: { id: true, createdAt: true, priority: true, status: true } } },
     }),
     prisma.quoteItem.findMany({
       where: { productId, resolvedQuantity: { gt: 0 }, quote: { status: { in: ['VALIDE', 'PRODUITE'] } } },
-      include: { quote: { select: { createdAt: true, priority: true } } },
+      include: { quote: { select: { id: true, createdAt: true, priority: true, status: true } } },
     }),
   ]);
 
   const claims = [
-    ...orderItems.map((i) => ({ id: i.id, kind: 'order' as Kind, resolvedQuantity: i.resolvedQuantity, createdAt: i.order.createdAt, priority: i.order.priority })),
-    ...quoteItems.map((i) => ({ id: i.id, kind: 'quote' as Kind, resolvedQuantity: i.resolvedQuantity, createdAt: i.quote.createdAt, priority: i.quote.priority })),
+    ...orderItems.map((i) => ({ id: i.id, kind: 'order' as Kind, quantity: i.quantity, resolvedQuantity: i.resolvedQuantity, createdAt: i.order.createdAt, priority: i.order.priority, parentId: i.order.id, parentStatus: i.order.status })),
+    ...quoteItems.map((i) => ({ id: i.id, kind: 'quote' as Kind, quantity: i.quantity, resolvedQuantity: i.resolvedQuantity, createdAt: i.quote.createdAt, priority: i.quote.priority, parentId: i.quote.id, parentStatus: i.quote.status })),
   ].sort(fifoCompare);
 
   let poolLeft = product.reserved;
   let touchedAny = false;
   const newStockPath = product.mode === 'ACHETE' ? 'PURCHASE_PENDING' : 'IN_PRODUCTION';
+  // Commande/devis redescendues de "Produite" à "Confirmée" parce qu'elles viennent de perdre
+  // de la couverture ci-dessous — jamais l'inverse (checkCompletion ne fait remonter que si
+  // TOUS les articles sont de nouveau résolus, appelé séparément ailleurs).
+  const reopenedParents = new Set<string>();
 
   for (const claim of claims) {
     if (poolLeft >= claim.resolvedQuantity) {
@@ -831,12 +1064,25 @@ export async function reassessProductReserved(productId: string) {
     poolLeft = 0;
     if (takeBack <= 0) continue;
 
+    const newResolved = claim.resolvedQuantity - takeBack;
     await (itemDelegate(claim.kind) as any).update({
       where: { id: claim.id },
-      data: { resolvedQuantity: claim.resolvedQuantity - takeBack, stockPath: newStockPath },
+      data: { resolvedQuantity: newResolved, stockPath: newStockPath },
     });
     await syncCommercialAssignment(claim.kind, claim.id);
     touchedAny = true;
+
+    // La commande/devis perd sa couverture complète (son manquant réapparaît) alors qu'elle
+    // était déjà "Produite" → redescend "Confirmée", sinon elle resterait affichée Disponible
+    // tout en ayant du stock manquant (cf. forceCompleteOrder, même règle pour le vol de donneur).
+    if (claim.parentStatus === 'PRODUITE' && newResolved < claim.quantity) {
+      reopenedParents.add(`${claim.kind}:${claim.parentId}`);
+    }
+  }
+
+  for (const key of reopenedParents) {
+    const [kind, parentId] = key.split(':') as [Kind, string];
+    await (parentDelegate(kind) as any).update({ where: { id: parentId }, data: { status: 'VALIDE' } });
   }
 
   if (!touchedAny) return;
@@ -1088,7 +1334,9 @@ export async function unblockProductionForMaterial(rawMaterialId: string) {
   // elle-même — cf. productionLineFifoKey.
   const blockedLines = await sortLinesByFifo(blockedLinesRaw);
 
-  const ratioByLine = new Map(blockedLines.map((l) => [l.id, l.product.recipeItems.find((r) => r.rawMaterialId === rawMaterialId)?.quantity ?? 0]));
+  // `l.product` garanti non nul : le filtre ci-dessus exige `product: { recipeItems: { some } }`
+  // — une ligne libre (sans fiche produit) ne peut jamais matcher cette condition.
+  const ratioByLine = new Map(blockedLines.map((l) => [l.id, l.product!.recipeItems.find((r) => r.rawMaterialId === rawMaterialId)?.quantity ?? 0]));
   const totalOwed = blockedLines.reduce((sum, l) => sum + (ratioByLine.get(l.id) ?? 0) * l.neededQuantity, 0);
   const toReserve = Math.min(Math.max(0, totalOwed - material.reserved), material.available);
   if (toReserve > 0) {
@@ -1106,7 +1354,7 @@ export async function unblockProductionForMaterial(rawMaterialId: string) {
     if (poolLeft < owed) break; // FIFO : s'arrête à la première ligne pas encore couverte pour cette matière
     poolLeft -= owed;
 
-    const recipe = await prisma.recipeItem.findMany({ where: { productId: line.productId }, include: { rawMaterial: true } });
+    const recipe = await prisma.recipeItem.findMany({ where: { productId: line.productId! }, include: { rawMaterial: true } });
     const stillMissingOther = recipe.some((r) => r.rawMaterialId !== rawMaterialId && r.rawMaterial.available < r.quantity * line.neededQuantity);
     if (stillMissingOther) continue;
 
@@ -1148,7 +1396,8 @@ export async function reassessProductionForMaterial(rawMaterialId: string) {
   let poolLeft = material.reserved;
   let stillCovered = true;
   for (const line of openLines) {
-    const ratio = line.product.recipeItems.find((r) => r.rawMaterialId === rawMaterialId)?.quantity ?? 0;
+    // `line.product` garanti non nul (même filtre que unblockProductionForMaterial ci-dessus).
+    const ratio = line.product!.recipeItems.find((r) => r.rawMaterialId === rawMaterialId)?.quantity ?? 0;
     if (ratio <= 0) continue;
     const owed = ratio * line.neededQuantity;
     if (stillCovered && poolLeft >= owed) {
@@ -1188,7 +1437,8 @@ export async function reconcileMaterialAcrossAllLines(rawMaterialId: string) {
   if (linesRaw.length === 0) { await resyncMaterialPurchaseNeed(rawMaterialId); return; }
 
   const lines = await sortLinesByFifo(linesRaw);
-  const ratioByLine = new Map(lines.map((l) => [l.id, l.product.recipeItems.find((r) => r.rawMaterialId === rawMaterialId)?.quantity ?? 0]));
+  // `l.product` garanti non nul (le filtre ci-dessus exige `product: { recipeItems: { some } }`).
+  const ratioByLine = new Map(lines.map((l) => [l.id, l.product!.recipeItems.find((r) => r.rawMaterialId === rawMaterialId)?.quantity ?? 0]));
 
   const totalStock = material.available + material.reserved;
   let cumulative = 0;
@@ -1206,7 +1456,7 @@ export async function reconcileMaterialAcrossAllLines(rawMaterialId: string) {
     // Couverte pour CETTE matière — vérifie encore les AUTRES ingrédients de sa recette avant de
     // déclarer la ligne définitivement "À produire" (même garde-fou que unblockProductionForMaterial).
     const finalBlocked = !coveredLineIds.has(line.id)
-      || line.product.recipeItems.some((r) => r.rawMaterialId !== rawMaterialId && r.rawMaterial.available < r.quantity * line.neededQuantity);
+      || line.product!.recipeItems.some((r) => r.rawMaterialId !== rawMaterialId && r.rawMaterial.available < r.quantity * line.neededQuantity);
     if (finalBlocked !== (line.status === 'BLOQUE')) {
       await prisma.productionListItem.update({ where: { id: line.id }, data: { status: finalBlocked ? 'BLOQUE' : 'A_PRODUIRE' } });
     }

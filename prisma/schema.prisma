@@ -109,6 +109,32 @@ model RawMaterial {
   updatedAt         DateTime           @updatedAt
   recipeItems       RecipeItem[]
   purchaseListItems PurchaseListItem[]
+  freeTextRecipeItems FreeTextRecipeItem[]
+}
+
+// ─── RECETTE POUR LIGNE LIBRE ─────────────────────────────────────────────────
+// Une ligne libre (commande/devis, texte tapé à la main, sans fiche produit — cf.
+// OrderItem/QuoteItem.description) n'a pas de fiche Produit à laquelle attacher une recette
+// classique (RecipeItem). Ce modèle mémorise quand même une recette pour un texte EXACT donné
+// (`label`, unique) — retrouvée automatiquement la prochaine fois qu'une ligne libre porte le
+// même texte, au clic "Produire"/"Marquer Disponible" (cf. order-stock.ts).
+model FreeTextRecipe {
+  id        String               @id @default(cuid())
+  label     String               @unique
+  createdAt DateTime             @default(now())
+  updatedAt DateTime             @updatedAt
+  items     FreeTextRecipeItem[]
+}
+
+model FreeTextRecipeItem {
+  id               String         @id @default(cuid())
+  recipe           FreeTextRecipe @relation(fields: [freeTextRecipeId], references: [id], onDelete: Cascade)
+  freeTextRecipeId String
+  rawMaterial      RawMaterial    @relation(fields: [rawMaterialId], references: [id])
+  rawMaterialId    String
+  quantity         Float
+
+  @@unique([freeTextRecipeId, rawMaterialId])
 }
 
 // Ligne de recette : quantité d'une matière première nécessaire pour fabriquer 1 unité d'un produit.
@@ -186,8 +212,14 @@ enum ProductionItemStatus {
 // Ligne de la liste de production — produit fini "Fabriqué"/"Les deux" à fabriquer.
 model ProductionListItem {
   id               String               @id @default(cuid())
-  product          Product              @relation(fields: [productId], references: [id], onDelete: Cascade)
-  productId        String
+  // `productId` optionnel UNIQUEMENT pour une ligne libre (commande/devis sans fiche produit,
+  // cf. OrderItem/QuoteItem.description) : dans ce cas `description` porte le texte tapé à la
+  // main et la ligne n'est jamais partagée entre commandes (1 ligne libre = 1 ligne de
+  // production, jamais agrégée comme pour un vrai produit). Pour un vrai produit, `productId`
+  // reste toujours renseigné — ce champ description reste alors `null`.
+  product          Product?             @relation(fields: [productId], references: [id], onDelete: Cascade)
+  productId        String?
+  description      String?
   neededQuantity   Float // quantité à produire réelle (commande/manuel), pré-remplie
   // Rattrapage préventif ajouté PAR-DESSUS `neededQuantity` — même logique que sur
   // PurchaseListItem (cf. commentaire là-bas), replié dans `neededQuantity` dès que

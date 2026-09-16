@@ -44,6 +44,8 @@ function toItems(rawItems: any[]): NonNullable<RequestDetail['items']> {
       stockPath: i.stockPath ?? 'NONE',
       resolvedQuantity: i.resolvedQuantity ?? 0,
       listItemStatus: i.purchaseListItem?.status ?? i.productionListItem?.status ?? null,
+      purchaseListItemId: i.purchaseListItemId ?? null,
+      productionListItemId: i.productionListItemId ?? null,
     };
   });
 }

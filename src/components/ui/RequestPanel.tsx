@@ -62,6 +62,22 @@ export interface RequestItem {
   // Statut de la ligne d'achat/production liée (A_COMMANDER/COMMANDE/RECU ou
   // A_PRODUIRE/BLOQUE/EN_COURS/PRODUIT), selon `stockPath`.
   listItemStatus?: string | null;
+  // Id de la ligne de liste d'achat/production liée (cf. stockPath) — sert à charger le détail
+  // "où est réservé ce stock" (commandes concernées) au dépli de la carte "État du stock".
+  purchaseListItemId?: string | null;
+  productionListItemId?: string | null;
+}
+
+// Détail d'une ligne d'achat/production (cf. GET /api/production-list|purchase-list/[id]) —
+// `holders` = TOUTES les commandes/devis Confirmée ou Produite qui retiennent actuellement une
+// part du réservé de ce produit (pas juste celles encore bloquées/en attente — cf.
+// stock-traceability.ts::productStockHolders), avec la quantité exacte que CHACUNE retient.
+interface StockLinkedParent { ref: string | null; clientName: string | null; clientCompany: string | null; client: { name: string; company: string | null } | null }
+interface StockHolder { quantity: number; order?: StockLinkedParent; quote?: StockLinkedParent; status: 'Confirmée' | 'Produite' }
+interface StockLineDetail {
+  product: { available: number; reserved: number } | null;
+  rawMaterial: { reference: string; name: string; unit: string; available: number; reserved: number } | null;
+  holders: { orderItems: StockHolder[]; quoteItems: StockHolder[] };
 }
 
 export interface RequestDetail {
@@ -1008,6 +1024,32 @@ export function RequestPanel({ item, onClose, onStatusChange, onConfirmQuoteWith
   // du client (cf. select "Pris en charge par" plus bas).
   const [pendingAssignChange, setPendingAssignChange] = useState<string | null>(null);
 
+  // Carte "État du stock" (Confirmé, pas encore Disponible) : dépliée à la demande pour voir le
+  // détail — disponible/réservé du produit/de la matière, et QUI retient ce qui est réservé
+  // (commandes concernées, cf. GET /api/production-list|purchase-list/[id]). Chargé une seule
+  // fois au premier dépli, mis en cache par id de ligne (jamais recalculé si on replie/déplie).
+  const [stockDetailOpen, setStockDetailOpen] = useState(false);
+  const [stockDetails, setStockDetails] = useState<Record<string, StockLineDetail | 'loading' | 'error'>>({});
+
+  // Charge le détail de chaque ligne manquante au dépli — une seule fois (jamais reconstruit si
+  // déjà en cache), et seulement les lignes reliées à une vraie liste d'achat/production (une
+  // référence libre sans les deux ids n'a rien à charger).
+  useEffect(() => {
+    if (!stockDetailOpen) return;
+    const blocked = (item.items ?? []).filter((i) => (i.resolvedQuantity ?? 0) < i.quantite);
+    for (const i of blocked) {
+      const kind = i.productionListItemId ? 'production' : i.purchaseListItemId ? 'purchase' : null;
+      const id = i.productionListItemId ?? i.purchaseListItemId;
+      if (!kind || !id || stockDetails[id]) continue;
+      setStockDetails((prev) => ({ ...prev, [id]: 'loading' }));
+      fetch(`/api/${kind === 'production' ? 'production-list' : 'purchase-list'}/${id}`)
+        .then((r) => r.ok ? r.json() : Promise.reject())
+        .then((data) => setStockDetails((prev) => ({ ...prev, [id]: data })))
+        .catch(() => setStockDetails((prev) => ({ ...prev, [id]: 'error' })));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stockDetailOpen, item.items]);
+
   const handleAssignChange = (newId: string) => {
     if (item.clientAssignedToId && newId !== item.clientAssignedToId && newId !== '' && item.id) {
       setPendingAssignChange(newId);
@@ -1196,15 +1238,79 @@ export function RequestPanel({ item, onClose, onStatusChange, onConfirmQuoteWith
                 };
                 return (
                   <div className="rounded-xl border border-[#FDE68A] bg-[#FFFBEB] px-4 py-3">
-                    <p className="text-[12px] font-bold text-[#92400E] mb-1.5">État du stock — pas encore disponible</p>
-                    <ul className="flex flex-col gap-1">
+                    <button onClick={() => setStockDetailOpen((v) => !v)} className="w-full flex items-center justify-between">
+                      <p className="text-[12px] font-bold text-[#92400E]">État du stock — pas encore disponible</p>
+                      <svg width={14} height={14} viewBox="0 0 24 24" fill="none" className={`flex-shrink-0 transition-transform ${stockDetailOpen ? 'rotate-180' : ''}`}>
+                        <path d="M6 9l6 6 6-6" stroke="#92400E" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                    </button>
+                    <ul className="flex flex-col gap-1 mt-1.5">
                       {blocked.map((i, idx) => {
                         const manquant = i.quantite - (i.resolvedQuantity ?? 0);
-                        const pathLabel = i.stockPath === 'PURCHASE_PENDING' ? "en attente d'achat" : i.stockPath === 'IN_PRODUCTION' ? 'en production' : 'non traité';
                         const statusLabel = i.listItemStatus ? LIST_STATUS_LABEL[i.listItemStatus] ?? i.listItemStatus : null;
+                        const lineId = i.productionListItemId ?? i.purchaseListItemId ?? null;
+                        const detail = lineId ? stockDetails[lineId] : undefined;
                         return (
                           <li key={idx} className="text-[12px] text-[#78350F]">
-                            <span className="font-semibold">{i.designation}</span> : {manquant} {pathLabel}{statusLabel ? ` — ${statusLabel}` : ''}
+                            <span className="font-semibold">{i.designation}</span> — {manquant} manquant{manquant !== 1 ? 's' : ''}{statusLabel ? ` — ${statusLabel}` : ''}
+                            {stockDetailOpen && (
+                              <div className="mt-1 mb-2 ml-3 pl-3 border-l-2 border-[#FDE68A]">
+                                {!lineId && (
+                                  <p className="text-[11px] text-[#B45309] italic">Référence libre — pas de fiche produit, rien de plus à afficher.</p>
+                                )}
+                                {lineId && detail === 'loading' && (
+                                  <p className="text-[11px] text-[#B45309] italic">Chargement…</p>
+                                )}
+                                {lineId && detail === 'error' && (
+                                  <p className="text-[11px] text-[#B45309] italic">Échec du chargement.</p>
+                                )}
+                                {lineId && detail && detail !== 'loading' && detail !== 'error' && (() => {
+                                  const stock = detail.product ?? detail.rawMaterial;
+                                  const unit = detail.rawMaterial ? ` ${detail.rawMaterial.unit}` : '';
+                                  // TOUTES les commandes/devis Confirmée ou Produite qui retiennent actuellement
+                                  // une part du réservé (pas juste celles encore bloquées/en attente — cf.
+                                  // productStockHolders, différent de "Commandes concernées" sur la page Stock).
+                                  const holders = [...detail.holders.orderItems, ...detail.holders.quoteItems]
+                                    // Exclut la commande/le devis actuellement ouvert(e) — inutile de se lister soi-même.
+                                    .filter((h) => (h.order ?? h.quote)?.ref !== item.ref);
+                                  return (
+                                    <>
+                                      {stock && (
+                                        <p className="text-[11px] text-[#78350F]">
+                                          Disponible : <span className="font-semibold">{stock.available}{unit}</span> · Réservé : <span className="font-semibold">{stock.reserved}{unit}</span>
+                                          {detail.rawMaterial && <span className="text-[#B45309]"> ({detail.rawMaterial.reference} — {detail.rawMaterial.name})</span>}
+                                        </p>
+                                      )}
+                                      {holders.length === 0 ? (
+                                        <p className="text-[11px] text-[#B45309] italic mt-0.5">Aucune autre commande/devis ne retient ce stock.</p>
+                                      ) : (
+                                        <div className="mt-1">
+                                          <p className="text-[10px] font-bold text-[#92400E] uppercase tracking-wide mb-1">Réservé par</p>
+                                          <div className="flex flex-col gap-1.5">
+                                            {holders.map((h, li) => {
+                                              const parent = h.order ?? h.quote;
+                                              const client = parent?.clientCompany || parent?.client?.company || parent?.clientName || parent?.client?.name || 'Client';
+                                              return (
+                                                <div key={li} className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg bg-white border border-[#FDE68A]">
+                                                  <span className="flex items-center gap-1.5 flex-wrap min-w-0">
+                                                    <span className="text-[12px] font-bold text-[#0F172A]">{parent?.ref ?? '—'}</span>
+                                                    <span className="text-[11px] text-[#8A9BB5] truncate">{client}</span>
+                                                  </span>
+                                                  <span className="flex items-center gap-1.5 flex-shrink-0">
+                                                    <span className="text-[12px] font-bold text-[#0F172A] tabular-nums">{h.quantity}{unit}</span>
+                                                    <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase ${h.status === 'Produite' ? 'bg-[#F0FDF4] text-[#166534]' : 'bg-[#EEF2FF] text-[#4F46E5]'}`}>{h.status}</span>
+                                                  </span>
+                                                </div>
+                                              );
+                                            })}
+                                          </div>
+                                        </div>
+                                      )}
+                                    </>
+                                  );
+                                })()}
+                              </div>
+                            )}
                           </li>
                         );
                       })}

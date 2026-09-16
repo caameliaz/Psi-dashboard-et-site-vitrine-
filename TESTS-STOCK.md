@@ -1,386 +1,387 @@
-# Plan de test — Liste d'achat / Liste de production
+# Plan de test — Gestion du stock
 
-Prenez un produit **fabriqué** avec une recette (1 matière suffit, ratio 1:1 pour retrouver
-facilement les chiffres ci-dessous), et si possible un deuxième produit en mode **acheté**.
-Gardez 3 pages ouvertes en parallèle : la fiche produit/matière (page Stock), la liste de
-production, la liste d'achat.
-
-Réglages suggérés pour retomber sur les chiffres de référence ci-dessous :
-matière `stockMax=2000, purchaseThreshold=500` ; produit fabriqué `stockMax=100,
-purchaseThreshold=50, productionThreshold=50` ; recette ratio `1`.
+Organisé par fonctionnalité. Pour chaque fonctionnalité : le comportement général attendu,
+puis les cas critiques où ce comportement peut changer, avec pour chacun ce qu'on doit
+observer (sans valeurs chiffrées d'exemple — utilisez les vôtres et comparez au comportement
+décrit).
 
 ## Préparation
-Notez au départ : disponible/réservé du produit et de la matière, seuils, stock max, contenu
-des listes (doivent être vides ou stables sur ce produit/matière).
 
-## 1. Confirmation → création des lignes
-Produit dispo=3, matière dispo=5, commande de 20.
-- [ ] Après confirmation : produit `available=0 reserved=3` ; ligne production `needed=17
-  buffer=100 status=BLOQUE` (5 pris sur la matière, 12 manquants) ; ligne achat matière
-  `needed=112 buffer=2000 status=A_COMMANDER`.
-- [ ] "Commandes concernées" sur les deux lignes affiche bien cette commande.
+Prenez un produit **fabriqué** avec une recette (une seule matière suffit pour simplifier), et
+si possible un second produit en mode **acheté**. Gardez en parallèle : la fiche produit/matière
+(page Stock), la liste de production, la liste d'achat.
 
-## 2. Modification de quantité (matière abondante, dispo produit=0)
-Commande de 20 confirmée → matière `available=880 reserved=120`, ligne production
-`needed=20 buffer=100 status=A_PRODUIRE`.
-- [ ] Augmentez 20 → 35 : matière `available=865 reserved=135`, ligne `needed=35` (grossit du
-  delta, pas de 2ᵉ ligne).
-- [ ] Réduisez 35 → 10 : matière `available=890 reserved=110` (relâche exactement 25, le
-  delta), ligne `needed=10`.
-- [ ] Cas particulier : si la ligne liée n'est plus modifiable (achat déjà "Commandé") : la
-  nouvelle quantité doit quand même s'enregistrer sur la commande ET le stock/la liste doit
-  suivre après coup (pas resté bloqué sur l'ancienne quantité).
-- [ ] **Réduction d'une commande déjà résolue → réaffectation automatique à une AUTRE commande
-  en attente** (trou trouvé et corrigé). ORDOLD (créée en premier, besoin=5, matière
-  indisponible → reste en attente) puis ORDBIG (créée ensuite, dispo=10 → prise directement en
-  stock, `FROM_STOCK`, résolue à 10/10). Réduisez ORDBIG de 10 → 4 (excédent de 6 à relâcher)
-  → **ORDOLD reçoit automatiquement ses 5** (`resolvedQuantity=5/5`, sans action manuelle),
-  ORDBIG `resolvedQuantity=4/4`, produit `available=1 reserved=9` (6 relâchés − 5 réaffectés =
-  1 de reliquat). Avant le correctif, ce disponible restait "libre" au lieu d'être proposé à
-  la plus ancienne commande en attente.
+Avant de commencer une série de tests, notez toujours l'état de départ : disponible et réservé
+du produit et de la matière, seuils, stock max, contenu des listes (idéalement vides ou stables
+sur ce produit/matière avant de commencer).
 
-## 3. "Marquer fabriquée"
+Pour chaque étape qui échoue, notez les valeurs exactes observées — ça permet de retrouver
+directement la fonction en cause dans le code.
+
+---
+
+## 1. Bouton "Produire" (marquer une ligne de production fabriquée)
+
 Le buffer ne réserve JAMAIS de matière (c'est un simple chiffre indicatif de rattrapage
-préventif, pas un engagement physique) — seul le besoin réel en réserve. La consommation à la
-production suit un ordre précis, matière par matière :
-1. Vérification globale D'ABORD sur toute la recette : si `disponible + réservé` (tous produits
-   confondus) ne suffit pas pour la quantité demandée, **rien n'est modifié**, erreur renvoyée.
-2. La part qui correspond au besoin déjà reconnu de CETTE ligne (dans la limite de ce qui est
-   produit) vient de son propre `reserved` — déjà mis de côté pour elle, on le libère
-   normalement (jamais pris sur le disponible général, sinon cette réservation resterait
-   bloquée pour toujours, jamais consommée).
-3. Le surplus éventuel (production au-delà du besoin déjà reconnu — buffer produit, ou
-   quantité forcée plus grande que prévu) prend d'abord sur le **disponible** (matière fraîche).
-4. S'il en manque encore, on pioche dans le `reserved` du pot commun — donc potentiellement
-   dans ce qui était compté pour D'AUTRES lignes "À produire". Ces lignes sont réévaluées
-   aussitôt après (FIFO par ancienneté) : **les plus RÉCENTES basculent "Bloquée" en priorité**,
-   les plus anciennes gardent leur matière intacte. Le manquant qui en résulte remonte
-   normalement en liste d'achat matière.
+préventif, pas un engagement physique) — seul le besoin réel se réserve. La consommation à la
+production suit un ordre précis, matière par matière : vérification globale d'abord sur toute
+la recette, puis la part correspondant au besoin déjà reconnu de cette ligne vient de son propre
+réservé, le surplus éventuel prend d'abord sur le disponible, et seulement s'il en manque encore
+on pioche dans le réservé du pot commun (potentiellement destiné à d'autres lignes).
 
-### 3a. Cas normal (matière abondante)
-Départ (commande de 10 confirmée) : matière `available=890 reserved=110` (110 = besoin réel 10,
-le reste vient d'un ancien réglage — seul le besoin réel se réserve désormais), ligne
-`needed=10 buffer=100`.
-- [ ] Produisez 6 (partiel) : matière `available=890 reserved=104` — **`available` ne bouge
-  PAS** quand le réservé de la ligne suffit à couvrir ce qui est produit, `reserved` baisse
-  d'exactement 6 (jamais plus). Ligne : `needed=4 produced=6`, reste ouverte. La commande liée
-  reçoit sa part (`resolvedQuantity=6`).
-- [ ] Produisez les 4 restants : matière `reserved=100` (−4 de plus, jamais −8). Ligne :
-  `needed=0 produced=10` — reste "À produire" tant que le buffer (100, jamais réservé) est
-  actif, passe "Produit" seulement si le buffer retombe aussi à 0.
+### 1.1 Matière disponible suffisante (cas normal)
+- [ ] Une production partielle fait baisser le réservé de la ligne d'exactement la quantité
+  produite — jamais plus, jamais moins — et ne touche pas le disponible.
+- [ ] La ligne reste "À produire" tant qu'il reste du besoin ou du buffer ; elle ne passe
+  "Produit" que lorsque les deux sont retombés à zéro.
+- [ ] La commande liée reçoit sa part correspondante dans son suivi de résolution.
 
-### 3b. Vol sur le réservé d'une commande plus récente (matière insuffisante)
-Deux produits différents, même matière : ANCIEN (commande créée en premier, besoin=10) et
-RÉCENT (créée ensuite, besoin=10). Matière dispo=0, reserved=20 (10+10, tout juste assez pour
-les deux besoins réels, rien de plus).
-- [ ] Marquez fabriquée ANCIEN pour 15 (plus que son besoin de 10) : matière `reserved=20→5`
-  (10 pour son propre besoin + 5 volés au pot commun, faute de disponible). Ligne ANCIEN :
-  `needed=0 buffer=95 produced=15 status=A_PRODUIRE`. Ligne RÉCENT : **repasse `BLOQUE`**
-  (plus assez de matière réservée pour couvrir son besoin de 10 — il ne reste que 5). Le
-  manquant remonte automatiquement en liste d'achat matière (`needed=200` dans cet exemple).
+### 1.2 Matière réservée insuffisante pour cette ligne, mais dispo dans le pot commun d'une AUTRE commande
+- [ ] Produire au-delà du réservé propre de la ligne va piocher dans le réservé du pot commun
+  destiné à d'autres lignes/commandes sur la même matière.
+- [ ] Les lignes ainsi privées de leur matière basculent "Bloquée" en priorité sur les plus
+  RÉCENTES — les plus anciennes gardent leur matière intacte (FIFO par ancienneté réelle).
+- [ ] Le manquant qui en résulte pour la ligne nouvellement bloquée remonte automatiquement dans
+  la liste d'achat matière.
 
-### 3c. Refus net si vraiment pas assez de matière du tout
-Matière `available=0 reserved=5`, tentative de produire 20 (recette ratio 1, besoin=20).
-- [ ] Rien ne se passe : erreur "Stock matière insuffisant" renvoyée, `producedQuantity` et le
-  stock matière restent parfaitement inchangés (aucune modification partielle).
-- [ ] **Recette à plusieurs matières, une seule insuffisante** : MAT-OK très abondante
-  (`available=1000`), MAT-COURTE insuffisante (`available=0 reserved=5`), besoin=20 pour les
-  deux. Tentative de produire 20 → **refus net (409)**, `"Stock matière insuffisant : courte
-  (disponible+réservé=5, besoin=20)"` — et **MAT-OK reste rigoureusement inchangée
-  (`1000/0`)** : une seule matière manquante bloque toute la recette, même si toutes les
-  autres suffisent largement.
+### 1.3 Matière totalement insuffisante (disponible + réservé ne suffit pas)
+- [ ] Refus net : rien n'est modifié (ni le stock matière, ni la quantité déjà produite de la
+  ligne), une erreur explicite est renvoyée.
+- [ ] Recette à plusieurs matières, une seule insuffisante : refus net également, et TOUTES les
+  autres matières de la recette (même largement suffisantes) restent rigoureusement inchangées —
+  une seule matière manquante bloque toute la recette.
 
-### 3d. Surplus produit au-delà du besoin réel, pris sur un disponible qui en a
-Une seule ligne, aucune autre commande concurrente sur cette matière. Besoin réel=10 (déjà
-réservé), matière `available=200` en plus (ex: du réassort), `reserved=10`.
-- [ ] Marquez fabriquée pour 25 (10 = besoin réel + 15 de surplus) : matière `available=185
-  reserved=0` — les 10 du besoin réel viennent du `reserved` (consommé, pas laissé orphelin),
-  les 15 de surplus viennent du `available` (200→185), puisque personne d'autre n'attend cette
-  matière ici. Ligne : `needed=0 buffer=85 produced=25 status=A_PRODUIRE`.
+### 1.4 Production au-delà du besoin réel déjà réservé (surplus)
+- [ ] La part correspondant au besoin réel déjà réservé vient du réservé de la ligne (consommée,
+  jamais laissée orpheline).
+- [ ] Le surplus (au-delà de ce besoin réel — buffer produit ou quantité forcée plus grande que
+  prévu) vient du disponible, tant que personne d'autre n'attend cette matière.
 
-## 4. Liste d'achat matière — "Commander" puis annuler la commande d'origine
-Départ (commande de 20, matière indisponible) : ligne achat matière `needed=120 buffer=2000
-status=A_COMMANDER`.
-- [ ] "Commander" tout (2120) : `needed=0 buffer=0 status=COMMANDE ordered=2120`.
-- [ ] Annulez la commande client d'origine : **la carte reste à `needed=0 buffer=0`** (pas de
-  remontée trompeuse) — parce que ce qui est déjà commandé au fournisseur (2120) couvre déjà
-  largement ce qu'il faudrait maintenant (100 réel + 2000 buffer). Le statut reste "Commandé"
-  jusqu'à réception, jamais supprimé automatiquement une fois commandé.
-- [ ] Réceptionnez le tout → statut "Reçu", disparaît de la liste. Le buffer (100) n'a jamais
-  été réservé, mais `available` (qui contient maintenant tout ce qui a été reçu) compte comme
-  "couvert" pour le besoin — la carte se ferme donc naturellement (`needed=0 buffer=0`), sans
-  faux manquant qui traîne.
+### 1.5 Produit fabriqué sans AUCUNE recette enregistrée
+- [ ] Cliquer "Produire" sans rien choisir n'exécute rien : un message explicite indique que le
+  produit n'a pas de recette, avec deux choix — continuer sans elle, ou la saisir maintenant.
+  Jamais de production silencieuse comme avant ce comportement.
+- [ ] "Continuer sans recette" : comportement identique à l'ancien (aucune vérification ni
+  consommation de matière première), mais choisi explicitement, jamais implicite.
+- [ ] "Entrer la recette" ouvre l'overlay de saisie avec une case à cocher pour l'enregistrer.
+  Après saisie, "Lancer la production" applique le circuit normal de vérification/consommation
+  de matière (comme si le produit avait toujours eu cette recette), pas l'ancien passage libre.
+- [ ] Case "Enregistrer" COCHÉE : la recette est aussi sauvegardée sur le produit (visible ensuite
+  dans l'onglet Recettes) — une prochaine production sur ce produit ne redemande plus rien.
+- [ ] Case "Enregistrer" DÉCOCHÉE : la recette saisie sert uniquement à cette production ; le
+  produit reste sans recette enregistrée après coup (la prochaine production redemande).
+- [ ] Dans les deux cas (case cochée ou non), le stock matière est bien vérifié et consommé selon
+  la recette saisie — refus net si la matière saisie ne suffit pas, rien n'est produit.
 
-## 5. Produit ACHETÉ — cycle complet
-Départ (dispo 5, commande de 20) : produit `reserved=5`, ligne achat `needed=15 buffer=100`.
-- [ ] "Commander" (115) puis réception partielle (ex: 38) : distribution FIFO — la commande en
-  attente est comblée en priorité (`resolvedQuantity` monte jusqu'à `quantity`), le reliquat
-  part en `available` du produit.
-- [ ] Réception du reste → commande totalement résolue, ligne "Reçue" une fois tout arrivé.
+---
 
-## 6. Annulation + réaffectation FIFO (deux commandes)
-X(20, prend son stock directement — FROM_STOCK) puis Y(15, tout en production, rien de dispo).
-- [ ] Annulez X : matière relâchée **une seule fois** pour la part de Y qui vient d'être
-  comblée directement par le disponible libéré (pas de double relâchement — vérifiez que
-  `reserved` matière ne baisse pas de plus que ce qui est réellement repris).
-- [ ] Item Y : `resolvedQuantity` passe à `quantity` (comblé automatiquement, FIFO).
+## 2. Bouton "Commander" (liste d'achat matière / produit acheté)
 
-## 7. "Marquer Produit" (bouton manuel, avant Livré)
-Résout le manquant de chaque article, dans cet ordre STRICT, par produit : 1) disponible
-produit, 2) réservé d'une AUTRE commande/devis déjà "Produite" (la plus RÉCEMMENT créée en
-premier — elle repasse "Confirmée", `stockPath` remis sur IN_PRODUCTION/PURCHASE_PENDING, son
-manquant réapparaît normalement), 3) (fabriqués seulement) fabrication immédiate avec la
-matière déjà réservée. S'il reste un manquant après ces 3 étapes → **blocage dur** (rien n'est
-modifié, aucun moyen de forcer), erreur affichée avec les produits manquants et les quantités.
+### 2.1 Commande couvrant besoin réel + buffer
+- [ ] Commander la totalité de la ligne (besoin + buffer) fait retomber la ligne à zéro sur les
+  deux compteurs, passe son statut à "Commandé", et fige la quantité commandée.
 
-### 7a. Disponible couvre tout
-Produit `available=10` (arrivé après coup, sans réaffectation), commande de 10 en attente.
-- [ ] "Marquer Produit" → réussit (200) : produit `available=10→0 reserved=0→10`, commande
-  entièrement résolue.
-- [ ] **Effet sur les autres commandes/la liste/un témoin** : avec DEUX autres commandes en
-  attente (A, B) sur le même produit en plus de celle qu'on force (C), matière indisponible
-  (ligne `needed=15 buffer=100 BLOQUE` pour les 3 réunies) — après "Marquer Produit" sur C
-  SEULE (disponible=5 arrivé sans réaffectation) : A et B **restent strictement inchangées**
-  (`resolvedQuantity=0`, toujours "Confirmée", toujours Bloquées — l'action ne redistribue
-  jamais aux autres commandes en attente) ; la ligne de production recalcule correctement
-  `needed=15→10` (A+B seulement) ; matière et témoin (autre produit/matière) inchangés.
+### 2.2 Ce qui est déjà commandé compte comme "sécurisé"
+- [ ] Après avoir passé une commande fournisseur qui couvre largement le besoin + le buffer
+  actuels, la carte doit rester à besoin=0/buffer=0 tant que ce qui reste "en transit"
+  (commandé moins déjà reçu) couvre toujours le total requis — même si le besoin ou le buffer
+  sont recalculés entre-temps (annulation de la commande d'origine, nouvelle commande, etc.).
+- [ ] Le statut reste "Commandé" jusqu'à réception, il n'est jamais supprimé automatiquement une
+  fois la commande passée.
 
-### 7b. Vol chez une AUTRE commande active — "Produite" OU simplement "Confirmée"
-Le donneur peut être n'importe quelle commande/devis encore active (Confirmée OU Produite) qui
-a déjà du réservé sur ce produit — pas seulement celles déjà "Produite". Toujours la plus
-RÉCEMMENT créée en premier.
+---
 
-- [ ] Produit avec commande DONOR (5, confirmée avec dispo=5 → `FROM_STOCK`, devient
-  automatiquement "Produite") puis commande CURRENT (5, créée après, dispo=0 ensuite, matière
-  indisponible). "Marquer Produit" sur CURRENT → réussit (200) : CURRENT entièrement résolue
-  (`resolvedQuantity=5`), DONOR **repasse "Confirmée"** avec `resolvedQuantity=0` et
-  `stockPath=IN_PRODUCTION` (son manquant de 5 réapparaît dans la liste de production, jamais
-  perdu silencieusement), produit `reserved` reste à 5 (transfert interne, pas de changement de
-  total).
-- [ ] **Donneur encore "Confirmée" (jamais "Produite")** : commande DONOR2 (8, confirmée avec
-  dispo=5 → 5 pris directement, 3 restent en attente en production, matière indisponible →
-  reste "Confirmée", ne devient JAMAIS "Produite") puis commande CURRENT (5, créée après,
-  dispo=0). "Marquer Produit" sur CURRENT → réussit (200) : CURRENT entièrement résolue
-  (`resolvedQuantity=5/5`), DONOR2 perd ses 5 (`resolvedQuantity=0/8`, reste "Confirmée" —
-  n'avait pas de statut à faire redescendre), produit `reserved` reste à 5.
+## 3. Bouton "Réceptionner"
 
-### 7c. Rien du tout nulle part → blocage dur
-Matière dispo=3 pour un besoin de 10, aucune commande "Produite" à qui prendre.
-- [ ] "Marquer Produit" → **refusé (409)**, `{error: "PRODUCT_SHORTFALL", shortfall: [{reference,
-  name, missing}]}` — commande reste "Confirmée", RIEN n'est modifié (ni stock, ni statut).
+### 3.1 Réception partielle (produit acheté avec commande client en attente)
+- [ ] La distribution suit l'ordre FIFO : la commande client en attente la plus ancienne est
+  comblée en priorité, le reliquat éventuel part dans le disponible du produit.
 
-## 8. Stock direct (hors commande)
-- [ ] Correction manuelle du disponible produit **à la baisse** → seul le buffer bouge (le
-  besoin réel, lié aux commandes déjà réglées à leur confirmation, ne bouge jamais).
-- [ ] Correction **à la hausse** avec une commande déjà en attente sur ce produit → elle est
-  comblée en priorité (FIFO) avant que le reliquat compte comme buffer ; la matière relâchée
-  pour la part reprise ne l'est **qu'une fois** (pas de double comptage).
-- [ ] Correction du disponible d'une matière **à la hausse** avec une ligne "Bloquée" en
-  attente → elle se débloque (ou avance partiellement, cf. section 11).
-- [ ] Correction de `reserved` sur une matière → recalcule le besoin réel immédiatement. **À la
-  baisse** : revérifie aussi si les lignes de production "À produire" qui comptaient sur ce pot
-  commun sont toujours couvertes — **les plus RÉCENTES rebasculent "Bloquée" en premier**
-  (FIFO), le manquant qui en résulte remonte dans la liste d'achat matière. Exemple : matière
-  `reserved=20` (10 pour une ligne ancienne, 10 pour une plus récente, toutes deux `A_PRODUIRE`)
-  → correction à 12 : l'ancienne reste `A_PRODUIRE` (10 ≤ 12), la récente repasse `BLOQUE`
-  (plus assez pour ses 10), la liste d'achat matière reflète le manquant.
-- [ ] Correction de `reserved` sur un **produit**, **à la baisse** : reprend la couverture aux
-  commandes/devis actifs concernés (VALIDE/PRODUITE), **les plus RÉCENTES perdent en premier**
-  (FIFO, les plus anciennes gardent la priorité). Exemple : produit `reserved=30` (10 pour une
-  ancienne commande, 20 pour une plus récente, toutes deux entièrement résolues) → correction à
-  15 : l'ancienne garde ses 10 intacts, la récente perd 15 de couverture
-  (`resolvedQuantity` 20→5, repasse `IN_PRODUCTION`/`PURCHASE_PENDING`), et une ligne de
-  production/achat apparaît avec le manquant (`needed=15`). **À la hausse** : aucun effet
-  (une hausse manuelle n'invente pas de commande à mieux couvrir).
-- [ ] Témoin (autre produit/matière non touché) : ne bouge jamais pendant ces actions.
+### 3.2 Passage au statut "Reçu" — condition stricte
+- [ ] Réceptionner exactement le besoin réel (sans le buffer) ne fait PAS passer la ligne à
+  "Reçu" tant qu'il reste du buffer à recevoir.
+- [ ] Réceptionner le reste (le buffer) fait enfin passer la ligne à "Reçu".
+- [ ] Piège à vérifier : une réception partielle minime ne doit JAMAIS faire passer la ligne à
+  "Reçu" seulement parce que besoin et buffer retombent à zéro grâce à l'en-transit qui compte
+  comme "couvert" — il faut EN PLUS que la quantité reçue égale la quantité commandée.
 
-## 9. FIFO multi-commandes
-Deux commandes de 10 sur le même produit, la 1ʳᵉ créée avant la 2ᵉ.
-- [ ] Produisez 10 (ne couvre qu'une commande) → la plus ancienne reçoit tout
-  (`resolvedQuantity=10`), la plus récente rien (`resolvedQuantity=0`).
+### 3.3 Badge "Urgent" vs statut d'attente de réception
+- [ ] Le badge "Urgent" ne s'affiche que si (besoin + buffer) est positif ET que le stock
+  physique est à zéro.
+- [ ] Une ligne déjà "Commandé" qui n'attend plus que sa réception n'affiche jamais "Urgent" —
+  elle affiche un sous-titre "en attente de réception" à la place.
 
-## 10. Réception qui ne passe "Reçu" que si besoin ET buffer sont à 0, ET tout est reçu
-- [ ] Forcez une ligne avec besoin réel ET buffer > 0, "Commandez" tout, réceptionnez
-  EXACTEMENT le besoin réel (pas le buffer) → reste "Commandé".
-- [ ] Réceptionnez le reste (buffer) → passe enfin "Reçu".
-- [ ] **Piège à vérifier** : commande de 2120 chez le fournisseur → réceptionnez SEULEMENT 1
-  unité → reste "Commandé" (ne doit JAMAIS passer "Reçu" juste parce que `needed`/`buffer`
-  retombent à 0 grâce à l'en-transit qui compte comme "couvert" — il faut EN PLUS que
-  `receivedQuantity >= orderedQuantity`, sinon une réception minime fermerait la carte à tort).
-  Réceptionnez ensuite le reste → passe "Reçu" seulement à ce moment-là.
-- [ ] Badge "Urgent" : affiché seulement si `needed+buffer > 0` ET stock physique à 0 — jamais
-  sur une ligne "Commandé" qui n'attend plus que sa réception (sous-titre "En attente de
-  réception" à la place).
+### 3.4 Déblocage progressif d'une matière (FIFO), pas tout-ou-rien
+- [ ] Avec plusieurs lignes de production "Bloquée" sur la même matière, réceptionner juste assez
+  pour couvrir ENTIÈREMENT la plus ancienne la débloque seule ("À produire") ; les autres restent
+  "Bloquée", inchangées.
+- [ ] Compléter la réception débloque la suivante à son tour.
+- [ ] Le FIFO se base sur la vraie commande d'origine, pas sur la date de (re)création de la
+  ligne de production elle-même : une ligne qui "renaît" (annulée puis recréée) garde la
+  priorité de la commande réelle qui est derrière, même si sa propre date est plus récente.
 
-## 11. Déblocage matière progressif (FIFO), pas tout-ou-rien
-Deux produits différents partageant la même matière, tous deux bloqués (A créé avant B).
-- [ ] Réceptionnez juste assez pour couvrir ENTIÈREMENT A → seule sa ligne se débloque
-  ("À produire"), B reste "Bloquée", inchangée.
-- [ ] Complétez pour B → elle se débloque à son tour.
-- [ ] **FIFO par vraie commande, pas par date de ligne** : supprimez puis recréez la ligne de A
-  (ex: en annulant sa dernière commande jusqu'à 0 besoin, puis en repassant une commande dessus)
-  — sa ligne "renaît" avec une date fraîche, mais sa commande réelle peut être plus ancienne que
-  celle de B. Réceptionnez juste assez pour couvrir UNE des deux → c'est bien celle dont la VRAIE
-  commande est la plus ancienne qui se débloque en premier, peu importe la date de la ligne.
+---
 
-## 11 bis. Changement de recette — réconciliation globale
-Produit A (ligne "À produire", ratio 1, besoin réel 20, matière M `reserved=20`) et produit B
-(ligne "Bloquée" sur la même matière M, ratio 1, besoin réel 15, `available=0`). Recette de A
-ratio 1 → 3.
-- [ ] Après le changement : M `reserved` recalculé à neuf pour couvrir en FIFO (par vraie
-  commande, pas par ligne) A (nouveau besoin 60) et B (15) dans l'ordre de leur ancienneté
-  réelle — pas juste A qui rafle tout en premier parce que c'est lui qu'on vient de modifier.
-- [ ] Si le total (60+15=75) dépasse le stock total de M (`available+reserved` d'avant), la
-  ligne la plus ancienne des deux (par vraie commande) reste/passe "À produire" en premier, la
-  plus récente peut être rétrogradée "Bloquée" — même si elle ne l'était pas avant.
-- [ ] Retirez complètement M de la recette de A → la part de M due à A retombe à 0 (ligne
-  d'achat de M recalculée sans lui), B reprend sa part normalement.
-- [ ] Liste d'achat de M recalculée immédiatement après le changement (pas besoin d'une autre
-  action pour déclencher le recalcul).
+## 4. "Marquer commandes produites" (bouton "Marquer Produit", avant Livré)
 
-## 12. "Commandes concernées" — précision (lien réel + besoin restant réel)
-- [ ] Une commande "En attente" (jamais confirmée) n'apparaît PAS dans "Commandes concernées".
-- [ ] Deux commandes sur le même produit (matière insuffisante pour les deux, la 1ʳᵉ créée
-  avant la 2ᵉ) : dans "Commandes concernées" (production ET achat matière), la plus ancienne
-  n'a PAS le badge "Bloqué", la plus récente l'a.
-- [ ] Le statut "Bloqué" n'apparaît plus jamais au niveau de la carte elle-même (ni badge, ni
-  sous-titre, ni ligne de statut) — uniquement par commande.
+Résout le manquant de chaque article, dans cet ordre strict, par produit : 1) disponible
+produit, 2) réservé d'une autre commande/devis déjà active sur ce produit (la plus récemment
+créée en premier), 3) — pour les produits fabriqués seulement — fabrication immédiate avec la
+matière déjà réservée. S'il reste un manquant après ces trois étapes : blocage dur, aucune
+modification, aucun moyen de forcer depuis ce bouton.
 
-## 13. Ce qui a été déjà commandé au fournisseur compte comme "sécurisé"
-- [ ] Commandez une quantité au fournisseur (matière ou produit acheté) qui dépasse largement
-  le besoin réel + le buffer actuels → la carte doit afficher `needed=0 buffer=0` tant que ce
-  qui reste "en transit" (`ordered − received`) couvre toujours le total requis, même si le
-  besoin/buffer sont recalculés entre-temps (annulation, nouvelle commande...).
+### 4.1 Disponible produit suffit à tout couvrir
+- [ ] L'action réussit, le disponible bascule en réservé pour la commande concernée, celle-ci
+  est entièrement résolue.
+- [ ] Effet sur les AUTRES commandes en attente sur le même produit : elles restent strictement
+  inchangées (résolution, statut, blocage) — l'action ne redistribue jamais aux autres commandes
+  en attente, elle ne sert que celle qu'on force. Un témoin (autre produit/matière) reste
+  également inchangé.
 
-## 14. Réapprovisionnement manuel (restock) et correction de stock
+### 4.2 Vol chez une AUTRE commande active (déjà "Produite" OU simplement "Confirmée")
+- [ ] Le donneur peut être n'importe quelle commande/devis encore active qui a déjà du réservé
+  sur ce produit, pas seulement celles déjà "Produite" — toujours la plus récemment créée en
+  premier.
+- [ ] Si le donneur était "Produite" : il repasse "Confirmée", son manquant réapparaît
+  normalement dans la liste de production/achat (jamais perdu silencieusement).
+- [ ] Si le donneur était simplement "Confirmée" (jamais "Produite") : il perd sa couverture sans
+  changement de statut (il n'y avait pas de statut à faire redescendre).
+- [ ] Dans les deux cas, le réservé total du produit ne change pas (c'est un transfert interne
+  entre commandes, pas une création ou destruction de stock).
 
-### Restock d'un produit fabriqué (mode "produire" — consomme la recette)
-Recette ratio 2, matière dispo=1000, produit dispo=0.
-- [ ] Réapprovisionnez le produit de 30 → produit `available=30` ; matière `available=940`
-  (1000 − 2×30, consommée directement, jamais mise en `reserved`) — c'est une vraie
-  fabrication immédiate, pas une réservation.
-- [ ] Avec une commande de 15 déjà en attente (ratio 1, matière abondante) : réapprovisionnez
-  le produit de 10 → la commande est comblée en priorité (`resolvedQuantity` monte de 10),
-  produit `reserved=10`, ligne production `needed` baisse de 10 (15→5) ; la matière qui était
-  réservée pour cette part de production n'est plus nécessaire (elle vient d'être fabriquée
-  directement) → relâchée d'autant, un SEUL coup (pas de double comptage : vérifiez que
-  `reserved` matière baisse d'exactement la quantité correspondant à ce qui vient d'être
-  réaffecté, ni plus ni moins).
+### 4.3 Rien du tout nulle part → blocage dur
+- [ ] Refus net (aucune commande "Produite" ou "Confirmée" à qui prendre, matière insuffisante
+  pour fabriquer davantage) : la commande reste "Confirmée", rien n'est modifié (ni stock, ni
+  statut), l'erreur détaille les produits/quantités manquants.
 
-### Restock d'une matière première (débloque une ligne "Bloquée")
-Matière dispo=2 pour un besoin de 10 (ratio 1) → ligne "Bloquée".
-- [ ] Réapprovisionnez la matière de 500 → la ligne de production se débloque ("À produire"),
-  la matière réservée monte exactement du nécessaire (jamais plus que le total de la ligne :
-  besoin + buffer), le reste part en disponible et alimente le nouveau buffer de la ligne
-  d'achat matière (recalculé immédiatement, jamais un ancien chiffre qui traîne).
+### 4.4 Produit fabriqué sans AUCUNE recette parmi les articles de la commande/du devis
+- [ ] Une commande/un devis contenant un tel produit ne bascule JAMAIS "Disponible" tout seul
+  (ni automatiquement, ni via "Marquer Disponible" sans intervention) — elle reste "Confirmée"
+  tant que rien n'a été choisi pour ce produit.
+- [ ] Cliquer "Marquer Disponible" affiche un message explicite ("ce produit n'a pas de recette")
+  avec les mêmes deux choix qu'au §1.5 — continuer sans recette, ou la saisir maintenant (même
+  overlay, même case "Enregistrer").
+- [ ] "Continuer sans recette" : la commande passe "Disponible" sans aucune vérification/
+  consommation de matière pour ce produit (écart assumé, choisi explicitement).
+- [ ] "Entrer la recette" puis lancer : la commande passe "Disponible" en suivant le circuit
+  normal de résolution (disponible → vol chez une autre commande → fabrication avec la matière),
+  cette fois avec une vraie vérification de stock matière selon la recette saisie — refus si la
+  matière ne suffit pas (comme un manquant normal, §4.3).
+- [ ] Recette saisie mais NON enregistrée (case décochée) : le produit reste sans recette après
+  coup — une prochaine commande sur ce même produit redemandera la même chose.
 
-### Correction manuelle de stock (renvoi à la section 8)
-- [ ] Rejouez les points de la section 8 (baisse = buffer seul ; hausse = réaffectation en
-  priorité ; correction de `reserved` matière = recalcul du besoin réel, sur produit = aucun
-  effet) — le réapprovisionnement suit exactement les mêmes règles qu'une correction à la
-  hausse, seule la source de l'augmentation change (bouton dédié vs champ libre).
+---
 
-## 15. Commandes/devis prioritaires
-Une commande/devis marqué "prioritaire" passe TOUJOURS devant les autres dans les simulations
-FIFO du stock (distribution, réaffectation, reprise de couverture, badge "Bloqué"), comme si
-elle avait été créée en premier — **ne déclenche RIEN d'immédiat**, compte juste comme "la
-plus ancienne" au prochain évènement qui recalcule le stock. Togglable uniquement tant que la
-commande est "Confirmée" (VALIDE) et pas encore "Produite" — ne change RIEN au reste de la
-ligne de production/achat normale (son `needed` continue d'inclure toutes les commandes,
-prioritaires ou pas).
+## 5. "Commandes concernées" (précision de l'affichage)
 
-- [ ] Deux commandes sur le même produit (matière abondante) : ANCIENNE créée en premier (10),
-  RÉCENTE créée ensuite (10), RÉCENTE marquée prioritaire. Produisez seulement 10 (pas assez
-  pour les deux) → **RÉCENTE reçoit tout** (`resolvedQuantity=10`), ANCIENNE rien
-  (`resolvedQuantity=0`) — inversé par rapport au FIFO normal.
-- [ ] **Aucun effet immédiat à la mise en priorité** : commande A (5, confirmée avec dispo=5 →
-  `FROM_STOCK`, devient "Produite" automatiquement) créée avant B (5, dispo=0 ensuite). Marquer
-  B prioritaire → réussit (200) : B a juste `priority=true`, `resolvedQuantity` **reste à
-  0/5** (rien volé) ; A **reste strictement inchangée** (`status=PRODUITE
-  resolvedQuantity=5/5 stockPath=FROM_STOCK`) — aucun vol, aucune réouverture. B ne récupère du
-  stock qu'au prochain évènement qui recalcule le stock (réception, correction, etc.), et à ce
-  moment-là seulement en tant que "la plus ancienne".
+### 5.1 Commande jamais confirmée
+- [ ] Une commande encore "En attente" (jamais confirmée) n'apparaît PAS dans "Commandes
+  concernées" — elle n'a encore réservé ni consommé aucun stock.
 
-- [ ] Carte "Production urgente" (en bas de la liste de production) : affiche le produit avec
-  la quantité manquante des commandes prioritaires ; **disparaît d'elle-même** une fois
-  entièrement produite.
+### 5.2 Badge "Bloqué" — par commande, jamais par carte
+- [ ] Avec plusieurs commandes en attente sur une même ligne à matière insuffisante pour toutes
+  les couvrir, seules les commandes réellement non couvertes (les plus récentes, cf. §1.2)
+  portent le badge "Bloqué" — les plus anciennes, couvertes, ne l'ont pas.
+- [ ] Le statut "Bloqué" n'apparaît plus jamais au niveau de la carte/ligne elle-même (ni badge,
+  ni sous-titre, ni ligne de statut globale) — uniquement par commande listée dans "Commandes
+  concernées".
 
-- [ ] Retirer la priorité sur une commande déjà "Produite" → refusé (rien à prioriser dessus).
+---
 
-- [ ] Marquer prioritaire une commande "Annulée" (ou tout statut ≠ Confirmé) → refusé,
-  message clair.
+## 6. Modification de commande (changement de quantité)
 
-## 16. Stock commercial (attribution, hors commerciaux, auto-attribution, livraison)
-Depuis ce chantier, l'attribution à un commercial (page Stock) ne touche PLUS `available`/
-`reserved` — seul `StockAssignment` bouge. La colonne **"Hors commerciaux"** (produits finis
-seulement) = `available + reserved − Σ StockAssignment(produit)` ; c'est elle qui doit toujours
-servir de plafond, jamais `available` seul. Prenez un produit fabriqué ou acheté avec
-`available=30`, `reserved=50` pour retomber sur les chiffres ci-dessous (hors commerciaux de
-départ = 80), et un employé (rôle EMPLOYEE actif) pour l'attribution.
+### 6.1 Augmentation de quantité
+- [ ] Le stock réservé (produit et/ou matière selon le mode) augmente en conséquence, la ligne
+  de production/achat grossit du delta — jamais une deuxième ligne créée pour la même commande.
 
-### 16a. Attribution manuelle — bornée sur le stock hors commerciaux
+### 6.2 Réduction de quantité
+- [ ] Le stock réservé relâché correspond exactement au delta réduit — jamais plus, jamais
+  moins.
 
-- [ ] Page Stock → tableau Produits : colonnes dans l'ordre Disponible (30) → Réservé (50) →
-  **Hors commerciaux (80)** → En livraison → En retour.
+### 6.3 Ligne de production/achat liée non modifiable (déjà "Commandé" côté fournisseur)
+- [ ] La nouvelle quantité s'enregistre quand même normalement sur la commande.
+- [ ] Le stock et la ligne concernée doivent malgré tout suivre après coup (pas rester bloqués
+  sur l'ancienne quantité une fois la ligne de nouveau modifiable, ou dès que le recalcul suivant
+  s'exécute).
 
-- [ ] Bouton "+ Attribuer du stock" visible tout de suite, sans passer par l'onglet "Stock par
-  commercial".
+### 6.4 Réduction qui libère du stock pendant qu'une AUTRE commande attend sur le même
+    produit/matière
+- [ ] Le disponible libéré par la réduction n'est pas laissé "libre" : il doit être proposé en
+  priorité à la commande en attente la PLUS ANCIENNE, automatiquement, sans action manuelle.
+- [ ] La commande qui a été réduite garde sa propre résolution cohérente avec sa nouvelle
+  quantité ; le reliquat non réaffecté (s'il y en a) reste un vrai disponible.
 
-- [ ] Modale "Attribuer" : le produit n'apparaît QUE si hors commerciaux > 0, et affiche "X hors
-  commerciaux" (pas "X dispo"). Le champ quantité est plafonné à cette valeur (80 ici).
+---
 
-- [ ] Attribuez 80 à l'employé A → `available` et `reserved` restent 30/50 (inchangés) ;
-  "Hors commerciaux" retombe à 0 (80 − 80).
+## 7. Annulation de commande
 
-- [ ] Retentez d'attribuer ne serait-ce que 1 unité (même à un AUTRE employé) → refusé, message
-  "Stock hors commerciaux insuffisant pour RÉF : 0 disponible, 1 manquant(s)" — **rien n'est
-  modifié**.
-- [ ] Onglet "Stock par commercial" : l'employé A apparaît avec 80 sur ce produit.
+### 7.1 Annulation simple (aucune autre commande en attente sur le produit/la matière)
+- [ ] Le stock réservé (et la matière associée le cas échéant) est intégralement relâché.
 
-### 16b. Retrait d'attribution
-- [ ] Retirez 30 des 80 attribués à A → `StockAssignment` passe à 50 ; `available`/`reserved`
-  **ne bougent toujours pas** ; "Hors commerciaux" remonte à 30 (30 remis en circulation).
-- [ ] Retrait total (les 50 restants) → la ligne d'attribution disparaît complètement (pas de
-  ligne à 0 qui traîne) ; "Hors commerciaux" revient à 80.
+### 7.2 Annulation avec réaffectation automatique FIFO
+- [ ] Si une autre commande en attente sur le même produit peut être comblée par le disponible
+  qui vient d'être libéré, elle l'est automatiquement (règle FIFO : la plus ancienne d'abord).
+- [ ] La matière associée à cette part n'est relâchée qu'UNE SEULE FOIS — pas de double
+  relâchement quand la part libérée est immédiatement reprise par une autre commande.
 
-### 16c. Auto-attribution au commercial (case à cocher, RequestPanel)
-Commande CMD-X pour le produit ci-dessus, `available=30 reserved=0` avant confirmation.
-- [ ] Commande "En attente" SANS "Pris en charge par" → case visible mais grisée/désactivée,
-  infobulle expliquant qu'il faut d'abord assigner un commercial.
-- [ ] Assignez "Pris en charge par" = employé B, cochez la case → réussit (autoAssignStock=true).
-- [ ] Confirmez la commande (qty=20, tout pris sur dispo) → produit `available=10 reserved=20` ;
-  **`StockAssignment(B, produit)` créé/incrémenté de 20 automatiquement**, sans action manuelle
-  sur la page Stock.
-- [ ] Statut passe à "Produit" ou "Livré" → la case n'est plus modifiable (que En attente /
-  Confirmé).
-- [ ] Décochez la case (retour à Confirmé) → **le crédit de B est retiré immédiatement** (0
-  tout de suite, pas seulement pour le futur) ; `available`/`reserved` inchangés.
-- [ ] Recochez, puis annulez la commande → `releaseOrderItemStock` relâche le stock ET reprend
-  le crédit de B en même temps (les deux tombent à 0/remontent ensemble).
-- [ ] Changez "Pris en charge par" de B vers C APRÈS un premier crédit à B (case toujours
-  cochée) → le crédit déjà donné à B reste chez B (pas transféré) ; seule une AUGMENTATION
-  ultérieure du besoin (ex: ajustement de quantité à la hausse) doit créditer C, pas B.
+### 7.3 Annulation d'une commande dont la matière/le produit est déjà commandé chez le
+    fournisseur
+- [ ] Ce qui a déjà été commandé au fournisseur reste "sécurisé" : la carte ne doit pas afficher
+  de nouveau manquant trompeur si l'en-transit couvre toujours ce qui est réellement nécessaire
+  après l'annulation (cf. §2.2).
 
-### 16d. Livraison
-Reprenez CMD-X (qty=20 livrées à terme, B a bien 20 en `StockAssignment`).
-- [ ] Marquez "Livré" avec B disposant de ses 20 pleins → `reserved` baisse de 20 comme
-  toujours ; 
-  `StockAssignment(B)` supprimé (tombé à 0) ; `available` **inchangé** ; "Hors
-  commerciaux" **inchangé** par cette livraison (les 20 n'y comptaient déjà plus)
-- [ ] Même scénario mais B n'a plus que 12 sur ce produit (retiré ailleurs entretemps) → à la
-  livraison, `reserved` baisse quand même des 20 pleins, B tombe à 0 (ses 12 retirés, jamais
-  négatif), et "Hors commerciaux" **baisse de 8** (20 − 12) — sans qu'`available` soit touché
-  explicitement (l'écart passe par la formule).
-- [ ] Article livré SANS commercial verrouillé (case jamais cochée) → seul `reserved` baisse,
-  rien d'autre ne bouge (comportement identique à avant ce chantier).
+---
 
-### 16e. Angle mort connu (à vérifier, pas forcément à corriger)
-- [ ] "Marquer Produit" avec un manquant, en forçant ("Continuer quand même", cf. section 7) sur
-  une commande où l'auto-attribution est cochée → le manquant phantom (jamais couvert par du
-  vrai stock) est quand même crédité au commercial. Vérifiez que ça se voit clairement (le
-  commercial semble avoir plus que ce qui existe réellement) — pas encore traité spécifiquement.
+## 8. Restock (réapprovisionnement manuel dédié)
 
-## Notes
-Pour chaque étape qui échoue, notez les valeurs exactes observées (disponible/réservé produit
-et matière, needed/buffer/status des lignes concernées) — ça permet de retrouver directement
-la fonction en cause dans le code.
+### 8.1 Produit fabriqué, aucune commande en attente
+- [ ] Le réapprovisionnement consomme directement la recette (fabrication immédiate) — la
+  matière n'est jamais mise en réservé pour cette opération, elle est consommée sur le
+  disponible tout de suite.
+
+### 8.2 Produit fabriqué avec une commande déjà en attente sur ce produit
+- [ ] La commande en attente est comblée en priorité (FIFO) avant que le reliquat n'alimente
+  simplement le disponible/buffer.
+- [ ] La matière qui était réservée pour la part de production désormais couverte directement
+  n'est plus nécessaire : elle doit être relâchée d'autant, en une seule fois (pas de double
+  comptage si le recalcul est déclenché plusieurs fois).
+
+### 8.3 Matière première, avec une ligne de production "Bloquée" en attente
+- [ ] La ligne se débloque ("À produire") dès que la matière apportée suffit à couvrir son
+  besoin.
+- [ ] La matière réservée pour cette ligne augmente d'exactement ce qui est nécessaire (jamais
+  plus que besoin + buffer de la ligne) ; le reste part en disponible et alimente le nouveau
+  buffer de la ligne d'achat matière, recalculé immédiatement.
+
+---
+
+## 9. Modification manuelle de stock (correction directe, hors commande/restock dédié)
+
+### 9.1 Disponible produit — correction à la baisse
+- [ ] Seul le buffer bouge : le besoin réel, lié aux commandes déjà réglées à leur confirmation,
+  ne change jamais suite à une simple correction du disponible.
+
+### 9.2 Disponible produit — correction à la hausse
+- [ ] S'il y a une commande déjà en attente sur ce produit, elle est comblée en priorité (FIFO)
+  avant que le reliquat ne compte comme buffer.
+- [ ] La matière relâchée pour la part ainsi reprise ne l'est qu'UNE seule fois (pas de double
+  comptage).
+
+### 9.3 Disponible matière — correction à la hausse
+- [ ] Une ligne de production "Bloquée" en attente sur cette matière se débloque, ou avance
+  partiellement si l'apport ne suffit qu'à couvrir une partie du besoin manquant (cf. §3.4).
+
+### 9.4 Réservé matière — correction (hausse ou baisse)
+- [ ] Le besoin réel est recalculé immédiatement.
+- [ ] À la baisse : les lignes de production "À produire" qui comptaient sur ce pot commun sont
+  revérifiées — les plus RÉCENTES rebasculent "Bloquée" en premier (même logique FIFO inversée
+  qu'en §1.2), le manquant qui en résulte remonte dans la liste d'achat matière.
+
+### 9.5 Réservé produit — correction
+- [ ] À la baisse : la couverture est reprise aux commandes/devis actifs concernés, les plus
+  RÉCENTES perdent leur couverture en premier (les plus anciennes gardent la priorité) ; une
+  ligne de production/achat apparaît avec le manquant résultant, et le statut des commandes
+  ainsi découvertes redescend en conséquence.
+- [ ] À la hausse : aucun effet — une hausse manuelle du réservé n'invente pas de commande
+  supplémentaire à mieux couvrir.
+
+### 9.6 Témoin (non-régression)
+- [ ] Un autre produit/matière non concerné par la correction ne bouge jamais pendant ces
+  actions.
+
+---
+
+## 10. Modification du seuil (seuil d'achat, seuil de production, stock max)
+
+Ces champs ne pilotent QUE le buffer (rattrapage préventif) — jamais le besoin réel, qui ne
+dépend que des commandes/devis actifs. Le recalcul du buffer est immédiat, dans les deux sens.
+
+### 10.1 Seuil relevé au-dessus du disponible actuel
+- [ ] Le buffer apparaît ou augmente immédiatement (sans qu'aucune autre action ne soit
+  nécessaire pour déclencher le recalcul).
+
+### 10.2 Seuil abaissé, ou stock max abaissé sous le disponible actuel
+- [ ] Le buffer diminue en conséquence, sans jamais descendre sous zéro.
+
+### 10.3 Modification sur un produit (fabriqué ou acheté)
+- [ ] Les DEUX lignes concernées (production et achat) sont recalculées ensemble à partir de ce
+  seul changement.
+
+### 10.4 Modification sur une matière première
+- [ ] Seul le buffer de la ligne d'achat de cette matière est recalculé — le besoin réel des
+  lignes de production qui en dépendent, lui, ne bouge pas suite à ce changement seul.
+
+### 10.5 Effet sur le statut des lignes
+- [ ] Un changement de seuil ne fait jamais basculer une ligne entre "À produire" et "Bloquée" —
+  seul le rapport entre besoin réel et matière réservée décide de ce statut, jamais le buffer.
+
+---
+
+## 11. Modification des recettes
+
+### 11.1 Changement de ratio d'une matière dans une recette
+- [ ] Le besoin réel en matière de TOUS les produits utilisant cette matière est réconcilié à
+  neuf, en FIFO par vraie commande d'origine (pas par date de la ligne de production) — pas
+  seulement le produit dont la recette vient de changer.
+
+### 11.2 Le nouveau total dépasse le stock disponible + réservé de la matière
+- [ ] La ligne de production dont la vraie commande est la plus ancienne reste/passe "À
+  produire" en priorité ; une ligne plus récente peut être rétrogradée "Bloquée" même si elle ne
+  l'était pas avant le changement.
+
+### 11.3 Suppression complète d'une matière de la recette d'un produit
+- [ ] La part de cette matière due à ce produit retombe à zéro ; la ligne d'achat de la matière
+  est recalculée sans lui ; les autres produits utilisant encore cette matière reprennent leur
+  part normalement (aucun effet de bord sur eux).
+
+### 11.4 Recalcul immédiat
+- [ ] La liste d'achat de la matière concernée est recalculée immédiatement après le changement
+  de recette — aucune autre action nécessaire pour déclencher le recalcul.
+
+---
+
+## 12. Stock commercial (attribution) — bonus, hors liste initiale
+
+L'attribution à un commercial ne touche jamais directement le disponible/réservé du produit :
+seule l'attribution elle-même bouge. La colonne "Hors commerciaux" (disponible + réservé moins
+la somme déjà attribuée) sert toujours de plafond pour une nouvelle attribution, jamais le
+disponible seul.
+
+### 12.1 Attribution manuelle
+- [ ] Un produit n'apparaît dans la modale d'attribution que si son stock hors commerciaux est
+  positif, et la quantité saisie est plafonnée à cette valeur.
+- [ ] Attribuer la totalité du stock hors commerciaux d'un produit ne change ni son disponible ni
+  son réservé — seule la colonne "Hors commerciaux" retombe à zéro.
+- [ ] Toute tentative d'attribuer au-delà de ce qui reste hors commerciaux est refusée avec un
+  message explicite, rien n'est modifié.
+
+### 12.2 Retrait d'attribution
+- [ ] Retirer une partie de l'attribution d'un commercial remet la quantité correspondante en
+  circulation dans "Hors commerciaux", sans toucher au disponible/réservé.
+- [ ] Un retrait total supprime la ligne d'attribution (pas de ligne à zéro qui traîne).
+
+### 12.3 Auto-attribution au commercial assigné à la commande
+- [ ] La case d'auto-attribution n'est activable que si un commercial est déjà assigné à la
+  commande, et seulement tant que la commande est "En attente" ou "Confirmée".
+- [ ] Confirmer une commande avec la case cochée crée/incrémente automatiquement l'attribution du
+  commercial assigné, sans action manuelle sur la page Stock.
+- [ ] Décocher la case retire immédiatement le crédit déjà donné (pas seulement pour le futur).
+- [ ] Annuler une commande dont la case était cochée relâche le stock ET reprend le crédit du
+  commercial en même temps.
+- [ ] Changer le commercial assigné après un premier crédit ne transfère pas le crédit déjà
+  donné : seule une augmentation ultérieure du besoin doit créditer le nouveau commercial.
+
+### 12.4 Livraison
+- [ ] Marquer une commande "Livré" fait toujours baisser le réservé du produit de la quantité
+  livrée.
+- [ ] Si le commercial assigné dispose bien de tout son crédit sur ce produit, la livraison le
+  ramène à zéro sans toucher au disponible ni à "Hors commerciaux".
+- [ ] Si le commercial en a moins que la quantité livrée (retiré ailleurs entre-temps), la
+  livraison le ramène à zéro (jamais négatif) et "Hors commerciaux" absorbe l'écart restant.
+- [ ] Une commande livrée sans auto-attribution active ne touche que le réservé, rien d'autre.
+
+### 12.5 Angle mort connu (à vérifier, pas forcément à corriger)
+- [ ] Forcer "Marquer Produit" sur une commande avec un manquant réel, quand l'auto-attribution
+  est cochée : le manquant fictif (jamais couvert par du vrai stock) est quand même crédité au
+  commercial. Vérifier que ça reste au moins visible/détectable (le commercial semble avoir plus
+  que ce qui existe réellement).

@@ -50,7 +50,7 @@ export async function POST(request: NextRequest) {
         title: 'Mot de passe réinitialisé',
         message: `${user.name} (${user.email}) a demandé un nouveau mot de passe — envoyé automatiquement par email.`,
         adminOnly: true,
-        link: '/admin/users',
+        link: '/admin/settings/users',
       }).catch(() => {});
 
       prisma.user

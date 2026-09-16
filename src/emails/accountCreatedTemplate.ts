@@ -91,7 +91,7 @@ export function renderAccountCreatedAdminEmail(params: {
       </table>
     </div>
 
-    <a href="${ADMIN_URL}/admin/users" style="display:inline-block;background:#4CAF4F;color:#fff;text-decoration:none;padding:11px 22px;border-radius:8px;font-size:13px;font-weight:700">Voir les utilisateurs →</a>
+    <a href="${ADMIN_URL}/admin/settings/users" style="display:inline-block;background:#4CAF4F;color:#fff;text-decoration:none;padding:11px 22px;border-radius:8px;font-size:13px;font-weight:700">Voir les utilisateurs →</a>
   `;
 
   return { subject: `Nouveau compte créé : ${name}`, html: wrapEmail(body) };

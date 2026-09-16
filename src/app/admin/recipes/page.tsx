@@ -10,15 +10,19 @@ const inputClass = "w-full px-3 py-2.5 rounded-lg border border-[#E2E8F0] text-s
 interface RawMaterial { id: string; reference: string; name: string; unit: string; price: number; stockMax: number; purchaseThreshold: number; available: number; reserved: number; }
 interface RecipeItem { id: string; rawMaterialId: string; quantity: number; rawMaterial: RawMaterial; }
 interface Prod { id: string; reference: string; name: string | null; mode: 'ACHETE' | 'FABRIQUE' | 'LES_DEUX'; recipeItems: RecipeItem[]; }
+// Recette enregistrée pour une ligne LIBRE (texte tapé à la main, sans fiche produit) — cf.
+// saveFreeTextRecipe/getFreeTextRecipe (order-stock.ts), appliquée automatiquement au clic
+// "Produire"/"Marquer Disponible" pour toute ligne portant exactement ce texte.
+interface FreeTextRecipe { id: string; label: string; items: RecipeItem[]; }
 
-// ── Overlay : éditer la recette d'un produit ────────────────────────────────
-function RecipeEditModal({ product, materials, onClose, onSave }: {
-  product: Prod; materials: RawMaterial[];
+// ── Overlay : éditer une recette (produit du catalogue OU référence libre) ──────────────────
+function RecipeEditModal({ title, initialItems, materials, onClose, onSave }: {
+  title: string; initialItems: { rawMaterialId: string; quantity: number }[]; materials: RawMaterial[];
   onClose: () => void; onSave: (items: { rawMaterialId: string; quantity: number }[]) => Promise<void>;
 }) {
   const [lines, setLines] = useState<{ rawMaterialId: string; quantity: string }[]>(
-    product.recipeItems.length > 0
-      ? product.recipeItems.map((r) => ({ rawMaterialId: r.rawMaterialId, quantity: String(r.quantity) }))
+    initialItems.length > 0
+      ? initialItems.map((r) => ({ rawMaterialId: r.rawMaterialId, quantity: String(r.quantity) }))
       : [{ rawMaterialId: '', quantity: '' }]
   );
   const [saving, setSaving] = useState(false);
@@ -35,7 +39,7 @@ function RecipeEditModal({ product, materials, onClose, onSave }: {
   };
 
   return (
-    <Modal title={`Recette — ${product.reference}`} onClose={onClose}>
+    <Modal title={title} onClose={onClose}>
       <div className="space-y-4">
         <div className="flex flex-col gap-2">
           {lines.map((l, i) => {
@@ -144,20 +148,23 @@ function RecipesPageInner() {
   const [view, setView] = useState<'recettes' | 'matieres'>('recettes');
   const [products, setProducts] = useState<Prod[]>([]);
   const [materials, setMaterials] = useState<RawMaterial[]>([]);
+  const [freeTextRecipes, setFreeTextRecipes] = useState<FreeTextRecipe[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [editingProduct, setEditingProduct] = useState<Prod | null>(null);
+  const [editingFreeText, setEditingFreeText] = useState<FreeTextRecipe | null>(null);
   const [materialModal, setMaterialModal] = useState<'new' | RawMaterial | null>(null);
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
     try {
-      const [pRes, mRes] = await Promise.all([fetch('/api/products?all=true'), fetch('/api/raw-materials')]);
+      const [pRes, mRes, ftRes] = await Promise.all([fetch('/api/products?all=true'), fetch('/api/raw-materials'), fetch('/api/free-text-recipes')]);
       if (pRes.ok) {
         const data = await pRes.json();
         setProducts(data.filter((p: any) => p.mode === 'FABRIQUE' || p.mode === 'LES_DEUX'));
       }
       if (mRes.ok) setMaterials(await mRes.json());
+      if (ftRes.ok) setFreeTextRecipes(await ftRes.json());
     } finally {
       setLoading(false);
     }
@@ -173,6 +180,10 @@ function RecipesPageInner() {
     const q = search.toLowerCase();
     return !q || m.reference.toLowerCase().includes(q) || m.name.toLowerCase().includes(q);
   }), [materials, search]);
+  const filteredFreeTextRecipes = useMemo(() => freeTextRecipes.filter((r) => {
+    const q = search.toLowerCase();
+    return !q || r.label.toLowerCase().includes(q);
+  }), [freeTextRecipes, search]);
 
   const saveRecipe = async (productId: string, items: { rawMaterialId: string; quantity: number }[]) => {
     const res = await fetch(`/api/products/${productId}/recipe`, {
@@ -180,6 +191,22 @@ function RecipesPageInner() {
       body: JSON.stringify({ items }),
     });
     if (!res.ok) { const err = await res.json().catch(() => ({})); alert(err.error ?? "Échec de l'enregistrement de la recette"); return; }
+    await fetchAll();
+  };
+
+  const saveFreeTextRecipeItems = async (id: string, items: { rawMaterialId: string; quantity: number }[]) => {
+    const res = await fetch(`/api/free-text-recipes/${id}`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ items }),
+    });
+    if (!res.ok) { const err = await res.json().catch(() => ({})); alert(err.error ?? "Échec de l'enregistrement de la recette"); return; }
+    await fetchAll();
+  };
+
+  const deleteFreeTextRecipe = async (r: FreeTextRecipe) => {
+    if (!confirm(`Supprimer la recette enregistrée pour "${r.label}" ? La prochaine ligne libre portant ce texte redemandera quoi faire.`)) return;
+    const res = await fetch(`/api/free-text-recipes/${r.id}`, { method: 'DELETE' });
+    if (!res.ok) { const err = await res.json().catch(() => ({})); alert(err.error ?? 'Échec de la suppression'); return; }
     await fetchAll();
   };
 
@@ -197,6 +224,13 @@ function RecipesPageInner() {
       }),
     });
     if (!res.ok) { const err = await res.json().catch(() => ({})); alert(err.error ?? 'Échec de l\'enregistrement'); return; }
+    await fetchAll();
+  };
+
+  const deleteMaterial = async (m: RawMaterial) => {
+    if (!confirm(`Supprimer la matière première "${m.name}" (${m.reference}) ?`)) return;
+    const res = await fetch(`/api/raw-materials/${m.id}`, { method: 'DELETE' });
+    if (!res.ok) { const err = await res.json().catch(() => ({})); alert(err.error ?? 'Échec de la suppression'); return; }
     await fetchAll();
   };
 
@@ -281,6 +315,60 @@ function RecipesPageInner() {
               <p className="text-[13px] mt-1">Les produits en mode &quot;Fabriqué&quot; ou &quot;Les deux&quot; apparaissent ici.</p>
             </div>
           )}
+
+          {/* ── Références libres : recettes enregistrées pour des lignes tapées à la main sur
+              une commande/devis (sans fiche produit) — cf. saveFreeTextRecipe, order-stock.ts.
+              Appliquées automatiquement dès qu'une nouvelle ligne porte exactement ce texte. */}
+          {filteredFreeTextRecipes.length > 0 && (
+            <div className="mt-8">
+              <div className="mb-3">
+                <h2 className="text-[16px] font-bold text-[#0F172A]">Références libres</h2>
+                <p className="text-[12px] text-[#8A9BB5] mt-0.5">
+                  Recettes enregistrées pour des lignes tapées à la main (hors catalogue) — appliquées automatiquement dès qu&apos;une commande/devis porte exactement le même texte.
+                </p>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+                {filteredFreeTextRecipes.map((r) => (
+                  <div key={r.id} className="rounded-2xl border border-[#E2E8F0] bg-white overflow-hidden flex flex-col">
+                    <div className="px-5 py-4 bg-[#F8FAFC] border-b border-[#E2E8F0] flex items-center justify-between">
+                      <p className="text-[14px] font-bold text-[#0F172A] truncate">{r.label}</p>
+                      {canEdit && (
+                        <div className="flex gap-2 flex-shrink-0">
+                          <button onClick={() => setEditingFreeText(r)} className="px-3 py-1.5 rounded-lg border border-[#E2E8F0] text-[12px] font-semibold text-[#374151] hover:bg-white bg-white/60">
+                            Modifier
+                          </button>
+                          <button onClick={() => deleteFreeTextRecipe(r)} className="px-3 py-1.5 rounded-lg border border-[#FCA5A5] text-[12px] font-semibold text-[#EF4444] hover:bg-[#FEF2F2]">
+                            Supprimer
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                    <table className="w-full text-left">
+                      <thead>
+                        <tr>
+                          <th className="px-5 pt-4 pb-2 text-[10px] font-bold text-[#8A9BB5] uppercase tracking-wide">Ingrédient</th>
+                          <th className="px-5 pt-4 pb-2 text-[10px] font-bold text-[#8A9BB5] uppercase tracking-wide text-right">Qté / unité</th>
+                          <th className="px-5 pt-4 pb-2 text-[10px] font-bold text-[#8A9BB5] uppercase tracking-wide text-right">Unité</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {r.items.map((it, i) => (
+                          <tr key={it.id} className={i > 0 ? 'border-t border-[#F0F4F8]' : ''}>
+                            <td className="px-5 py-2.5">
+                              <p className="text-[12px] font-bold text-[#4F46E5]">{it.rawMaterial.reference}</p>
+                              <p className="text-[11px] text-[#8A9BB5]">{it.rawMaterial.name}</p>
+                            </td>
+                            <td className="px-5 py-2.5 text-[13px] font-bold text-[#0F172A] text-right tabular-nums">{it.quantity}</td>
+                            <td className="px-5 py-2.5 text-[12px] text-[#8A9BB5] text-right">{it.rawMaterial.unit}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </>
       )}
 
@@ -311,7 +399,10 @@ function RecipesPageInner() {
                   <td className="px-4 py-3 text-[13px] text-[#374151] text-right tabular-nums">{m.purchaseThreshold}</td>
                   {canEditStock && (
                     <td className="px-4 py-3 text-right">
-                      <button onClick={() => setMaterialModal(m)} className="px-3 py-1.5 rounded-lg border border-[#E2E8F0] text-[12px] font-semibold text-[#374151] hover:bg-[#F8FAFC]">Modifier</button>
+                      <div className="flex justify-end gap-2">
+                        <button onClick={() => setMaterialModal(m)} className="px-3 py-1.5 rounded-lg border border-[#E2E8F0] text-[12px] font-semibold text-[#374151] hover:bg-[#F8FAFC]">Modifier</button>
+                        <button onClick={() => deleteMaterial(m)} className="px-3 py-1.5 rounded-lg border border-[#FCA5A5] text-[12px] font-semibold text-[#EF4444] hover:bg-[#FEF2F2]">Supprimer</button>
+                      </div>
                     </td>
                   )}
                 </tr>
@@ -326,9 +417,20 @@ function RecipesPageInner() {
 
       {editingProduct && (
         <RecipeEditModal
-          product={editingProduct} materials={materials}
+          title={`Recette — ${editingProduct.reference}`}
+          initialItems={editingProduct.recipeItems.map((r) => ({ rawMaterialId: r.rawMaterialId, quantity: r.quantity }))}
+          materials={materials}
           onClose={() => setEditingProduct(null)}
           onSave={(items) => saveRecipe(editingProduct.id, items)}
+        />
+      )}
+      {editingFreeText && (
+        <RecipeEditModal
+          title={`Recette — ${editingFreeText.label}`}
+          initialItems={editingFreeText.items.map((r) => ({ rawMaterialId: r.rawMaterialId, quantity: r.quantity }))}
+          materials={materials}
+          onClose={() => setEditingFreeText(null)}
+          onSave={(items) => saveFreeTextRecipeItems(editingFreeText.id, items)}
         />
       )}
       {materialModal && (

@@ -228,10 +228,10 @@ function NewOrderForm({ client, onClose }: { client: ClientRecord; onClose: () =
   );
 }
 
-function ClientSlideIn({ client, onClose, onEdit, onDelete, onReactivate, onDeleteDefinitif, onRefresh, onNewRequest }: {
+function ClientSlideIn({ client, onClose, onEdit, onDelete, onReactivate, onDeleteDefinitif, onRefresh, onNewRequest, users, onReassigned }: {
   client: ClientRecord; onClose: () => void; onEdit: () => void; onDelete: () => void;
   onReactivate?: () => void; onDeleteDefinitif?: () => void; onRefresh?: () => void;
-  onNewRequest?: () => void;
+  onNewRequest?: () => void; users?: { id: string; name: string }[]; onReassigned?: () => void;
 }) {
   const { can } = useRole();
   const canEditClients = can('modifier_clients');
@@ -239,7 +239,29 @@ function ClientSlideIn({ client, onClose, onEdit, onDelete, onReactivate, onDele
   const [photo, setPhoto] = useState<string | undefined>(client.photo);
   const [selectedRequest, setSelectedRequest] = useState<RequestDetail | null>(null);
   const [templateMode, setTemplateMode] = useState<'wa' | 'mail' | null>(null);
+  const [assignedToId, setAssignedToId] = useState<string | null>(client.assignedToId ?? null);
+  const [assigning, setAssigning] = useState(false);
+  const [pendingAssign, setPendingAssign] = useState<{ id: string | null; name: string } | null>(null);
   const ac = avatarColor(client.id);
+
+  const confirmReassign = async () => {
+    if (!pendingAssign) return;
+    const newId = pendingAssign.id;
+    const dbId = (client as any)._dbId ?? client.id;
+    setAssigning(true);
+    try {
+      await fetch(`/api/clients/${dbId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ assignedToId: newId }),
+      });
+      setAssignedToId(newId);
+      onReassigned?.();
+    } finally {
+      setAssigning(false);
+      setPendingAssign(null);
+    }
+  };
 
   // Item minimal (niveau client) pour le sélecteur de templates WhatsApp
   const clientAsItem: RequestDetail = {
@@ -271,7 +293,7 @@ function ClientSlideIn({ client, onClose, onEdit, onDelete, onReactivate, onDele
   return (
     <>
       <div className="fixed inset-0 bg-black/30 z-[110] backdrop-blur-[2px]" onClick={onClose} />
-      <div className="fixed right-0 top-0 h-full bg-white z-[120] shadow-2xl flex flex-col overflow-hidden w-full md:w-[46vw] md:min-w-[500px] max-w-full">
+      <div className="fixed right-0 top-0 h-full bg-white z-[120] shadow-2xl flex flex-col overflow-hidden w-full md:w-[36vw] md:min-w-[400px] max-w-full">
 
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-[#F2F4F7]">
@@ -294,91 +316,123 @@ function ClientSlideIn({ client, onClose, onEdit, onDelete, onReactivate, onDele
 
         <div className="flex-1 overflow-y-auto">
 
-          {/* Profil */}
+          {/* Profil — carte compacte */}
           <div className="px-5 md:px-6 pt-5 md:pt-6 pb-5 border-b border-[#F2F4F7]">
-            <div className="flex items-start gap-3 mb-4">
-              {/* Avatar (sans nom dessous) */}
-              <div className="relative group cursor-pointer flex-shrink-0" onClick={() => fileRef.current?.click()}>
-                {photo ? (
-                  <img src={photo} alt={client.contact} className="w-12 h-12 rounded-xl object-cover" />
-                ) : (
-                  <div className="w-12 h-12 rounded-xl flex items-center justify-center text-[15px] font-extrabold" style={{ background: ac.bg, color: ac.text }}>
-                    {initials(client.entreprise || client.contact)}
+            <div className="rounded-2xl border border-[#E2E8F0] overflow-hidden">
+
+              {/* En-tête : avatar + nom + badges */}
+              <div className="p-4 flex items-start gap-3">
+                <div className="relative group cursor-pointer flex-shrink-0" onClick={() => fileRef.current?.click()}>
+                  {photo ? (
+                    <img src={photo} alt={client.contact} className="w-11 h-11 rounded-xl object-cover" />
+                  ) : (
+                    <div className="w-11 h-11 rounded-xl flex items-center justify-center text-[14px] font-extrabold" style={{ background: ac.bg, color: ac.text }}>
+                      {initials(client.entreprise || client.contact)}
+                    </div>
+                  )}
+                  <div className="absolute inset-0 rounded-xl bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                    <span className="text-white text-[9px] font-bold">Photo</span>
                   </div>
-                )}
-                <div className="absolute inset-0 rounded-xl bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                  <span className="text-white text-[9px] font-bold">Photo</span>
+                </div>
+                <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handlePhoto} />
+
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <p className="text-[16px] font-extrabold text-[#0F172A] leading-tight truncate">{client.entreprise || client.contact}</p>
+                    <span className="bg-[#F0FDF4] text-[#166534] text-[10px] font-bold px-1.5 py-0.5 rounded border border-[#BBF7D0] flex-shrink-0">{client.commandes} cmd</span>
+                    {client.devis > 0 && (
+                      <span className="bg-[#F5F3FF] text-[#5B21B6] text-[10px] font-bold px-1.5 py-0.5 rounded border border-[#DDD6FE] flex-shrink-0">{client.devis} devis</span>
+                    )}
+                  </div>
+                  {client.sectorName && (
+                    <p className="text-[12px] text-[#8A9BB5] truncate mt-0.5">{client.sectorName}</p>
+                  )}
                 </div>
               </div>
-              <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handlePhoto} />
 
-              <div className="flex-1 min-w-0">
-                {/* Ligne 1 : nom entreprise + badges (à gauche), boutons contact (à droite) */}
-                <div className="flex items-start gap-2 mb-1">
-                  <div className="min-w-0 flex-1 flex items-center gap-2 flex-wrap">
-                    <p className="text-[19px] font-extrabold text-[#0F172A] leading-tight truncate">{client.entreprise || client.contact}</p>
-                    <span className="bg-[#F0FDF4] text-[#166534] text-[10px] font-bold px-1.5 py-0.5 rounded border border-[#BBF7D0]">{client.commandes} cmd</span>
-                    {client.devis > 0 && (
-                      <span className="bg-[#F5F3FF] text-[#5B21B6] text-[10px] font-bold px-1.5 py-0.5 rounded border border-[#DDD6FE]">{client.devis} devis</span>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-1.5 flex-shrink-0">
-                    <button onClick={() => setTemplateMode('wa')} title="WhatsApp (avec template)"
-                      className="w-8 h-8 flex items-center justify-center rounded-lg text-white" style={{ background: '#25D366' }}>
-                      <svg width={15} height={15} viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
-                    </button>
-                    <a href={callHref} title="Appeler"
-                      className="w-8 h-8 flex items-center justify-center rounded-lg border border-[#E2E8F0] text-[#3B82F6] hover:bg-[#F8FAFC] transition-colors">
-                      <svg width={14} height={14} fill="none" viewBox="0 0 24 24"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.08 9.81 19.79 19.79 0 01.01 1.18 2 2 0 012 0h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.09 7.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"/></svg>
-                    </a>
-                    {client.email && (
-                      <button onClick={() => setTemplateMode('mail')} title="Email (avec template)"
-                        className="w-8 h-8 flex items-center justify-center rounded-lg border border-[#E2E8F0] text-[#F59E0B] hover:bg-[#F8FAFC] transition-colors">
-                        <svg width={14} height={14} fill="none" viewBox="0 0 24 24"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" stroke="currentColor" strokeWidth="1.6"/><path d="M22 6l-10 7L2 6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
-                      </button>
-                    )}
-                  </div>
-                </div>
+              <div className="h-px bg-[#F2F4F7]" />
 
-                {/* Ligne 2 : nom du client + secteur + commercial assigné */}
-                <div className="flex items-center gap-2 flex-wrap">
-                  <p className="text-[13px] font-semibold text-[#4CAF4F]">{client.contact}</p>
-                  {client.sectorName && (
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#EFF6FF] text-[#1E40AF] border border-[#BFDBFE]">{client.sectorName}</span>
-                  )}
-                  {client.assignedToName ? (
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#FDF4FF] text-[#86198F] border border-[#F5D0FE]">{client.assignedToName}</span>
-                  ) : (
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#F8FAFC] text-[#8A9BB5] border border-[#E2E8F0]">Non assigné</span>
-                  )}
-                </div>
-
-                {/* Petit espace, puis 2 colonnes : tél/mail à gauche, wilaya/adresse à droite */}
-                <div className="grid grid-cols-2 gap-x-4 gap-y-2 mt-4">
-                  {/* Colonne gauche : tél + mail */}
-                  <div className="flex flex-col gap-2 min-w-0">
+              {/* Contact / Localisation */}
+              <div className="grid grid-cols-2 gap-x-4 p-4">
+                <div className="min-w-0">
+                  <p className="text-[10px] font-bold text-[#ABBED1] uppercase tracking-wider mb-2">Contact</p>
+                  <div className="flex flex-col gap-1.5">
                     <div className="flex items-center gap-2 text-[13px] text-[#374151]">
-                      <svg width={14} height={14} fill="none" viewBox="0 0 24 24" className="flex-shrink-0 text-[#8A9BB5]"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.08 9.81 19.79 19.79 0 01.01 1.18 2 2 0 012 0h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.09 7.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
+                      <svg width={13} height={13} viewBox="0 0 24 24" fill="none" className="flex-shrink-0 text-[#8A9BB5]"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/><circle cx="12" cy="7" r="4" stroke="currentColor" strokeWidth="1.8"/></svg>
+                      <span className="font-medium truncate">{client.contact}</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-[13px] text-[#374151]">
+                      <svg width={13} height={13} fill="none" viewBox="0 0 24 24" className="flex-shrink-0 text-[#8A9BB5]"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.08 9.81 19.79 19.79 0 01.01 1.18 2 2 0 012 0h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.09 7.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
                       <span className="font-medium truncate">{client.telephone || '—'}</span>
                     </div>
                     <div className="flex items-center gap-2 text-[13px] text-[#374151]">
-                      <svg width={14} height={14} fill="none" viewBox="0 0 24 24" className="flex-shrink-0 text-[#8A9BB5]"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" stroke="currentColor" strokeWidth="1.6"/><path d="M22 6l-10 7L2 6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
+                      <svg width={13} height={13} fill="none" viewBox="0 0 24 24" className="flex-shrink-0 text-[#8A9BB5]"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" stroke="currentColor" strokeWidth="1.6"/><path d="M22 6l-10 7L2 6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
                       <span className="font-medium truncate">{client.email || '—'}</span>
                     </div>
                   </div>
-                  {/* Colonne droite : wilaya + adresse */}
-                  <div className="flex flex-col gap-2 min-w-0">
+                </div>
+                <div className="min-w-0">
+                  <p className="text-[10px] font-bold text-[#ABBED1] uppercase tracking-wider mb-2">Localisation</p>
+                  <div className="flex flex-col gap-1.5">
                     <div className="flex items-center gap-2 text-[13px] text-[#374151]">
-                      <svg width={14} height={14} viewBox="0 0 24 24" fill="none" className="flex-shrink-0 text-[#8A9BB5]"><path d="M12 21s-7-5.7-7-11a7 7 0 0114 0c0 5.3-7 11-7 11z" stroke="currentColor" strokeWidth="1.6"/><circle cx="12" cy="10" r="2.4" stroke="currentColor" strokeWidth="1.6"/></svg>
-                      <span className="truncate">{client.commune ? `${client.commune}, ${client.wilaya}` : client.wilaya}</span>
+                      <svg width={13} height={13} viewBox="0 0 24 24" fill="none" className="flex-shrink-0 text-[#8A9BB5]"><path d="M12 21s-7-5.7-7-11a7 7 0 0114 0c0 5.3-7 11-7 11z" stroke="currentColor" strokeWidth="1.6"/><circle cx="12" cy="10" r="2.4" stroke="currentColor" strokeWidth="1.6"/></svg>
+                      <span className="truncate">{client.wilaya || '—'}</span>
                     </div>
-                    {client.adresse && (
-                      <div className="flex items-center gap-2 text-[13px] text-[#8A9BB5]">
-                        <svg width={14} height={14} viewBox="0 0 24 24" fill="none" className="flex-shrink-0"><path d="M3 12l9-9 9 9M5 10v10a1 1 0 001 1h4v-6h4v6h4a1 1 0 001-1V10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                        <span className="truncate">{client.adresse}</span>
+                    {client.commune && (
+                      <div className="flex items-center gap-2 text-[13px] text-[#374151]">
+                        <svg width={13} height={13} viewBox="0 0 24 24" fill="none" className="flex-shrink-0"><path d="M3 12l9-9 9 9M5 10v10a1 1 0 001 1h4v-6h4v6h4a1 1 0 001-1V10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                        <span className="truncate">{client.commune}</span>
                       </div>
                     )}
+                    {client.adresse && (
+                      <p className="text-[12px] text-[#8A9BB5] truncate pl-[21px]">{client.adresse}</p>
+                    )}
                   </div>
+                </div>
+              </div>
+
+              <div className="h-px bg-[#F2F4F7]" />
+
+              {/* Commercial assigné + actions contact */}
+              <div className="p-4 flex items-center justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                  <p className="text-[10px] font-bold text-[#ABBED1] uppercase tracking-wider mb-1.5">Commercial assigné</p>
+                  {canEditClients ? (
+                    <select
+                      value={assignedToId ?? ''}
+                      disabled={assigning}
+                      onChange={(e) => {
+                        const newId = e.target.value || null;
+                        if (newId === assignedToId) return;
+                        const name = newId ? (users?.find((u) => u.id === newId)?.name ?? '—') : 'Non assigné';
+                        setPendingAssign({ id: newId, name });
+                      }}
+                      className="w-auto max-w-[160px] text-[12px] font-semibold text-[#374151] border border-[#E2E8F0] rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:border-[#4CAF4F] disabled:opacity-50 truncate"
+                    >
+                      <option value="">Non assigné</option>
+                      {users?.map((u) => (
+                        <option key={u.id} value={u.id}>{u.name}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <span className="text-[12px] font-semibold text-[#374151]">{client.assignedToName ?? 'Non assigné'}</span>
+                  )}
+                </div>
+                <div className="flex items-center gap-1.5 flex-shrink-0">
+                  <button onClick={() => setTemplateMode('wa')} title="WhatsApp (avec template)"
+                    className="w-8 h-8 flex items-center justify-center rounded-lg text-white" style={{ background: '#25D366' }}>
+                    <svg width={14} height={14} viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+                  </button>
+                  <a href={callHref} title="Appeler"
+                    className="w-8 h-8 flex items-center justify-center rounded-lg border border-[#E2E8F0] text-[#3B82F6] hover:bg-[#F8FAFC] transition-colors">
+                    <svg width={14} height={14} fill="none" viewBox="0 0 24 24"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.08 9.81 19.79 19.79 0 01.01 1.18 2 2 0 012 0h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.09 7.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"/></svg>
+                  </a>
+                  {client.email && (
+                    <button onClick={() => setTemplateMode('mail')} title="Email (avec template)"
+                      className="w-8 h-8 flex items-center justify-center rounded-lg border border-[#E2E8F0] text-[#F59E0B] hover:bg-[#F8FAFC] transition-colors">
+                      <svg width={14} height={14} fill="none" viewBox="0 0 24 24"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" stroke="currentColor" strokeWidth="1.6"/><path d="M22 6l-10 7L2 6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
@@ -512,6 +566,28 @@ function ClientSlideIn({ client, onClose, onEdit, onDelete, onReactivate, onDele
         />
       )}
       {templateMode && <TemplatePopover item={clientAsItem} mode={templateMode} recipientEmail={client.email} onClose={() => setTemplateMode(null)} />}
+      {pendingAssign && (
+        <Modal title="Confirmer l'assignation" onClose={() => setPendingAssign(null)}>
+          <div>
+            <p className="text-[13px] text-[#374151]">
+              Assigner <span className="font-bold">{client.entreprise || client.contact}</span> à{' '}
+              <span className="font-bold">{pendingAssign.name}</span> ?
+            </p>
+            <div className="flex gap-3 mt-5">
+              <button onClick={() => setPendingAssign(null)} className="flex-1 px-4 py-2.5 rounded-xl border border-[#E2E8F0] text-[13px] font-semibold text-[#374151] hover:bg-[#F8FAFC] transition-colors">
+                Annuler
+              </button>
+              <button
+                onClick={confirmReassign}
+                disabled={assigning}
+                className="flex-1 px-4 py-2.5 rounded-xl text-[13px] font-bold text-white transition-colors disabled:opacity-40"
+                style={{ background: '#4CAF4F' }}>
+                Confirmer
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
     </>
   );
 }
@@ -904,7 +980,7 @@ function ClientsPageInner() {
       {/* Actions : Nouveau client + Secteurs (+ Import Excel sur ordi seulement) —
           DESKTOP seulement (mobile : rond "+" dans le header, cf. plus haut). */}
       {canEditClients && (
-        <div className="hidden md:flex items-center gap-2 mb-3 flex-wrap">
+        <div className="hidden md:flex items-center justify-end gap-2 mb-3 flex-wrap">
           <button onClick={() => { setAddForm({ ...emptyClient }); setShowAdd(true); }} className="flex items-center gap-2 px-4 py-2 rounded-xl text-[13px] font-semibold text-white transition-colors whitespace-nowrap" style={{ background: '#4CAF4F' }}>
             + Nouveau client
           </button>
@@ -1057,6 +1133,8 @@ function ClientsPageInner() {
           onDeleteDefinitif={() => handleDeleteDefinitif(selected)}
           onRefresh={() => { fetchClients(); setSelected(null); }}
           onNewRequest={() => setNewRequestFor(selected)}
+          users={users}
+          onReassigned={() => fetchClients(true)}
         />
       )}
 

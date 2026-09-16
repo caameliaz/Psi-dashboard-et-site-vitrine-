@@ -26,7 +26,10 @@ export async function GET() {
     // Traçabilité précise : commandes/devis réellement rattachés à chaque ligne, avec badge
     // "Bloqué" par commande — cf. src/lib/stock-traceability.ts.
     const resolver = createLinkResolver();
-    const withLinks = await Promise.all(items.map(async (i) => ({ ...i, ...(await resolver.productionLineLinks(i.productId, i.id)) })));
+    const withLinks = await Promise.all(items.map(async (i) => ({
+      ...i,
+      ...(i.productId ? await resolver.productionLineLinks(i.productId, i.id) : await resolver.freeTextLineLinks(i.id)),
+    })));
 
     return NextResponse.json(withLinks);
   } catch (e) {
@@ -61,7 +64,7 @@ export async function POST(request: NextRequest) {
       ? await prisma.productionListItem.update({ where: { id: existing.id }, data: { neededQuantity: { increment: qty }, manualQuantity: { increment: qty } }, include: INCLUDE })
       : await prisma.productionListItem.create({ data: { productId: body.productId, neededQuantity: qty, manualQuantity: qty, auto: false }, include: INCLUDE });
 
-    createAudit({ userId: session?.user?.id, action: 'Ligne ajoutée à la liste de production', entity: 'STOCK', entityId: item.id, detail: `${item.product.reference} — ${qty}` });
+    createAudit({ userId: session?.user?.id, action: 'Ligne ajoutée à la liste de production', entity: 'STOCK', entityId: item.id, detail: `${item.product!.reference} — ${qty}` });
     return NextResponse.json(item, { status: existing ? 200 : 201 });
   } catch (e) {
     console.error(e);

@@ -607,6 +607,10 @@ function RequestsPageInner() {
   const [showCreate, setShowCreate] = useState(false);
   const [showImportVentes, setShowImportVentes] = useState(false);
   const [createPrefill, setCreatePrefill] = useState<{ client?: string; entreprise?: string; telephone?: string; email?: string; wilaya?: string; commune?: string } | undefined>(undefined);
+  // "Marquer Produit" tombe sur un manquant réel (rien pour le couvrir, même après avoir
+  // cherché dans le disponible et chez les commandes déjà Produites/Confirmées) — jamais résolu
+  // en silence : propose "Annuler" ou "Mettre disponible malgré le manque" (cf. handleStatusChange).
+  const [shortfallChoice, setShortfallChoice] = useState<{ ref: string; newStatut: string; shortfall: { reference: string; name: string | null; missing: number }[] } | null>(null);
 
   // silent = refetch en arrière-plan (SSE temps réel) → pas de spinner, pas de clignotement
   const fetchAll = useCallback(async (silent = false) => {
@@ -769,30 +773,34 @@ function RequestsPageInner() {
       body: JSON.stringify({ status: dbStatus, ...(force && { force: true }) }),
     });
 
+    // Le corps de la réponse ne peut être lu qu'UNE SEULE FOIS (`res.json()`/`res.text()`
+    // lèvent sinon "body stream already read") — on le lit ici une bonne fois pour toutes,
+    // qu'on ait besoin de l'inspecter (409) ou juste de le logger (autre échec).
+    const data = !res.ok ? await res.json().catch(() => null) : null;
+
     // "Marquer Produit" avec un manquant (rien pour le couvrir, même après avoir cherché dans
-    // le disponible et chez les commandes déjà Produites) → proposé à l'utilisateur avec le
-    // détail du manquant, plutôt qu'un simple blocage : "Continuer quand même" relance la même
-    // action avec `force`, qui marque la part manquante résolue SANS inventer de stock fictif
-    // (cf. forceCompleteOrder, order-stock.ts) — un écart assumé, tracé dans l'audit.
-    if (res.status === 409) {
-      const data = await res.json().catch(() => null);
-      if (data?.error === 'PRODUCT_SHORTFALL') {
-        const shortfall: { reference: string; name: string | null; missing: number }[] = data.shortfall ?? [];
-        const detail = shortfall.map((w) => `• ${w.name ?? w.reference} — ${w.missing} manquant(s)`).join('\n');
-        if (window.confirm(
-          `Il manque du produit fini pour marquer ${isItemDevis ? 'ce devis' : 'cette commande'} produit(e) :\n${detail}\n\n` +
-          'Continuer quand même ? Le manquant sera marqué résolu sans stock réel derrière (écart assumé, visible en audit).'
-        )) {
-          await handleStatusChange(ref, newStatut, true);
-        }
-        return;
-      }
+    // le disponible et chez les commandes déjà Produites/Confirmées — jamais de fabrication,
+    // cf. forceCompleteOrder) → overlay proposant "Annuler" ou "Mettre disponible malgré le
+    // manque" (force, qui marque la part manquante résolue SANS inventer de stock fictif — un
+    // écart assumé, tracé dans l'audit).
+    if (res.status === 409 && data?.error === 'PRODUCT_SHORTFALL') {
+      setShortfallChoice({ ref, newStatut, shortfall: data.shortfall ?? [] });
+      return;
     }
 
-    if (!res.ok) console.error('PATCH failed', await res.text());
+    if (!res.ok) console.error('PATCH failed', data);
     // fetchAll resynchronise le détail ouvert : on ne ferme jamais le panneau,
     // l'utilisateur enchaîne ses actions et ferme lui-même quand il a fini.
     await fetchAll(true);
+  };
+
+  // "Mettre disponible malgré le manque" sur l'overlay de manquant : relance "Marquer Produit"
+  // en acceptant l'écart (force).
+  const handleForceShortfall = async () => {
+    if (!shortfallChoice) return;
+    const { ref, newStatut } = shortfallChoice;
+    setShortfallChoice(null);
+    await handleStatusChange(ref, newStatut, true);
   };
 
   // Change l'assignation ("pris en charge par") d'une commande/devis
@@ -1132,6 +1140,31 @@ function RequestsPageInner() {
           currentUserId={currentUserId}
           prefill={createPrefill}
         />
+      )}
+      {shortfallChoice && (
+        <Modal title="Stock insuffisant" onClose={() => setShortfallChoice(null)}>
+          <div className="space-y-4">
+            <p className="text-[13px] text-[#374151]">
+              Il manque du produit fini pour marquer {rawItems.find((r) => r.ref === shortfallChoice.ref)?.type === 'Devis' ? 'ce devis' : 'cette commande'} produit(e) :
+            </p>
+            <ul className="flex flex-col gap-1">
+              {shortfallChoice.shortfall.map((s, i) => (
+                <li key={i} className="text-[13px] text-[#374151]">• {s.name ?? s.reference} — {s.missing} manquant(s)</li>
+              ))}
+            </ul>
+            <div className="flex flex-col gap-3 pt-1">
+              <button onClick={() => setShortfallChoice(null)}
+                className="text-left px-4 py-3 rounded-lg border border-[#E2E8F0] bg-white hover:bg-[#F8FAFC] transition-colors">
+                <p className="text-sm font-semibold text-[#374151]">Annuler</p>
+              </button>
+              <button onClick={handleForceShortfall}
+                className="text-left px-4 py-3 rounded-lg transition-colors" style={{ background: '#4CAF4F' }}>
+                <p className="text-sm font-bold text-white">Mettre disponible malgré le manque</p>
+                <p className="text-[11px] text-white/85 mt-0.5">Le manquant sera marqué résolu sans stock réel derrière (écart assumé, visible en audit).</p>
+              </button>
+            </div>
+          </div>
+        </Modal>
       )}
 
       <MobileNavbar />

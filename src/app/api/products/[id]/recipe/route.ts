@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { requirePermission } from '@/lib/permissions';
 import { createAudit } from '@/lib/audit';
-import { reconcileMaterialAcrossAllLines } from '@/lib/order-stock';
+import { saveProductRecipe } from '@/lib/order-stock';
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -28,20 +28,6 @@ export async function PUT(request: NextRequest, { params }: Ctx) {
     const product = await prisma.product.findUnique({ where: { id }, select: { name: true, reference: true } });
     if (!product) return NextResponse.json({ error: 'Produit introuvable' }, { status: 404 });
 
-    // Recette AVANT modification — nécessaire pour savoir quelles matières N'EN font PLUS
-    // partie (pour les réconcilier aussi : leur part due à ce produit doit retomber à 0).
-    const oldRecipe = await prisma.recipeItem.findMany({ where: { productId: id }, select: { rawMaterialId: true } });
-    const oldMaterialIds = oldRecipe.map((r) => r.rawMaterialId);
-
-    await prisma.$transaction([
-      prisma.recipeItem.deleteMany({ where: { productId: id } }),
-      ...(items.length > 0
-        ? [prisma.recipeItem.createMany({
-            data: items.map((i) => ({ productId: id, rawMaterialId: i.rawMaterialId, quantity: Number(i.quantity) })),
-          })]
-        : []),
-    ]);
-
     // Réconciliation GLOBALE (Bloquées ET déjà "À produire", tous produits confondus) de chaque
     // matière touchée — ancienne (pour remettre à 0 la part due à CE produit si elle en a été
     // retirée) et nouvelle (pour la demande à jour, avec les nouveaux ratios). Recalcule
@@ -50,15 +36,11 @@ export async function PUT(request: NextRequest, { params }: Ctx) {
     // — volontairement plus agressif qu'une réception de stock ou "Marquer fabriquée" (cf.
     // reconcileMaterialAcrossAllLines) : un changement de recette redéfinit légitimement les
     // priorités, contrairement à ces deux-là qui ne retouchent jamais du `reserved` déjà acquis.
-    const newMaterialIds = items.map((i) => i.rawMaterialId);
-    const touchedMaterialIds = new Set([...oldMaterialIds, ...newMaterialIds]);
-    for (const rawMaterialId of touchedMaterialIds) await reconcileMaterialAcrossAllLines(rawMaterialId);
+    const recipeItems = await saveProductRecipe(id, items);
 
     // "Commandes concernées" (badge Bloqué par commande) : rien à faire de plus, il est déjà
     // recalculé EN DIRECT à chaque lecture à partir de `reserved` (jamais stocké) — cf.
     // stock-traceability.ts.
-
-    const recipeItems = await prisma.recipeItem.findMany({ where: { productId: id }, include: { rawMaterial: true } });
 
     const prodLabel = product.name ? `${product.name} (${product.reference})` : product.reference;
     createAudit({ userId: session?.user?.id, action: 'Recette modifiée', entity: 'PRODUIT', entityId: id, detail: prodLabel });

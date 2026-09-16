@@ -31,7 +31,7 @@ export function renderPasswordResetRequestEmail(params: {
 
     <p style="margin:0 0 20px;font-size:12px;color:#8A9BB5">Vous recevez cet email à titre d'information. Si cette demande vous semble suspecte, vous pouvez désactiver le compte depuis l'espace d'administration.</p>
 
-    <a href="${ADMIN_URL}/admin/users" style="display:inline-block;background:#4CAF4F;color:#fff;text-decoration:none;padding:11px 22px;border-radius:8px;font-size:13px;font-weight:700">Voir les utilisateurs →</a>
+    <a href="${ADMIN_URL}/admin/settings/users" style="display:inline-block;background:#4CAF4F;color:#fff;text-decoration:none;padding:11px 22px;border-radius:8px;font-size:13px;font-weight:700">Voir les utilisateurs →</a>
   `;
 
   return { subject: `Mot de passe réinitialisé : ${name}`, html: wrapEmail(body) };
