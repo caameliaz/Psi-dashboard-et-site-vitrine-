@@ -91,17 +91,26 @@ function PieChart({ data }: { data: { ref: string; qty: number; label: string; c
   const total = data.reduce((s, d) => s + d.qty, 0);
   if (total === 0) return <p className="text-[11px] md:text-[12px] text-[#8A9BB5] py-4">Aucune commande</p>;
   const R = 70, stroke = 24, cx = 88, cy = 88, gap = 0.015;
+  // Un seul produit à 100% : un arc à balayage ~360° dégénère (x1≈x2), ce qui rend le
+  // path SVG invisible sur certains moteurs de rendu. On dessine alors un cercle complet.
+  const visibleSlices = data.filter((d) => d.qty > 0);
   let angle = -Math.PI / 2;
-  const slices = data.map((d) => {
-    const sweep = (d.qty / total) * (2 * Math.PI) - gap;
-    const x1 = cx + R * Math.cos(angle);
-    const y1 = cy + R * Math.sin(angle);
-    angle += sweep + gap;
-    const x2 = cx + R * Math.cos(angle);
-    const y2 = cy + R * Math.sin(angle);
-    const large = sweep > Math.PI ? 1 : 0;
-    return { ...d, path: `M${x1},${y1} A${R},${R} 0 ${large},1 ${x2},${y2}`, pct: Math.round((d.qty / total) * 100) };
-  });
+  const slices = visibleSlices.length === 1
+    ? [{
+        ...visibleSlices[0],
+        path: `M${cx - R},${cy} A${R},${R} 0 1,1 ${cx + R},${cy} A${R},${R} 0 1,1 ${cx - R},${cy}`,
+        pct: 100,
+      }]
+    : data.map((d) => {
+        const sweep = (d.qty / total) * (2 * Math.PI) - gap;
+        const x1 = cx + R * Math.cos(angle);
+        const y1 = cy + R * Math.sin(angle);
+        angle += sweep + gap;
+        const x2 = cx + R * Math.cos(angle);
+        const y2 = cy + R * Math.sin(angle);
+        const large = sweep > Math.PI ? 1 : 0;
+        return { ...d, path: `M${x1},${y1} A${R},${R} 0 ${large},1 ${x2},${y2}`, pct: Math.round((d.qty / total) * 100) };
+      });
   const hov = hovered !== null ? slices[hovered] : null;
 
   const TOOLTIP_WIDTH = 130; // minWidth (110) + marge de sécurité
