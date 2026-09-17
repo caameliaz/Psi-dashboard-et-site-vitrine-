@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import { Modal } from '@/components/ui/Modal';
+import { StockListsWidget } from '@/components/ui/StockListsWidget';
 import { useRole } from '@/lib/role-context';
 import { RequirePerm } from '@/components/RequirePerm';
 
@@ -278,6 +279,7 @@ function StockPageInner() {
   const [actionTarget, setActionTarget] = useState<{ type: 'product' | 'material'; item: StockProduct | StockMaterial; label: string; unit: string; needsMode: boolean } | null>(null);
   const [showAssign, setShowAssign] = useState(false);
   const [showRestock, setShowRestock] = useState(false);
+  const [showLists, setShowLists] = useState(false);
   const [selectedEmployee, setSelectedEmployee] = useState<{ id: string; name: string; lines: AssignmentLine[] } | null>(null);
 
   const fetchAll = useCallback(async () => {
@@ -384,8 +386,13 @@ function StockPageInner() {
       </div>
 
       {(tab === 'produits' || tab === 'matieres') && (
-        <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Rechercher par référence ou nom..."
-          className="mb-4 px-3 py-2 rounded-lg border border-[#E2E8F0] text-[13px] text-[#0F172A] focus:outline-none focus:border-[#4CAF4F] w-full max-w-xs" />
+        <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
+          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Rechercher par référence ou nom..."
+            className="px-3 py-2 rounded-lg border border-[#E2E8F0] text-[13px] text-[#0F172A] focus:outline-none focus:border-[#4CAF4F] w-full max-w-xs" />
+          <button onClick={() => setShowLists(true)} className="px-4 py-2 rounded-lg text-sm font-semibold border border-[#E2E8F0] text-[#374151] hover:bg-[#F8FAFC] transition-colors flex-shrink-0">
+            Listes d&apos;achat / production
+          </button>
+        </div>
       )}
 
       {tab === 'produits' && (
@@ -540,6 +547,20 @@ function StockPageInner() {
       {showRestock && (
         <RestockOnlyModal products={products} materials={materials} onClose={() => setShowRestock(false)}
           onRestock={(type, id, qty, mode) => doRestock(type, id, qty, mode)} />
+      )}
+      {showLists && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/30 backdrop-blur-[2px]" onClick={() => setShowLists(false)} />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[85vh] overflow-hidden flex flex-col">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-[#E2E8F0] bg-[#F8FAFC] flex-shrink-0">
+              <h3 className="text-[15px] font-bold text-[#0F172A]">Listes d&apos;achat / production</h3>
+              <button onClick={() => setShowLists(false)} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-[#E2E8F0] text-[#8A9BB5] transition-colors text-lg">&#x2715;</button>
+            </div>
+            <div className="p-5 overflow-y-auto">
+              <StockListsWidget />
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
