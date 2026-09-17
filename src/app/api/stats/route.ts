@@ -9,19 +9,27 @@ export async function GET(request: NextRequest) {
 
   try {
     const now = new Date();
-    
+
+    // Le serveur peut tourner en UTC alors que l'entreprise est en Algérie (UTC+1,
+    // pas de changement d'heure) : calculer "aujourd'hui"/"ce mois" avec l'horloge du
+    // serveur décale les bornes d'1h et fait disparaître les commandes créées juste
+    // après minuit heure locale (ex: 1er du mois 00h locale = 31 23h UTC, exclu si le
+    // serveur borne sur minuit UTC). On ancre donc le calcul sur l'heure d'Algérie.
+    const ALGERIA_OFFSET_MS = 60 * 60 * 1000; // UTC+1
+    const nowAlgeria = new Date(now.getTime() + ALGERIA_OFFSET_MS);
+
     // Récupérer les paramètres de date optionnels
     const startDateParam = request.nextUrl.searchParams.get('startDate');
     const endDateParam = request.nextUrl.searchParams.get('endDate');
     const userIdParam = request.nextUrl.searchParams.get('userId'); // NOUVEAU: filtre par employé
-    
+
     // Parser les dates ou utiliser les valeurs par défaut (mois courant)
     let startOfMonth: Date;
     let startOfToday: Date;
     let startOfPrevMonth: Date;
     let start6MonthsAgo: Date;
     let endDate: Date;
-    
+
     if (startDateParam && endDateParam) {
       // Utiliser les dates fournies
       startOfMonth = new Date(startDateParam);
@@ -34,12 +42,12 @@ export async function GET(request: NextRequest) {
       start6MonthsAgo = new Date(startOfMonth);
       start6MonthsAgo.setMonth(start6MonthsAgo.getMonth() - 5);
     } else {
-      // Utiliser les valeurs par défaut (mois courant)
-      startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-      endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
-      startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-      startOfPrevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-      start6MonthsAgo = new Date(now.getFullYear(), now.getMonth() - 5, 1);
+      // Utiliser les valeurs par défaut (mois courant, heure d'Algérie)
+      startOfMonth = new Date(Date.UTC(nowAlgeria.getUTCFullYear(), nowAlgeria.getUTCMonth(), 1) - ALGERIA_OFFSET_MS);
+      endDate = new Date(Date.UTC(nowAlgeria.getUTCFullYear(), nowAlgeria.getUTCMonth() + 1, 0, 23, 59, 59, 999) - ALGERIA_OFFSET_MS);
+      startOfToday = new Date(Date.UTC(nowAlgeria.getUTCFullYear(), nowAlgeria.getUTCMonth(), nowAlgeria.getUTCDate()) - ALGERIA_OFFSET_MS);
+      startOfPrevMonth = new Date(Date.UTC(nowAlgeria.getUTCFullYear(), nowAlgeria.getUTCMonth() - 1, 1) - ALGERIA_OFFSET_MS);
+      start6MonthsAgo = new Date(Date.UTC(nowAlgeria.getUTCFullYear(), nowAlgeria.getUTCMonth() - 5, 1) - ALGERIA_OFFSET_MS);
     }
 
     // Créer les filtres conditionnels pour l'employé
@@ -229,40 +237,45 @@ export async function GET(request: NextRequest) {
 
     // Série 6 mois : commandes + devis par mois (labels courts)
     const MOIS = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Aoû', 'Sep', 'Oct', 'Nov', 'Déc'];
-    // Utiliser endDate comme référence pour supporter le filtrage
-    const referenceDate = startDateParam && endDateParam ? endDate : now;
+    // Regrouper une date par année/mois en heure d'Algérie (cf. ALGERIA_OFFSET_MS
+    // plus haut) pour éviter qu'un enregistrement créé juste après minuit locale
+    // ne soit classé dans le mois précédent quand le serveur tourne en UTC.
+    const monthKeyAlgeria = (date: Date) => {
+      const local = new Date(date.getTime() + ALGERIA_OFFSET_MS);
+      return `${local.getUTCFullYear()}-${local.getUTCMonth()}`;
+    };
+    // Référence (année/mois en heure d'Algérie) pour construire les 6 mois : endDate
+    // si un filtre est actif, sinon "maintenant" en Algérie.
+    const referenceKey = startDateParam && endDateParam ? monthKeyAlgeria(endDate) : monthKeyAlgeria(now);
+    const [refYear, refMonth] = referenceKey.split('-').map(Number);
     const serie: { mois: string; commandes: number; devis: number }[] = [];
     for (let i = 5; i >= 0; i--) {
-      const d = new Date(referenceDate.getFullYear(), referenceDate.getMonth() - i, 1);
-      const key = `${d.getFullYear()}-${d.getMonth()}`;
-      serie.push({ mois: MOIS[d.getMonth()], commandes: 0, devis: 0 });
+      const d = new Date(Date.UTC(refYear, refMonth - i, 1));
+      const key = `${d.getUTCFullYear()}-${d.getUTCMonth()}`;
+      serie.push({ mois: MOIS[d.getUTCMonth()], commandes: 0, devis: 0 });
       const idx = serie.length - 1;
       ordersFor6Months.forEach((o) => {
-        const od = new Date(o.createdAt);
-        if (`${od.getFullYear()}-${od.getMonth()}` === key) serie[idx].commandes++;
+        if (monthKeyAlgeria(o.createdAt) === key) serie[idx].commandes++;
       });
       quotesFor6Months.forEach((q) => {
-        const qd = new Date(q.createdAt);
-        if (`${qd.getFullYear()}-${qd.getMonth()}` === key) serie[idx].devis++;
+        if (monthKeyAlgeria(q.createdAt) === key) serie[idx].devis++;
       });
     }
 
     // Série 6 mois : ventes (montant) par mois
     const serieVentes: { mois: string; ventes: number }[] = [];
     for (let i = 5; i >= 0; i--) {
-      const d = new Date(referenceDate.getFullYear(), referenceDate.getMonth() - i, 1);
-      const key = `${d.getFullYear()}-${d.getMonth()}`;
-      serieVentes.push({ mois: MOIS[d.getMonth()], ventes: 0 });
+      const d = new Date(Date.UTC(refYear, refMonth - i, 1));
+      const key = `${d.getUTCFullYear()}-${d.getUTCMonth()}`;
+      serieVentes.push({ mois: MOIS[d.getUTCMonth()], ventes: 0 });
       const idx = serieVentes.length - 1;
       ordersLivresFor6Months.forEach((o) => {
-        const od = new Date(o.createdAt);
-        if (`${od.getFullYear()}-${od.getMonth()}` === key) {
+        if (monthKeyAlgeria(o.createdAt) === key) {
           serieVentes[idx].ventes += orderAmount(o.items);
         }
       });
       quotesLivresFor6Months.forEach((q) => {
-        const qd = new Date(q.createdAt);
-        if (`${qd.getFullYear()}-${qd.getMonth()}` === key) {
+        if (monthKeyAlgeria(q.createdAt) === key) {
           serieVentes[idx].ventes += q.proposedPrice ?? 0;
         }
       });
@@ -313,8 +326,8 @@ export async function GET(request: NextRequest) {
       .map((c) => ({ name: c.name, commandes: c.commandes, devis: c.devis, total: c.commandes + c.devis }))
       .sort((a, b) => b.total - a.total);
 
-    // Objectifs du mois courant (global + par user)
-    const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    // Objectifs du mois courant (global + par user), heure d'Algérie
+    const monthKey = `${nowAlgeria.getUTCFullYear()}-${String(nowAlgeria.getUTCMonth() + 1).padStart(2, '0')}`;
     const goals = await prisma.monthlyGoal.findMany({ where: { month: monthKey } });
     const goalGlobal = goals.find((g) => g.userId == null)?.amount ?? 0;
     const goalsByUser: Record<string, number> = {};
