@@ -38,6 +38,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Identifiant ou mot de passe incorrect.' }, { status: 401 });
     }
 
+    // Compte exempté (temporairement) du code par email : mot de passe seul.
+    // Le client enchaîne directement sur signIn, qui refait la vérification.
+    if (user.twoFactorDisabled) {
+      return NextResponse.json({ success: true, skipOtp: true });
+    }
+
     // Identifiants valides → génère un code à 6 chiffres, valable 5 min, usage unique
     const code = String(Math.floor(100000 + Math.random() * 900000));
     await prisma.user.update({

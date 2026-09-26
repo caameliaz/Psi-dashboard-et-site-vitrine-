@@ -34,6 +34,7 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
     if (body.phone !== undefined) data.phone = body.phone;
     if (body.photo !== undefined) data.photo = body.photo;
     if (body.permissions !== undefined) data.permissions = body.permissions;
+    if (body.twoFactorDisabled !== undefined) data.twoFactorDisabled = Boolean(body.twoFactorDisabled);
     if (body.password !== undefined) {
       data.password = await bcrypt.hash(body.password, 10);
       // Réinitialiser le mot de passe efface la demande "mot de passe oublié"
@@ -46,12 +47,14 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
       data,
       select: {
         id: true, name: true, email: true, role: true,
-        active: true, phone: true, photo: true, permissions: true, createdAt: true,
+        active: true, phone: true, photo: true, permissions: true, createdAt: true, twoFactorDisabled: true,
       },
     });
 
     const action = body.active === false ? 'Utilisateur désactivé'
       : body.active === true ? 'Utilisateur activé'
+      : body.twoFactorDisabled === true ? 'Code de connexion par email désactivé'
+      : body.twoFactorDisabled === false ? 'Code de connexion par email réactivé'
       : body.permissions !== undefined && Object.keys(body).length === 1 ? 'Autorisations modifiées'
       : 'Utilisateur modifié';
     createAudit({ userId: session.user.id, action, entity: 'UTILISATEUR', entityId: id, detail: user.name });

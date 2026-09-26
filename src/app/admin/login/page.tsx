@@ -31,8 +31,11 @@ export default function LoginPage() {
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data.error || 'Identifiant ou mot de passe incorrect.');
+    // Compte exempté du code par email → connexion directe, pas d'étape OTP
+    if (data.skipOtp) return true;
     // Code envoyé avec succès → passer à l'étape OTP
     setStep('otp');
+    return false;
   };
 
   const handleForgot = async (e: React.FormEvent) => {
@@ -57,12 +60,14 @@ export default function LoginPage() {
       // 2FA : après email + mot de passe valides, un code à 6 chiffres est
       // envoyé par email avant de pouvoir se connecter réellement.
       if (step === 'credentials') {
-        await sendOtp();
-        setLoading(false);
-        return;
+        const skipOtp = await sendOtp();
+        if (!skipOtp) {
+          setLoading(false);
+          return;
+        }
       }
 
-      // Vérification du code OTP (step === 'otp')
+      // Connexion : vérification du code OTP, ou directe si le compte est exempté
       const res = await signIn('credentials', {
         email,
         password,

@@ -26,6 +26,7 @@ interface User {
   statut: 'Actif' | 'Inactif';
   permissions: PermKey[];
   resetRequested?: boolean;
+  twoFactorDisabled?: boolean;
 }
 
 function dbUserToUser(u: any): User {
@@ -36,6 +37,7 @@ function dbUserToUser(u: any): User {
     role: u.role === 'ADMIN' ? 'Admin' : 'Employe',
     statut: u.active ? 'Actif' : 'Inactif',
     resetRequested: !!u.resetRequested,
+    twoFactorDisabled: !!u.twoFactorDisabled,
     // Un employé a EXACTEMENT ses permissions stockées (pas de fallback :
     // sinon décocher toutes les cases les ferait "revenir" à l'affichage).
     permissions: u.role === 'ADMIN' ? [...ADMIN_PERMS] : (u.permissions ?? []),
@@ -404,7 +406,7 @@ interface LeaveInfo {
   allowFullHistory: boolean;
 }
 
-function UserSlideIn({ user, onClose, onDelete, onPermChange, onPermSetAll, customRoles, onSaveProfile, onResetPassword, onReactivate, initialEditing = false }: {
+function UserSlideIn({ user, onClose, onDelete, onPermChange, onPermSetAll, customRoles, onSaveProfile, onResetPassword, onReactivate, onToggleTwoFactor, initialEditing = false }: {
   user: User; onClose: () => void; onDelete: () => void;
   onPermChange: (userId: number, perm: PermKey, value: boolean) => void;
   onPermSetAll: (userId: number, perms: PermKey[]) => void;
@@ -412,6 +414,7 @@ function UserSlideIn({ user, onClose, onDelete, onPermChange, onPermSetAll, cust
   onSaveProfile: (user: User, data: { name: string; email: string; role: string; password?: string; permissions: PermKey[] }) => Promise<void>;
   onResetPassword: (user: User) => Promise<void>;
   onReactivate: (user: User) => Promise<void>;
+  onToggleTwoFactor: (user: User, disabled: boolean) => Promise<void>;
   initialEditing?: boolean;
 }) {
   const ac = avatarColor(user.role);
@@ -422,6 +425,7 @@ function UserSlideIn({ user, onClose, onDelete, onPermChange, onPermSetAll, cust
   const [saving, setSaving] = useState(false);
   const [resetting, setResetting] = useState(false);
   const [reactivating, setReactivating] = useState(false);
+  const [togglingTwoFactor, setTogglingTwoFactor] = useState(false);
   const [fNom, setFNom] = useState(user.nom);
   const [fEmail, setFEmail] = useState(user.email);
   const [fRole, setFRole] = useState<string>(user.role); // 'Admin' | 'Employe' | id rôle perso
@@ -635,6 +639,26 @@ function UserSlideIn({ user, onClose, onDelete, onPermChange, onPermSetAll, cust
               {resetting ? 'Génération…' : '🔑 Réinitialiser le mot de passe'}
             </button>
             <p className="text-[11px] text-[#ABBED1] mt-2">Un nouveau mot de passe sera généré et affiché (à transmettre à l&apos;utilisateur).</p>
+
+            {/* Exemption TEMPORAIRE du code de connexion par email (boîte qui ne reçoit plus les mails) */}
+            {user.twoFactorDisabled && (
+              <div className="flex items-center gap-2 mt-4 mb-2 px-3 py-2.5 rounded-xl bg-[#FEF2F2] border border-[#FECACA]">
+                <svg width={16} height={16} fill="none" viewBox="0 0 24 24" className="flex-shrink-0"><path d="M12 9v4M12 17h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" stroke="#DC2626" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                <span className="text-[12px] font-semibold text-[#991B1B]">Code de connexion par email désactivé : ce compte se connecte avec le mot de passe seul. À réactiver dès que possible.</span>
+              </div>
+            )}
+            <button
+              onClick={async () => {
+                const disable = !user.twoFactorDisabled;
+                if (disable && !confirm(`Désactiver le code de connexion par email pour ${user.nom} ? Le compte sera protégé par le mot de passe seul.`)) return;
+                setTogglingTwoFactor(true);
+                try { await onToggleTwoFactor(user, disable); } finally { setTogglingTwoFactor(false); }
+              }}
+              disabled={togglingTwoFactor}
+              className={`w-full ${user.twoFactorDisabled ? 'mt-0' : 'mt-4'} px-4 py-2.5 rounded-xl border text-[13px] font-semibold transition-colors disabled:opacity-60 ${user.twoFactorDisabled ? 'border-[#4CAF4F] text-[#166534] hover:bg-[#F0FDF4]' : 'border-[#E2E8F0] text-[#374151] hover:bg-[#F8FAFC]'}`}>
+              {togglingTwoFactor ? 'Enregistrement…' : user.twoFactorDisabled ? '✓ Réactiver le code de connexion par email' : 'Désactiver le code de connexion par email'}
+            </button>
+            <p className="text-[11px] text-[#ABBED1] mt-2">À utiliser seulement si l&apos;utilisateur ne reçoit plus les codes par email, et temporairement.</p>
           </div>
         </div>
 
@@ -882,6 +906,20 @@ function UsersPageInner() {
       : prev);
   };
 
+  // Active / désactive le code de connexion par email (exemption temporaire)
+  const handleToggleTwoFactor = async (u: User, disabled: boolean) => {
+    const res = await fetch(`/api/users/${u.id}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ twoFactorDisabled: disabled }),
+    });
+    if (res.ok) {
+      await fetchUsers();
+      setProfilUser((prev) => prev && prev.id === u.id ? { ...prev, twoFactorDisabled: disabled } : prev);
+    } else {
+      alert('Modification impossible.');
+    }
+  };
+
   // Réactive un compte désactivé (active: true)
   const handleReactivateUser = async (u: User) => {
     const res = await fetch(`/api/users/${u.id}`, {
@@ -979,6 +1017,9 @@ function UsersPageInner() {
                       {u.resetRequested && (
                         <span title="Mot de passe oublié — réinitialisation demandée" className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-full bg-[#FFF7ED] text-[#9A3412] border border-[#FED7AA]">🔑 Reset</span>
                       )}
+                      {u.twoFactorDisabled && (
+                        <span title="Code de connexion par email désactivé (mot de passe seul)" className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-full bg-[#FEF2F2] text-[#991B1B] border border-[#FECACA]">⚠ Sans code</span>
+                      )}
                       <StatutBadge statut={u.statut} />
                     </div>
                   </div>
@@ -1021,7 +1062,8 @@ function UsersPageInner() {
           initialEditing={profilEditing}
           onSaveProfile={handleSaveProfile}
           onResetPassword={handleResetPassword}
-          onReactivate={handleReactivateUser} />
+          onReactivate={handleReactivateUser}
+          onToggleTwoFactor={handleToggleTwoFactor} />
       )}
 
       {showAdd && (

@@ -24,7 +24,7 @@ export async function GET(req: Request) {
 
     // Sinon, retourner tous les users avec toutes les infos
     const users = await prisma.user.findMany({
-      select: { id: true, name: true, email: true, role: true, active: true, permissions: true, resetRequested: true },
+      select: { id: true, name: true, email: true, role: true, active: true, permissions: true, resetRequested: true, twoFactorDisabled: true },
       orderBy: { name: 'asc' },
     });
     return NextResponse.json(users);

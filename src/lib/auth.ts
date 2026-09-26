@@ -50,13 +50,15 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         if (!passwordMatch) { recordFail('login', email); return null; }
 
         // ── 2FA : code à 6 chiffres envoyé par email (cf. /api/auth/2fa/send) ──
+        // Sauf compte exempté par un admin (twoFactorDisabled) : mot de passe seul.
         const otp = String(credentials.otp).trim();
         const codeValid =
+          user.twoFactorDisabled || (
           user.twoFactorCode &&
           user.twoFactorExpires &&
           user.twoFactorExpires.getTime() > Date.now() &&
           (user.twoFactorAttempts ?? 0) < 5 &&
-          user.twoFactorCode === otp;
+          user.twoFactorCode === otp);
 
         if (!codeValid) {
           recordFail('login', email);

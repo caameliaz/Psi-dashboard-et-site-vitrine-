@@ -573,6 +573,7 @@ model User {
   twoFactorCode      String? // code 2FA à 6 chiffres en attente de validation (usage unique)
   twoFactorExpires   DateTime? // expiration du code 2FA (5 min)
   twoFactorAttempts  Int                @default(0) // tentatives échouées sur le code courant (invalide après 5)
+  twoFactorDisabled  Boolean            @default(false) // exemption TEMPORAIRE du code par email (ex. boîte @psi.dz qui ne reçoit plus) — réglable par un admin
   recapDaily         Boolean            @default(true) // reçoit le récap quotidien (20h) — désactivable dans le profil
   recapWeekly        Boolean            @default(true) // reçoit le bilan hebdomadaire (jeudi 23h59)
   ordersCreated      Order[]            @relation("OrderCreatedBy")

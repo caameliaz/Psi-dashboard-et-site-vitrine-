@@ -79,3 +79,149 @@ Limites communes à **toutes** les offres gratuites :
 - **Pas de support prioritaire** (réponse lente, parfois uniquement par email).
 - La seule vraie garantie est une **IP dédiée** (payant, plusieurs dizaines d'€ / mois)
   — ou qu'**Icosnet arrête de bloquer** Brevo, ce qui est gratuit.
+
+### ⚠️ À ne PAS toucher dans Brevo
+
+Brevo → Sécurité → **Adresses IP autorisées** (« Blocage d'adresses IP non
+autorisées », Clés API / Clés SMTP) : **laisser « Désactivé »**.
+Ce réglage limite les IP qui ont le droit d'*utiliser* nos clés Brevo. Le site
+tourne sur Vercel, dont les IP changent tout le temps → si on l'active, **plus
+aucun mail ne part** (codes de connexion, récaps, notifications). Ça n'a rien à
+voir avec le rejet par Icosnet.
+
+---
+
+## Tuto : passer temporairement sur un autre service d'envoi
+
+**Aucune ligne de code à changer.** Le code (`src/lib/email/send.ts`) sait parler à
+n'importe quel serveur SMTP : il suffit de changer des **variables d'environnement**
+dans Vercel. Brevo n'est pas supprimé : pour revenir, on remet les anciennes valeurs.
+
+### Étape 0 — Noter la config Brevo actuelle (pour pouvoir revenir)
+
+Vercel → projet → **Settings → Environment Variables** → noter quelque part (pas
+dans ce fichier, il est dans Git !) les valeurs actuelles de :
+`SMTP_PROVIDER`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `EMAIL_FROM`.
+
+### Étape 1 — Créer le compte et valider le domaine psi.dz
+
+Dans le service choisi : ajouter le domaine **psi.dz**. Il affiche 2 à 4
+enregistrements DNS à créer.
+
+Les ajouter dans **cPanel → Zone Editor → psi.dz → Add Record**, en recopiant
+exactement le **type**, le **nom** et la **valeur** affichés.
+
+Règles :
+- **Ne rien supprimer** des enregistrements Brevo existants (brevo1/brevo2,
+  brevo-code, envoi…) : les deux services peuvent coexister.
+- **SPF** (`v=spf1 … ~all` sur psi.dz) : il ne doit y en avoir **qu'un seul**. Si le
+  service demande un `include:`, l'**ajouter dans l'enregistrement existant**, juste
+  avant `~all` (ex. `… include:spf.brevo.com include:spf.mailjet.com ~all`). Ne
+  jamais créer un 2ᵉ enregistrement SPF, ne jamais enlever `+a +mx +ip4:197.140.11.7`.
+- Ne pas toucher au `_dmarc` existant.
+- Attendre que le service affiche le domaine **« Verified / Vérifié »**
+  (quelques minutes à quelques heures).
+
+### Étape 2 — Récupérer les identifiants SMTP
+
+| Service | SMTP_HOST | SMTP_PORT | SMTP_USER | SMTP_PASS | DNS demandés (en gros) |
+|---|---|---|---|---|---|
+| **Resend** | `smtp.resend.com` | `465` | `resend` (littéralement) | la clé API (`re_…`), menu **API Keys** | DKIM `resend._domainkey` (TXT) + MX et TXT sur le sous-domaine `send` |
+| **Mailjet** | `in-v3.mailjet.com` | `587` | la **API Key** | la **Secret Key** (menu Compte → API Keys) | DKIM `mailjet._domainkey` (TXT) + `include:spf.mailjet.com` dans le SPF + TXT de validation |
+| **SMTP2GO** | `mail.smtp2go.com` | `465` | l'utilisateur SMTP créé dans **Sending → SMTP Users** | son mot de passe | 3 CNAME (DKIM, retour, liens) |
+| **Amazon SES** | `email-smtp.<région>.amazonaws.com` (ex. `eu-west-3`) | `465` | identifiant SMTP (**SMTP settings → Create SMTP credentials**, ≠ clés IAM) | mot de passe SMTP associé | 3 CNAME DKIM (+ sortir du « sandbox » via une demande à AWS) |
+
+(Valeurs relevées en 2026 : si le site du service indique autre chose, c'est lui
+qui a raison.)
+
+### Étape 3 — Tester EN LOCAL avant de toucher à la prod
+
+1. Dans le `.env` **local** du projet, remplacer les lignes SMTP par :
+   ```
+   SMTP_PROVIDER=cpanel
+   SMTP_HOST=<host du tableau>
+   SMTP_PORT=<port du tableau>
+   SMTP_USER=<user>
+   SMTP_PASS=<mot de passe / clé>
+   EMAIL_FROM=contact@psi.dz
+   ```
+   (`cpanel` = le mode « SMTP générique » du code : il utilise juste HOST/PORT.
+   Ne pas mettre `brevo`, ce mode est spécifique à Brevo.)
+2. Lancer `npm run dev`, ouvrir http://localhost:3000/admin/login et se connecter
+   avec le compte **radja@psi.dz**.
+3. **Radja reçoit le code ?**
+   - ✅ Oui → passer à l'étape 4.
+   - ❌ Non → regarder les logs du service (souvent la même erreur 550 : ses IP
+     sont aussi bloquées par Icosnet). Inutile de basculer la prod : seul Icosnet
+     peut régler le problème.
+4. Remettre les valeurs Brevo dans le `.env` local ensuite (ou garder, au choix).
+
+### Étape 4 — Basculer la prod
+
+1. Vercel → **Settings → Environment Variables** → modifier les 6 variables avec
+   les mêmes valeurs que le test local (environnement **Production**).
+2. Vercel → **Deployments** → dernier déploiement → **⋯ → Redeploy**
+   (les variables ne sont prises en compte qu'au redéploiement).
+3. Vérifier : se connecter avec un compte @psi.dz et un compte Gmail → les deux
+   doivent recevoir le code. Vérifier aussi les logs du nouveau service.
+
+### Étape 5 — Revenir sur Brevo (quand Icosnet a débloqué)
+
+1. Remettre les 6 valeurs Brevo notées à l'étape 0 dans Vercel → **Redeploy**.
+2. Tester une connexion avec un compte @psi.dz.
+3. Les enregistrements DNS du service temporaire peuvent rester (inoffensifs) ou
+   être supprimés ; si un `include:` a été ajouté dans le SPF, le retirer.
+
+### Pendant qu'on est sur un autre service
+
+- Surveiller le **plafond journalier** de l'offre gratuite (voir tableau plus haut) :
+  au-delà, plus aucun mail ne part jusqu'au lendemain, codes de connexion compris.
+- Tous les mails passent par le nouveau service (pas seulement ceux vers @psi.dz).
+
+---
+
+## Comptes exemptés du code de connexion (temporaire)
+
+Paramètres → Utilisateurs → fiche de la personne → **Sécurité** →
+« Désactiver le code de connexion par email ». Le compte se connecte alors avec le
+**mot de passe seul** (badge rouge « ⚠ Sans code » dans la liste des utilisateurs).
+
+- [ ] Désactiver le code pour **Radja** et **Karim** (après le déploiement).
+- [ ] **Les réactiver** dès que les mails @psi.dz arrivent de nouveau
+      (Icosnet débloqué, ou autre service d'envoi en place) : même bouton,
+      « Réactiver le code de connexion par email ».
+
+Pendant ce temps, leur compte n'est protégé que par le mot de passe : leur
+conseiller un mot de passe solide et unique (réinitialisable depuis la même fiche).
+
+---
+
+## Plus tard : code via une application d'authentification (au lieu du mail)
+
+**Objectif** : ne plus dépendre des mails pour se connecter. Le code à 6 chiffres
+est généré par une appli sur le téléphone (Google Authenticator, Microsoft
+Authenticator, Authy…), fonctionne **sans internet** et change toutes les 30 s.
+Plus sûr que le code par email, et le problème Icosnet/Brevo ne pourrait plus
+bloquer les connexions.
+
+**Ce que ça change pour l'équipe**
+- Une seule fois : installer l'appli, puis dans le dashboard (Profil → Sécurité)
+  **scanner un QR code**.
+- À chaque connexion : mot de passe, puis le code affiché dans l'appli.
+- Le code par email reste disponible **en secours** (téléphone perdu, etc.).
+
+**Travail côté code (à demander à Claude — quelques heures)**
+- Base : champs `totpSecret` (chiffré) et `totpEnabledAt` sur `User` (migration).
+- Profil : page « Activer l'application d'authentification » → QR code + saisie
+  d'un premier code pour confirmer. Bouton « Désactiver » (avec mot de passe).
+- Connexion : si l'appli est activée → demander le code de l'appli au lieu
+  d'envoyer un mail ; lien « Recevoir plutôt un code par email ».
+- Admin : pouvoir **réinitialiser** l'appli d'un utilisateur (téléphone perdu).
+- Codes de secours à usage unique (8 codes à imprimer/garder) — optionnel.
+- Bibliothèque : `otplib` (standard TOTP, compatible toutes les applis) + `qrcode`.
+
+**Limites à connaître**
+- Téléphone perdu / changé sans transfert de l'appli → il faut qu'un admin
+  réinitialise, ou utiliser le code email / un code de secours.
+- L'heure du téléphone doit être correcte (réglage automatique), sinon codes refusés.
+- Chaque personne doit faire l'activation une fois : prévoir 5 min par personne.
