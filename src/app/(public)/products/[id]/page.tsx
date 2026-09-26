@@ -8,6 +8,7 @@ import { useTranslation } from '@/lib/i18n';
 import { QuoteCTA } from '@/components/QuoteCTA';
 import { FormatPreview } from '@/components/FormatPreview';
 import { type Cat, type Prod, getFallbackDescription } from '@/lib/hardcodedCatalog';
+import { trackEvent } from '@/lib/gtag';
 
 // Icônes des fiches techniques (Largeur / Diamètre / Mandrin / Papier / Grammage / Couleur)
 function specIcon(label: string) {
@@ -121,7 +122,19 @@ export default function ProductDetailPage() {
             return (
               <button
                 key={p.id}
-                onClick={() => { setIndex(i); setQty(1); }}
+                onClick={() => {
+                  // « Produit consulté » (dashboard) = référence choisie par le visiteur
+                  if (i !== index) {
+                    trackEvent('view_item', {
+                      items: [{
+                        item_id: p.id,
+                        item_name: p.metrage != null ? `${p.reference} · ${p.metrage} m` : p.reference,
+                        item_category: category.name,
+                      }],
+                    });
+                  }
+                  setIndex(i); setQty(1);
+                }}
                 className={`flex-shrink-0 px-3 py-2 rounded-xl border text-[13px] font-bold whitespace-nowrap transition-all ${
                   active
                     // Bordure VERTE : la référence choisie doit se voir nettement

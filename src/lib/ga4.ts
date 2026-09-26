@@ -40,6 +40,14 @@ function formatDate(date: Date): string {
   return date.toISOString().split('T')[0];
 }
 
+// Période ?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD d'une requête (undefined = mois en cours)
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+export function rangeFromSearchParams(params: URLSearchParams): { startDate: string; endDate: string } | undefined {
+  const startDate = params.get('startDate')?.slice(0, 10);
+  const endDate = params.get('endDate')?.slice(0, 10);
+  return startDate && endDate && ISO_DATE.test(startDate) && ISO_DATE.test(endDate) ? { startDate, endDate } : undefined;
+}
+
 // Exclut les pages admin/API : avant, le tag GA etait charge sur tout le site
 // et chaque clic de l'equipe dans l'admin etait compte comme une visite.
 const PUBLIC_PAGES_ONLY = {
@@ -361,5 +369,109 @@ export async function getWeeklyPageViews(): Promise<PageViewsByWeek[]> {
       })),
       total: 0,
     }));
+  }
+}
+
+// ── Détail « Site public » (fenêtre du dashboard) ─────────────────────────────
+
+// Ligne de rapport GA4 (runReport / runRealtimeReport)
+type GaRow = {
+  dimensionValues?: { value?: string | null }[] | null;
+  metricValues?: { value?: string | null }[] | null;
+};
+
+export interface SiteDetails {
+  // null = erreur GA4 sur ce bloc (les autres blocs restent affichés)
+  whatsappClicks: number | null;
+  cities: { city: string; visits: number }[] | null;
+  products: { name: string; views: number }[] | null;
+}
+
+// Villes, clics WhatsApp et produits consultés sur la période (mois en cours par défaut).
+// Chaque bloc est indépendant : si l'un échoue, les autres sont quand même renvoyés.
+export async function getSiteDetails(range?: { startDate: string; endDate: string }): Promise<SiteDetails> {
+  const client = getAnalyticsClient();
+  if (!client || !propertyId) return { whatsappClicks: null, cities: null, products: null };
+
+  const now = new Date();
+  const dateRanges = [{
+    startDate: range?.startDate ?? formatDate(new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1))),
+    endDate: range?.endDate ?? formatDate(now),
+  }];
+  const property = `properties/${propertyId}`;
+  const num = (v: string | null | undefined) => parseInt(v ?? '0', 10);
+
+  const [whatsapp, cities, products] = await Promise.allSettled([
+    // Événement envoyé par GoogleAnalytics.tsx à chaque clic sur un lien wa.me
+    client.runReport({
+      property, dateRanges,
+      metrics: [{ name: 'eventCount' }],
+      dimensionFilter: { filter: { fieldName: 'eventName', stringFilter: { matchType: 'EXACT', value: 'whatsapp_click' } } },
+    }),
+    client.runReport({
+      property, dateRanges,
+      dimensions: [{ name: 'city' }],
+      metrics: [{ name: 'sessions' }],
+      dimensionFilter: PUBLIC_PAGES_ONLY,
+      orderBys: [{ metric: { metricName: 'sessions' }, desc: true }],
+      limit: 11, // +1 : "(not set)" est retiré ensuite
+    }),
+    // Événement standard view_item envoyé quand un visiteur choisit une référence
+    // dans une catégorie (products/[id]) — lisible par l'API sans dimension personnalisée
+    client.runReport({
+      property, dateRanges,
+      dimensions: [{ name: 'itemName' }],
+      metrics: [{ name: 'itemsViewed' }],
+      orderBys: [{ metric: { metricName: 'itemsViewed' }, desc: true }],
+      limit: 10,
+    }),
+  ]);
+
+  const rows = (r: PromiseSettledResult<[{ rows?: GaRow[] | null }, ...unknown[]]>, label: string) => {
+    if (r.status === 'rejected') { console.error(`[GA4] Erreur détail ${label}:`, r.reason); return null; }
+    return r.value?.[0]?.rows ?? [];
+  };
+
+  const whatsappRows = rows(whatsapp, 'whatsapp');
+  const cityRows = rows(cities, 'villes');
+  const productRows = rows(products, 'produits');
+
+  return {
+    whatsappClicks: whatsappRows === null ? null : num(whatsappRows[0]?.metricValues?.[0]?.value),
+    cities: cityRows === null ? null : cityRows
+      .map((row) => ({ city: row.dimensionValues?.[0]?.value ?? '', visits: num(row.metricValues?.[0]?.value) }))
+      .filter((c) => c.city && c.city !== '(not set)')
+      .slice(0, 10),
+    products: productRows === null ? null : productRows
+      .map((row) => ({ name: row.dimensionValues?.[0]?.value ?? '', views: num(row.metricValues?.[0]?.value) }))
+      .filter((p) => p.name && p.name !== '(not set)'),
+  };
+}
+
+// Visiteurs actifs sur les 30 dernières minutes (API temps réel de GA4 — quota
+// séparé des rapports classiques, pas de délai de traitement).
+// perMinute[29] = minute en cours, perMinute[0] = il y a 29 min. null = erreur GA4.
+export async function getRealtimeVisitors(): Promise<{ now: number; perMinute: number[] } | null> {
+  const client = getAnalyticsClient();
+  if (!client || !propertyId) return null;
+  const property = `properties/${propertyId}`;
+
+  try {
+    const [[totalRes], [minutesRes]] = await Promise.all([
+      // Total sans dimension : un même visiteur actif sur plusieurs minutes compte 1 fois
+      client.runRealtimeReport({ property, metrics: [{ name: 'activeUsers' }] }),
+      client.runRealtimeReport({ property, dimensions: [{ name: 'minutesAgo' }], metrics: [{ name: 'activeUsers' }] }),
+    ]);
+
+    const perMinute: number[] = Array(30).fill(0);
+    ((minutesRes.rows ?? []) as GaRow[]).forEach((row) => {
+      const minutesAgo = parseInt(row.dimensionValues?.[0]?.value ?? '-1', 10);
+      if (minutesAgo >= 0 && minutesAgo < 30) perMinute[29 - minutesAgo] = parseInt(row.metricValues?.[0]?.value ?? '0', 10);
+    });
+
+    return { now: parseInt(totalRes.rows?.[0]?.metricValues?.[0]?.value ?? '0', 10), perMinute };
+  } catch (error) {
+    console.error('[GA4] Erreur temps réel:', error);
+    return null;
   }
 }

@@ -28,6 +28,8 @@ const SalesLineChart = dynamic(() => import('@/components/ui/DashboardCharts').t
 const CategoryPageViewsChart = dynamic(() => import('@/components/ui/DashboardCharts').then((m) => m.CategoryPageViewsChart), {
   ssr: false, loading: () => <div className="h-[180px] flex items-center justify-center text-[11px] text-[#ABBED1]">Chargement…</div>,
 });
+// Fenêtre de détail « Site public » — chargée seulement à l'ouverture
+const SiteVisitsModal = dynamic(() => import('@/components/ui/SiteVisitsModal').then((m) => m.SiteVisitsModal), { ssr: false });
 
 function ChartSkeleton({ title }: { title: string }) {
   return (
@@ -266,6 +268,7 @@ export default function DashboardPage() {
   // Date filtering states for each container
   const [topProduitsDateRange, setTopProduitsDateRange] = useState<{ start: string | null; end: string | null }>({ start: null, end: null });
   const [visitesDateRange, setVisitesDateRange] = useState<{ start: string | null; end: string | null }>({ start: null, end: null });
+  const [siteModalOpen, setSiteModalOpen] = useState(false);
   const [commandesDevisDateRange, setCommandesDevisDateRange] = useState<{ start: string | null; end: string | null }>({ start: null, end: null });
   const [ventesDateRange, setVentesDateRange] = useState<{ start: string | null; end: string | null }>({ start: null, end: null });
   const [wilayaDateRange, setWilayaDateRange] = useState<{ start: string | null; end: string | null }>({ start: null, end: null });
@@ -697,6 +700,7 @@ export default function DashboardPage() {
           <div className="flex items-end gap-2 mb-2">
             <span className="text-[20px] font-extrabold text-[#0F172A] leading-none">{(filteredAnalyticsData || analyticsData).monthly.total.toLocaleString('fr-FR')}</span>
             <span className="text-[10px] font-semibold text-[#8A9BB5] pb-0.5">visites ce mois</span>
+            <button onClick={() => setSiteModalOpen(true)} className="ml-auto text-[11px] font-semibold text-[#4CAF4F] hover:text-[#388E3C] pb-0.5">Voir le détail ↗</button>
           </div>
           {loading ? <p className="text-[11px] text-[#8A9BB5]">Chargement…</p> : <CategoryPageViewsChart data={(filteredAnalyticsData || analyticsData).weekly} />}
         </div>
@@ -781,6 +785,7 @@ export default function DashboardPage() {
             <span className="text-[12px] font-semibold text-[#8A9BB5] pb-1">
               {filteredAnalyticsData !== null ? 'visites' : 'visites ce mois'}
             </span>
+            <button onClick={() => setSiteModalOpen(true)} className="ml-auto text-[12px] font-semibold text-[#4CAF4F] hover:text-[#388E3C] transition-colors pb-1">Voir le détail ↗</button>
           </div>
           {loading ? <p className="text-[12px] text-[#8A9BB5]">Chargement…</p> : <CategoryPageViewsChart data={(filteredAnalyticsData || analyticsData).weekly} />}
         </div>
@@ -1104,6 +1109,17 @@ export default function DashboardPage() {
             // On garde le panneau ouvert — pas de setSelectedRequest(null)
             fetchData(true);
           }}
+        />
+      )}
+
+      {siteModalOpen && (
+        <SiteVisitsModal
+          onClose={() => setSiteModalOpen(false)}
+          // Même période que la carte (filtre de dates actif) sinon mois en cours
+          range={filteredAnalyticsData !== null && visitesDateRange.start && visitesDateRange.end
+            ? { start: visitesDateRange.start, end: visitesDateRange.end } : null}
+          visits={(filteredAnalyticsData || analyticsData).monthly.total}
+          weekly={(filteredAnalyticsData || analyticsData).weekly}
         />
       )}
 

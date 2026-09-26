@@ -225,3 +225,59 @@ bloquer les connexions.
   réinitialise, ou utiliser le code email / un code de secours.
 - L'heure du téléphone doit être correcte (réglage automatique), sinon codes refusés.
 - Chaque personne doit faire l'activation une fois : prévoir 5 min par personne.
+
+---
+
+## Statistiques du site public : idées à faire plus tard
+
+Déjà en place (fenêtre « Voir le détail » de la carte Site public) : visites,
+visiteurs en ligne maintenant, clics WhatsApp, villes, produits consultés, vues par
+catégorie. Tout ce qui suit est **gratuit**.
+
+### 1. Mots tapés sur Google — Google Search Console (config ~15 min)
+
+Montre les recherches Google qui amènent sur psi.dz (« rouleau thermique Alger »…),
+la position du site dans Google et les pages mal référencées.
+
+- [ ] search.google.com/search-console (même compte Google que Google Analytics) →
+      **Ajouter une propriété** → type **Domaine** → `psi.dz`.
+- [ ] Copier l'enregistrement **TXT** affiché → cPanel → Zone Editor → psi.dz →
+      Add Record (type TXT, nom `psi.dz.`) → revenir cliquer **Valider**.
+      (Ne pas toucher au TXT SPF existant : c'est un enregistrement **en plus**.)
+- [ ] Search Console → **Paramètres → Utilisateurs et autorisations → Ajouter** :
+      `psi-ga4-service@psi-analytics-503922.iam.gserviceaccount.com`, droit **Restreint**.
+- [ ] console.cloud.google.com (projet `psi-analytics-503922`) → **API et services →
+      Bibliothèque** → « Google Search Console API » → **Activer**.
+- [ ] Prévenir Claude → il ajoute le bloc « Mots tapés sur Google » dans la fenêtre.
+
+Limites : premières données **2-3 jours** après validation ; Google masque les
+recherches trop rares → avec peu de trafic, liste courte au début.
+
+### 2. Microsoft Clarity — cartes de chaleur + enregistrements de visites
+
+Gratuit et illimité. Montre **où les visiteurs cliquent**, **jusqu'où ils descendent**
+dans chaque page, et permet de **revoir des visites** comme une vidéo (champs de
+formulaire masqués automatiquement). Détecte aussi les clics de frustration.
+
+- [ ] clarity.microsoft.com → se connecter (compte Microsoft ou Google) →
+      **New project** → nom `PSI site`, URL `https://psi.dz`.
+- [ ] Récupérer l'**ID du projet** (Settings → Overview, ~10 caractères).
+- [ ] Donner l'ID à Claude → il ajoute le script **uniquement sur le site public**
+      (pas sur l'admin), comme Google Analytics.
+- [ ] Optionnel : Clarity → Settings → **Google Analytics integration** pour relier les deux.
+- [ ] Mentionner Clarity et Google Analytics dans les **mentions légales / politique de
+      confidentialité** du site (enregistrement des visites = données de navigation).
+
+Limites : les enregistrements sont gardés **30 jours** (sauf ceux marqués favoris) ;
+ne remplace pas Google Analytics (pas les mêmes chiffres), ça le complète.
+
+### 3. Autres KPI possibles dans la fenêtre (sans config, juste du code)
+
+- [ ] **D'où viennent les visiteurs** : Google, direct, Facebook/Instagram, WhatsApp…
+- [ ] **Mobile / ordinateur / tablette**.
+- [ ] **Demandes envoyées depuis le site** : devis envoyés, commandes passées, ajouts
+      au panier, formulaire de contact → « combien de visiteurs deviennent des
+      demandes » et quelles catégories en génèrent le plus. (Démarre à zéro au
+      déploiement, pas d'historique.)
+- [ ] **Produits consultés vs produits commandés** : repérer ceux qui intéressent
+      mais ne se vendent pas.
