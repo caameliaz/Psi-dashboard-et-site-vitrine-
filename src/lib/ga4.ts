@@ -402,11 +402,35 @@ export async function getSiteDetails(range?: { startDate: string; endDate: strin
   const num = (v: string | null | undefined) => parseInt(v ?? '0', 10);
 
   const [whatsapp, cities, products] = await Promise.allSettled([
-    // Événement envoyé par GoogleAnalytics.tsx à chaque clic sur un lien wa.me
+    // Clics WhatsApp, deux sources :
+    // - `click` : clic sortant enregistré automatiquement par GA4 (mesures améliorées,
+    //   actives par défaut) → contient l'HISTORIQUE, filtré sur le domaine du lien ;
+    // - `whatsapp_click` : notre événement (GoogleAnalytics.tsx), depuis son déploiement.
     client.runReport({
       property, dateRanges,
+      dimensions: [{ name: 'eventName' }],
       metrics: [{ name: 'eventCount' }],
-      dimensionFilter: { filter: { fieldName: 'eventName', stringFilter: { matchType: 'EXACT', value: 'whatsapp_click' } } },
+      dimensionFilter: {
+        orGroup: {
+          expressions: [
+            { filter: { fieldName: 'eventName', stringFilter: { matchType: 'EXACT', value: 'whatsapp_click' } } },
+            {
+              andGroup: {
+                expressions: [
+                  { filter: { fieldName: 'eventName', stringFilter: { matchType: 'EXACT', value: 'click' } } },
+                  {
+                    orGroup: {
+                      expressions: ['wa.me', 'whatsapp'].map((value) => ({
+                        filter: { fieldName: 'linkDomain', stringFilter: { matchType: 'CONTAINS', value, caseSensitive: false } },
+                      })),
+                    },
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      },
     }),
     client.runReport({
       property, dateRanges,
@@ -437,7 +461,9 @@ export async function getSiteDetails(range?: { startDate: string; endDate: strin
   const productRows = rows(products, 'produits');
 
   return {
-    whatsappClicks: whatsappRows === null ? null : num(whatsappRows[0]?.metricValues?.[0]?.value),
+    // Depuis le déploiement, un même clic déclenche les DEUX événements : on prend le
+    // plus grand (et pas la somme) pour ne pas compter deux fois. Avant, seul `click` existe.
+    whatsappClicks: whatsappRows === null ? null : Math.max(0, ...whatsappRows.map((row) => num(row.metricValues?.[0]?.value))),
     cities: cityRows === null ? null : cityRows
       .map((row) => ({ city: row.dimensionValues?.[0]?.value ?? '', visits: num(row.metricValues?.[0]?.value) }))
       .filter((c) => c.city && c.city !== '(not set)')
