@@ -1,6 +1,7 @@
 import { Navbar } from '@/components/Navbar';
 import { Footer } from '@/components/Footer';
 import { LangProvider } from '@/lib/i18n';
+import GoogleAnalytics from '../GoogleAnalytics';
 
 const WHATSAPP_NUMBER = '213770150656';
 const WHATSAPP_MSG = encodeURIComponent('Bonjour, je souhaite obtenir des informations sur vos produits PSI.');
@@ -10,8 +11,12 @@ export default function PublicLayout({
 }: {
   children: React.ReactNode;
 }) {
+  // GA uniquement sur le site public : l'admin ne doit pas gonfler les visites.
+  const gaId = process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID || '';
+
   return (
     <LangProvider>
+      {gaId && <GoogleAnalytics gaId={gaId} />}
       <script dangerouslySetInnerHTML={{ __html: `try{var l=localStorage.getItem('psi-lang');if(l==='ar'){document.documentElement.dir='rtl';document.documentElement.lang='ar';}}catch(e){}` }} />
       <div className="flex flex-col min-h-screen">
         <Navbar />

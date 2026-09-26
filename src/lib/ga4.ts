@@ -40,8 +40,23 @@ function formatDate(date: Date): string {
   return date.toISOString().split('T')[0];
 }
 
-// Recuperer les vues de pages par categorie pour le mois en cours
-export async function getMonthlyPageViews(): Promise<{ total: number; byCategory: CategoryPageViews[] }> {
+// Exclut les pages admin/API : avant, le tag GA etait charge sur tout le site
+// et chaque clic de l'equipe dans l'admin etait compte comme une visite.
+const PUBLIC_PAGES_ONLY = {
+  notExpression: {
+    orGroup: {
+      expressions: ['/admin', '/api'].map((value) => ({
+        filter: { fieldName: 'pagePath', stringFilter: { matchType: 'BEGINS_WITH', value } },
+      })),
+    },
+  },
+};
+
+// Recuperer les visites (sessions) et les vues par categorie pour le mois en cours,
+// ou pour la periode [startDate, endDate] (YYYY-MM-DD) si fournie.
+export async function getMonthlyPageViews(
+  range?: { startDate: string; endDate: string },
+): Promise<{ total: number; byCategory: CategoryPageViews[] }> {
   const client = getAnalyticsClient();
   
   // Import dynamique de prisma uniquement cote serveur
@@ -69,25 +84,31 @@ export async function getMonthlyPageViews(): Promise<{ total: number; byCategory
     // Utiliser runReport avec pagePath
     const now = new Date();
     const startOfMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
-    const today = formatDate(now);
-    const startDate = formatDate(startOfMonth);
-    
+    const today = range?.endDate ?? formatDate(now);
+    const startDate = range?.startDate ?? formatDate(startOfMonth);
+
     console.log('[GA4] Appel runReport mensuel:', {
       startDate,
       endDate: today,
     });
-    
-    const [response] = await client.runReport({
-      property: `properties/${propertyId}`,
-      dateRanges: [
-        {
-          startDate,
-          endDate: today,
-        },
-      ],
-      dimensions: [{ name: 'pagePath' }],
-      metrics: [{ name: 'screenPageViews' }],
-    });
+
+    const [[response], [sessionsResponse]] = await Promise.all([
+      client.runReport({
+        property: `properties/${propertyId}`,
+        dateRanges: [{ startDate, endDate: today }],
+        dimensions: [{ name: 'pagePath' }],
+        metrics: [{ name: 'screenPageViews' }],
+        dimensionFilter: PUBLIC_PAGES_ONLY,
+      }),
+      // Total = nombre de visites (sessions), pas de pages vues :
+      // un visiteur qui ouvre 10 pages compte pour 1 visite.
+      client.runReport({
+        property: `properties/${propertyId}`,
+        dateRanges: [{ startDate, endDate: today }],
+        metrics: [{ name: 'sessions' }],
+        dimensionFilter: PUBLIC_PAGES_ONLY,
+      }),
+    ]);
 
     // Mapper les categories par ID pour recherche rapide
     const categoryIds = new Set(categories.map(c => c.id));
@@ -98,7 +119,8 @@ export async function getMonthlyPageViews(): Promise<{ total: number; byCategory
       byCategoryMap[cat.id] = 0;
     });
 
-    let total = 0;
+    let totalPageViews = 0;
+    const total = parseInt(sessionsResponse.rows?.[0]?.metricValues?.[0]?.value ?? '0', 10);
     const allRows: Array<{ pagePath: string; views: number }> = [];
     const matchedPaths: Array<{ path: string; categoryId: string }> = [];
     const unmatchedPaths: string[] = [];
@@ -110,7 +132,7 @@ export async function getMonthlyPageViews(): Promise<{ total: number; byCategory
       const pagePath = row.dimensionValues?.[0]?.value ?? '';
       const views = parseInt(row.metricValues?.[0]?.value ?? '0', 10);
       
-      total += views;
+      totalPageViews += views;
       allRows.push({ pagePath, views });
 
       // Extraire l'ID de categorie du pagePath
@@ -129,7 +151,8 @@ export async function getMonthlyPageViews(): Promise<{ total: number; byCategory
     });
 
     console.log('[GA4] Resultat runReport mensuel:', {
-      totalSite: total,
+      sessions: total,
+      totalPageViews,
       totalCategories: Object.values(byCategoryMap).reduce((a, b) => a + b, 0),
       byCategoryMap,
       allRows: allRows.slice(0, 5),
