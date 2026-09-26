@@ -246,7 +246,7 @@ export default function DashboardPage() {
   const [topWilayas, setTopWilayas] = useState<{ wilaya: string; count: number }[]>([]);
   const [conversionRates, setConversionRates] = useState<{ label: string; rate: number }[]>([]);
   const [serie6Mois, setSerie6Mois] = useState<{ mois: string; commandes: number; devis: number }[]>([]);
-  const [serie6MoisVentes, setSerie6MoisVentes] = useState<{ mois: string; ventes: number }[]>([]);
+  const [serie6MoisVentes, setSerie6MoisVentes] = useState<{ mois: string; ventes: number; commandes?: number; devis?: number }[]>([]);
   const [analyticsData, setAnalyticsData] = useState<{ monthly: { total: number; byCategory: { category: string; views: number; color: string }[] }; weekly: { week: string; categories: { category: string; views: number; color: string }[] }[] }>({ monthly: { total: 0, byCategory: [] }, weekly: [] });
   const [loading, setLoading]   = useState(true);
 
@@ -261,7 +261,7 @@ export default function DashboardPage() {
   // Évolution % vs la période précédente de même durée, quand un filtre de dates est actif
   const [filteredEvolutionCommandes, setFilteredEvolutionCommandes] = useState<number | null>(null);
   const [filteredEvolutionDevis, setFilteredEvolutionDevis] = useState<number | null>(null);
-  const [filteredSerie6MoisVentes, setFilteredSerie6MoisVentes] = useState<{ mois: string; ventes: number }[] | null>(null);
+  const [filteredSerie6MoisVentes, setFilteredSerie6MoisVentes] = useState<{ mois: string; ventes: number; commandes?: number; devis?: number }[] | null>(null);
   const [filteredVentesMois, setFilteredVentesMois] = useState<number | null>(null);
   const [filteredTopWilayas, setFilteredTopWilayas] = useState<{ wilaya: string; count: number }[] | null>(null);
   const [filteredConversionRates, setFilteredConversionRates] = useState<{ label: string; rate: number }[] | null>(null);

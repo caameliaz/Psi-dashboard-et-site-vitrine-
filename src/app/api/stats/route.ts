@@ -263,20 +263,24 @@ export async function GET(request: NextRequest) {
     }
 
     // Série 6 mois : ventes (montant) par mois de LIVRAISON
-    const serieVentes: { mois: string; ventes: number }[] = [];
+    // ventes = total ; commandes / devis = détail pour le sélecteur du graphe
+    const serieVentes: { mois: string; ventes: number; commandes: number; devis: number }[] = [];
     for (let i = 5; i >= 0; i--) {
       const d = new Date(Date.UTC(refYear, refMonth - i, 1));
       const key = `${d.getUTCFullYear()}-${d.getUTCMonth()}`;
-      serieVentes.push({ mois: MOIS[d.getUTCMonth()], ventes: 0 });
+      serieVentes.push({ mois: MOIS[d.getUTCMonth()], ventes: 0, commandes: 0, devis: 0 });
       const idx = serieVentes.length - 1;
       ordersLivresFor6Months.forEach((o) => {
         if (o.deliveredAt && monthKeyAlgeria(o.deliveredAt) === key) {
-          serieVentes[idx].ventes += orderAmount(o.items);
+          const montant = orderAmount(o.items);
+          serieVentes[idx].ventes += montant;
+          serieVentes[idx].commandes += montant;
         }
       });
       quotesLivresFor6Months.forEach((q) => {
         if (q.deliveredAt && monthKeyAlgeria(q.deliveredAt) === key) {
           serieVentes[idx].ventes += q.proposedPrice ?? 0;
+          serieVentes[idx].devis += q.proposedPrice ?? 0;
         }
       });
     }
@@ -429,7 +433,7 @@ export async function GET(request: NextRequest) {
       devisEnAttente: { count: attenteDevis, montant: devisEnAttenteAgg._sum.proposedPrice ?? 0 },
       topWilayas,                // [{ wilaya, count }]
       serie6Mois: serie,         // [{ mois, commandes, devis }]
-      serie6MoisVentes: serieVentes, // [{ mois, ventes }] — montant des ventes par mois
+      serie6MoisVentes: serieVentes, // [{ mois, ventes, commandes, devis }] — montant des ventes par mois
       conversionRates,           // [{ productId, reference, label, rate, total, delivered }] — taux de conversion par produit
       topProduits: topProduitsFinal,
       sourceStats: sourceCounts,

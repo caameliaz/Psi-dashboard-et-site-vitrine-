@@ -19,7 +19,8 @@ export async function GET() {
         },
         createdBy: { select: { name: true } },
       },
-      orderBy: { updatedAt: 'desc' },
+      // Par date décroissante : plus récemment livrées en premier, puis date de commande
+      orderBy: [{ deliveredAt: 'desc' }, { createdAt: 'desc' }],
     });
 
     return NextResponse.json(orders);

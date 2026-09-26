@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import dynamic from 'next/dynamic';
+import { DateRangePicker } from '@/components/ui/DateRangePicker';
 
 const CategoryPageViewsChart = dynamic(() => import('@/components/ui/DashboardCharts').then((m) => m.CategoryPageViewsChart), {
   ssr: false,
@@ -19,6 +20,8 @@ interface SiteDetails {
 interface Realtime { now: number; perMinute: number[] }
 
 const REALTIME_REFRESH_MS = 60_000;
+// Installation de Google Analytics sur le site : aucune donnée avant cette date
+const GA_SINCE_LABEL = '30/07/2026';
 
 // Fenêtre « Site public » : tous les KPI du site vitrine. Les données GA4 détaillées
 // ne sont chargées qu'à l'ouverture (pas dans le polling du dashboard), et le temps
@@ -29,22 +32,39 @@ export function SiteVisitsModal({ onClose, range, visits, weekly }: {
   visits: number;
   weekly: WeeklyViews;
 }) {
+  // Période de la fenêtre : celle de la carte à l'ouverture, modifiable ici (null = mois en cours)
+  const [period, setPeriod] = useState(range);
+  // Visites de la période choisie ICI (null = pas encore changée → chiffre de la carte)
+  const [periodVisits, setPeriodVisits] = useState<number | null>(null);
   const [details, setDetails] = useState<SiteDetails | null>(null);
   const [detailsError, setDetailsError] = useState(false);
   const [realtime, setRealtime] = useState<Realtime | null>(null);
   const [realtimeError, setRealtimeError] = useState(false);
 
-  // Dépend des dates (chaînes), pas de l'objet `range` : le dashboard se ré-affiche
-  // chaque seconde (horloge) et recréerait l'objet → rechargement en boucle.
-  const rangeStart = range?.start ?? null;
-  const rangeEnd = range?.end ?? null;
+  // Dépend des dates (chaînes), pas de l'objet période, pour ne recharger qu'au changement réel
+  const periodStart = period?.start ?? null;
+  const periodEnd = period?.end ?? null;
   useEffect(() => {
-    const qs = rangeStart && rangeEnd ? `?startDate=${rangeStart}&endDate=${rangeEnd}` : '';
+    const qs = periodStart && periodEnd ? `?startDate=${periodStart}&endDate=${periodEnd}` : '';
     fetch(`/api/analytics/details${qs}`, { credentials: 'include' })
       .then((r) => r.ok ? r.json() : Promise.reject())
       .then(setDetails)
       .catch(() => setDetailsError(true));
-  }, [rangeStart, rangeEnd]);
+  }, [periodStart, periodEnd]);
+
+  // Changement de période depuis la fenêtre → recharge aussi le nombre de visites
+  const changePeriod = (start: string | null, end: string | null) => {
+    const next = start && end ? { start, end } : null;
+    setPeriod(next);
+    setPeriodVisits(null);
+    setDetails(null);
+    setDetailsError(false);
+    const qs = next ? `?startDate=${next.start}&endDate=${next.end}` : '';
+    fetch(`/api/analytics${qs}`, { credentials: 'include' })
+      .then((r) => r.ok ? r.json() : Promise.reject())
+      .then((data: { monthly?: { total?: number } }) => setPeriodVisits(data.monthly?.total ?? 0))
+      .catch(() => {});
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -65,7 +85,9 @@ export function SiteVisitsModal({ onClose, range, visits, weekly }: {
   }, [onClose]);
 
   const fmtDate = (d: string) => new Date(d + 'T00:00:00').toLocaleDateString('fr-DZ', { day: '2-digit', month: 'short' });
-  const periodLabel = range ? `du ${fmtDate(range.start)} au ${fmtDate(range.end)}` : 'ce mois';
+  const periodLabel = period ? `du ${fmtDate(period.start)} au ${fmtDate(period.end)}` : 'ce mois';
+  const periodChanged = period?.start !== range?.start || period?.end !== range?.end;
+  const shownVisits = periodChanged ? periodVisits : visits;
   const loadingDetails = details === null && !detailsError;
 
   return (
@@ -78,13 +100,16 @@ export function SiteVisitsModal({ onClose, range, visits, weekly }: {
             <p className="text-[11px] font-bold text-[#ABBED1] uppercase tracking-widest">Site public</p>
             <h3 className="text-[16px] font-bold text-[#0F172A]">Détail des visites <span className="font-semibold text-[#8A9BB5]">· {periodLabel}</span></h3>
           </div>
-          <button onClick={onClose} aria-label="Fermer" className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-[#E2E8F0] text-[#8A9BB5] transition-colors text-lg">&#x2715;</button>
+          <div className="flex items-center gap-2">
+            <DateRangePicker onDateChange={changePeriod} />
+            <button onClick={onClose} aria-label="Fermer" className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-[#E2E8F0] text-[#8A9BB5] transition-colors text-lg">&#x2715;</button>
+          </div>
         </div>
 
         <div className="overflow-y-auto px-5 md:px-6 py-5 flex flex-col gap-5">
           {/* KPI principaux */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 md:gap-4">
-            <KpiTile label="Visites" hint={periodLabel} value={visits.toLocaleString('fr-FR')} />
+            <KpiTile label="Visites" hint={periodLabel} value={shownVisits != null ? shownVisits.toLocaleString('fr-FR') : '…'} />
 
             <div className="rounded-2xl border border-[#E2E8F0] p-4">
               <div className="flex items-center justify-between">
@@ -104,7 +129,7 @@ export function SiteVisitsModal({ onClose, range, visits, weekly }: {
 
             <KpiTile
               label="Clics WhatsApp"
-              hint="bouton flottant, contact, devis"
+              hint={`${periodLabel} · bouton flottant, contact, devis`}
               value={details?.whatsappClicks != null ? details.whatsappClicks.toLocaleString('fr-FR') : loadingDetails ? '…' : '—'}
             />
           </div>
@@ -112,7 +137,7 @@ export function SiteVisitsModal({ onClose, range, visits, weekly }: {
           {/* Villes + produits consultés */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-4">
             <RankedList
-              title="Villes des visiteurs"
+              title={`Villes des visiteurs · ${periodLabel}`}
               note="Estimée d'après l'adresse IP : approximative (beaucoup de mobiles apparaissent à Alger)."
               loading={loadingDetails}
               rows={details?.cities?.map((c) => ({ label: c.city, value: c.visits })) ?? null}
@@ -120,7 +145,7 @@ export function SiteVisitsModal({ onClose, range, visits, weekly }: {
               empty="Aucune ville identifiée sur la période."
             />
             <RankedList
-              title="Produits consultés"
+              title={`Produits consultés · ${periodLabel}`}
               note="Référence choisie par le visiteur dans une catégorie. Suivi actif depuis la mise en ligne de ce bloc."
               loading={loadingDetails}
               rows={details?.products?.map((p) => ({ label: p.name, value: p.views })) ?? null}
@@ -137,8 +162,9 @@ export function SiteVisitsModal({ onClose, range, visits, weekly }: {
           </div>
 
           <p className="text-[11px] text-[#ABBED1]">
-            Source : Google Analytics (site public uniquement, hors pages admin). Les chiffres des rapports
-            peuvent avoir quelques heures de retard ; seul « En ligne maintenant » est en direct.
+            Source : Google Analytics (site public uniquement, hors pages admin), données disponibles depuis
+            le {GA_SINCE_LABEL} — utilisez « Filtrer » pour remonter plus loin que ce mois. Les chiffres des
+            rapports peuvent avoir quelques heures de retard ; seul « En ligne maintenant » est en direct.
           </p>
         </div>
       </div>

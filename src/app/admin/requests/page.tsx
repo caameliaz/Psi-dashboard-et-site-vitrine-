@@ -45,7 +45,14 @@ const SOURCE_COLOR: Record<'SITE' | 'OTHER', { bg: string; color: string; border
 const PERIODE_LABEL: Record<string, string> = {
   '7j': '7 derniers jours', '2sem': '2 dernières semaines', '3sem': '3 dernières semaines',
   mois: 'Ce mois', '3mois': '3 derniers mois', '6mois': '6 derniers mois', annee: 'Cette année', tout: 'Tout afficher',
+  date: 'Date exacte',
 };
+
+// "YYYY-MM-DD" (champ date) → minuit local de ce jour
+function parseDateExacte(value: string): Date | null {
+  const [y, m, d] = value.split('-').map(Number);
+  return y && m && d ? new Date(y, m - 1, d) : null;
+}
 
 // Date de début d'une période → Date. null = tout charger.
 function periodeStartDate(periode: string): Date | null {
@@ -602,6 +609,8 @@ function RequestsPageInner() {
   const [search, setSearch]       = useState('');
   const [filterStatut, setFilterStatut] = useState('all');
   const [filterPeriode, setFilterPeriode] = useState('mois');
+  // Filtre « Date exacte » (période = 'date') : jour de création au format YYYY-MM-DD
+  const [filterDateExacte, setFilterDateExacte] = useState('');
   const [filterAssigne, setFilterAssigne] = useState('all');
   const [users, setUsers] = useState<{ id: string; name: string }[]>([]);
   const [selected, setSelected]   = useState<RequestDetail | null>(null);
@@ -621,7 +630,8 @@ function RequestsPageInner() {
       // La restriction "mes commandes/clients" pour un non-admin est appliquée côté
       // serveur (cf. src/lib/leave.ts + /api/orders, /api/quotes) — pas besoin de la
       // repasser en query param ici.
-      const from = periodeToFrom(filterPeriode);
+      const dateExacte = filterPeriode === 'date' ? parseDateExacte(filterDateExacte) : null;
+      const from = dateExacte ? dateExacte.toISOString() : periodeToFrom(filterPeriode);
       const qs = from ? `?from=${encodeURIComponent(from)}` : '';
 
       const [ordRes, quoRes] = await Promise.all([
@@ -651,7 +661,7 @@ function RequestsPageInner() {
     } finally {
       if (!silent) setLoading(false);
     }
-  }, [filterPeriode, isAdmin, currentUserId]);
+  }, [filterPeriode, filterDateExacte, isAdmin, currentUserId]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
   
@@ -724,6 +734,7 @@ function RequestsPageInner() {
   const sorted = sortItems(rawItems);
 
   const periodeStart = periodeStartDate(filterPeriode);
+  const dateExacte = filterPeriode === 'date' ? parseDateExacte(filterDateExacte) : null;
 
   const filtered = sorted.filter((r) => {
     const q = search.toLowerCase();
@@ -731,9 +742,11 @@ function RequestsPageInner() {
     const matchStatut = filterStatut === 'all' || r.statut === filterStatut;
     const matchAssigne = filterAssigne === 'all'
       || (filterAssigne === 'none' ? !r.assignedToId : r.assignedToId === filterAssigne);
-    const matchPeriode = !periodeStart || (() => {
+    const matchPeriode = (() => {
       const [d, m, y] = r.date.split('/').map(Number);
-      return new Date(y, m - 1, d) >= periodeStart;
+      const jour = new Date(y, m - 1, d);
+      if (dateExacte) return jour.getTime() === dateExacte.getTime();
+      return !periodeStart || jour >= periodeStart;
     })();
     return matchSearch && matchStatut && matchAssigne && matchPeriode;
   });
@@ -877,7 +890,7 @@ function RequestsPageInner() {
     : users.find((u) => u.id === filterAssigne)?.name ?? 'Responsable';
   const activeFilters = [
     filterStatut === 'all' ? 'Tous les statuts' : filterStatut,
-    PERIODE_LABEL[filterPeriode] ?? filterPeriode,
+    dateExacte ? `Date : ${dateExacte.toLocaleDateString('fr-FR')}` : (PERIODE_LABEL[filterPeriode] ?? filterPeriode),
     assigneLabel,
   ];
 
@@ -922,7 +935,9 @@ function RequestsPageInner() {
           <button
             onClick={() => {
               const label = activeTab === 'devis' ? 'Devis' : activeTab === 'commandes' ? 'Commandes' : 'Demandes';
-              exportTableauExcel(filtered, `PSI_${label}`, label, activeFilters.join(' | '));
+              // Export trié par date, la plus récente en premier
+              const parDate = [...filtered].sort((a, b) => dateKey(b) - dateKey(a));
+              exportTableauExcel(parDate, `PSI_${label}`, label, activeFilters.join(' | '));
             }}
             className="hidden md:flex items-center gap-1.5 px-3 py-2 rounded-xl text-[13px] font-semibold border border-[#E2E8F0] text-[#374151] hover:bg-[#F8FAFC] transition-colors"
             title="Exporter le tableau filtré en Excel">
@@ -1002,8 +1017,18 @@ function RequestsPageInner() {
               { value: '6mois', label: '6 derniers mois' },
               { value: 'annee', label: 'Cette année' },
               { value: 'tout',  label: 'Tout afficher' },
+              { value: 'date',  label: 'Date exacte…' },
             ]}
           />
+          {filterPeriode === 'date' && (
+            <input
+              type="date"
+              value={filterDateExacte}
+              onChange={(e) => setFilterDateExacte(e.target.value)}
+              aria-label="Date exacte"
+              className="flex-shrink-0 px-3 py-2 rounded-xl border border-[#E2E8F0] bg-white text-[13px] text-[#374151] focus:outline-none focus:border-[#4CAF4F] focus:ring-2 focus:ring-[#4CAF4F]/20"
+            />
+          )}
           <AdminSelect
             className="flex-1 min-w-0"
             value={filterAssigne}
@@ -1031,7 +1056,7 @@ function RequestsPageInner() {
           )}
         </div>
         {(search || filterStatut !== 'all' || filterPeriode !== 'mois' || filterAssigne !== 'all') && (
-          <button onClick={() => { setSearch(''); setFilterStatut('all'); setFilterPeriode('mois'); setFilterAssigne('all'); }} className="text-[12px] font-semibold text-[#8A9BB5] hover:text-[#374151] self-start md:self-auto">Effacer</button>
+          <button onClick={() => { setSearch(''); setFilterStatut('all'); setFilterPeriode('mois'); setFilterDateExacte(''); setFilterAssigne('all'); }} className="text-[12px] font-semibold text-[#8A9BB5] hover:text-[#374151] self-start md:self-auto">Effacer</button>
         )}
       </div>
 

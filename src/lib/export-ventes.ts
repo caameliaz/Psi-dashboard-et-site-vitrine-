@@ -38,7 +38,8 @@ export async function exportVentesExcel(filtresLabel?: string) {
 
   for (const order of orders) {
     const dateCmd = new Date(order.createdAt).toLocaleDateString('fr-FR');
-    const dateLiv = new Date(order.updatedAt).toLocaleDateString('fr-FR');
+    // Vraie date de passage à Livré (deliveredAt) — updatedAt changeait à chaque modif (facture, notes…)
+    const dateLiv = new Date(order.deliveredAt ?? order.updatedAt).toLocaleDateString('fr-FR');
     const client = order.client?.name ?? order.clientName ?? '—';
     const entreprise = order.client?.company ?? order.clientCompany ?? '—';
     const wilaya = order.client?.wilaya ?? order.clientWilaya ?? '—';

@@ -4,6 +4,7 @@
 // dashboard → Recharts n'est chargé QUE sur cette page, jamais sur le site public
 // ni ailleurs dans l'admin. Aucun impact de poids sur le reste du site.
 
+import { useState } from 'react';
 import {
   BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
 } from 'recharts';
@@ -72,7 +73,17 @@ export function TrendLineChart({ data }: { data: { mois: string; commandes: numb
   );
 }
 
-export function SalesLineChart({ data }: { data: { mois: string; ventes: number }[] }) {
+const SALES_SERIES = {
+  ventes:    { label: 'Tout',      legend: 'Ventes (DA)',   color: '#4CAF4F' },
+  commandes: { label: 'Commandes', legend: 'Commandes (DA)', color: '#2184F3' },
+  devis:     { label: 'Devis',     legend: 'Devis (DA)',    color: '#8B5CF6' },
+} as const;
+type SalesSeries = keyof typeof SALES_SERIES;
+
+export function SalesLineChart({ data }: { data: { mois: string; ventes: number; commandes?: number; devis?: number }[] }) {
+  // Sélecteur : total (Tout), commandes livrées seules, ou devis livrés seuls
+  const [series, setSeries] = useState<SalesSeries>('ventes');
+
   if (!data || data.length === 0) {
     return <p className="text-[11px] md:text-[12px] text-[#8A9BB5] py-4 text-center">Aucune donnée</p>;
   }
@@ -83,23 +94,32 @@ export function SalesLineChart({ data }: { data: { mois: string; ventes: number 
     if (value >= 1000) return `${(value / 1000).toFixed(0)}k`;
     return value.toString();
   };
+  const cfg = SALES_SERIES[series];
 
   return (
     <>
+      <div className="flex items-center gap-0.5 bg-[#F2F4F7] rounded-lg p-0.5 w-fit mb-2">
+        {(Object.keys(SALES_SERIES) as SalesSeries[]).map((key) => (
+          <button key={key} onClick={() => setSeries(key)}
+            className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition-colors ${series === key ? 'bg-white text-[#0F172A] shadow-sm' : 'text-[#64748B] hover:text-[#374151]'}`}>
+            {SALES_SERIES[key].label}
+          </button>
+        ))}
+      </div>
       <ResponsiveContainer width="100%" height={150}>
         <LineChart data={data} margin={{ left: -12, right: 12, top: 6, bottom: 0 }}>
           <CartesianGrid stroke="#F2F4F7" />
           <XAxis dataKey="mois" tick={{ fontSize: 11, fill: '#8A9BB5' }} />
           <YAxis tick={{ fontSize: 11, fill: '#8A9BB5' }} tickFormatter={formatDA} />
-          <Tooltip {...tooltipStyle()} formatter={(value) => typeof value === 'number' ? [`${value.toLocaleString('fr-FR')} DA`, 'Ventes'] : [String(value), 'Ventes']} />
-          <Line type="monotone" dataKey="ventes" name="Ventes" stroke="#4CAF4F" strokeWidth={2.5} dot={{ r: 3 }} activeDot={{ r: 5 }} />
+          <Tooltip {...tooltipStyle()} formatter={(value) => typeof value === 'number' ? [`${value.toLocaleString('fr-FR')} DA`, cfg.legend.replace(' (DA)', '')] : [String(value), cfg.legend]} />
+          <Line type="monotone" dataKey={series} name={cfg.legend} stroke={cfg.color} strokeWidth={2.5} dot={{ r: 3 }} activeDot={{ r: 5 }} />
         </LineChart>
       </ResponsiveContainer>
       <div className="flex flex-col md:flex-row md:items-center gap-1 md:gap-5 mt-1 md:mt-2 md:justify-center">
         <span className="text-[9px] md:text-[11px] font-semibold text-[#8A9BB5] text-center md:text-left">Évolution 6 mois</span>
         <span className="flex items-center gap-1 text-[10px] md:text-[11px] text-[#374151] justify-center">
-          <span className="w-2.5 md:w-3 h-1 md:h-1.5 rounded-full" style={{ background: '#4CAF4F' }} />
-          Ventes (DA)
+          <span className="w-2.5 md:w-3 h-1 md:h-1.5 rounded-full" style={{ background: cfg.color }} />
+          {cfg.legend}
         </span>
       </div>
     </>
