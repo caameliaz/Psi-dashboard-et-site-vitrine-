@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { usePolling } from '@/lib/use-polling';
 import { MobileNavbar } from '@/components/MobileNavbar';
 interface ClientRecord {
   id: string | number;
@@ -759,31 +760,8 @@ function ClientsPageInner() {
   useEffect(() => { fetchClients(); }, [fetchClients]);
   useEffect(() => { fetchSectors(); fetchUsers(); }, [fetchSectors, fetchUsers]);
   
-  // Polling adaptatif : 20s si onglet actif, 60s si inactif
-  useEffect(() => {
-    let intervalId: NodeJS.Timeout;
-    
-    const startPolling = (interval: number) => {
-      if (intervalId) clearInterval(intervalId);
-      intervalId = setInterval(() => fetchClients(true), interval);
-    };
-
-    const handleVisibilityChange = () => {
-      const interval = document.hidden ? 60000 : 20000;
-      startPolling(interval);
-    };
-
-    // Démarrer avec l'intervalle approprié
-    startPolling(document.hidden ? 60000 : 20000);
-
-    // Écouter les changements de visibilité
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-
-    return () => {
-      clearInterval(intervalId);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
-  }, [fetchClients]);
+  // Rafraîchissement toutes les 20 s, en pause quand l'onglet est caché
+  usePolling(() => fetchClients(true), 20000);
 
   // Ouverture directe d'une fiche via ?open=<clientId> (depuis l'historique / une notif)
   // — inclut les clients désactivés (?inactifs=true) pour voir la justif.

@@ -1,6 +1,7 @@
 ﻿'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { usePolling } from '@/lib/use-polling';
 import { useRouter } from 'next/navigation';
 import { initials } from '@/lib/utils';
 import { StatusPill } from '@/components/ui/StatusPill';
@@ -107,31 +108,8 @@ function HistoryPageInner() {
       .then((data: { id: string; name: string }[]) => setUsers(data))
       .catch(() => {});
   }, []);
-  // Polling adaptatif : 20s si onglet actif, 60s si inactif
-  useEffect(() => {
-    let intervalId: NodeJS.Timeout;
-    
-    const startPolling = (interval: number) => {
-      if (intervalId) clearInterval(intervalId);
-      intervalId = setInterval(() => fetchHistory(true), interval);
-    };
-
-    const handleVisibilityChange = () => {
-      const interval = document.hidden ? 60000 : 20000;
-      startPolling(interval);
-    };
-
-    // Démarrer avec l'intervalle approprié
-    startPolling(document.hidden ? 60000 : 20000);
-
-    // Écouter les changements de visibilité
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-
-    return () => {
-      clearInterval(intervalId);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
-  }, [fetchHistory]);
+  // Rafraîchissement toutes les 20 s, en pause quand l'onglet est caché
+  usePolling(() => fetchHistory(true), 20000);
 
   const filtered = history.filter((h) => {
     const matchSearch = !search || h.action.toLowerCase().includes(search.toLowerCase()) || h.detail.toLowerCase().includes(search.toLowerCase()) || h.user.toLowerCase().includes(search.toLowerCase());

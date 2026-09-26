@@ -1,6 +1,7 @@
 ﻿'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { usePolling } from '@/lib/use-polling';
 import { StatusPill } from '@/components/ui/StatusPill';
 import { Modal } from '@/components/ui/Modal';
 import { RequestPanel, type RequestDetail } from '@/components/ui/RequestPanel';
@@ -654,31 +655,8 @@ function RequestsPageInner() {
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
   
-  // Polling adaptatif : 20s si onglet actif, 60s si inactif
-  useEffect(() => {
-    let intervalId: NodeJS.Timeout;
-    
-    const startPolling = (interval: number) => {
-      if (intervalId) clearInterval(intervalId);
-      intervalId = setInterval(() => fetchAll(true), interval);
-    };
-
-    const handleVisibilityChange = () => {
-      const interval = document.hidden ? 60000 : 20000;
-      startPolling(interval);
-    };
-
-    // Démarrer avec l'intervalle approprié
-    startPolling(document.hidden ? 60000 : 20000);
-
-    // Écouter les changements de visibilité
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-
-    return () => {
-      clearInterval(intervalId);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
-  }, [fetchAll]);
+  // Rafraîchissement toutes les 20 s, en pause quand l'onglet est caché
+  usePolling(() => fetchAll(true), 20000);
 
   // ── Gestion du bouton retour du navigateur pour fermer le panneau de détail ──
   useEffect(() => {

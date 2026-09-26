@@ -1,6 +1,7 @@
 ﻿'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
+import { usePolling } from '@/lib/use-polling';
 import { StatusPill } from '@/components/ui/StatusPill';
 import { RequestPanel, type RequestDetail } from '@/components/ui/RequestPanel';
 import { orderToDetail, quoteToDetail, DB_TO_UI, UI_TO_DB } from '@/lib/request-detail';
@@ -419,9 +420,11 @@ export default function DashboardPage() {
 
       console.log('📥 Chargement initial de toutes les données');
       // Default: fetch all data (no filter)
+      // Google Analytics : seulement au chargement de la page (pas dans les
+      // rafraîchissements silencieux) — ses chiffres ont de toute façon plusieurs heures de retard
       const [statsRes, analyticsRes] = await Promise.all([
         fetch(statsUrl, { credentials: 'include' }),
-        fetch(analyticsUrl, { credentials: 'include' }),
+        silent ? Promise.resolve(null) : fetch(analyticsUrl, { credentials: 'include' }),
       ]);
       
       if (statsRes.ok) {
@@ -453,7 +456,7 @@ export default function DashboardPage() {
         setRecentRequests(allDetails);
       }
       
-      if (analyticsRes.ok) {
+      if (analyticsRes?.ok) {
         const analyticsDataRes = await analyticsRes.json();
         setAnalyticsData(analyticsDataRes);
       }
@@ -483,34 +486,9 @@ export default function DashboardPage() {
                        filteredSerie6MoisVentes !== null || filteredVentesMois !== null ||
                        filteredTopWilayas !== null || filteredConversionRates !== null;
   
-  // Polling adaptatif : 20s si onglet actif, 60s si inactif
-  // MAIS seulement si aucun filtre n'est actif
-  useEffect(() => {
-    if (hasAnyFilter) return; // Ne pas rafraîchir si un filtre est actif
-    
-    let intervalId: NodeJS.Timeout;
-    
-    const startPolling = (interval: number) => {
-      if (intervalId) clearInterval(intervalId);
-      intervalId = setInterval(() => fetchData(true), interval);
-    };
-
-    const handleVisibilityChange = () => {
-      const interval = document.hidden ? 60000 : 20000;
-      startPolling(interval);
-    };
-
-    // Démarrer avec l'intervalle approprié
-    startPolling(document.hidden ? 60000 : 20000);
-
-    // Écouter les changements de visibilité
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-
-    return () => {
-      clearInterval(intervalId);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
-  }, [fetchData, hasAnyFilter]);
+  // Rafraîchissement toutes les 60 s, en pause quand l'onglet est caché,
+  // et seulement si aucun filtre n'est actif
+  usePolling(() => fetchData(true), 60000, !hasAnyFilter);
 
   const handleSort = (key: SortKey) => {
     if (sortKey === key) setSortAsc((a) => !a);

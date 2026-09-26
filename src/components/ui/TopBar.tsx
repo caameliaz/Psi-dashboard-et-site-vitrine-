@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { usePolling } from '@/lib/use-polling';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { AdminSelect } from '@/components/ui/AdminSelect';
@@ -275,31 +276,9 @@ export function TopBar() {
   // Premier chargement (sans toaster l'existant)
   useEffect(() => { refreshNotifs(false, true); }, [refreshNotifs]);
 
-  // Polling adaptatif : 7s si onglet actif, 20s si inactif
-  useEffect(() => {
-    let intervalId: NodeJS.Timeout;
-    
-    const startPolling = (interval: number) => {
-      if (intervalId) clearInterval(intervalId);
-      intervalId = setInterval(() => refreshNotifs(true), interval);
-    };
-
-    const handleVisibilityChange = () => {
-      const interval = document.hidden ? 20000 : 7000;
-      startPolling(interval);
-    };
-
-    // Démarrer avec l'intervalle approprié
-    startPolling(document.hidden ? 20000 : 7000);
-
-    // Écouter les changements de visibilité
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-
-    return () => {
-      clearInterval(intervalId);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
-  }, [refreshNotifs]);
+  // Cloche : rafraîchie toutes les 30 s (présente sur toutes les pages admin → c'était
+  // le plus gros volume de requêtes à 7 s), en pause quand l'onglet est caché
+  usePolling(() => refreshNotifs(true), 30000);
 
   // Exposer le count et le toggle au store (pour Sidebar)
   useEffect(() => { notifBell.setCount(unread); }, [unread]);

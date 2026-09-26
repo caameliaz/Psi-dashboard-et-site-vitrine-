@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { usePolling } from '@/lib/use-polling';
 import { Modal } from './Modal';
 import { RecipeEntryModal, NoRecipeChoiceModal } from './NoRecipeModal';
 
@@ -326,17 +327,8 @@ export function StockListsWidget() {
   // confirmée/annulée sur un autre écran, par un autre utilisateur...) — sans ça, le total
   // affiché reste figé jusqu'au prochain rechargement complet de la page. On rafraîchit donc
   // en arrière-plan à intervalle régulier, et immédiatement quand l'onglet redevient actif.
-  useEffect(() => {
-    const interval = setInterval(() => fetchAll(true), 20000);
-    const onVisible = () => { if (document.visibilityState === 'visible') fetchAll(true); };
-    document.addEventListener('visibilitychange', onVisible);
-    window.addEventListener('focus', onVisible);
-    return () => {
-      clearInterval(interval);
-      document.removeEventListener('visibilitychange', onVisible);
-      window.removeEventListener('focus', onVisible);
-    };
-  }, [fetchAll]);
+  // 5 requêtes par rafraîchissement → toutes les 60 s, en pause quand l'onglet est caché.
+  usePolling(() => fetchAll(true), 60000);
 
   const purchasableProducts = products.filter((p) => p.mode === 'ACHETE' || p.mode === 'LES_DEUX');
   const producibleProducts = products.filter((p) => p.mode === 'FABRIQUE' || p.mode === 'LES_DEUX');
