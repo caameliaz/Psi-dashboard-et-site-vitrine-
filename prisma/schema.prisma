@@ -359,6 +359,7 @@ model Order {
   paymentMethod   String? // Espèces, Chèque, Virement, Versement, À crédit, Dépensé, Offert
   paymentDate     DateTime? // date de règlement (facultative, modifiable après validation)
   vatEnabled      Boolean        @default(false) // TVA appliquée (info seule — le montant saisi est final)
+  deliveredAt     DateTime? // date du passage au statut LIVRE (ventes/livraisons du dashboard)
   salesRepName    String? // nom du commercial importé, avant rattachement à un compte
   createdBy       User?          @relation("OrderCreatedBy", fields: [createdById], references: [id])
   createdById     String? // null si commande du site public
@@ -445,6 +446,7 @@ model Quote {
   paymentMethod   String?
   paymentDate     DateTime?
   vatEnabled      Boolean        @default(false)
+  deliveredAt     DateTime? // date du passage au statut LIVRE (ventes/livraisons du dashboard)
   salesRepName    String?
   createdBy       User?          @relation("QuoteCreatedBy", fields: [createdById], references: [id])
   createdById     String?

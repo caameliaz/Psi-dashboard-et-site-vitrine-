@@ -201,10 +201,15 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
       }
     }
 
+    // Date de livraison : posée au passage à LIVRE (pas si on renvoie LIVRE sur une commande déjà livrée)
+    const becomesDelivered = body.status === 'LIVRE'
+      && (await prisma.order.findUnique({ where: { id }, select: { status: true } }))?.status !== 'LIVRE';
+
     const order = await prisma.order.update({
       where: { id },
       data: {
         ...(body.status !== undefined && { status: body.status }),
+        ...(becomesDelivered && { deliveredAt: new Date() }),
         ...(body.priority !== undefined && { priority: Boolean(body.priority) }),
         ...(body.autoAssignStock !== undefined && { autoAssignStock: Boolean(body.autoAssignStock) }),
         // Facturation / règlement — modifiables après validation

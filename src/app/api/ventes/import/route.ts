@@ -148,6 +148,7 @@ export async function POST(request: NextRequest) {
         createdById: session.user.id,
         // ⚠️ Date RÉELLE de la vente, pas la date d'import
         createdAt: dateVente,
+        deliveredAt: dateVente,
       };
 
       // Référence : reprise du n° de facture s'il existe et n'est pas déjà pris,

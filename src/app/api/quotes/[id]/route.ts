@@ -205,10 +205,15 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
       }
     }
 
+    // Date de livraison : posée au passage à LIVRE (pas si on renvoie LIVRE sur un devis déjà livré)
+    const becomesDelivered = body.status === 'LIVRE'
+      && (await prisma.quote.findUnique({ where: { id }, select: { status: true } }))?.status !== 'LIVRE';
+
     const quote = await prisma.quote.update({
       where: { id },
       data: {
         ...(body.status !== undefined && { status: body.status }),
+        ...(becomesDelivered && { deliveredAt: new Date() }),
         ...(body.priority !== undefined && { priority: Boolean(body.priority) }),
         ...(body.autoAssignStock !== undefined && { autoAssignStock: Boolean(body.autoAssignStock) }),
         // Facturation / règlement — modifiables après validation

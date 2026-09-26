@@ -233,6 +233,8 @@ export default function DashboardPage() {
   const [employesLivres, setEmployesLivres] = useState<{ name: string; commandes: number; devis: number; total: number }[]>([]);
   const [objectifs, setObjectifs] = useState<{ global: number; byUser: Record<string, number> }>({ global: 0, byUser: {} });
   const [selectedCommercial, setSelectedCommercial] = useState<string>(''); // '' = total entreprise
+  // Commercial dont on filtre les ventes par dates : la sélection (admin) ou soi-même (employé)
+  const ventesUserId = isAdmin ? (selectedCommercial || null) : myId;
   const [goalsOpen, setGoalsOpen] = useState(false);
   const [todayStats, setTodayStats] = useState({ commandes: 0, attente: 0, confirmes: 0 });
   const [topProduits, setTopProduits] = useState<{ ref: string; qty: number; label: string; color: string }[]>([]);
@@ -253,6 +255,9 @@ export default function DashboardPage() {
   const [filteredAnalyticsData, setFilteredAnalyticsData] = useState<{ monthly: { total: number; byCategory: { category: string; views: number; color: string }[] }; weekly: { week: string; categories: { category: string; views: number; color: string }[] }[] } | null>(null);
   const [filteredCommandesMois, setFilteredCommandesMois] = useState<number | null>(null);
   const [filteredDevisMois, setFilteredDevisMois] = useState<number | null>(null);
+  // Évolution % vs la période précédente de même durée, quand un filtre de dates est actif
+  const [filteredEvolutionCommandes, setFilteredEvolutionCommandes] = useState<number | null>(null);
+  const [filteredEvolutionDevis, setFilteredEvolutionDevis] = useState<number | null>(null);
   const [filteredSerie6MoisVentes, setFilteredSerie6MoisVentes] = useState<{ mois: string; ventes: number }[] | null>(null);
   const [filteredVentesMois, setFilteredVentesMois] = useState<number | null>(null);
   const [filteredTopWilayas, setFilteredTopWilayas] = useState<{ wilaya: string; count: number }[] | null>(null);
@@ -351,6 +356,8 @@ export default function DashboardPage() {
             console.log('📊 Données filtrées commandesDevis:', { commandes: data.stats?.commandes, devis: data.stats?.devisMois });
             setFilteredCommandesMois(data.stats?.commandes ?? null);
             setFilteredDevisMois(data.stats?.devisMois ?? null);
+            setFilteredEvolutionCommandes(data.evolutionCommandes ?? null);
+            setFilteredEvolutionDevis(data.stats?.evolutionDevis ?? null);
           }
           setLoading(false);
           return;
@@ -399,7 +406,7 @@ export default function DashboardPage() {
         // Reset filter for specific container
         if (dateParams.containerId === 'topProduits') setFilteredTopProduits(null);
         else if (dateParams.containerId === 'visites') setFilteredAnalyticsData(null);
-        else if (dateParams.containerId === 'commandesDevis') { setFilteredCommandesMois(null); setFilteredDevisMois(null); }
+        else if (dateParams.containerId === 'commandesDevis') { setFilteredCommandesMois(null); setFilteredDevisMois(null); setFilteredEvolutionCommandes(null); setFilteredEvolutionDevis(null); }
         else if (dateParams.containerId === 'ventes') { setFilteredSerie6MoisVentes(null); setFilteredVentesMois(null); }
         else if (dateParams.containerId === 'wilaya') setFilteredTopWilayas(null);
         else if (dateParams.containerId === 'conversion') setFilteredConversionRates(null);
@@ -457,15 +464,15 @@ export default function DashboardPage() {
   // Re-fetch ventes data when selectedCommercial changes
   useEffect(() => {
     if (ventesDateRange.start && ventesDateRange.end) {
-      console.log('🔄 Re-fetch ventes data for selectedCommercial:', selectedCommercial);
+      console.log('🔄 Re-fetch ventes data for user:', ventesUserId);
       fetchData(false, { 
         containerId: 'ventes', 
         startDate: ventesDateRange.start, 
         endDate: ventesDateRange.end,
-        userId: selectedCommercial || null 
+        userId: ventesUserId
       });
     }
-  }, [selectedCommercial, ventesDateRange, fetchData]);
+  }, [ventesUserId, ventesDateRange, fetchData]);
   
   // Ne rafraîchir automatiquement QUE si aucun filtre n'est actif
   const hasAnyFilter = filteredTopProduits !== null || filteredAnalyticsData !== null || 
@@ -519,6 +526,9 @@ export default function DashboardPage() {
       const vb = b[sortKey as keyof typeof b] ?? '';
       return sortAsc ? (va as string).localeCompare(vb as string) : (vb as string).localeCompare(va as string);
     });
+
+  const evolutionCommandesAffichee = filteredEvolutionCommandes ?? evolution;
+  const evolutionDevisAffichee = filteredEvolutionDevis ?? stats.evolutionDevis;
 
   const SortIcon = ({ col }: { col: SortKey }) => (
     <span className="ml-1 inline-block opacity-40 text-[10px]">{sortKey === col ? (sortAsc ? '▲' : '▼') : '⇅'}</span>
@@ -839,11 +849,11 @@ export default function DashboardPage() {
                 <span className="text-[24px] md:text-[32px] font-extrabold text-[#0F172A] leading-none">
                   {filteredCommandesMois !== null ? filteredCommandesMois : stats.commandes}
                 </span>
-                <span className={`flex items-center gap-1 text-[11px] md:text-[13px] font-bold pb-0.5 md:pb-1 ${evolution >= 0 ? 'text-[#4CAF4F]' : 'text-[#EF4444]'}`}>
-                  {evolution >= 0 ? '▲' : '▼'} {Math.abs(evolution)}%
+                <span className={`flex items-center gap-1 text-[11px] md:text-[13px] font-bold pb-0.5 md:pb-1 ${evolutionCommandesAffichee >= 0 ? 'text-[#4CAF4F]' : 'text-[#EF4444]'}`}>
+                  {evolutionCommandesAffichee >= 0 ? '▲' : '▼'} {Math.abs(evolutionCommandesAffichee)}%
                 </span>
               </div>
-              <p className="text-[8px] md:text-[12px] text-[#8A9BB5] mt-1">vs mois précédent</p>
+              <p className="text-[8px] md:text-[12px] text-[#8A9BB5] mt-1">{filteredEvolutionCommandes !== null ? 'vs période précédente' : 'vs mois précédent'}</p>
             </>
           ) : (
             <>
@@ -851,11 +861,11 @@ export default function DashboardPage() {
                 <span className="text-[24px] md:text-[32px] font-extrabold text-[#8B5CF6] leading-none">
                   {filteredDevisMois !== null ? filteredDevisMois : stats.devisMois}
                 </span>
-                <span className={`flex items-center gap-1 text-[11px] md:text-[13px] font-bold pb-0.5 md:pb-1 ${stats.evolutionDevis >= 0 ? 'text-[#4CAF4F]' : 'text-[#EF4444]'}`}>
-                  {stats.evolutionDevis >= 0 ? '▲' : '▼'} {Math.abs(stats.evolutionDevis)}%
+                <span className={`flex items-center gap-1 text-[11px] md:text-[13px] font-bold pb-0.5 md:pb-1 ${evolutionDevisAffichee >= 0 ? 'text-[#4CAF4F]' : 'text-[#EF4444]'}`}>
+                  {evolutionDevisAffichee >= 0 ? '▲' : '▼'} {Math.abs(evolutionDevisAffichee)}%
                 </span>
               </div>
-              <p className="text-[8px] md:text-[12px] text-[#8A9BB5] mt-1">devis créés · vs mois précédent</p>
+              <p className="text-[8px] md:text-[12px] text-[#8A9BB5] mt-1">devis créés · {filteredEvolutionDevis !== null ? 'vs période précédente' : 'vs mois précédent'}</p>
             </>
           )}
           
@@ -871,9 +881,10 @@ export default function DashboardPage() {
           // Montant + objectif affichés selon la sélection (admin) ou soi-même (employé)
           const activeId = isAdmin ? selectedCommercial : (myId ?? '');
           const isTotal = isAdmin && selectedCommercial === '';
-          const ventes = isTotal
-            ? (filteredVentesMois !== null ? filteredVentesMois : stats.ventesMois)
-            : (parCommercial.find((c) => c.id === activeId)?.ventes ?? 0);
+          // Filtre de dates actif → montant filtré (déjà restreint au commercial via ventesUserId)
+          const ventes = filteredVentesMois !== null
+            ? filteredVentesMois
+            : isTotal ? stats.ventesMois : (parCommercial.find((c) => c.id === activeId)?.ventes ?? 0);
           const objectif = isTotal ? objectifs.global : (activeId ? (objectifs.byUser[activeId] ?? 0) : 0);
           const pct = objectif > 0 ? Math.min(100, Math.round((ventes / objectif) * 100)) : 0;
           const atteint = objectif > 0 && ventes >= objectif;
@@ -897,7 +908,7 @@ export default function DashboardPage() {
                 <div className="mb-2">
                   <DateRangePicker onDateChange={(start, end) => {
                     setVentesDateRange({ start, end });
-                    fetchData(false, { containerId: 'ventes', startDate: start, endDate: end, userId: selectedCommercial || null });
+                    fetchData(false, { containerId: 'ventes', startDate: start, endDate: end, userId: ventesUserId });
                   }} />
                 </div>
                 <p className="text-[10px] font-bold text-[#ABBED1] uppercase tracking-widest mb-2">Ventes</p>
@@ -924,7 +935,7 @@ export default function DashboardPage() {
                 </div>
                 <DateRangePicker onDateChange={(start, end) => {
                   setVentesDateRange({ start, end });
-                  fetchData(false, { containerId: 'ventes', startDate: start, endDate: end, userId: selectedCommercial || null });
+                  fetchData(false, { containerId: 'ventes', startDate: start, endDate: end, userId: ventesUserId });
                 }} />
               </div>
               <div>

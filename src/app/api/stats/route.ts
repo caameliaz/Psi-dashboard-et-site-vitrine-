@@ -37,8 +37,8 @@ export async function GET(request: NextRequest) {
       endDate = new Date(endDateParam);
       endDate.setHours(23, 59, 59, 999);
       startOfToday = startOfMonth;
-      startOfPrevMonth = new Date(startOfMonth);
-      startOfPrevMonth.setMonth(startOfPrevMonth.getMonth() - 1);
+      // Période de comparaison (évolution %) = même durée, juste avant la période filtrée
+      startOfPrevMonth = new Date(startOfMonth.getTime() - (endDate.getTime() + 1 - startOfMonth.getTime()));
       start6MonthsAgo = new Date(startOfMonth);
       start6MonthsAgo.setMonth(start6MonthsAgo.getMonth() - 5);
     } else {
@@ -90,22 +90,22 @@ export async function GET(request: NextRequest) {
       prisma.order.count({ where: { createdAt: { gte: startOfPrevMonth, lt: startOfMonth } } }),
       prisma.quote.count({ where: { createdAt: { gte: startOfMonth, lte: endDate } } }),
       prisma.quote.count({ where: { createdAt: { gte: startOfPrevMonth, lt: startOfMonth } } }),
-      // Commandes LIVRÉES dans l'intervalle (montant via items + assigné) — pour ventes + par commercial + employés
+      // Commandes LIVRÉES dans l'intervalle (date de livraison) — pour ventes + par commercial + employés
       prisma.order.findMany({
-        where: { ...orderUserWhere, createdAt: { gte: startOfMonth, lte: endDate } },
+        where: { ...orderUserWhere, deliveredAt: { gte: startOfMonth, lte: endDate } },
         select: { assignedToId: true, items: { select: { quantity: true, unitPrice: true } } },
       }),
-      // Devis LIVRÉS dans l'intervalle (proposedPrice + assigné)
+      // Devis LIVRÉS dans l'intervalle (date de livraison, proposedPrice + assigné)
       prisma.quote.findMany({
-        where: { ...quoteUserWhere, createdAt: { gte: startOfMonth, lte: endDate } },
+        where: { ...quoteUserWhere, deliveredAt: { gte: startOfMonth, lte: endDate } },
         select: { assignedToId: true, proposedPrice: true },
       }),
       // Commandes + devis livrés le MOIS PRÉCÉDENT (montant global, pour l'évolution des ventes)
       prisma.orderItem.findMany({
-        where: { order: { status: 'LIVRE', createdAt: { gte: startOfPrevMonth, lt: startOfMonth } } },
+        where: { order: { ...orderUserWhere, deliveredAt: { gte: startOfPrevMonth, lt: startOfMonth } } },
         select: { quantity: true, unitPrice: true },
       }),
-      prisma.quote.aggregate({ _sum: { proposedPrice: true }, where: { status: 'LIVRE', createdAt: { gte: startOfPrevMonth, lt: startOfMonth } } }),
+      prisma.quote.aggregate({ _sum: { proposedPrice: true }, where: { ...quoteUserWhere, deliveredAt: { gte: startOfPrevMonth, lt: startOfMonth } } }),
       prisma.client.count({ where: { createdAt: { gte: startOfMonth } } }),
       prisma.quote.count({ where: { status: { in: ['EN_ATTENTE', 'CONTACTE'] } } }),
       prisma.quote.aggregate({ _sum: { proposedPrice: true }, where: { status: { in: ['EN_ATTENTE', 'CONTACTE'] } } }),
@@ -118,7 +118,7 @@ export async function GET(request: NextRequest) {
       // Top produits dans l'intervalle filtré
       prisma.orderItem.groupBy({
         by: ['productId'],
-        where: { order: { createdAt: { gte: startOfMonth, lte: endDate } } },
+        where: { order: { createdAt: { gte: startOfMonth, lte: endDate }, status: { notIn: ['ANNULE', 'RETOURNE'] } } },
         _sum: { quantity: true },
         orderBy: { _sum: { quantity: 'desc' } },
         take: 6,
@@ -138,12 +138,12 @@ export async function GET(request: NextRequest) {
       prisma.quote.findMany({ where: { createdAt: { gte: start6MonthsAgo } }, select: { createdAt: true } }),
       // Ventes livrées des 6 derniers mois (pour la courbe des ventes)
       prisma.order.findMany({
-        where: { ...orderUserWhere, createdAt: { gte: start6MonthsAgo } },
-        select: { createdAt: true, assignedToId: true, items: { select: { quantity: true, unitPrice: true } } },
+        where: { ...orderUserWhere, deliveredAt: { gte: start6MonthsAgo } },
+        select: { deliveredAt: true, assignedToId: true, items: { select: { quantity: true, unitPrice: true } } },
       }),
       prisma.quote.findMany({
-        where: { ...quoteUserWhere, createdAt: { gte: start6MonthsAgo } },
-        select: { createdAt: true, assignedToId: true, proposedPrice: true },
+        where: { ...quoteUserWhere, deliveredAt: { gte: start6MonthsAgo } },
+        select: { deliveredAt: true, assignedToId: true, proposedPrice: true },
       }),
       prisma.order.findMany({
         take: 5,
@@ -262,7 +262,7 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // Série 6 mois : ventes (montant) par mois
+    // Série 6 mois : ventes (montant) par mois de LIVRAISON
     const serieVentes: { mois: string; ventes: number }[] = [];
     for (let i = 5; i >= 0; i--) {
       const d = new Date(Date.UTC(refYear, refMonth - i, 1));
@@ -270,12 +270,12 @@ export async function GET(request: NextRequest) {
       serieVentes.push({ mois: MOIS[d.getUTCMonth()], ventes: 0 });
       const idx = serieVentes.length - 1;
       ordersLivresFor6Months.forEach((o) => {
-        if (monthKeyAlgeria(o.createdAt) === key) {
+        if (o.deliveredAt && monthKeyAlgeria(o.deliveredAt) === key) {
           serieVentes[idx].ventes += orderAmount(o.items);
         }
       });
       quotesLivresFor6Months.forEach((q) => {
-        if (monthKeyAlgeria(q.createdAt) === key) {
+        if (q.deliveredAt && monthKeyAlgeria(q.deliveredAt) === key) {
           serieVentes[idx].ventes += q.proposedPrice ?? 0;
         }
       });
