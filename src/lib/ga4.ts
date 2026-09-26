@@ -410,19 +410,28 @@ export async function getSiteDetails(range?: { startDate: string; endDate: strin
       property, dateRanges,
       dimensions: [{ name: 'eventName' }],
       metrics: [{ name: 'eventCount' }],
+      // Hors pages admin : avant, le tag GA y tournait aussi, et les liens WhatsApp de
+      // l'admin (fiche client, demandes…) = l'équipe qui contacte un client, pas un visiteur.
       dimensionFilter: {
-        orGroup: {
+        andGroup: {
           expressions: [
-            { filter: { fieldName: 'eventName', stringFilter: { matchType: 'EXACT', value: 'whatsapp_click' } } },
+            PUBLIC_PAGES_ONLY,
             {
-              andGroup: {
+              orGroup: {
                 expressions: [
-                  { filter: { fieldName: 'eventName', stringFilter: { matchType: 'EXACT', value: 'click' } } },
+                  { filter: { fieldName: 'eventName', stringFilter: { matchType: 'EXACT', value: 'whatsapp_click' } } },
                   {
-                    orGroup: {
-                      expressions: ['wa.me', 'whatsapp'].map((value) => ({
-                        filter: { fieldName: 'linkDomain', stringFilter: { matchType: 'CONTAINS', value, caseSensitive: false } },
-                      })),
+                    andGroup: {
+                      expressions: [
+                        { filter: { fieldName: 'eventName', stringFilter: { matchType: 'EXACT', value: 'click' } } },
+                        {
+                          orGroup: {
+                            expressions: ['wa.me', 'whatsapp'].map((value) => ({
+                              filter: { fieldName: 'linkDomain', stringFilter: { matchType: 'CONTAINS', value, caseSensitive: false } },
+                            })),
+                          },
+                        },
+                      ],
                     },
                   },
                 ],
