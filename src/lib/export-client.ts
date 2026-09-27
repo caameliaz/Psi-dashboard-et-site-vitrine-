@@ -24,6 +24,11 @@ export interface ClientExportData {
   }>;
 }
 
+// Annulé / Retourné : pas une vente → ligne gardée (statut visible) mais montant
+// laissé vide et exclu du total (ex. devis en double annulé).
+const HORS_TOTAL = new Set(['Annulé', 'Retourné']);
+const compte = (h: { statut: string }) => !HORS_TOTAL.has(h.statut);
+
 const montantToNum = (s: string) =>
   Number(String(s).replace(/\s/g, '').replace('DA', '').replace('TTC', '').replace(',', '.')) || 0;
 
@@ -72,14 +77,15 @@ export async function exportClientExcel(c: ClientExportData) {
   const histHeaderIdx = rows.length;
   push(['Référence', 'Type', 'Date', 'Statut', 'Produits', 'Montant']);
   const histStart = rows.length;
-  c.historique.forEach((h) => push([h.ref, h.type, h.date, h.statut, h.produits, montantToNum(h.montant)]));
+  c.historique.forEach((h) => push([h.ref, h.type, h.date, h.statut, h.produits, compte(h) ? montantToNum(h.montant) : '']));
   const histEnd = rows.length - 1;
   push(pad([]));
 
   // Total
-  const total = c.historique.reduce((acc, h) => acc + montantToNum(h.montant), 0);
+  const total = c.historique.filter(compte).reduce((acc, h) => acc + montantToNum(h.montant), 0);
   const totalRowIdx = rows.length;
-  push(pad(['Total', String(c.historique.length), '', '', '', total]));
+  const nbCompte = c.historique.filter(compte).length;
+  push(pad([nbCompte < c.historique.length ? 'Total hors annulés' : 'Total', String(nbCompte), '', '', '', total]));
 
   const ws = utils.aoa_to_sheet(rows);
   ws['!cols'] = [{ wch: 22 }, { wch: 14 }, { wch: 18 }, { wch: 16 }, { wch: 46 }, { wch: 16 }];
@@ -121,14 +127,14 @@ export async function printClientDoc(c: ClientExportData) {
     logoHtml = `<img src="${b64}" alt="PSI" style="height:52px;filter:grayscale(100%) contrast(110%);display:block;margin-bottom:4px"/>`;
   } catch { /* fallback texte */ }
 
-  const total = c.historique.reduce((acc, h) => acc + montantToNum(h.montant), 0);
+  const total = c.historique.filter(compte).reduce((acc, h) => acc + montantToNum(h.montant), 0);
   const histRows = c.historique.map((h) => `<tr>
     <td style="font-weight:600">${h.ref}</td>
     <td>${h.type}</td>
     <td>${h.date}</td>
     <td>${h.statut}</td>
     <td>${h.produits}</td>
-    <td style="text-align:right">${h.montant || '—'}</td>
+    <td style="text-align:right">${compte(h) ? (h.montant || '—') : '—'}</td>
   </tr>`).join('') || '<tr><td colspan="6" style="text-align:center;color:#999">Aucun historique</td></tr>';
 
   const cell = (label: string, value: string, full = false) =>
@@ -193,7 +199,7 @@ ${c.active === false ? `<div class="banner">Client désactivé${c.deactivatedRea
 </table>
 <div class="total-row">
   <div class="total-box">
-    <span class="total-label">Total historique</span>
+    <span class="total-label">Total (hors annulés)</span>
     <span class="total-amount">${total.toLocaleString('fr-FR')} DA</span>
   </div>
 </div>
