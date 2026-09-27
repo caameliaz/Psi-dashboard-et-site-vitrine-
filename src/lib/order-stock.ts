@@ -66,7 +66,7 @@ export async function getFreeTextRecipe(label: string | null): Promise<RecipeWit
   return recipe?.items ?? [];
 }
 
-export type MaterialShortfall = { reference: string; name: string; unit: string; missing: number };
+export type MaterialShortfall = { rawMaterialId: string; reference: string; name: string; unit: string; missing: number };
 type RecipeWithMaterial = { rawMaterialId: string; quantity: number; rawMaterial: { id: string; reference: string; name: string; unit: string; available: number; reserved: number } };
 
 // ── Vérifie puis consomme la matière nécessaire pour produire `qty` unités, à partir de
@@ -87,20 +87,23 @@ type RecipeWithMaterial = { rawMaterialId: string; quantity: number; rawMaterial
 // Vérification globale D'ABORD (refus net si une seule matière ne suffit pas, rien n'est
 // modifié) ; `dryRun` ne fait que ce contrôle, sans jamais rien consommer (pour un aperçu avant
 // de bloquer avec un 409).
+// `forcer` (admin, « Produire quand même ») : pas de refus — consomme ce qui existe, chaque
+// matière descend au plus à 0 (le manque n'est jamais inventé ni passé en négatif).
 export async function checkAndConsumeRecipe(
   recipe: RecipeWithMaterial[],
   qty: number,
   ownNeededCap: number,
   dryRun: boolean,
+  forcer = false,
 ): Promise<{ ok: true; touchedByReserved: Set<string> } | { ok: false; shortfalls: MaterialShortfall[] }> {
   const shortfalls: MaterialShortfall[] = recipe
     .map((r) => {
       const totalNeeded = r.quantity * qty;
       const totalStock = r.rawMaterial.available + r.rawMaterial.reserved;
-      return { reference: r.rawMaterial.reference, name: r.rawMaterial.name, unit: r.rawMaterial.unit, missing: totalNeeded - totalStock };
+      return { rawMaterialId: r.rawMaterialId, reference: r.rawMaterial.reference, name: r.rawMaterial.name, unit: r.rawMaterial.unit, missing: totalNeeded - totalStock };
     })
     .filter((s) => s.missing > 0);
-  if (shortfalls.length > 0) return { ok: false, shortfalls };
+  if (shortfalls.length > 0 && !forcer) return { ok: false, shortfalls };
   if (dryRun) return { ok: true, touchedByReserved: new Set() };
 
   const touchedByReserved = new Set<string>();
@@ -111,7 +114,9 @@ export async function checkAndConsumeRecipe(
     const fromReservedOwn = Math.min(ownPortion, r.rawMaterial.reserved);
     const afterOwn = totalNeeded - fromReservedOwn;
     const fromAvailable = Math.min(afterOwn, r.rawMaterial.available);
-    const fromReservedExcess = afterOwn - fromAvailable;
+    // Plafonné au réservé restant : ne change rien en temps normal (vérifié plus haut), empêche
+    // seulement de passer en négatif en mode `forcer`.
+    const fromReservedExcess = Math.min(afterOwn - fromAvailable, r.rawMaterial.reserved - fromReservedOwn);
 
     await prisma.rawMaterial.update({
       where: { id: r.rawMaterialId },

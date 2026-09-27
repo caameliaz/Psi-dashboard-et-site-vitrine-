@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { fixerReferenceProduit } from '@/lib/stock-reference';
 import { requirePermission } from '@/lib/permissions';
 import { createAudit } from '@/lib/audit';
 import {
@@ -114,11 +115,20 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
     // `ownNeededCap` : pour un vrai produit, son propre `neededQuantity` (la matière a déjà été
     // mise de côté pour lui à la confirmation) ; pour une ligne LIBRE, toujours 0 — rien n'a
     // jamais été réservé à l'avance pour elle (cf. checkAndConsumeRecipe pour le détail).
-    const result = await checkAndConsumeRecipe(recipe, qty, item.productId ? item.neededQuantity : 0, false);
+    // Pas assez de matière : l'écran propose de la réapprovisionner, ou — admins seulement —
+    // de produire quand même (`forcer` : consomme ce qui reste, la matière descend à 0).
+    const cap = item.productId ? item.neededQuantity : 0;
+    let result = await checkAndConsumeRecipe(recipe, qty, cap, false);
     if (!result.ok) {
       const detail = result.shortfalls.map((s) => `${s.name} (manque ${s.missing} ${s.unit})`).join(', ');
-      return NextResponse.json({ error: `Stock matière insuffisant pour produire cette quantité : ${detail}`, shortfalls: result.shortfalls }, { status: 409 });
+      const estAdmin = (session?.user as { role?: string } | undefined)?.role === 'ADMIN';
+      if (!(body.forcer && estAdmin)) {
+        return NextResponse.json({ error: `Stock matière insuffisant pour produire cette quantité : ${detail}`, code: 'MATIERE_INSUFFISANTE', produit: label, shortfalls: result.shortfalls }, { status: 409 });
+      }
+      createAudit({ userId: session?.user?.id, action: 'Production forcée malgré le manque de matière', entity: 'STOCK', entityId: id, detail: `${label} (+${qty}) — ${detail}` });
+      result = await checkAndConsumeRecipe(recipe, qty, cap, false, true);
     }
+    if (!result.ok) return NextResponse.json({ error: 'Stock matière insuffisant' }, { status: 409 });
     const touchedByReserved = result.touchedByReserved;
 
     // `producedQuantity` est un pur compteur historique (jamais dérivé) — on l'incrémente
@@ -127,9 +137,12 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
     await prisma.productionListItem.update({ where: { id }, data: { producedQuantity: { increment: qty } } });
 
     if (item.productId) {
+      const avantProduit = (await prisma.product.findUnique({ where: { id: item.productId }, select: { available: true } }))?.available ?? 0;
       // Distribue la quantité produite aux commandes/devis liés (→ Réservé, FIFO), le reliquat
       // éventuel (réassort manuel/seuil) part en Disponible.
       await distributeProduction(id, qty, item.productId);
+      // Production marquée → ce qui arrive en disponible devient la référence (100 %), seuil à 30 %
+      await fixerReferenceProduit(item.productId, avantProduit);
       // Recalcule entièrement à neuf le besoin + le buffer de cette ligne (les commandes
       // viennent d'avancer, le disponible a pu bouger) — marque "Produit" si plus rien ne
       // manque, et recalcule la matière première en cascade.

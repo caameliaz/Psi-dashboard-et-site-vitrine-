@@ -4,6 +4,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { usePolling } from '@/lib/use-polling';
 import { Modal } from './Modal';
 import { RecipeEntryModal, NoRecipeChoiceModal } from './NoRecipeModal';
+import { ManqueMatiereModal, type ManqueMatiere } from './ManqueMatiereModal';
+import { useRole } from '@/lib/role-context';
 
 const inputClass = "w-full px-3 py-2.5 rounded-lg border border-[#E2E8F0] text-sm text-[#0F172A] focus:outline-none focus:border-[#4CAF4F] focus:ring-1 focus:ring-[#4CAF4F] transition-colors bg-[#F8FAFC]";
 
@@ -304,6 +306,10 @@ export function StockListsWidget() {
   // parallèle, pour pouvoir s'arrêter sur chaque produit sans recette) et les listes de
   // résultats déjà accumulées, pour afficher un seul récapitulatif à la toute fin.
   const [recipeModal, setRecipeModal] = useState<NoRecipeTarget | null>(null);
+  // Overlay « Pas assez de matière » (Réapprovisionner et produire / Produire quand même pour
+  // les admins) — même principe de file d'attente que ci-dessus.
+  const [manqueMatiere, setManqueMatiere] = useState<(NoRecipeTarget & { manques: ManqueMatiere[] }) | null>(null);
+  const { isAdmin } = useRole();
 
   // `silent` évite le flash "Chargement…" pour les rafraîchissements en arrière-plan
   // (polling, retour sur l'onglet) — seul le premier chargement doit bloquer l'affichage.
@@ -365,12 +371,12 @@ export function StockListsWidget() {
   // "Produire" traité un par un (jamais en parallèle, contrairement à Commander/Valider
   // réception) : un produit sans recette (409 "NO_RECIPE") doit interrompre la file en cours
   // pour demander à l'utilisateur quoi faire, puis reprendre avec le reste une fois résolu.
-  const processProduceQueue = async (queue: { id: string; quantity: number }[], failures: string[], warnings: string[], successes: string[]) => {
+  const processProduceQueue = async (queue: { id: string; quantity: number; forcer?: boolean }[], failures: string[], warnings: string[], successes: string[]) => {
     for (let i = 0; i < queue.length; i++) {
       const s = queue[i];
       const res = await fetch(`/api/production-list/${s.id}`, {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ quantity: s.quantity }),
+        body: JSON.stringify({ quantity: s.quantity, ...(s.forcer && { forcer: true }) }),
       });
       if (res.ok) {
         const data = await res.json().catch(() => ({}));
@@ -379,6 +385,15 @@ export function StockListsWidget() {
         continue;
       }
       const err = await res.json().catch(() => ({}));
+      if (err?.code === 'MATIERE_INSUFFISANTE' && Array.isArray(err.shortfalls)) {
+        setManqueMatiere({
+          current: { id: s.id, productId: null, reference: err.produit ?? labelFor(s.id), name: null, quantity: s.quantity },
+          queueRest: queue.slice(i + 1),
+          accumFailures: failures, accumWarnings: warnings, accumSuccesses: successes,
+          manques: err.shortfalls,
+        });
+        return;
+      }
       if (err?.error === 'NO_RECIPE') {
         // Ouvre l'overlay de premier choix (Continuer / Ajouter une recette) ; le reste de la
         // file reprend depuis handleContinueWithoutRecipe/handleOpenRecipeEntry une fois cette
@@ -450,6 +465,23 @@ export function StockListsWidget() {
     }
     setRecipeModal(null);
     await processProduceQueue(queueRest, accumFailures, accumWarnings, accumSuccesses);
+  };
+
+  // Après « Réapprovisionner » (forcer = false) ou « Produire quand même » (forcer = true) :
+  // relance cette production puis reprend la file. Un nouveau manque rouvre l'overlay.
+  const handleManqueRelance = async (forcer: boolean) => {
+    if (!manqueMatiere) return;
+    const { current, queueRest, accumFailures, accumWarnings, accumSuccesses } = manqueMatiere;
+    setManqueMatiere(null);
+    await processProduceQueue([{ id: current.id, quantity: current.quantity, ...(forcer && { forcer: true }) }, ...queueRest], accumFailures, accumWarnings, accumSuccesses);
+  };
+
+  const handleManqueClose = () => {
+    if (!manqueMatiere) return;
+    const { current, queueRest, accumFailures, accumWarnings, accumSuccesses } = manqueMatiere;
+    accumFailures.push(`${labelFor(current.id)} : pas assez de matière première, production annulée`);
+    setManqueMatiere(null);
+    processProduceQueue(queueRest, accumFailures, accumWarnings, accumSuccesses);
   };
 
   const handleRecipeCancel = () => {
@@ -703,6 +735,10 @@ export function StockListsWidget() {
           onContinueWithout={handleContinueWithoutRecipe}
           onAddRecipe={handleOpenRecipeEntry}
         />
+      )}
+      {manqueMatiere && (
+        <ManqueMatiereModal produit={manqueMatiere.current.reference} manques={manqueMatiere.manques} peutForcer={isAdmin}
+          onReessayer={() => handleManqueRelance(false)} onForcer={() => handleManqueRelance(true)} onClose={handleManqueClose} />
       )}
       {recipeModal && (
         <RecipeEntryModal

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { fixerReferenceProduit, fixerReferenceMatiere } from '@/lib/stock-reference';
 import { requirePermission } from '@/lib/permissions';
 import { createAudit } from '@/lib/audit';
 import { resyncProductionLine, resyncPurchaseLineForProduct, resyncMaterialBufferOnly, resyncMaterialPurchaseNeed, reallocateAvailableStock, unblockProductionForMaterial, reassessProductReserved, reassessProductionForMaterial } from '@/lib/order-stock';
@@ -36,6 +37,8 @@ export async function POST(request: NextRequest) {
       // recalcul immédiat, mais uniquement sur CE produit (pas de balayage global).
       if (body.field === 'available') {
         if (before && qty > before.available) {
+          // Correction À LA HAUSSE = entrée de stock → nouvelle référence (100 %), seuil à 30 %
+          await fixerReferenceProduit(product.id, before.available);
           // Le disponible vient d'AUGMENTER → proposer ce stock EN PRIORITÉ aux autres
           // commandes/devis déjà en attente sur ce produit (FIFO), avant de laisser le
           // reliquat compter comme simple buffer — même logique que la réception en liste
@@ -66,6 +69,8 @@ export async function POST(request: NextRequest) {
       createAudit({ userId: session?.user?.id, action: `Correction stock matière — ${FIELD_LABELS[body.field]}`, entity: 'MATIERE', entityId: material.id, detail: `${material.name} → ${qty}` });
       if (body.field === 'available') {
         if (before && qty > before.available) {
+          // Correction À LA HAUSSE = entrée de stock → nouvelle référence (100 %), seuil à 30 %
+          await fixerReferenceMatiere(material.id, before.available);
           // Débloque d'abord les lignes de production "Bloquées" qui attendaient cette
           // matière, avant de recalculer son propre buffer sur ce qui reste.
           await unblockProductionForMaterial(material.id);

@@ -20,12 +20,17 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
   try {
     const body = await request.json();
 
-    // Désactivation (ex. licenciement) avec réassignation : le nouveau commercial doit exister,
-    // être actif et différent — vérifié AVANT de désactiver quoi que ce soit.
+    // Désactivation (ex. licenciement) avec reprise des clients :
+    //  • reassignClientsTo : commercial par défaut (clients non répartis, congés, autres commandes) ;
+    //  • reassignClients   : { clientId: userId | null } pour répartir client par client.
+    // Chaque commercial choisi doit exister, être actif et différent — vérifié AVANT de désactiver.
     const cibleReassignation: string | null = body.active === false && body.reassignClientsTo ? String(body.reassignClientsTo) : null;
-    if (cibleReassignation) {
-      const cible = await prisma.user.findUnique({ where: { id: cibleReassignation }, select: { active: true } });
-      if (!cible?.active || cibleReassignation === id) {
+    const repartition: Record<string, string | null> =
+      body.active === false && body.reassignClients && typeof body.reassignClients === 'object' ? body.reassignClients : {};
+    const cibles = [...new Set([cibleReassignation, ...Object.values(repartition)].filter((c): c is string => !!c))];
+    if (cibles.length) {
+      const actifs = await prisma.user.findMany({ where: { id: { in: cibles }, active: true }, select: { id: true } });
+      if (actifs.length !== cibles.length || cibles.includes(id)) {
         return NextResponse.json({ error: 'Choisissez un autre commercial actif pour reprendre les clients' }, { status: 400 });
       }
     }
@@ -114,27 +119,50 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
     //   s'ils étaient chez un remplaçant, ils passent aussi au nouveau commercial.
     // Le stock déjà attribué à ce commercial n'est pas modifié ici.
     let reassignation: { clients: number; commandes: number; devis: number } | null = null;
-    if (body.active === false && body.reassignClientsTo !== undefined) {
+    if (body.active === false && (body.reassignClientsTo !== undefined || body.reassignClients !== undefined)) {
       const maintenant = new Date();
-      const conges = await prisma.leaveAssignment.findMany({ where: { employeeId: id, status: 'ACTIVE' }, select: { id: true, clientIds: true } });
-      const clientsConges = conges.flatMap((c) => c.clientIds);
       const enCours = { in: ['EN_ATTENTE', 'CONTACTE', 'VALIDE', 'PRODUITE'] as ('EN_ATTENTE' | 'CONTACTE' | 'VALIDE' | 'PRODUITE')[] };
-      const [clientsMaj, cmdMaj, devisMaj] = await prisma.$transaction([
-        prisma.client.updateMany({
-          where: cibleReassignation ? { OR: [{ assignedToId: id }, { id: { in: clientsConges } }] } : { assignedToId: id },
-          data: { assignedToId: cibleReassignation, assignedSince: cibleReassignation ? maintenant : null },
-        }),
-        prisma.order.updateMany({ where: cibleReassignation ? { assignedToId: id, status: enCours } : { id: '__aucun__' }, data: { assignedToId: cibleReassignation } }),
-        prisma.quote.updateMany({ where: cibleReassignation ? { assignedToId: id, status: enCours } : { id: '__aucun__' }, data: { assignedToId: cibleReassignation } }),
-        prisma.leaveAssignment.updateMany({ where: { employeeId: id, status: 'ACTIVE' }, data: { status: 'ENDED', endedAt: maintenant, endedById: session.user.id } }),
+      const [sesClients, conges] = await Promise.all([
+        prisma.client.findMany({ where: { assignedToId: id }, select: { id: true } }),
+        prisma.leaveAssignment.findMany({ where: { employeeId: id, status: 'ACTIVE' }, select: { clientIds: true } }),
       ]);
-      reassignation = { clients: clientsMaj.count, commandes: cmdMaj.count, devis: devisMaj.count };
+      // Client → commercial qui le reprend (répartition, sinon le commercial par défaut)
+      const parCible = new Map<string | null, string[]>();
+      for (const c of sesClients) {
+        const cible = c.id in repartition ? (repartition[c.id] || null) : cibleReassignation;
+        parCible.set(cible, [...(parCible.get(cible) ?? []), c.id]);
+      }
+      // Clients qu'il avait confiés à un remplaçant (congé en cours) → commercial par défaut s'il y en a un
+      const clientsConges = conges.flatMap((c) => c.clientIds);
+      const total = { clients: 0, commandes: 0, devis: 0 };
+      await prisma.$transaction(async (tx) => {
+        for (const [cible, ids] of parCible) {
+          total.clients += (await tx.client.updateMany({ where: { id: { in: ids } }, data: { assignedToId: cible, assignedSince: cible ? maintenant : null } })).count;
+          if (cible) {
+            // Commandes/devis EN COURS de ces clients → suivent le client
+            total.commandes += (await tx.order.updateMany({ where: { assignedToId: id, status: enCours, clientId: { in: ids } }, data: { assignedToId: cible } })).count;
+            total.devis += (await tx.quote.updateMany({ where: { assignedToId: id, status: enCours, clientId: { in: ids } }, data: { assignedToId: cible } })).count;
+          }
+        }
+        if (cibleReassignation) {
+          if (clientsConges.length) {
+            total.clients += (await tx.client.updateMany({ where: { id: { in: clientsConges } }, data: { assignedToId: cibleReassignation, assignedSince: maintenant } })).count;
+          }
+          // Ses autres commandes/devis en cours (clients qui ne sont pas à lui) → commercial par défaut
+          total.commandes += (await tx.order.updateMany({ where: { assignedToId: id, status: enCours }, data: { assignedToId: cibleReassignation } })).count;
+          total.devis += (await tx.quote.updateMany({ where: { assignedToId: id, status: enCours }, data: { assignedToId: cibleReassignation } })).count;
+        }
+        await tx.leaveAssignment.updateMany({ where: { employeeId: id, status: 'ACTIVE' }, data: { status: 'ENDED', endedAt: maintenant, endedById: session.user.id } });
+      });
+      reassignation = total;
+      const noms = new Map((await prisma.user.findMany({ where: { id: { in: cibles } }, select: { id: true, name: true } })).map((u) => [u.id, u.name]));
+      const detailRepartition = [...parCible].map(([cible, ids]) => `${ids.length} → ${cible ? noms.get(cible) ?? cible : 'sans commercial'}`).join(', ');
       createAudit({
         userId: session.user.id,
         action: 'Utilisateur désactivé — reprise des clients',
         entity: 'UTILISATEUR',
         entityId: id,
-        detail: `${user.name} : ${reassignation.clients} client(s), ${reassignation.commandes} commande(s) et ${reassignation.devis} devis en cours → ${cibleReassignation ?? 'sans commercial'}`,
+        detail: `${user.name} : clients ${detailRepartition || '0'} ; ${total.commandes} commande(s) et ${total.devis} devis en cours transférés`,
       });
     }
 
@@ -156,6 +184,13 @@ export async function DELETE(_request: NextRequest, { params }: Ctx) {
   try {
     const target = await prisma.user.findUnique({ where: { id }, select: { name: true, email: true } });
     if (!target) return NextResponse.json({ error: 'Utilisateur introuvable' }, { status: 404 });
+
+    // Suppression définitive : réservée aux comptes autorisés (canHardDelete — Camélia).
+    // Les autres admins peuvent seulement désactiver. Vérifié côté serveur, pas seulement à l'écran.
+    const auteur = await prisma.user.findUnique({ where: { id: session.user.id }, select: { canHardDelete: true } });
+    if (!auteur?.canHardDelete) {
+      return NextResponse.json({ error: "Seule l'administratrice principale peut supprimer définitivement un compte. Désactivez-le plutôt." }, { status: 403 });
+    }
 
     // Empêcher de supprimer son propre compte
     if (id === session.user.id) {

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { fixerReferenceMatiere } from '@/lib/stock-reference';
 import { requirePermission } from '@/lib/permissions';
 import { createAudit } from '@/lib/audit';
 import { resyncMaterialBufferOnly } from '@/lib/order-stock';
@@ -16,6 +17,7 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
 
   try {
     const body = await request.json();
+    const avantMatiere = body.available !== undefined ? await prisma.rawMaterial.findUnique({ where: { id }, select: { available: true } }) : null;
 
     const material = await prisma.rawMaterial.update({
       where: { id },
@@ -34,6 +36,11 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
     createAudit({ userId: session?.user?.id, action: 'Matière première modifiée', entity: 'MATIERE', entityId: id, detail: `${material.name} (${material.reference})` });
 
     if (body.stockMax !== undefined || body.purchaseThreshold !== undefined || body.available !== undefined) {
+      // Hausse du disponible = entrée de stock → nouvelle référence, sauf si les seuils sont saisis ici
+      if (avantMatiere && body.available !== undefined && Number(body.available) > avantMatiere.available
+        && body.stockMax === undefined && body.purchaseThreshold === undefined) {
+        await fixerReferenceMatiere(id, avantMatiere.available);
+      }
       await resyncMaterialBufferOnly(id);
     }
 

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { fixerReferenceProduit } from '@/lib/stock-reference';
 import { requirePermission } from '@/lib/permissions';
 import { createAudit } from '@/lib/audit';
 import { resyncProductionLine, resyncPurchaseLineForProduct, reallocateAvailableStock } from '@/lib/order-stock';
@@ -55,6 +56,10 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
     // directement ici) → recalcul immédiat, uniquement sur ce produit.
     if (body.stockMax !== undefined || body.purchaseThreshold !== undefined || body.productionThreshold !== undefined || body.available !== undefined) {
       if (before && body.available !== undefined && Number(body.available) > before.available) {
+        // Hausse = entrée de stock → nouvelle référence, sauf si les seuils sont saisis ici à la main
+        if (body.stockMax === undefined && body.purchaseThreshold === undefined && body.productionThreshold === undefined) {
+          await fixerReferenceProduit(id, before.available);
+        }
         // Disponible en hausse → sert d'abord les commandes en attente (FIFO) avant de
         // laisser le reliquat compter comme simple buffer (reallocate recalcule aussi les
         // deux lignes à la fin).

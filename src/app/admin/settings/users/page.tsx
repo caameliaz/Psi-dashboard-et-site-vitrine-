@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useSession } from 'next-auth/react';
 import { initials } from '@/lib/utils';
 import { Modal } from '@/components/ui/Modal';
 import { AdminSelect } from '@/components/ui/AdminSelect';
@@ -27,6 +28,7 @@ interface User {
   permissions: PermKey[];
   resetRequested?: boolean;
   twoFactorDisabled?: boolean;
+  canHardDelete?: boolean;
 }
 
 function dbUserToUser(u: any): User {
@@ -38,6 +40,7 @@ function dbUserToUser(u: any): User {
     statut: u.active ? 'Actif' : 'Inactif',
     resetRequested: !!u.resetRequested,
     twoFactorDisabled: !!u.twoFactorDisabled,
+    canHardDelete: !!u.canHardDelete,
     // Un employé a EXACTEMENT ses permissions stockées (pas de fallback :
     // sinon décocher toutes les cases les ferait "revenir" à l'affichage).
     permissions: u.role === 'ADMIN' ? [...ADMIN_PERMS] : (u.permissions ?? []),
@@ -715,35 +718,85 @@ function UserSlideIn({ user, onClose, onDelete, onPermChange, onPermSetAll, cust
 }
 
 /* ─── Modal suppression ─── */
-function DeleteUserModal({ user, candidats, onDeactivate, onDelete, onClose }: {
-  user: User; candidats: User[];
-  onDeactivate: (reprisePar: string | null) => Promise<void>; onDelete: () => void; onClose: () => void;
+function DeleteUserModal({ user, candidats, peutSupprimer, onDeactivate, onDelete, onClose }: {
+  user: User; candidats: User[]; peutSupprimer: boolean;
+  onDeactivate: (defaut: string | null, repartition: Record<string, string | null>) => Promise<void>;
+  onDelete: () => void; onClose: () => void;
 }) {
   const [step, setStep] = useState<'choice' | 'confirm' | 'deactivate'>('choice');
-  const [reprisePar, setReprisePar] = useState('');
+  const [defaut, setDefaut] = useState('');
+  const [repartition, setRepartition] = useState<Record<string, string>>({});
+  const [sesClients, setSesClients] = useState<{ id: string; label: string }[] | null>(null);
   const [enCours, setEnCours] = useState(false);
+
+  // Ses clients (ceux qui lui sont assignés), chargés à l'ouverture de l'étape « Désactiver »
+  useEffect(() => {
+    if (step !== 'deactivate' || sesClients !== null) return;
+    fetch('/api/clients?light=true')
+      .then((r) => (r.ok ? r.json() : []))
+      .then((data: { id: string; name: string; company: string | null; assignedToId: string | null }[]) =>
+        setSesClients(data.filter((c) => c.assignedToId === String(user.id)).map((c) => ({ id: c.id, label: c.company || c.name }))))
+      .catch(() => setSesClients([]));
+  }, [step, sesClients, user.id]);
+
   if (step === 'deactivate') {
+    const selectCls = 'border border-[#E2E8F0] rounded-lg px-2.5 py-2 text-[12px] bg-white focus:outline-none focus:ring-2 focus:ring-[#4CAF4F]/30';
+    const options = (
+      <>
+        <option value="">Personne (sans commercial)</option>
+        {candidats.map((c) => <option key={c.id} value={String(c.id)}>{c.nom}</option>)}
+      </>
+    );
     return (
       <Modal title="Désactiver le compte" onClose={onClose}>
-        <div className="space-y-4">
+        <div className="space-y-4 max-h-[75vh] overflow-y-auto pr-1">
           <p className="text-[13px] text-[#374151]">
             <span className="font-semibold">{user.nom}</span> ne pourra plus se connecter (déconnexion immédiate). Qui reprend ses clients ?
           </p>
-          <select value={reprisePar} onChange={(e) => setReprisePar(e.target.value)}
-            className="w-full border border-[#E2E8F0] rounded-lg px-3 py-2.5 text-[13px] bg-white focus:outline-none focus:ring-2 focus:ring-[#4CAF4F]/30">
-            <option value="">Personne — laisser ses clients sans commercial</option>
-            {candidats.map((c) => <option key={c.id} value={String(c.id)}>{c.nom}</option>)}
-          </select>
+          <div>
+            <label className="block text-[12px] font-bold text-[#374151] mb-1.5">Tous ses clients à…</label>
+            <select value={defaut} onChange={(e) => { setDefaut(e.target.value); setRepartition({}); }} className={`${selectCls} w-full`}>
+              {options}
+            </select>
+          </div>
+          <div>
+            <p className="text-[12px] font-bold text-[#374151] mb-1.5">
+              …ou client par client {sesClients && <span className="font-normal text-[#8A9BB5]">({sesClients.length} client{sesClients.length > 1 ? 's' : ''})</span>}
+            </p>
+            {sesClients === null ? (
+              <p className="text-[12px] text-[#8A9BB5]">Chargement des clients…</p>
+            ) : sesClients.length === 0 ? (
+              <p className="text-[12px] text-[#8A9BB5]">Aucun client ne lui est assigné.</p>
+            ) : (
+              <ul className="flex flex-col gap-1.5 max-h-[220px] overflow-y-auto rounded-xl border border-[#E2E8F0] p-2">
+                {sesClients.map((c) => (
+                  <li key={c.id} className="flex items-center gap-2">
+                    <span className="flex-1 min-w-0 truncate text-[12px] text-[#374151]">{c.label}</span>
+                    <select value={repartition[c.id] ?? defaut} onChange={(e) => setRepartition((r) => ({ ...r, [c.id]: e.target.value }))} className={`${selectCls} w-[45%]`}>
+                      {options}
+                    </select>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
           <ul className="text-[11px] text-[#8A9BB5] list-disc pl-4 space-y-0.5">
-            <li>Ses <b>clients</b> passent au commercial choisi, qui ne verra que les commandes créées <b>à partir d&apos;aujourd&apos;hui</b> (l&apos;historique reste visible par les admins).</li>
-            <li>Ses <b>commandes et devis en cours</b> (en attente, confirmés, disponibles) lui sont transférés pour le suivi.</li>
+            <li>Chaque client passe au commercial choisi, qui ne verra que les commandes créées <b>à partir d&apos;aujourd&apos;hui</b> (l&apos;historique reste visible par les admins).</li>
+            <li>Les <b>commandes et devis en cours</b> d&apos;un client suivent son nouveau commercial.</li>
             <li>Ses <b>ventes livrées</b> restent à son nom dans les statistiques.</li>
             <li>Le <b>stock qui lui était attribué</b> n&apos;est pas modifié : à reprendre depuis la page Stock si besoin.</li>
           </ul>
           <div className="flex gap-3">
             <button onClick={() => setStep('choice')} disabled={enCours} className="flex-1 px-4 py-2.5 rounded-xl border border-[#E2E8F0] text-[13px] font-semibold text-[#374151]">Retour</button>
-            <button disabled={enCours}
-              onClick={async () => { setEnCours(true); try { await onDeactivate(reprisePar || null); } finally { setEnCours(false); } }}
+            <button disabled={enCours || sesClients === null}
+              onClick={async () => {
+                setEnCours(true);
+                try {
+                  const carte: Record<string, string | null> = {};
+                  for (const c of sesClients ?? []) carte[c.id] = (repartition[c.id] ?? defaut) || null;
+                  await onDeactivate(defaut || null, carte);
+                } finally { setEnCours(false); }
+              }}
               className="flex-1 px-4 py-2.5 rounded-xl text-[13px] font-bold text-white bg-[#F59E0B] hover:bg-[#D97706] disabled:opacity-60">
               {enCours ? 'Désactivation…' : 'Désactiver'}
             </button>
@@ -777,10 +830,14 @@ function DeleteUserModal({ user, candidats, onDeactivate, onDelete, onClose }: {
           <p className="text-[13px] font-bold text-[#0F172A] group-hover:text-[#92400E]">Désactiver le compte</p>
           <p className="text-[11px] text-[#8A9BB5]">L&apos;utilisateur ne peut plus se connecter mais reste en historique</p>
         </button>
-        <button onClick={() => setStep('confirm')} className="w-full px-4 py-3 rounded-xl border border-[#E2E8F0] text-left hover:border-[#EF4444] hover:bg-[#FEF2F2] transition-all group">
-          <p className="text-[13px] font-bold text-[#0F172A] group-hover:text-[#991B1B]">Supprimer définitivement</p>
-          <p className="text-[11px] text-[#8A9BB5]">Efface le compte — irréversible</p>
-        </button>
+        {peutSupprimer ? (
+          <button onClick={() => setStep('confirm')} className="w-full px-4 py-3 rounded-xl border border-[#E2E8F0] text-left hover:border-[#EF4444] hover:bg-[#FEF2F2] transition-all group">
+            <p className="text-[13px] font-bold text-[#0F172A] group-hover:text-[#991B1B]">Supprimer définitivement</p>
+            <p className="text-[11px] text-[#8A9BB5]">Efface le compte — irréversible</p>
+          </button>
+        ) : (
+          <p className="text-[11px] text-[#ABBED1] px-1">La suppression définitive est réservée à l&apos;administratrice principale.</p>
+        )}
         <button onClick={onClose} className="px-4 py-2 text-sm text-[#8A9BB5] hover:text-[#374151]">Annuler</button>
       </div>
     </Modal>
@@ -789,6 +846,7 @@ function DeleteUserModal({ user, candidats, onDeactivate, onDelete, onClose }: {
 
 /* ─── Page principale ─── */
 function UsersPageInner() {
+  const { data: session } = useSession();
   const [users, setUsers]           = useState<User[]>([]);
   const [loading, setLoading]       = useState(true);
   const [search, setSearch]         = useState('');
@@ -969,13 +1027,14 @@ function UsersPageInner() {
     }
   };
 
-  // Désactivation (ex. licenciement) : ses clients + commandes/devis en cours repris par `reprisePar`
-  const handleDeactivate = async (reprisePar: string | null) => {
+  // Désactivation (ex. licenciement) : ses clients (répartis client par client, sinon au commercial
+  // par défaut) + leurs commandes/devis en cours sont repris
+  const handleDeactivate = async (reprisePar: string | null, repartition: Record<string, string | null>) => {
     if (!deleteUser) return;
     const res = await fetch(`/api/users/${deleteUser.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ active: false, reassignClientsTo: reprisePar }),
+      body: JSON.stringify({ active: false, reassignClientsTo: reprisePar, reassignClients: repartition }),
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) { alert(data.error ?? 'Désactivation impossible.'); return; }
@@ -983,9 +1042,7 @@ function UsersPageInner() {
     setDeleteUser(null);
     const r = data.reassignation as { clients: number; commandes: number; devis: number } | undefined;
     if (r) {
-      const qui = reprisePar ? (users.find((u) => String(u.id) === reprisePar)?.nom ?? 'le commercial choisi') : 'personne';
-      alert(`Compte désactivé.
-${r.clients} client(s) repris par ${qui}${reprisePar ? `, ${r.commandes} commande(s) et ${r.devis} devis en cours transférés` : ''}.`);
+      alert(`Compte désactivé.\n${r.clients} client(s) réassigné(s), ${r.commandes} commande(s) et ${r.devis} devis en cours transférés.`);
     }
   };
 
@@ -1125,6 +1182,7 @@ ${r.clients} client(s) repris par ${qui}${reprisePar ? `, ${r.commandes} command
       {deleteUser && (
         <DeleteUserModal user={deleteUser}
           candidats={users.filter((u) => u.statut === 'Actif' && u.id !== deleteUser.id)}
+          peutSupprimer={!!users.find((u) => String(u.id) === session?.user?.id)?.canHardDelete}
           onDeactivate={handleDeactivate} onDelete={handleDelete} onClose={() => setDeleteUser(null)} />
       )}
 

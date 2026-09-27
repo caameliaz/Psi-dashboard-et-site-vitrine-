@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { fixerReferenceProduit, fixerReferenceMatiere } from '@/lib/stock-reference';
 import { requirePermission } from '@/lib/permissions';
 import { createAudit } from '@/lib/audit';
 import { distributePurchase, unblockProductionForMaterial, resyncPurchaseLineForProduct, resyncMaterialPurchaseNeed } from '@/lib/order-stock';
@@ -97,16 +98,22 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
       if (item.productId) {
         // Produit fini "Acheté" → distribué en priorité aux commandes/devis liés (Réservé,
         // FIFO), le reliquat (réassort manuel/seuil) part en Disponible.
+        const avantProduit = (await prisma.product.findUnique({ where: { id: item.productId }, select: { available: true } }))?.available ?? 0;
         await prisma.purchaseListItem.update({ where: { id }, data: { receivedQuantity: { increment: qty } } });
         await distributePurchase(id, qty, item.productId);
+        // Rachat reçu → ce qui arrive en disponible devient la référence (100 %), seuil à 30 %
+        await fixerReferenceProduit(item.productId, avantProduit);
         // Besoin réel dérivé des commandes restantes + buffer recalculés entièrement à neuf.
         await resyncPurchaseLineForProduct(item.productId);
       } else {
         // Matière première → toujours en Disponible ; débloque les productions en attente.
+        const avantMatiere = (await prisma.rawMaterial.findUnique({ where: { id: item.rawMaterialId! }, select: { available: true } }))?.available ?? 0;
         await prisma.$transaction([
           prisma.purchaseListItem.update({ where: { id }, data: { receivedQuantity: { increment: qty } } }),
           prisma.rawMaterial.update({ where: { id: item.rawMaterialId! }, data: { available: { increment: qty } } }),
         ]);
+        // Rachat de matière reçu → le disponible obtenu devient la référence (100 %), seuil à 30 %
+        await fixerReferenceMatiere(item.rawMaterialId!, avantMatiere);
         await unblockProductionForMaterial(item.rawMaterialId!);
         // Le disponible de CETTE matière a bougé → recalcul immédiat de sa propre ligne
         // (besoin réel + buffer), même si aucune ligne de production n'a été débloquée.
