@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import { Modal } from '@/components/ui/Modal';
 import { StockListsWidget } from '@/components/ui/StockListsWidget';
+import { ManqueMatiereModal, type ManqueMatiere } from '@/components/ui/ManqueMatiereModal';
 import { useRole } from '@/lib/role-context';
 import { RequirePerm } from '@/components/RequirePerm';
 
@@ -42,11 +43,36 @@ function statusBadge(available: number, threshold: number | null | undefined) {
   return <span className="px-2 py-0.5 rounded-md bg-[#F0FDF4] text-[#166534] text-[11px] font-bold">En stock</span>;
 }
 
+// ── Champs « Matière restante (optionnel) » — saisie manuelle après une production ───
+function MatiereRestanteChamps({ materials, restes, setRestes }: {
+  materials: StockMaterial[]; restes: Record<string, string>;
+  setRestes: React.Dispatch<React.SetStateAction<Record<string, string>>>;
+}) {
+  return (
+    <div>
+      <p className="text-[12px] font-semibold text-[#374151] mb-0.5">Matière restante <span className="font-normal text-[#8A9BB5]">(optionnel)</span></p>
+      <p className="text-[11px] text-[#8A9BB5] mb-2">Ce qu&apos;il reste réellement après cette production. Laisser vide = inchangé.</p>
+      <ul className="flex flex-col gap-1.5 max-h-[200px] overflow-y-auto">
+        {materials.map((m) => (
+          <li key={m.id} className="flex items-center gap-2">
+            <span className="flex-1 min-w-0 text-[12px] text-[#374151] truncate">
+              {m.name} <span className="text-[#8A9BB5]">({m.reference}) — actuel : {m.available} {m.unit}</span>
+            </span>
+            <input value={restes[m.id] ?? ''} onChange={(e) => { const v = e.target.value.replace(/[^\d.]/g, ''); setRestes((r) => ({ ...r, [m.id]: v })); }}
+              inputMode="decimal" placeholder="—" className="w-[90px] px-2 py-1.5 rounded-lg border border-[#E2E8F0] text-[12px] text-right bg-[#F8FAFC] focus:outline-none focus:border-[#4CAF4F]" />
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 // ── Overlay : Restock (Disponible uniquement) / Correction (champ exact) ───
-function StockActionModal({ label, unit, item, isProduct, needsMode, onClose, onRestock, onCorrection }: {
+function StockActionModal({ label, unit, item, isProduct, needsMode, materials, onClose, onRestock, onCorrection }: {
   label: string; unit: string; item: StockProduct | StockMaterial; isProduct: boolean; needsMode: boolean;
+  materials: StockMaterial[];
   onClose: () => void;
-  onRestock: (qty: number, mode?: 'produire' | 'acheter') => Promise<void>;
+  onRestock: (qty: number, mode?: 'produire' | 'acheter', matieresRestantes?: Record<string, number>, forcer?: boolean) => Promise<ManqueMatiere[] | null>;
   onCorrection: (field: string, qty: number) => Promise<void>;
 }) {
   const [tab, setTab] = useState<'restock' | 'correction'>('restock');
@@ -55,21 +81,46 @@ function StockActionModal({ label, unit, item, isProduct, needsMode, onClose, on
   const fieldLabels = isProduct ? PRODUCT_FIELD_LABELS : MATERIAL_FIELD_LABELS;
   const [field, setField] = useState<string>('available');
   const [saving, setSaving] = useState(false);
+  // Matière restante saisie à la main après une production (vide = inchangée)
+  const [restes, setRestes] = useState<Record<string, string>>({});
+  // Production refusée faute de matière → overlay « Réapprovisionner / Produire quand même »
+  const [manques, setManques] = useState<ManqueMatiere[] | null>(null);
+  const { isAdmin } = useRole();
+  const produit = isProduct && (needsMode ? mode === 'produire' : (item as StockProduct).mode === 'FABRIQUE');
 
   const currentFieldValue = (item as any)[field] as number;
+
+  const reapprovisionner = async (forcer = false) => {
+    const matieresRestantes: Record<string, number> = {};
+    if (produit) {
+      for (const [id, v] of Object.entries(restes)) {
+        const r = Number(v);
+        if (v.trim() && !Number.isNaN(r) && r >= 0) matieresRestantes[id] = r;
+      }
+    }
+    const manquants = await onRestock(Number(qty), needsMode ? mode : undefined, Object.keys(matieresRestantes).length ? matieresRestantes : undefined, forcer);
+    if (manquants) setManques(manquants);
+    else onClose();
+  };
 
   const submit = async () => {
     const n = Number(qty);
     if (!qty.trim() || Number.isNaN(n) || n < 0) return;
     setSaving(true);
     try {
-      if (tab === 'restock') await onRestock(n, needsMode ? mode : undefined);
-      else await onCorrection(field, n);
-      onClose();
+      if (tab === 'restock') await reapprovisionner();
+      else { await onCorrection(field, n); onClose(); }
     } finally {
       setSaving(false);
     }
   };
+
+  if (manques) {
+    return (
+      <ManqueMatiereModal produit={label} manques={manques} peutForcer={isAdmin}
+        onReessayer={() => reapprovisionner()} onForcer={() => reapprovisionner(true)} onClose={onClose} />
+    );
+  }
 
   return (
     <Modal title={`Stock — ${label}`} onClose={onClose}>
@@ -104,6 +155,9 @@ function StockActionModal({ label, unit, item, isProduct, needsMode, onClose, on
               <label className="block text-[12px] font-semibold text-[#374151] mb-1.5">Quantité à ajouter ({unit})</label>
               <input value={qty} onChange={(e) => setQty(e.target.value.replace(/[^\d.]/g, ''))} inputMode="decimal" placeholder="ex: 50" className={inputClass} autoFocus />
             </div>
+            {produit && materials.length > 0 && (
+              <MatiereRestanteChamps materials={materials} restes={restes} setRestes={setRestes} />
+            )}
           </>
         ) : (
           <>
@@ -211,23 +265,50 @@ function AssignModal({ employees, products, onClose, onSave }: {
 // ── Overlay : Restocker (dédié, indépendant de "Gérer le stock") ───────────
 function RestockOnlyModal({ products, materials, onClose, onRestock }: {
   products: StockProduct[]; materials: StockMaterial[];
-  onClose: () => void; onRestock: (type: 'product' | 'material', id: string, qty: number, mode?: 'produire' | 'acheter') => Promise<void>;
+  onClose: () => void;
+  onRestock: (type: 'product' | 'material', id: string, qty: number, mode?: 'produire' | 'acheter', matieresRestantes?: Record<string, number>, forcer?: boolean) => Promise<ManqueMatiere[] | null>;
 }) {
   const [type, setType] = useState<'product' | 'material'>('product');
   const [id, setId] = useState('');
   const [qty, setQty] = useState('');
   const [mode, setMode] = useState<'produire' | 'acheter'>('produire');
   const [saving, setSaving] = useState(false);
+  // Matière restante saisie à la main après une production (vide = inchangée)
+  const [restes, setRestes] = useState<Record<string, string>>({});
+  // Production refusée faute de matière → overlay « Réapprovisionner / Produire quand même »
+  const [manques, setManques] = useState<ManqueMatiere[] | null>(null);
+  const { isAdmin } = useRole();
 
   const selectedProduct = products.find((p) => p.id === id);
   const needsMode = type === 'product' && selectedProduct?.mode === 'LES_DEUX';
+  const produit = type === 'product' && !!selectedProduct && (needsMode ? mode === 'produire' : selectedProduct.mode === 'FABRIQUE');
+
+  const restocker = async (forcer = false) => {
+    const matieresRestantes: Record<string, number> = {};
+    if (produit) {
+      for (const [mid, v] of Object.entries(restes)) {
+        const r = Number(v);
+        if (v.trim() && !Number.isNaN(r) && r >= 0) matieresRestantes[mid] = r;
+      }
+    }
+    const manquants = await onRestock(type, id, Number(qty), needsMode ? mode : undefined, Object.keys(matieresRestantes).length ? matieresRestantes : undefined, forcer);
+    if (manquants) setManques(manquants);
+    else onClose();
+  };
 
   const submit = async () => {
     const n = Number(qty);
     if (!id || !n || n <= 0 || saving) return;
     setSaving(true);
-    try { await onRestock(type, id, n, needsMode ? mode : undefined); onClose(); } finally { setSaving(false); }
+    try { await restocker(); } finally { setSaving(false); }
   };
+
+  if (manques) {
+    return (
+      <ManqueMatiereModal produit={selectedProduct?.name || selectedProduct?.reference || ''} manques={manques} peutForcer={isAdmin}
+        onReessayer={() => restocker()} onForcer={() => restocker(true)} onClose={onClose} />
+    );
+  }
 
   return (
     <Modal title="Restocker" onClose={onClose}>
@@ -258,6 +339,9 @@ function RestockOnlyModal({ products, materials, onClose, onRestock }: {
           <label className="block text-[12px] font-semibold text-[#374151] mb-1.5">Quantité à ajouter</label>
           <input value={qty} onChange={(e) => setQty(e.target.value.replace(/[^\d.]/g, ''))} inputMode="decimal" placeholder="ex: 50" className={inputClass} autoFocus />
         </div>
+        {produit && materials.length > 0 && (
+          <MatiereRestanteChamps materials={materials} restes={restes} setRestes={setRestes} />
+        )}
         <div className="flex gap-3 pt-1">
           <button onClick={onClose} className="flex-1 px-4 py-2.5 rounded-lg border border-[#E2E8F0] text-sm font-semibold text-[#374151] hover:bg-[#F8FAFC] transition-colors">Annuler</button>
           <button onClick={submit} disabled={saving || !id || !qty.trim()} className="flex-1 px-4 py-2.5 rounded-lg text-sm font-bold text-white transition-colors disabled:opacity-60" style={{ background: '#4CAF4F' }}>
@@ -316,13 +400,21 @@ function StockPageInner() {
     if (res.ok) setSelectedEmployee(await res.json());
   };
 
-  const doRestock = async (type: 'product' | 'material', id: string, quantity: number, mode?: 'produire' | 'acheter') => {
+  // Renvoie la matière manquante si la production est refusée (l'overlay prend le relais), sinon null
+  const doRestock = async (type: 'product' | 'material', id: string, quantity: number, mode?: 'produire' | 'acheter', matieresRestantes?: Record<string, number>, forcer?: boolean): Promise<ManqueMatiere[] | null> => {
     const res = await fetch('/api/stock/restock', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type, id, quantity, mode }),
+      body: JSON.stringify({ type, id, quantity, mode, matieresRestantes, forcer }),
     });
-    if (!res.ok) { const err = await res.json().catch(() => ({})); alert(err.error ?? 'Échec du réapprovisionnement'); return; }
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      await fetchAll();
+      if (err.code === 'MATIERE_INSUFFISANTE' && Array.isArray(err.shortfalls)) return err.shortfalls;
+      alert(err.error ?? 'Échec du réapprovisionnement');
+      return null;
+    }
     await fetchAll();
+    return null;
   };
   const doCorrection = async (type: 'product' | 'material', id: string, field: string, quantity: number) => {
     const res = await fetch('/api/stock/correction', {
@@ -540,8 +632,9 @@ function StockPageInner() {
       {actionTarget && (
         <StockActionModal
           label={actionTarget.label} unit={actionTarget.unit} item={actionTarget.item} isProduct={actionTarget.type === 'product'} needsMode={actionTarget.needsMode}
+          materials={materials}
           onClose={() => setActionTarget(null)}
-          onRestock={(qty, mode) => doRestock(actionTarget.type, actionTarget.item.id, qty, mode)}
+          onRestock={(qty, mode, restes, forcer) => doRestock(actionTarget.type, actionTarget.item.id, qty, mode, restes, forcer)}
           onCorrection={(field, qty) => doCorrection(actionTarget.type, actionTarget.item.id, field, qty)}
         />
       )}
@@ -550,7 +643,7 @@ function StockPageInner() {
       )}
       {showRestock && (
         <RestockOnlyModal products={products} materials={materials} onClose={() => setShowRestock(false)}
-          onRestock={(type, id, qty, mode) => doRestock(type, id, qty, mode)} />
+          onRestock={(type, id, qty, mode, restes, forcer) => doRestock(type, id, qty, mode, restes, forcer)} />
       )}
       {showLists && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
