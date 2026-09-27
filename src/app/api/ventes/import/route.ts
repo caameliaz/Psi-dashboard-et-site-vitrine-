@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { requirePermission } from '@/lib/permissions';
-import { createAudit } from '@/lib/audit';
+import { createAudit, statusLabel } from '@/lib/audit';
 import { generateOrderRef, generateQuoteRef } from '@/lib/generate-ref';
 
 // POST /api/ventes/import — importe des ventes passées depuis un Excel.
@@ -17,6 +17,9 @@ import { generateOrderRef, generateQuoteRef } from '@/lib/generate-ref';
 //  • plusieurs lignes même N° facture → UNE demande avec plusieurs produits
 //  • le client est créé s'il n'existe pas
 //  • le commercial est mémorisé par son NOM (rattachement aux comptes plus tard)
+//  • DOUBLONS : une vente déjà en base (même n° de facture, ou même client + même jour +
+//    même montant) ou répétée dans le fichier est IGNORÉE, sauf si l'utilisatrice l'a
+//    explicitement cochée (`forcer`). Body { mode: 'verifier' } → aperçu sans rien écrire.
 
 interface Ligne {
   date?: string;
@@ -58,13 +61,97 @@ function toNumber(v: unknown): number {
   return Number.isFinite(n) ? n : 0;
 }
 
+const deux = (n: string | number) => String(n).padStart(2, '0');
+const normNom = (s: unknown) => String(s ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
+
+/** Jour civil « AAAA-MM-JJ » écrit dans le fichier (indépendant du fuseau du serveur). */
+function jourDuFichier(v: unknown): string | null {
+  const d = parseDate(v);
+  if (!d) return null;
+  const fr = String(v ?? '').trim().match(/^(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{2,4})$/);
+  if (fr) return `${fr[3].length === 2 ? 2000 + Number(fr[3]) : Number(fr[3])}-${deux(fr[2])}-${deux(fr[1])}`;
+  return d.toISOString().slice(0, 10); // n° de série Excel / date ISO : calculés en UTC
+}
+/** Jour civil en heure d'Algérie (UTC+1, pas d'heure d'été) d'une date en base. */
+const jourAlgerie = (d: Date) => new Date(d.getTime() + 3600_000).toISOString().slice(0, 10);
+
+/** Montants possibles d'une vente du fichier : colonne Montant (devis) ou qté × prix (commande). */
+function montantsFichier(lignes: Ligne[]) {
+  const parMontant = lignes.reduce((a, l) => a + (toNumber(l.montant) || toNumber(l.prixUnitaire) * (toNumber(l.quantite) || 1)), 0);
+  const parLignes = lignes.reduce((a, l) => a + Math.max(1, Math.round(toNumber(l.quantite) || 1)) * toNumber(l.prixUnitaire), 0);
+  return [parMontant, parLignes];
+}
+
+type Groupe = { ligne: Ligne; index: number }[];
+
+/** cle du groupe → raison du doublon (absent = vente nouvelle). */
+async function detecterDoublons(groupes: Map<string, Groupe>): Promise<Map<string, string>> {
+  const doublons = new Map<string, string>();
+  const factures = [...groupes.values()].map((g) => String(g[0].ligne.facture ?? '').trim()).filter(Boolean);
+  const jours = [...groupes.values()].map((g) => jourDuFichier(g[0].ligne.date)).filter((j): j is string => !!j).sort();
+
+  // Ventes existantes : mêmes n° de facture (toutes dates) + toutes celles de la période du fichier (±2 jours)
+  const periode = jours.length
+    ? {
+        gte: new Date(new Date(`${jours[0]}T00:00:00Z`).getTime() - 2 * 86400_000),
+        lte: new Date(new Date(`${jours[jours.length - 1]}T00:00:00Z`).getTime() + 2 * 86400_000),
+      }
+    : null;
+  const variantes = [...new Set(factures.flatMap((f) => [f, f.toUpperCase(), f.toLowerCase()]))];
+  const ou = [
+    ...(variantes.length ? [{ invoiceNumber: { in: variantes } }, { ref: { in: variantes } }] : []),
+    ...(periode ? [{ createdAt: periode }] : []),
+  ];
+  if (ou.length === 0) return doublons;
+  const selClient = { clientName: true, clientCompany: true, client: { select: { name: true, company: true } } } as const;
+  const [cmds, devisExistants] = await Promise.all([
+    prisma.order.findMany({ where: { OR: ou }, select: { ref: true, invoiceNumber: true, status: true, createdAt: true, ...selClient, items: { select: { quantity: true, unitPrice: true } } } }),
+    prisma.quote.findMany({ where: { OR: ou }, select: { ref: true, invoiceNumber: true, status: true, createdAt: true, ...selClient, proposedPrice: true } }),
+  ]);
+  const existants = [
+    ...cmds.map((o) => ({ ...o, montant: o.items.reduce((a, i) => a + i.quantity * i.unitPrice, 0) })),
+    ...devisExistants.map((q) => ({ ...q, montant: q.proposedPrice ?? 0 })),
+  ].map((e) => ({
+    ref: e.ref ?? '—',
+    statut: statusLabel(e.status),
+    facture: normNom(e.invoiceNumber),
+    refNorm: normNom(e.ref),
+    jour: jourAlgerie(e.createdAt),
+    noms: [e.clientCompany, e.clientName, e.client?.company, e.client?.name].map(normNom).filter(Boolean),
+    montant: e.montant,
+  }));
+
+  const dejaVusFichier = new Map<string, string>();
+  for (const [cle, groupe] of groupes) {
+    const l0 = groupe[0].ligne;
+    const facture = normNom(l0.facture);
+    const jour = jourDuFichier(l0.date);
+    const nom = normNom(l0.client);
+    const montants = montantsFichier(groupe.map((g) => g.ligne));
+    const memeMontant = (m: number) => montants.some((x) => Math.abs(x - m) <= 1);
+
+    const parFacture = facture ? existants.find((e) => e.facture === facture || e.refNorm === facture) : undefined;
+    if (parFacture) { doublons.set(cle, `N° de facture ${String(l0.facture).trim()} déjà en base (${parFacture.ref}, ${parFacture.statut})`); continue; }
+
+    const identique = jour ? existants.find((e) => e.jour === jour && e.noms.includes(nom) && memeMontant(e.montant)) : undefined;
+    if (identique) { doublons.set(cle, `Vente identique déjà en base : ${identique.ref} (${identique.statut}) — même client, même jour, même montant`); continue; }
+
+    const cleFichier = `${nom}|${jour}|${Math.round(montants[0])}`;
+    const premiere = dejaVusFichier.get(cleFichier);
+    if (premiere) { doublons.set(cle, `Même vente déjà présente plus haut dans le fichier (ligne ${premiere})`); continue; }
+    dejaVusFichier.set(cleFichier, groupe.map((g) => g.index + 1).join(', '));
+  }
+  return doublons;
+}
+
 export async function POST(request: NextRequest) {
   const guard = await requirePermission('modifier_statuts');
   if (guard.error) return guard.error;
   const session = guard.session;
 
   try {
-    const { rows } = (await request.json()) as { rows: Ligne[] };
+    const { rows, mode, forcer } = (await request.json()) as { rows: Ligne[]; mode?: 'verifier'; forcer?: string[] };
+    const aForcer = new Set(Array.isArray(forcer) ? forcer : []);
     if (!Array.isArray(rows) || rows.length === 0) {
       return NextResponse.json({ error: 'Aucune ligne à importer' }, { status: 400 });
     }
@@ -74,20 +161,44 @@ export async function POST(request: NextRequest) {
     const parRef = new Map(produits.map((p) => [p.reference.trim().toLowerCase(), p.id]));
 
     // ── Regroupement : même N° facture = une seule demande à plusieurs produits ──
-    const groupes = new Map<string, Ligne[]>();
+    const groupes = new Map<string, Groupe>();
     rows.forEach((r, i) => {
       const cle = String(r.facture ?? '').trim() || `__ligne_${i}`; // sans n° → ligne isolée
       if (!groupes.has(cle)) groupes.set(cle, []);
-      groupes.get(cle)!.push(r);
+      groupes.get(cle)!.push({ ligne: r, index: i });
     });
+
+    const doublons = await detecterDoublons(groupes);
+
+    // ── Aperçu (aucune écriture) : pour l'écran d'import ──
+    if (mode === 'verifier') {
+      return NextResponse.json({
+        groupes: [...groupes].map(([cle, g]) => ({
+          cle,
+          lignes: g.map((x) => x.index + 1),
+          date: String(g[0].ligne.date ?? ''),
+          facture: String(g[0].ligne.facture ?? '').trim(),
+          client: String(g[0].ligne.client ?? '').trim(),
+          montant: Math.round(montantsFichier(g.map((x) => x.ligne))[0] * 100) / 100,
+          doublon: doublons.get(cle) ?? null,
+        })),
+      });
+    }
 
     let commandes = 0;
     let devis = 0;
     let clientsCrees = 0;
     const erreurs: string[] = [];
+    const ignores: string[] = [];
 
-    for (const [cle, lignes] of groupes) {
+    for (const [cle, groupe] of groupes) {
+      const lignes = groupe.map((g) => g.ligne);
       const premiere = lignes[0];
+      const raisonDoublon = doublons.get(cle);
+      if (raisonDoublon && !aForcer.has(cle)) {
+        ignores.push(`${String(premiere.facture ?? '').trim() || String(premiere.client ?? '').trim() || cle} (${premiere.date ?? ''}) : ${raisonDoublon}`);
+        continue;
+      }
       const nomClient = String(premiere.client ?? '').trim();
       if (!nomClient) { erreurs.push(`${cle} : client manquant`); continue; }
 
@@ -211,7 +322,7 @@ export async function POST(request: NextRequest) {
       userId: session.user.id,
       action: 'Import ventes Excel',
       entity: 'COMMANDE',
-      detail: `${commandes} commande(s), ${devis} devis, ${clientsCrees} client(s) créé(s)`,
+      detail: `${commandes} commande(s), ${devis} devis, ${clientsCrees} client(s) créé(s), ${ignores.length} doublon(s) ignoré(s)`,
     });
 
     return NextResponse.json({
@@ -220,6 +331,8 @@ export async function POST(request: NextRequest) {
       devis,
       clientsCrees,
       erreurs: erreurs.slice(0, 30),
+      doublonsIgnores: ignores.length,
+      ignores: ignores.slice(0, 50),
     });
   } catch (e: unknown) {
     console.error('[POST /api/ventes/import]', e);
