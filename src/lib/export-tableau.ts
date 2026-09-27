@@ -42,7 +42,7 @@ export async function exportTableauExcel(
 
   let totalGlobal = 0;
   items.forEach((r) => {
-    const dateStr = r.date + (r.heure ? ` ${r.heure}` : '');
+    const dateStr = r.date; // date seule (jj/mm/aaaa), sans l'heure
     const montantCommande = montantToNum(r.montant);
     totalGlobal += montantCommande;
     const lignes = (r.items && r.items.length > 0)
@@ -92,7 +92,7 @@ export async function exportTableauExcel(
   ws['!cols'] = [
     { wch: 16 }, // Ref
     { wch: 11 }, // Type
-    { wch: 16 }, // Date
+    { wch: 12 }, // Date
     { wch: 24 }, // Client
     { wch: 26 }, // Entreprise
     { wch: 16 }, // Téléphone
