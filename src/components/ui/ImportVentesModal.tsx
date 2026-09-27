@@ -22,6 +22,7 @@ interface Resultat {
   erreurs: string[];
   doublonsIgnores?: number;
   ignores?: string[];
+  commerciauxInconnus?: string[];
 }
 
 interface GroupeVerifie {
@@ -32,6 +33,8 @@ interface GroupeVerifie {
   client: string;
   montant: number;
   doublon: string | null;
+  commercial?: string;
+  commercialCompte?: string | null;
 }
 
 type LignePreparee = Record<'date' | 'facture' | 'client' | 'commercial' | 'wilaya' | 'reference' | 'quantite' | 'prixUnitaire' | 'montant' | 'modePaiement' | 'dateReglement', string>;
@@ -156,6 +159,8 @@ export function ImportVentesModal({ onClose, onDone }: { onClose: () => void; on
   const doublons = (verification ?? []).filter((g) => g.doublon);
   const nouvelles = (verification ?? []).filter((g) => !g.doublon);
   const aImporter = nouvelles.length + doublons.filter((g) => forcer.has(g.cle)).length;
+  // Commerciaux du fichier → compte reconnu (ou non)
+  const commerciaux = [...new Map((verification ?? []).filter((g) => g.commercial).map((g) => [g.commercial!, g.commercialCompte ?? null])).entries()];
 
   const handleImport = async () => {
     setImporting(true); setError('');
@@ -194,6 +199,13 @@ export function ImportVentesModal({ onClose, onDone }: { onClose: () => void; on
               </div>
             ))}
           </div>
+
+          {(result.commerciauxInconnus?.length ?? 0) > 0 && (
+            <div className="rounded-xl border border-[#FECACA] bg-[#FEF2F2] px-4 py-3">
+              <p className="text-[12px] font-bold text-[#991B1B] mb-1">Commercial non reconnu — ventes importées sans commercial</p>
+              <p className="text-[11px] text-[#991B1B]">{result.commerciauxInconnus!.join(', ')} : aucun compte ne correspond (vérifiez le nom dans Paramètres → Utilisateurs), assignez ces ventes à la main.</p>
+            </div>
+          )}
 
           {(result.ignores?.length ?? 0) > 0 && (
             <div className="rounded-xl border border-[#FED7AA] bg-[#FFF7ED] px-4 py-3">
@@ -251,7 +263,8 @@ export function ImportVentesModal({ onClose, onDone }: { onClose: () => void; on
             <li>N° de facture commençant par <b>F</b> → TVA « Oui » ; les montants du fichier sont considérés <b>TTC</b> (aucune TVA ajoutée)</li>
             <li>Le <b>n° de facture</b> devient la référence de la vente (sinon CMD-… / DEV-… automatique)</li>
             <li><b>Client</b> retrouvé par son nom exact ; s’il n’existe pas, il est <b>créé</b> (avec la wilaya du fichier)</li>
-            <li>Le <b>commercial</b> est gardé par son nom ; mode et date de règlement sont enregistrés</li>
+            <li>La vente est <b>assignée au compte du commercial</b> (même prénom + même initiale : « KARIM D. » → KARIM DAHES) ; nom non reconnu → vente non assignée et signalée</li>
+            <li>Mode et date de règlement sont enregistrés</li>
             <li><b>Doublons</b> : une vente déjà en base (même n° de facture, ou même client + même jour + même montant) ou répétée dans le fichier est <b>ignorée</b>, sauf si vous la cochez</li>
             <li>Aucun effet sur le stock</li>
           </ul>
@@ -284,6 +297,21 @@ export function ImportVentesModal({ onClose, onDone }: { onClose: () => void; on
                 <p className="text-[11px] font-semibold text-[#8A9BB5]">déjà en base (ignorée{doublons.length > 1 ? 's' : ''})</p>
               </div>
             </div>
+
+            {commerciaux.length > 0 && (
+              <div className="rounded-xl border border-[#E2E8F0] px-3 py-2 text-[11px] text-[#374151]">
+                <p className="font-bold text-[#0F172A] mb-1">Commerciaux → comptes</p>
+                <ul className="space-y-0.5">
+                  {commerciaux.map(([nom, compte]) => (
+                    <li key={nom}>
+                      {nom} → {compte
+                        ? <b className="text-[#166534]">{compte}</b>
+                        : <b className="text-[#DC2626]">non reconnu (ventes non assignées)</b>}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
 
             {doublons.length > 0 && (
               <div className="rounded-xl border border-[#FED7AA] bg-[#FFF7ED] px-3 py-2">

@@ -16,7 +16,9 @@ import { generateOrderRef, generateQuoteRef } from '@/lib/generate-ref';
 //  • N° facture commençant par "F"    → TVA activée (info seule, aucun calcul)
 //  • plusieurs lignes même N° facture → UNE demande avec plusieurs produits
 //  • le client est créé s'il n'existe pas
-//  • le commercial est mémorisé par son NOM (rattachement aux comptes plus tard)
+//  • le commercial est mémorisé par son NOM, et la vente est ASSIGNÉE au compte correspondant
+//    (même prénom + même initiale du nom : « KARIM D. » → KARIM DAHES). Aucun compte ou
+//    plusieurs possibles → vente non assignée, signalée dans le résultat.
 //  • DOUBLONS : une vente déjà en base (même n° de facture, ou même client + même jour +
 //    même montant) ou répétée dans le fichier est IGNORÉE, sauf si l'utilisatrice l'a
 //    explicitement cochée (`forcer`). Body { mode: 'verifier' } → aperçu sans rien écrire.
@@ -83,6 +85,21 @@ function montantsFichier(lignes: Ligne[]) {
 }
 
 type Groupe = { ligne: Ligne; index: number }[];
+
+/** Mots d'un nom, sans accents ni ponctuation : « Radja Djenadi » → ['radja', 'djenadi']. */
+const motsNom = (s: unknown) =>
+  String(s ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim().split(' ').filter(Boolean);
+
+/** Compte utilisateur du commercial écrit dans le fichier (même prénom + même initiale du nom). */
+function trouverCommercial(nom: string, comptes: { id: string; name: string | null }[]) {
+  const [prenom, nomFamille] = motsNom(nom);
+  if (!prenom) return null;
+  const candidats = comptes.filter((c) => {
+    const [p, n] = motsNom(c.name);
+    return p === prenom && (!nomFamille || (!!n && n.startsWith(nomFamille[0])));
+  });
+  return candidats.length === 1 ? candidats[0] : null;
+}
 
 /** cle du groupe → raison du doublon (absent = vente nouvelle). */
 async function detecterDoublons(groupes: Map<string, Groupe>): Promise<Map<string, string>> {
@@ -156,6 +173,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Aucune ligne à importer' }, { status: 400 });
     }
 
+    // Comptes actifs : pour assigner chaque vente à son commercial
+    const comptes = await prisma.user.findMany({ where: { active: true }, select: { id: true, name: true } });
+
     // Catalogue : sert à décider commande vs devis, et à retrouver la catégorie
     const produits = await prisma.product.findMany({ select: { id: true, reference: true } });
     const parRef = new Map(produits.map((p) => [p.reference.trim().toLowerCase(), p.id]));
@@ -181,6 +201,8 @@ export async function POST(request: NextRequest) {
           client: String(g[0].ligne.client ?? '').trim(),
           montant: Math.round(montantsFichier(g.map((x) => x.ligne))[0] * 100) / 100,
           doublon: doublons.get(cle) ?? null,
+          commercial: String(g[0].ligne.commercial ?? '').trim(),
+          commercialCompte: trouverCommercial(String(g[0].ligne.commercial ?? ''), comptes)?.name ?? null,
         })),
       });
     }
@@ -190,6 +212,7 @@ export async function POST(request: NextRequest) {
     let clientsCrees = 0;
     const erreurs: string[] = [];
     const ignores: string[] = [];
+    const commerciauxInconnus = new Set<string>();
 
     for (const [cle, groupe] of groupes) {
       const lignes = groupe.map((g) => g.ligne);
@@ -229,6 +252,8 @@ export async function POST(request: NextRequest) {
       // N° de facture commençant par F → vente facturée avec TVA
       const tva = /^f/i.test(facture);
       const commercial = String(premiere.commercial ?? '').trim() || null;
+      const compteCommercial = commercial ? trouverCommercial(commercial, comptes) : null;
+      if (commercial && !compteCommercial) commerciauxInconnus.add(commercial);
       const modePaiement = String(premiere.modePaiement ?? '').trim() || null;
       const dateReglement = parseDate(premiere.dateReglement);
 
@@ -258,6 +283,7 @@ export async function POST(request: NextRequest) {
         // Montant / prix unitaire du fichier = déjà TTC quand la facture commence par F
         priceIncludesVat: true,
         salesRepName: commercial,
+        assignedToId: compteCommercial?.id ?? null,
         createdById: session.user.id,
         // ⚠️ Date RÉELLE de la vente, pas la date d'import
         createdAt: dateVente,
@@ -333,6 +359,7 @@ export async function POST(request: NextRequest) {
       erreurs: erreurs.slice(0, 30),
       doublonsIgnores: ignores.length,
       ignores: ignores.slice(0, 50),
+      commerciauxInconnus: [...commerciauxInconnus],
     });
   } catch (e: unknown) {
     console.error('[POST /api/ventes/import]', e);

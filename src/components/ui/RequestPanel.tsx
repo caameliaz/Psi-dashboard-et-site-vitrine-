@@ -1458,8 +1458,12 @@ export function RequestPanel({ item, onClose, onStatusChange, onConfirmQuoteWith
               {(() => {
                 const hasTva = item.vatEnabled === true;
                 const hasItems = item.items && item.items.length > 0;
-                const ht = hasItems ? (item.items || []).reduce((acc, it) => acc + it.quantite * it.prixUnitaire, 0) : 0;
-                const total = hasItems && hasTva ? Math.round(ht * 1.19) : ht;
+                // Somme des lignes : HT en temps normal, déjà TTC pour les ventes importées
+                // (priceIncludesVat) → TVA déduite, pas ajoutée (même règle que le bon et le PDF)
+                const sommeLignes = hasItems ? (item.items || []).reduce((acc, it) => acc + it.quantite * it.prixUnitaire, 0) : 0;
+                const dejaTtc = hasTva && item.priceIncludesVat === true;
+                const ht = dejaTtc ? Math.round((sommeLignes / 1.19) * 100) / 100 : sommeLignes;
+                const total = dejaTtc ? sommeLignes : hasItems && hasTva ? Math.round(sommeLignes * 1.19) : sommeLignes;
                 
                 return (
                   <div className="rounded-xl border border-[#F2F4F7] px-4 py-3 flex flex-col gap-2">
