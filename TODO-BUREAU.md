@@ -1,5 +1,46 @@
 # À faire au bureau
 
+## psi.dz : site Sitejet (cPanel) actif en même temps que Vercel
+
+**Constat (27/09)** : côté Vercel, `psi.dz` / `www.psi.dz` /
+`psi-dashboard-et-site-vitrine.vercel.app` sont tous les trois en
+**« Valid Configuration »** — Vercel voit tout comme il faut, ce n'est pas le
+problème. La popup cPanel « Check DNS » qui dit *« psi.dz points to a different
+server (216.198.79.1) »* vient du fait que ce compte cPanel héberge encore, en
+parallèle, **un vrai site sur son propre serveur** :
+
+- cPanel → **Websites & Apps → psi.dz → Overview** montre une IP à lui
+  (`197.140.11.7`), un dossier `/home/psidz/public_html`, et un
+  **« Website Builder : Sitejet Builder (Draft) »** — un site brouillon jamais
+  publié mais bien rattaché au domaine.
+- C'est ce montage cPanel (Website Builder) qui revendique `psi.dz` pour
+  lui-même, pas juste un DNS mal réglé. C'est pour ça que le **Zone Editor**
+  du domaine n'a affiché **aucun enregistrement** au premier essai (page restée
+  bloquée en chargement) — le domaine est configuré en mode « site hébergé
+  ici » plutôt qu'en simple zone DNS pointant ailleurs.
+
+**Ne pas suivre la popup cPanel** (« Option 1 · Point to the provided
+nameservers ») : ça donnerait tout le DNS du domaine à cPanel, ce n'est pas
+nécessaire et ça compliquerait un retour en arrière.
+
+- [ ] Rouvrir cPanel → **Websites & Apps → psi.dz → DNS** (Zone Editor) une
+      fois qu'il charge correctement, et vérifier les enregistrements **A**
+      et **CNAME** de `psi.dz` / `www` : ils doivent pointer vers Vercel
+      (Vercel affiche les valeurs exactes dans **Settings → Domains → Edit**
+      sur `psi.dz`, généralement un A vers `76.76.21.21` et un CNAME `www`
+      vers `cname.vercel-dns.com` — à vérifier au moment de le faire).
+  - [ ] Si le Website Builder (Sitejet, brouillon) squatte encore le domaine,
+      le débrancher/supprimer de `psi.dz` dans cPanel (ne touche pas au vrai
+      site : c'est un brouillon jamais publié).
+- [ ] Vérifier ensuite que https://psi.dz affiche bien le site Next.js
+      (Vercel), pas une page cPanel/Sitejet.
+
+Impact actuel : le domaine `psi.dz` peut être instable ou afficher le mauvais
+site tant que ce n'est pas réglé — priorité si des clients utilisent déjà ce
+lien.
+
+---
+
 ## Exclure l'équipe PSI des visites du site (Google Analytics)
 
 Les pages `/admin` ne sont plus comptées. Mais quand quelqu'un de l'équipe ouvre
