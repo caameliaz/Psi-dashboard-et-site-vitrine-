@@ -235,6 +235,9 @@ export default function DashboardPage() {
   const [parCommercial, setParCommercial] = useState<{ id: string; name: string; ventes: number; commandes: number; devis: number }[]>([]);
   const [employesLivres, setEmployesLivres] = useState<{ name: string; commandes: number; devis: number; total: number }[]>([]);
   const [objectifs, setObjectifs] = useState<{ global: number; byUser: Record<string, number> }>({ global: 0, byUser: {} });
+  // Chiffre d'affaires total depuis le début (admins) + bouton « Total » de la carte Ventes
+  const [ventesTotal, setVentesTotal] = useState<{ global: number; byUser: Record<string, number> } | null>(null);
+  const [showVentesTotal, setShowVentesTotal] = useState(false);
   const [selectedCommercial, setSelectedCommercial] = useState<string>(''); // '' = total entreprise
   // Commercial dont on filtre les ventes par dates : la sélection (admin) ou soi-même (employé)
   const ventesUserId = isAdmin ? (selectedCommercial || null) : myId;
@@ -440,6 +443,7 @@ export default function DashboardPage() {
         setParCommercial(data.parCommercial ?? []);
         setEmployesLivres(data.employesLivres ?? []);
         setObjectifs(data.objectifs ?? { global: 0, byUser: {} });
+        setVentesTotal(data.ventesTotal ?? null);
         setTopProduits(
           (data.topProduits as { ref: string; qty: number; label: string }[]).map((p, i) => ({
             ...p, color: TOP_COLORS[i] ?? '#8A9BB5',
@@ -864,10 +868,21 @@ export default function DashboardPage() {
           // Montant + objectif affichés selon la sélection (admin) ou soi-même (employé)
           const activeId = isAdmin ? selectedCommercial : (myId ?? '');
           const isTotal = isAdmin && selectedCommercial === '';
+          // Bouton « Total » (admin) → chiffre d'affaires depuis le début, sans filtre de dates
+          const modeTotal = isAdmin && showVentesTotal && ventesTotal !== null;
           // Filtre de dates actif → montant filtré (déjà restreint au commercial via ventesUserId)
-          const ventes = filteredVentesMois !== null
+          const ventes = modeTotal
+            ? (isTotal ? ventesTotal.global : (ventesTotal.byUser[activeId] ?? 0))
+            : filteredVentesMois !== null
             ? filteredVentesMois
             : isTotal ? stats.ventesMois : (parCommercial.find((c) => c.id === activeId)?.ventes ?? 0);
+          const boutonTotal = isAdmin && ventesTotal !== null && (
+            <button onClick={() => setShowVentesTotal((v) => !v)}
+              title="Chiffre d'affaires total, depuis la première vente"
+              className={`px-3 py-1.5 rounded-lg border text-[11px] font-bold transition-colors flex-shrink-0 ${modeTotal ? 'bg-[#4CAF4F] border-[#4CAF4F] text-white' : 'bg-white border-[#E2E8F0] text-[#374151] hover:bg-[#F8FAFC]'}`}>
+              Total
+            </button>
+          );
           const objectif = isTotal ? objectifs.global : (activeId ? (objectifs.byUser[activeId] ?? 0) : 0);
           const pct = objectif > 0 ? Math.min(100, Math.round((ventes / objectif) * 100)) : 0;
           const atteint = objectif > 0 && ventes >= objectif;
@@ -888,20 +903,24 @@ export default function DashboardPage() {
                     <svg className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-[#8A9BB5]" width={12} height={12} viewBox="0 0 24 24" fill="none"><path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
                   </div>
                 )}
-                <div className="mb-2">
-                  <DateRangePicker onDateChange={(start, end) => {
-                    setVentesDateRange({ start, end });
-                    fetchData(false, { containerId: 'ventes', startDate: start, endDate: end, userId: ventesUserId });
-                  }} />
+                <div className="mb-2 flex items-center gap-2">
+                  {/* Caché (pas retiré) en mode Total : garde le filtre choisi en mémoire */}
+                  <div className={modeTotal ? 'hidden' : ''}>
+                    <DateRangePicker onDateChange={(start, end) => {
+                      setVentesDateRange({ start, end });
+                      fetchData(false, { containerId: 'ventes', startDate: start, endDate: end, userId: ventesUserId });
+                    }} />
+                  </div>
+                  {boutonTotal}
                 </div>
-                <p className="text-[10px] font-bold text-[#ABBED1] uppercase tracking-widest mb-2">Ventes</p>
+                <p className="text-[10px] font-bold text-[#ABBED1] uppercase tracking-widest mb-2">{modeTotal ? "Chiffre d'affaires total" : 'Ventes'}</p>
               </div>
 
               {/* Desktop: layout original */}
               <div className="hidden md:flex md:items-center md:justify-between md:mb-2 md:gap-2">
                 <div className="flex items-center gap-2 min-w-0">
                   <p className="text-[11px] font-bold text-[#ABBED1] uppercase tracking-widest flex-shrink-0">
-                    {filteredVentesMois !== null ? 'Ventes' : 'Ventes ce mois'}
+                    {modeTotal ? "Chiffre d'affaires total" : filteredVentesMois !== null ? 'Ventes' : 'Ventes ce mois'}
                   </p>
                   {isAdmin && (
                     <div className="relative max-w-[140px]">
@@ -916,28 +935,38 @@ export default function DashboardPage() {
                     </div>
                   )}
                 </div>
-                <DateRangePicker onDateChange={(start, end) => {
-                  setVentesDateRange({ start, end });
-                  fetchData(false, { containerId: 'ventes', startDate: start, endDate: end, userId: ventesUserId });
-                }} />
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  {/* Caché (pas retiré) en mode Total : garde le filtre choisi en mémoire */}
+                  <div className={modeTotal ? 'hidden' : ''}>
+                    <DateRangePicker onDateChange={(start, end) => {
+                      setVentesDateRange({ start, end });
+                      fetchData(false, { containerId: 'ventes', startDate: start, endDate: end, userId: ventesUserId });
+                    }} />
+                  </div>
+                  {boutonTotal}
+                </div>
               </div>
               <div>
                 <div className="flex items-end gap-2 md:gap-3">
                   <span className="text-[20px] md:text-[32px] font-extrabold text-[#4CAF4F] leading-none">{Number(ventes).toLocaleString('fr-FR')}</span>
                   <span className="text-[10px] md:text-[15px] font-bold text-[#4CAF4F] pb-0.5 md:pb-1">DA</span>
-                  {isTotal && filteredVentesMois === null && (
+                  {isTotal && filteredVentesMois === null && !modeTotal && (
                     <span className={`hidden md:flex items-center gap-1 text-[10px] md:text-[13px] font-bold pb-1 ml-1 ${stats.evolutionVentes >= 0 ? 'text-[#4CAF4F]' : 'text-[#EF4444]'}`}>
                       {stats.evolutionVentes >= 0 ? '▲' : '▼'} {Math.abs(stats.evolutionVentes)}%
                     </span>
                   )}
                 </div>
-                {isTotal && filteredVentesMois === null && (
+                {isTotal && filteredVentesMois === null && !modeTotal && (
                   <span className={`md:hidden flex items-center gap-1 text-[10px] font-bold mt-1 ${stats.evolutionVentes >= 0 ? 'text-[#4CAF4F]' : 'text-[#EF4444]'}`}>
                     {stats.evolutionVentes >= 0 ? '▲' : '▼'} {Math.abs(stats.evolutionVentes)}%
                   </span>
                 )}
               </div>
-              {objectif > 0 ? (
+              {modeTotal ? (
+                <p className="text-[12px] text-[#8A9BB5]" style={{ marginTop: '12px' }}>
+                  commandes + devis livrés depuis la première vente{isTotal ? '' : ' (ventes gérées)'}
+                </p>
+              ) : objectif > 0 ? (
                 <div className="mt-3" style={{ marginTop: '12px' }}>
                   <div className="flex items-center justify-between mb-1">
                     <span className="text-[11px] font-bold text-[#8A9BB5] uppercase tracking-wide">Objectif : {Number(objectif).toLocaleString('fr-FR')} DA</span>

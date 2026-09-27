@@ -330,6 +330,23 @@ export async function GET(request: NextRequest) {
       .map((c) => ({ name: c.name, commandes: c.commandes, devis: c.devis, total: c.commandes + c.devis }))
       .sort((a, b) => b.total - a.total);
 
+    // Chiffre d'affaires TOTAL (toutes les ventes livrées, depuis le début) — admins seulement
+    let ventesTotal: { global: number; byUser: Record<string, number> } | null = null;
+    if ((session.user as { role?: string }).role === 'ADMIN') {
+      const [allOrdersLivres, allQuotesLivres] = await Promise.all([
+        prisma.order.findMany({ where: { status: 'LIVRE' }, select: { assignedToId: true, items: { select: { quantity: true, unitPrice: true } } } }),
+        prisma.quote.findMany({ where: { status: 'LIVRE' }, select: { assignedToId: true, proposedPrice: true } }),
+      ]);
+      const total = { global: 0, byUser: {} as Record<string, number> };
+      const add = (uid: string | null, montant: number) => {
+        total.global += montant;
+        if (uid) total.byUser[uid] = (total.byUser[uid] ?? 0) + montant;
+      };
+      allOrdersLivres.forEach((o) => add(o.assignedToId, orderAmount(o.items)));
+      allQuotesLivres.forEach((q) => add(q.assignedToId, q.proposedPrice ?? 0));
+      ventesTotal = total;
+    }
+
     // Objectifs du mois courant (global + par user), heure d'Algérie
     const monthKey = `${nowAlgeria.getUTCFullYear()}-${String(nowAlgeria.getUTCMonth() + 1).padStart(2, '0')}`;
     const goals = await prisma.monthlyGoal.findMany({ where: { month: monthKey } });
@@ -422,6 +439,7 @@ export async function GET(request: NextRequest) {
       parCommercial,                            // [{ id, name, ventes, commandes, devis }] — filtre admin
       employesLivres,                           // [{ name, commandes, devis, total }] — dashboard employés
       objectifs: { global: goalGlobal, byUser: goalsByUser },
+      ventesTotal,                              // { global, byUser } depuis le début — null si non admin
       todayStats: {
         commandes: commandesAujourdhui,
         attente: attenteCommandes + attenteDevis,
