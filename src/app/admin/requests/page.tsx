@@ -743,10 +743,10 @@ function RequestsPageInner() {
   const periodeStart = periodeStartDate(filterPeriode);
   const dateExacte = filterPeriode === 'date' ? parseDateExacte(filterDateExacte) : null;
 
-  const filtered = sorted.filter((r) => {
+  // Tous les filtres de la page SAUF le statut (le Rapport, lui, ne garde que les « Livré »)
+  const matchHorsStatut = (r: RequestDetail) => {
     const q = search.toLowerCase();
     const matchSearch = !q || r.client.toLowerCase().includes(q) || r.entreprise.toLowerCase().includes(q) || r.ref.toLowerCase().includes(q);
-    const matchStatut = filterStatut === 'all' || r.statut === filterStatut;
     const matchAssigne = filterAssigne === 'all'
       || (filterAssigne === 'none' ? !r.assignedToId : r.assignedToId === filterAssigne);
     const matchPeriode = (() => {
@@ -756,8 +756,9 @@ function RequestsPageInner() {
       if (filterPeriode === 'moisChoisi') return jour.getFullYear() === filterAnnee && jour.getMonth() === filterMois;
       return !periodeStart || jour >= periodeStart;
     })();
-    return matchSearch && matchStatut && matchAssigne && matchPeriode;
-  });
+    return matchSearch && matchAssigne && matchPeriode;
+  };
+  const filtered = sorted.filter((r) => matchHorsStatut(r) && (filterStatut === 'all' || r.statut === filterStatut));
 
   const handleStatusChange = async (ref: string, newStatut: string, force = false) => {
     const item = selected ?? rawItems.find((r) => r.ref === ref || r.id === ref);
@@ -932,9 +933,14 @@ function RequestsPageInner() {
             </button>
           )}
           <button
-            onClick={() => exportVentesExcel(activeFilters.join(' | '))}
+            onClick={() => {
+              const onglet = activeTab === 'devis' ? 'Devis' : activeTab === 'commandes' ? 'Commandes' : 'Commandes + devis';
+              // Même période / responsable / recherche / onglet que la page ; statut ignoré (Livré seulement)
+              const filtres = activeFilters.filter((f) => f !== (filterStatut === 'all' ? 'Tous les statuts' : filterStatut));
+              exportVentesExcel(sorted.filter(matchHorsStatut), [onglet, ...filtres].join(' | '));
+            }}
             className="hidden md:flex items-center gap-1.5 px-3 py-2 rounded-xl text-[13px] font-semibold border border-[#E2E8F0] text-[#374151] hover:bg-[#F8FAFC] hover:border-[#4CAF4F] hover:text-[#4CAF4F] transition-colors"
-            title="Rapport de ventes — commandes livrées">
+            title="Rapport des ventes livrées (commandes + devis) : par produit et par mois, selon les filtres de la page">
             <svg width={14} height={14} fill="none" viewBox="0 0 24 24">
               <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6z" stroke="currentColor" strokeWidth="1.8"/>
               <path d="M14 2v6h6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
