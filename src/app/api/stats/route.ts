@@ -21,6 +21,16 @@ export async function GET(request: NextRequest) {
     // Récupérer les paramètres de date optionnels
     const startDateParam = request.nextUrl.searchParams.get('startDate');
     const endDateParam = request.nextUrl.searchParams.get('endDate');
+    // Période filtrée "YYYY-MM-DD" → jour entier en heure d'Algérie (comme le graphe) :
+    // avant, les bornes étaient en UTC → une vente du 1er du mois à 00:00 (Algérie)
+    // = 23:00 UTC la veille tombait dans le mois précédent.
+    const ymd = (v: string | null) => {
+      const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(v ?? '');
+      return m ? { y: Number(m[1]), mo: Number(m[2]) - 1, d: Number(m[3]) } : null;
+    };
+    const debutFiltre = ymd(startDateParam);
+    const finFiltre = ymd(endDateParam);
+    const hasRange = debutFiltre !== null && finFiltre !== null;
     const userIdParam = request.nextUrl.searchParams.get('userId'); // NOUVEAU: filtre par employé
 
     // Parser les dates ou utiliser les valeurs par défaut (mois courant)
@@ -30,17 +40,15 @@ export async function GET(request: NextRequest) {
     let start6MonthsAgo: Date;
     let endDate: Date;
 
-    if (startDateParam && endDateParam) {
-      // Utiliser les dates fournies
-      startOfMonth = new Date(startDateParam);
-      startOfMonth.setHours(0, 0, 0, 0);
-      endDate = new Date(endDateParam);
-      endDate.setHours(23, 59, 59, 999);
+    if (hasRange) {
+      // Utiliser les dates fournies (jour entier, heure d'Algérie)
+      startOfMonth = new Date(Date.UTC(debutFiltre.y, debutFiltre.mo, debutFiltre.d) - ALGERIA_OFFSET_MS);
+      endDate = new Date(Date.UTC(finFiltre.y, finFiltre.mo, finFiltre.d, 23, 59, 59, 999) - ALGERIA_OFFSET_MS);
       startOfToday = startOfMonth;
       // Période de comparaison (évolution %) = même durée, juste avant la période filtrée
       startOfPrevMonth = new Date(startOfMonth.getTime() - (endDate.getTime() + 1 - startOfMonth.getTime()));
-      start6MonthsAgo = new Date(startOfMonth);
-      start6MonthsAgo.setMonth(start6MonthsAgo.getMonth() - 5);
+      // Courbe 6 mois : les 6 mois qui finissent au mois de fin du filtre (cf. referenceKey)
+      start6MonthsAgo = new Date(Date.UTC(finFiltre.y, finFiltre.mo - 5, 1) - ALGERIA_OFFSET_MS);
     } else {
       // Utiliser les valeurs par défaut (mois courant, heure d'Algérie)
       startOfMonth = new Date(Date.UTC(nowAlgeria.getUTCFullYear(), nowAlgeria.getUTCMonth(), 1) - ALGERIA_OFFSET_MS);
@@ -246,7 +254,7 @@ export async function GET(request: NextRequest) {
     };
     // Référence (année/mois en heure d'Algérie) pour construire les 6 mois : endDate
     // si un filtre est actif, sinon "maintenant" en Algérie.
-    const referenceKey = startDateParam && endDateParam ? monthKeyAlgeria(endDate) : monthKeyAlgeria(now);
+    const referenceKey = hasRange ? monthKeyAlgeria(endDate) : monthKeyAlgeria(now);
     const [refYear, refMonth] = referenceKey.split('-').map(Number);
     const serie: { mois: string; commandes: number; devis: number }[] = [];
     for (let i = 5; i >= 0; i--) {
