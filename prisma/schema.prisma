@@ -295,6 +295,10 @@ model Client {
   // Restauré automatiquement au retour de congé de son titulaire.
   assignedTo        User?            @relation("ClientAssignedTo", fields: [assignedToId], references: [id])
   assignedToId      String?
+  // Date à laquelle le commercial actuel a reçu ce client : il ne voit que les commandes/devis
+  // créés depuis (l'historique d'avant reste réservé aux admins). null = tout l'historique.
+  // Posée seulement lors d'une vraie réassignation (pas pendant un congé, cf. leave.ts).
+  assignedSince     DateTime?
   createdAt         DateTime         @default(now())
   updatedAt         DateTime         @updatedAt
 }

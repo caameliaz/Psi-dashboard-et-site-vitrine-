@@ -20,6 +20,16 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
   try {
     const body = await request.json();
 
+    // Désactivation (ex. licenciement) avec réassignation : le nouveau commercial doit exister,
+    // être actif et différent — vérifié AVANT de désactiver quoi que ce soit.
+    const cibleReassignation: string | null = body.active === false && body.reassignClientsTo ? String(body.reassignClientsTo) : null;
+    if (cibleReassignation) {
+      const cible = await prisma.user.findUnique({ where: { id: cibleReassignation }, select: { active: true } });
+      if (!cible?.active || cibleReassignation === id) {
+        return NextResponse.json({ error: 'Choisissez un autre commercial actif pour reprendre les clients' }, { status: 400 });
+      }
+    }
+
     // Récupérer l'ancien email avant la modification
     const oldUser = await prisma.user.findUnique({
       where: { id },
@@ -95,7 +105,40 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
         .catch(() => {});
     }
 
-    return NextResponse.json(user);
+    // ── Désactivation : clients et commandes/devis en cours repris par un autre commercial ──
+    // • ses clients → nouveau commercial, qui ne voit que les commandes créées à partir
+    //   d'aujourd'hui (assignedSince) — l'historique reste réservé aux admins ;
+    // • ses commandes/devis EN COURS → nouveau commercial (pour le suivi) ; les ventes
+    //   livrées/annulées restent à son nom (statistiques justes) ;
+    // • ses congés en cours sont clôturés sans rendre les clients (compte désactivé) ;
+    //   s'ils étaient chez un remplaçant, ils passent aussi au nouveau commercial.
+    // Le stock déjà attribué à ce commercial n'est pas modifié ici.
+    let reassignation: { clients: number; commandes: number; devis: number } | null = null;
+    if (body.active === false && body.reassignClientsTo !== undefined) {
+      const maintenant = new Date();
+      const conges = await prisma.leaveAssignment.findMany({ where: { employeeId: id, status: 'ACTIVE' }, select: { id: true, clientIds: true } });
+      const clientsConges = conges.flatMap((c) => c.clientIds);
+      const enCours = { in: ['EN_ATTENTE', 'CONTACTE', 'VALIDE', 'PRODUITE'] as ('EN_ATTENTE' | 'CONTACTE' | 'VALIDE' | 'PRODUITE')[] };
+      const [clientsMaj, cmdMaj, devisMaj] = await prisma.$transaction([
+        prisma.client.updateMany({
+          where: cibleReassignation ? { OR: [{ assignedToId: id }, { id: { in: clientsConges } }] } : { assignedToId: id },
+          data: { assignedToId: cibleReassignation, assignedSince: cibleReassignation ? maintenant : null },
+        }),
+        prisma.order.updateMany({ where: cibleReassignation ? { assignedToId: id, status: enCours } : { id: '__aucun__' }, data: { assignedToId: cibleReassignation } }),
+        prisma.quote.updateMany({ where: cibleReassignation ? { assignedToId: id, status: enCours } : { id: '__aucun__' }, data: { assignedToId: cibleReassignation } }),
+        prisma.leaveAssignment.updateMany({ where: { employeeId: id, status: 'ACTIVE' }, data: { status: 'ENDED', endedAt: maintenant, endedById: session.user.id } }),
+      ]);
+      reassignation = { clients: clientsMaj.count, commandes: cmdMaj.count, devis: devisMaj.count };
+      createAudit({
+        userId: session.user.id,
+        action: 'Utilisateur désactivé — reprise des clients',
+        entity: 'UTILISATEUR',
+        entityId: id,
+        detail: `${user.name} : ${reassignation.clients} client(s), ${reassignation.commandes} commande(s) et ${reassignation.devis} devis en cours → ${cibleReassignation ?? 'sans commercial'}`,
+      });
+    }
+
+    return NextResponse.json(reassignation ? { ...user, reassignation } : user);
   } catch (e) {
     console.error(e);
     return NextResponse.json({ error: 'Failed to update user' }, { status: 500 });

@@ -110,7 +110,7 @@ export async function resolveClientVisibility(userId: string) {
   await reclaimAllExpiredLeaves();
 
   const [ownClients, substituteLeaves] = await Promise.all([
-    prisma.client.findMany({ where: { assignedToId: userId }, select: { id: true } }),
+    prisma.client.findMany({ where: { assignedToId: userId }, select: { id: true, assignedSince: true } }),
     getActiveLeavesAsSubstitute(userId),
   ]);
 
@@ -124,10 +124,15 @@ export async function resolveClientVisibility(userId: string) {
   );
 
   const visibleClientIds = new Set(ownClients.map((c) => c.id));
+  // Historique complet : ses clients « d'origine » (assignedSince null). Un client reçu d'un
+  // autre commercial (réassignation, licenciement) n'est visible qu'à partir de la date où il
+  // l'a reçu — l'historique d'avant reste réservé aux admins.
   const historyClientIds = new Set(
-    ownClients.map((c) => c.id).filter((id) => !restrictedClientIds.has(id))
+    ownClients.filter((c) => !c.assignedSince).map((c) => c.id).filter((id) => !restrictedClientIds.has(id))
   );
-  const interimSince: { clientId: string; since: Date }[] = [];
+  const interimSince: { clientId: string; since: Date }[] = ownClients
+    .filter((c) => c.assignedSince && !restrictedClientIds.has(c.id))
+    .map((c) => ({ clientId: c.id, since: c.assignedSince as Date }));
 
   for (const leave of substituteLeaves) {
     // Seuil réel de "pendant l'intérim" : jamais avant l'instant où le congé a été

@@ -1364,18 +1364,29 @@ export function RequestPanel({ item, onClose, onStatusChange, onConfirmQuoteWith
                   {isCommande ? 'Produits commandés' : 'Spécifications demandées'}
                 </p>
                 <div className="rounded-xl border-2 border-[#E2E8F0] overflow-hidden">
-                  <div className="grid grid-cols-[1fr_auto] bg-[#F8FAFC] px-4 py-2 border-b border-[#E2E8F0]">
+                  <div className="grid grid-cols-[1fr_auto_auto_auto] gap-x-3 bg-[#F8FAFC] px-4 py-2 border-b border-[#E2E8F0]">
                     <span className="text-[10px] font-bold text-[#ABBED1] uppercase tracking-wider">Référence</span>
-                    <span className="text-[10px] font-bold text-[#ABBED1] uppercase tracking-wider">Qté</span>
+                    <span className="text-[10px] font-bold text-[#ABBED1] uppercase tracking-wider text-right">Qté</span>
+                    <span className="text-[10px] font-bold text-[#ABBED1] uppercase tracking-wider text-right">Prix unit.</span>
+                    <span className="text-[10px] font-bold text-[#ABBED1] uppercase tracking-wider text-right">Total</span>
                   </div>
-                  {lignes.map((ligne, i) => {
-                    const match = ligne.match(/^(.+?)\s*×\s*(\d+)/);
-                    const ref = match ? match[1].trim() : ligne;
-                    const qty = match ? `${match[2]} roul.` : '—';
+                  {/* Lignes détaillées (prix unitaire + total de ligne) ; à défaut, le texte « réf × qté » */}
+                  {(item.items && item.items.length > 0
+                    ? item.items.map((it) => ({ ref: it.designation, qte: it.quantite, pu: it.prixUnitaire }))
+                    : lignes.map((ligne) => {
+                        const match = ligne.match(/^(.+?)\s*×\s*(\d+)/);
+                        return { ref: match ? match[1].trim() : ligne, qte: match ? Number(match[2]) : 0, pu: 0 };
+                      })
+                  ).map((l, i) => {
+                    const dh = (n: number) => `${(Math.round(n * 100) / 100).toLocaleString('fr-FR')} DA`;
+                    // Devis à prix global (pas de prix par ligne) → « — », le montant est dans le Total en bas
+                    const aUnPrix = l.pu > 0;
                     return (
-                      <div key={i} className="grid grid-cols-[1fr_auto] px-4 py-3 border-b border-[#E2E8F0] last:border-b-0">
-                        <span className="text-[13px] font-medium text-[#374151]">{ref}</span>
-                        <span className="text-[13px] font-semibold text-[#8A9BB5] tabular-nums">{qty}</span>
+                      <div key={i} className="grid grid-cols-[1fr_auto_auto_auto] gap-x-3 items-center px-4 py-3 border-b border-[#E2E8F0] last:border-b-0">
+                        <span className="text-[13px] font-medium text-[#374151] min-w-0 break-words">{l.ref}</span>
+                        <span className="text-[13px] font-semibold text-[#8A9BB5] tabular-nums text-right whitespace-nowrap">{l.qte > 0 ? `${l.qte} roul.` : '—'}</span>
+                        <span className="text-[13px] text-[#374151] tabular-nums text-right whitespace-nowrap">{aUnPrix ? dh(l.pu) : '—'}</span>
+                        <span className="text-[13px] font-semibold text-[#0F172A] tabular-nums text-right whitespace-nowrap">{aUnPrix && l.qte > 0 ? dh(l.qte * l.pu) : '—'}</span>
                       </div>
                     );
                   })}

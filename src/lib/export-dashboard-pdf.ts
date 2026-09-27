@@ -5,8 +5,6 @@
 
 const MOIS_NOMS = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
 const VERT = '#4CAF4F';
-const BLEU = '#2184F3';
-const VIOLET = '#8B5CF6';
 
 interface StatsMois {
   stats: { commandes: number; devisMois: number; ventesMois: number; livrees: number; devis: number; evolutionVentes: number; evolutionDevis: number };
@@ -35,32 +33,12 @@ function axe(max: number) {
   return { top: Math.ceil(max / pas) * pas, pas };
 }
 
-// Courbes (ventes 6 mois : total / commandes / devis)
-function lineChart(labels: string[], series: { nom: string; couleur: string; valeurs: number[] }[]) {
-  const W = 700, H = 210, L = 52, R = 14, T = 12, B = 28;
-  const { top: max, pas } = axe(Math.max(0, ...series.flatMap((s) => s.valeurs)));
-  const x = (i: number) => L + (labels.length <= 1 ? (W - L - R) / 2 : (i * (W - L - R)) / (labels.length - 1));
-  const y = (v: number) => T + (H - T - B) * (1 - v / max);
-  let svg = `<svg viewBox="0 0 ${W} ${H}" width="100%" xmlns="http://www.w3.org/2000/svg" font-family="Helvetica,Arial,sans-serif">`;
-  for (let v = 0; v <= max; v += pas) {
-    svg += `<line x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}" stroke="#EEF2F6"/>`;
-    svg += `<text x="${L - 6}" y="${y(v) + 3}" font-size="10" fill="#8A9BB5" text-anchor="end">${court(v)}</text>`;
-  }
-  labels.forEach((l, i) => { svg += `<text x="${x(i)}" y="${H - 8}" font-size="10" fill="#8A9BB5" text-anchor="middle">${esc(l)}</text>`; });
-  for (const s of series) {
-    const pts = s.valeurs.map((v, i) => `${x(i)},${y(v)}`).join(' ');
-    svg += `<polyline points="${pts}" fill="none" stroke="${s.couleur}" stroke-width="2.5" stroke-linejoin="round"/>`;
-    s.valeurs.forEach((v, i) => { svg += `<circle cx="${x(i)}" cy="${y(v)}" r="3" fill="${s.couleur}"/>`; });
-  }
-  return svg + '</svg>';
-}
-
-// Barres groupées (commandes / devis par mois)
-function barChart(labels: string[], series: { nom: string; couleur: string; valeurs: number[] }[]) {
-  const W = 700, H = 190, L = 36, R = 10, T = 12, B = 28;
+// Barres (montant vendu par mois), valeur écrite au-dessus de chaque barre
+function barChart(labels: string[], series: { nom: string; couleur: string; valeurs: number[] }[], formatValeur: (v: number) => string = (v) => String(v)) {
+  const W = 700, H = 230, L = 44, R = 10, T = 18, B = 28;
   const { top: max, pas } = axe(Math.max(0, ...series.flatMap((s) => s.valeurs)));
   const groupe = (W - L - R) / Math.max(1, labels.length);
-  const bw = Math.min(26, (groupe * 0.7) / series.length);
+  const bw = Math.min(series.length === 1 ? 60 : 26, (groupe * 0.7) / series.length);
   const y = (v: number) => T + (H - T - B) * (1 - v / max);
   let svg = `<svg viewBox="0 0 ${W} ${H}" width="100%" xmlns="http://www.w3.org/2000/svg" font-family="Helvetica,Arial,sans-serif">`;
   for (let v = 0; v <= max; v += pas) {
@@ -74,14 +52,11 @@ function barChart(labels: string[], series: { nom: string; couleur: string; vale
       const v = s.valeurs[i] ?? 0;
       const bx = cx - (bw * series.length) / 2 + j * bw;
       svg += `<rect x="${bx + 1}" y="${y(v)}" width="${bw - 2}" height="${Math.max(0, H - B - y(v))}" rx="2" fill="${s.couleur}"/>`;
-      if (v > 0) svg += `<text x="${bx + bw / 2}" y="${y(v) - 3}" font-size="9" fill="#374151" text-anchor="middle">${v}</text>`;
+      if (v > 0) svg += `<text x="${bx + bw / 2}" y="${y(v) - 4}" font-size="10" font-weight="700" fill="#0F172A" text-anchor="middle">${esc(formatValeur(v))}</text>`;
     });
   });
   return svg + '</svg>';
 }
-
-const legende = (series: { nom: string; couleur: string }[]) =>
-  `<div class="legend">${series.map((s) => `<span><i style="background:${s.couleur}"></i>${esc(s.nom)}</span>`).join('')}</div>`;
 
 /** À appeler DIRECTEMENT dans le clic (la fenêtre est ouverte tout de suite, sinon bloquée comme pop-up). */
 export async function printDashboardPdf(opts: { mois: number; annee: number; isAdmin: boolean }) {
@@ -129,16 +104,7 @@ export async function printDashboardPdf(opts: { mois: number; annee: number; isA
   if (opts.isAdmin && d.ventesTotal) tuiles.push(["Chiffre d'affaires total", da(d.ventesTotal.global), 'depuis la première vente']);
 
   const ventes6 = d.serie6MoisVentes ?? [];
-  const cmd6 = d.serie6Mois ?? [];
-  const seriesVentes = [
-    { nom: 'Total', couleur: VERT, valeurs: ventes6.map((m) => m.ventes) },
-    { nom: 'Commandes', couleur: BLEU, valeurs: ventes6.map((m) => m.commandes ?? 0) },
-    { nom: 'Devis', couleur: VIOLET, valeurs: ventes6.map((m) => m.devis ?? 0) },
-  ];
-  const seriesNb = [
-    { nom: 'Commandes', couleur: BLEU, valeurs: cmd6.map((m) => m.commandes) },
-    { nom: 'Devis', couleur: VIOLET, valeurs: cmd6.map((m) => m.devis) },
-  ];
+  const seriesVentes = [{ nom: 'Ventes', couleur: VERT, valeurs: ventes6.map((m) => m.ventes) }];
   const maxQte = Math.max(1, ...d.topProduits.map((p) => p.qty));
   const topProduitsHtml = d.topProduits.length
     ? d.topProduits.map((p) => `<div class="hbar"><span class="hlabel">${esc(p.label && p.label !== p.ref ? `${p.ref} · ${p.label}` : p.ref)}</span><span class="htrack"><span class="hfill" style="width:${(p.qty / maxQte) * 100}%"></span></span><span class="hval">${p.qty}</span></div>`).join('')
@@ -163,8 +129,6 @@ export async function printDashboardPdf(opts: { mois: number; annee: number; isA
   .tile .s{font-size:9.5px;color:#64748B}
   .card{border:1px solid #E2E8F0;border-radius:8px;padding:10px 12px;margin-bottom:12px;break-inside:avoid}
   .card h2{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#8A9BB5;margin-bottom:6px}
-  .legend{display:flex;gap:14px;justify-content:center;margin-top:4px;font-size:10px;color:#374151}
-  .legend i{display:inline-block;width:12px;height:4px;border-radius:2px;margin-right:5px;vertical-align:middle}
   .grid2{display:grid;grid-template-columns:1.3fr 1fr;gap:12px}
   .hbar{display:flex;align-items:center;gap:8px;margin:5px 0}
   .hlabel{width:50%;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -181,8 +145,7 @@ export async function printDashboardPdf(opts: { mois: number; annee: number; isA
   <div class="titre"><h1>Tableau de bord</h1><p>${esc(periode)} · édité le ${new Date().toLocaleDateString('fr-FR')}</p></div>
 </div>
 <div class="tiles">${tuiles.map(([l, v, sub]) => `<div class="tile"><div class="l">${esc(l)}</div><div class="v">${esc(v)}</div><div class="s">${sub}</div></div>`).join('')}</div>
-<div class="card"><h2>Ventes sur 6 mois (DA, livrées)</h2>${ventes6.length ? lineChart(ventes6.map((m) => m.mois), seriesVentes) + legende(seriesVentes) : '<p class="vide">Aucune donnée.</p>'}</div>
-<div class="card"><h2>Commandes et devis créés sur 6 mois (nombre)</h2>${cmd6.length ? barChart(cmd6.map((m) => m.mois), seriesNb) + legende(seriesNb) : '<p class="vide">Aucune donnée.</p>'}</div>
+<div class="card"><h2>Montant total vendu par mois (DA, commandes + devis livrés)</h2>${ventes6.length ? barChart(ventes6.map((m) => m.mois), seriesVentes, (v) => Math.round(v).toLocaleString('fr-FR')) : '<p class="vide">Aucune donnée.</p>'}</div>
 <div class="grid2">
   <div class="card"><h2>Top produits — ${esc(periode)} (quantités commandées)</h2>${topProduitsHtml}</div>
   <div class="card"><h2>Commandes par wilaya — ${esc(periode)}</h2>${wilayasHtml}

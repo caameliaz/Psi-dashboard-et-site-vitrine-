@@ -715,8 +715,43 @@ function UserSlideIn({ user, onClose, onDelete, onPermChange, onPermSetAll, cust
 }
 
 /* ─── Modal suppression ─── */
-function DeleteUserModal({ user, onDeactivate, onDelete, onClose }: { user: User; onDeactivate: () => void; onDelete: () => void; onClose: () => void }) {
-  const [step, setStep] = useState<'choice' | 'confirm'>('choice');
+function DeleteUserModal({ user, candidats, onDeactivate, onDelete, onClose }: {
+  user: User; candidats: User[];
+  onDeactivate: (reprisePar: string | null) => Promise<void>; onDelete: () => void; onClose: () => void;
+}) {
+  const [step, setStep] = useState<'choice' | 'confirm' | 'deactivate'>('choice');
+  const [reprisePar, setReprisePar] = useState('');
+  const [enCours, setEnCours] = useState(false);
+  if (step === 'deactivate') {
+    return (
+      <Modal title="Désactiver le compte" onClose={onClose}>
+        <div className="space-y-4">
+          <p className="text-[13px] text-[#374151]">
+            <span className="font-semibold">{user.nom}</span> ne pourra plus se connecter (déconnexion immédiate). Qui reprend ses clients ?
+          </p>
+          <select value={reprisePar} onChange={(e) => setReprisePar(e.target.value)}
+            className="w-full border border-[#E2E8F0] rounded-lg px-3 py-2.5 text-[13px] bg-white focus:outline-none focus:ring-2 focus:ring-[#4CAF4F]/30">
+            <option value="">Personne — laisser ses clients sans commercial</option>
+            {candidats.map((c) => <option key={c.id} value={String(c.id)}>{c.nom}</option>)}
+          </select>
+          <ul className="text-[11px] text-[#8A9BB5] list-disc pl-4 space-y-0.5">
+            <li>Ses <b>clients</b> passent au commercial choisi, qui ne verra que les commandes créées <b>à partir d&apos;aujourd&apos;hui</b> (l&apos;historique reste visible par les admins).</li>
+            <li>Ses <b>commandes et devis en cours</b> (en attente, confirmés, disponibles) lui sont transférés pour le suivi.</li>
+            <li>Ses <b>ventes livrées</b> restent à son nom dans les statistiques.</li>
+            <li>Le <b>stock qui lui était attribué</b> n&apos;est pas modifié : à reprendre depuis la page Stock si besoin.</li>
+          </ul>
+          <div className="flex gap-3">
+            <button onClick={() => setStep('choice')} disabled={enCours} className="flex-1 px-4 py-2.5 rounded-xl border border-[#E2E8F0] text-[13px] font-semibold text-[#374151]">Retour</button>
+            <button disabled={enCours}
+              onClick={async () => { setEnCours(true); try { await onDeactivate(reprisePar || null); } finally { setEnCours(false); } }}
+              className="flex-1 px-4 py-2.5 rounded-xl text-[13px] font-bold text-white bg-[#F59E0B] hover:bg-[#D97706] disabled:opacity-60">
+              {enCours ? 'Désactivation…' : 'Désactiver'}
+            </button>
+          </div>
+        </div>
+      </Modal>
+    );
+  }
   if (step === 'confirm') {
     return (
       <Modal title="Suppression définitive" onClose={onClose}>
@@ -738,7 +773,7 @@ function DeleteUserModal({ user, onDeactivate, onDelete, onClose }: { user: User
     <Modal title="Que voulez-vous faire ?" onClose={onClose}>
       <p className="text-[13px] text-[#8A9BB5] mb-5">Utilisateur : <span className="font-semibold text-[#0F172A]">{user.nom}</span></p>
       <div className="flex flex-col gap-3">
-        <button onClick={onDeactivate} className="w-full px-4 py-3 rounded-xl border border-[#E2E8F0] text-left hover:border-[#F59E0B] hover:bg-[#FFFBEB] transition-all group">
+        <button onClick={() => setStep('deactivate')} className="w-full px-4 py-3 rounded-xl border border-[#E2E8F0] text-left hover:border-[#F59E0B] hover:bg-[#FFFBEB] transition-all group">
           <p className="text-[13px] font-bold text-[#0F172A] group-hover:text-[#92400E]">Désactiver le compte</p>
           <p className="text-[11px] text-[#8A9BB5]">L&apos;utilisateur ne peut plus se connecter mais reste en historique</p>
         </button>
@@ -934,15 +969,24 @@ function UsersPageInner() {
     }
   };
 
-  const handleDeactivate = async () => {
+  // Désactivation (ex. licenciement) : ses clients + commandes/devis en cours repris par `reprisePar`
+  const handleDeactivate = async (reprisePar: string | null) => {
     if (!deleteUser) return;
-    await fetch(`/api/users/${deleteUser.id}`, {
+    const res = await fetch(`/api/users/${deleteUser.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ active: false }),
+      body: JSON.stringify({ active: false, reassignClientsTo: reprisePar }),
     });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) { alert(data.error ?? 'Désactivation impossible.'); return; }
     await fetchUsers();
     setDeleteUser(null);
+    const r = data.reassignation as { clients: number; commandes: number; devis: number } | undefined;
+    if (r) {
+      const qui = reprisePar ? (users.find((u) => String(u.id) === reprisePar)?.nom ?? 'le commercial choisi') : 'personne';
+      alert(`Compte désactivé.
+${r.clients} client(s) repris par ${qui}${reprisePar ? `, ${r.commandes} commande(s) et ${r.devis} devis en cours transférés` : ''}.`);
+    }
   };
 
   const handleDelete = async () => {
@@ -1079,7 +1123,9 @@ function UsersPageInner() {
       )}
 
       {deleteUser && (
-        <DeleteUserModal user={deleteUser} onDeactivate={handleDeactivate} onDelete={handleDelete} onClose={() => setDeleteUser(null)} />
+        <DeleteUserModal user={deleteUser}
+          candidats={users.filter((u) => u.statut === 'Actif' && u.id !== deleteUser.id)}
+          onDeactivate={handleDeactivate} onDelete={handleDelete} onClose={() => setDeleteUser(null)} />
       )}
 
       {newCreds && (

@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { createAudit } from '@/lib/audit';
 import { notifyDeletion } from '@/lib/notify-activity';
 import { createNotif } from '@/lib/notifications';
+import { resolveClientVisibility } from '@/lib/leave';
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -35,6 +36,22 @@ export async function GET(_request: NextRequest, { params }: Ctx) {
 
     if (!client) return NextResponse.json({ error: 'Client introuvable' }, { status: 404 });
 
+    // Employé : mêmes règles que les listes Commandes/Devis (src/lib/leave.ts) — historique
+    // complet seulement pour ses clients d'origine ; client reçu d'un autre commercial ou
+    // confié pendant un congé → uniquement depuis la réception. Les admins voient tout.
+    if (guard.session!.user.role !== 'ADMIN') {
+      const userId = guard.session!.user.id;
+      const { historyClientIds, interimSince } = await resolveClientVisibility(userId);
+      const toutHistorique = historyClientIds.includes(id);
+      const depuis = interimSince.filter((x) => x.clientId === id).map((x) => x.since.getTime());
+      const seuil = depuis.length ? Math.min(...depuis) : null;
+      const visible = (d: { assignedToId: string | null; createdAt: Date }) =>
+        toutHistorique || d.assignedToId === userId || (seuil !== null && d.createdAt.getTime() >= seuil);
+      const orders = client.orders.filter(visible);
+      const quotes = client.quotes.filter(visible);
+      return NextResponse.json({ ...client, orders, quotes, _count: { orders: orders.length, quotes: quotes.length } });
+    }
+
     return NextResponse.json(client);
   } catch (e) {
     console.error(e);
@@ -53,6 +70,15 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
   try {
     const body = await request.json();
 
+    // Changement RÉEL de commercial → historique visible seulement à partir de maintenant
+    // (le formulaire renvoie souvent le même assignedToId à chaque enregistrement).
+    let assignedSinceMaj: { assignedSince: Date | null } | Record<string, never> = {};
+    if (body.assignedToId !== undefined) {
+      const avant = await prisma.client.findUnique({ where: { id }, select: { assignedToId: true } });
+      const nouveau = body.assignedToId || null;
+      if ((avant?.assignedToId ?? null) !== nouveau) assignedSinceMaj = { assignedSince: nouveau ? new Date() : null };
+    }
+
     const client = await prisma.client.update({
       where: { id },
       data: {
@@ -66,6 +92,7 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
         ...(body.photo !== undefined && { photo: body.photo }),
         // Responsable habituel du client (cf. src/lib/leave.ts pour la bascule pendant un congé)
         ...(body.assignedToId !== undefined && { assignedToId: body.assignedToId || null }),
+        ...assignedSinceMaj,
         // Réactivation → efface les infos de désactivation
         ...(body.active === true && { active: true, deactivatedReason: null, deactivatedById: null, deactivatedAt: null }),
       },

@@ -25,10 +25,17 @@ export async function POST(request: NextRequest) {
       if (!user) return NextResponse.json({ error: 'Utilisateur introuvable' }, { status: 404 });
     }
 
-    const result = await prisma.client.updateMany({
-      where: { id: { in: clientIds } },
-      data: { assignedToId },
-    });
+    // Nouveau commercial → il ne voit l'historique qu'à partir de maintenant (assignedSince,
+    // cf. src/lib/leave.ts) ; les clients qui lui étaient déjà assignés ne changent pas.
+    const result = assignedToId
+      ? await prisma.client.updateMany({
+          where: { id: { in: clientIds }, OR: [{ assignedToId: null }, { assignedToId: { not: assignedToId } }] },
+          data: { assignedToId, assignedSince: new Date() },
+        })
+      : await prisma.client.updateMany({
+          where: { id: { in: clientIds } },
+          data: { assignedToId: null, assignedSince: null },
+        });
 
     createAudit({
       userId: session.user.id,
