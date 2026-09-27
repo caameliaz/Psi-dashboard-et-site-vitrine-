@@ -9,6 +9,11 @@ import { styleBandRow, styleHeaderRow, styleDataRows, styleSectionTitle, styleFi
 const NUM_COLS = 17;
 const pad = (r: (string | number)[]) => { while (r.length < NUM_COLS) r.push(''); return r; };
 
+// Annulé / Retourné : pas une vente → ligne gardée (statut visible) mais montants
+// laissés vides et exclus du total, pour qu'une somme de colonne dans Excel reste juste
+// (ex. devis en double annulé).
+const HORS_TOTAL = new Set(['Annulé', 'Retourné']);
+
 const montantToNum = (s: string) =>
   Number(String(s).replace(/\s/g, '').replace('DA', '').replace('TTC', '').replace(',', '.')) || 0;
 
@@ -41,10 +46,12 @@ export async function exportTableauExcel(
   const dataStart = allRows.length;
 
   let totalGlobal = 0;
+  let nbCompte = 0;
   items.forEach((r) => {
     const dateStr = r.date; // date seule (jj/mm/aaaa), sans l'heure
     const montantCommande = montantToNum(r.montant);
-    totalGlobal += montantCommande;
+    const compte = !HORS_TOTAL.has(r.statut);
+    if (compte) { totalGlobal += montantCommande; nbCompte += 1; }
     const lignes = (r.items && r.items.length > 0)
       ? r.items
       : [{ designation: r.produits, categorie: '—', quantite: 0, prixUnitaire: 0, metrage: null }];
@@ -61,8 +68,8 @@ export async function exportTableauExcel(
         l.metrage != null ? l.metrage : '—',
         qty,
         pu,
-        totalLigne,
-        index === 0 ? montantCommande : '',
+        compte ? totalLigne : '',
+        compte && index === 0 ? montantCommande : '',
       ]);
     });
   });
@@ -85,12 +92,13 @@ export async function exportTableauExcel(
   Object.entries(parStatut).forEach(([s, v]) => push(pad([s, v.count, v.montant])));
   const summaryDataEnd = allRows.length - 1;
   const totalRowIdx = allRows.length;
-  push(pad(['Total', items.length, totalGlobal]));
+  const horsTotal = items.length - nbCompte;
+  push(pad([horsTotal > 0 ? 'Total hors annulés' : 'Total', nbCompte, totalGlobal]));
 
   const ws = utils.aoa_to_sheet(allRows);
 
   ws['!cols'] = [
-    { wch: 16 }, // Ref
+    { wch: 20 }, // Ref (assez large pour « Total hors annulés » du récap)
     { wch: 11 }, // Type
     { wch: 12 }, // Date
     { wch: 24 }, // Client
