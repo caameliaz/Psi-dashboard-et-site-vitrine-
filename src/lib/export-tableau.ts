@@ -4,7 +4,9 @@ import { styleBandRow, styleHeaderRow, styleDataRows, styleSectionTitle, styleFi
 // Export "tableau" : UNE LIGNE PAR PRODUIT.
 // Les infos de la commande/devis (réf, client, wilaya, date…) sont RÉPÉTÉES sur
 // chaque ligne produit → aucune cellule vide, l'Excel reste filtrable/triable.
-const NUM_COLS = 16;
+// Exception : « Total commande » n'est écrit que sur la 1re ligne de chaque commande,
+// pour que la somme de la colonne dans Excel donne le vrai total.
+const NUM_COLS = 17;
 const pad = (r: (string | number)[]) => { while (r.length < NUM_COLS) r.push(''); return r; };
 
 const montantToNum = (s: string) =>
@@ -34,7 +36,7 @@ export async function exportTableauExcel(
   const headerRowIdx = allRows.length;
   push([
     'Référence', 'Type', 'Date', 'Client', 'Entreprise', 'Téléphone', 'Wilaya', 'Commune',
-    'Statut', 'Catégorie', 'Produit', 'Métrage (m)', 'Qté', 'Prix unitaire (DA)', 'Total ligne (DA)', 'Total commande (DA)',
+    'Statut', 'TVA', 'Catégorie', 'Produit', 'Métrage (m)', 'Qté', 'Prix unitaire (DA)', 'Total ligne (DA)', 'Total commande (DA)',
   ]);
   const dataStart = allRows.length;
 
@@ -46,7 +48,7 @@ export async function exportTableauExcel(
     const lignes = (r.items && r.items.length > 0)
       ? r.items
       : [{ designation: r.produits, categorie: '—', quantite: 0, prixUnitaire: 0, metrage: null }];
-    lignes.forEach((l) => {
+    lignes.forEach((l, index) => {
       const qty = l.quantite || 0;
       const pu = l.prixUnitaire || 0;
       const totalLigne = qty * pu;
@@ -54,12 +56,13 @@ export async function exportTableauExcel(
       push([
         r.ref, r.type, dateStr, r.client, r.entreprise || '—', r.telephone || '—',
         r.wilaya || '—', r.commune || '—', r.statut,
+        r.vatEnabled ? 'Oui' : 'Non',
         l.categorie || '—', l.designation || '—',
         l.metrage != null ? l.metrage : '—',
         qty,
         pu,
         totalLigne,
-        montantCommande,
+        index === 0 ? montantCommande : '',
       ]);
     });
   });
@@ -96,6 +99,7 @@ export async function exportTableauExcel(
     { wch: 16 }, // Wilaya
     { wch: 16 }, // Commune
     { wch: 13 }, // Statut
+    { wch: 7 },  // TVA
     { wch: 18 }, // Catégorie
     { wch: 30 }, // Produit
     { wch: 12 }, // Métrage

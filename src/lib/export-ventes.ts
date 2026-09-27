@@ -8,7 +8,7 @@ export async function exportVentesExcel(filtresLabel?: string) {
   const { utils, writeFile } = await import('xlsx-js-style');
 
   const dateExport = new Date().toLocaleDateString('fr-FR');
-  const NUM_COLS = 12;
+  const NUM_COLS = 13;
   const pad = (r: (string | number)[]) => { while (r.length < NUM_COLS) r.push(''); return r; };
 
   // ── En-tête document ──────────────────────────────────────────────────────
@@ -29,7 +29,7 @@ export async function exportVentesExcel(filtresLabel?: string) {
   const headerRowIdx = allRows.length;
   push([
     'N° Facture', 'Source', 'Date commande', 'Date livraison', 'Client', 'Entreprise',
-    'Wilaya', 'Agent', 'Réf produit', 'Qté', 'Prix unitaire (DA)', 'Total ligne (DA)',
+    'Wilaya', 'Agent', 'TVA', 'Réf produit', 'Qté', 'Prix unitaire (DA)', 'Total ligne (DA)',
   ]);
 
   // ── Lignes — une ligne par produit ────────────────────────────────────────
@@ -46,9 +46,10 @@ export async function exportVentesExcel(filtresLabel?: string) {
     const agent = order.createdBy?.name ?? 'Site web';
     const ref = order.ref ?? order.id.slice(0, 8).toUpperCase();
     const source = SOURCE_LABEL[order.source] ?? order.source ?? '—';
+    const tva = order.vatEnabled ? 'Oui' : 'Non';
 
     if (!order.items || order.items.length === 0) {
-      push([ref, source, dateCmd, dateLiv, client, entreprise, wilaya, agent, '—', 0, 0, 0]);
+      push([ref, source, dateCmd, dateLiv, client, entreprise, wilaya, agent, tva, '—', 0, 0, 0]);
     } else {
       order.items.forEach((item: any) => {
         const prodRef = item.product?.reference ?? '—';
@@ -66,6 +67,7 @@ export async function exportVentesExcel(filtresLabel?: string) {
           entreprise,
           wilaya,
           agent,
+          tva,
           prodRef,
           qty,
           pu,
@@ -95,6 +97,7 @@ export async function exportVentesExcel(filtresLabel?: string) {
     { wch: 30 }, // Entreprise
     { wch: 18 }, // Wilaya
     { wch: 18 }, // Agent
+    { wch: 7  }, // TVA
     { wch: 16 }, // Réf produit
     { wch: 8  }, // Qté
     { wch: 18 }, // Prix unit
@@ -103,10 +106,10 @@ export async function exportVentesExcel(filtresLabel?: string) {
 
   // ── Fusion en-têtes PSI ────────────────────────────────────────────────────
   ws['!merges'] = [
-    { s: { r: 0, c: 0 }, e: { r: 0, c: 11 } },
-    { s: { r: 1, c: 0 }, e: { r: 1, c: 11 } },
-    { s: { r: 2, c: 0 }, e: { r: 2, c: 11 } },
-    { s: { r: filtersRowIdx, c: 0 }, e: { r: filtersRowIdx, c: 11 } },
+    { s: { r: 0, c: 0 }, e: { r: 0, c: NUM_COLS - 1 } },
+    { s: { r: 1, c: 0 }, e: { r: 1, c: NUM_COLS - 1 } },
+    { s: { r: 2, c: 0 }, e: { r: 2, c: NUM_COLS - 1 } },
+    { s: { r: filtersRowIdx, c: 0 }, e: { r: filtersRowIdx, c: NUM_COLS - 1 } },
   ];
 
   // ── Styles : bandeau, en-tête coloré, grille de bordures sur les données ────

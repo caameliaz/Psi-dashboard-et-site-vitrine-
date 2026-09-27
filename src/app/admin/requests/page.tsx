@@ -46,7 +46,10 @@ const PERIODE_LABEL: Record<string, string> = {
   '7j': '7 derniers jours', '2sem': '2 dernières semaines', '3sem': '3 dernières semaines',
   mois: 'Ce mois', '3mois': '3 derniers mois', '6mois': '6 derniers mois', annee: 'Cette année', tout: 'Tout afficher',
   date: 'Date exacte',
+  moisChoisi: 'Mois',
 };
+
+const MOIS_NOMS = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
 
 // "YYYY-MM-DD" (champ date) → minuit local de ce jour
 function parseDateExacte(value: string): Date | null {
@@ -611,6 +614,9 @@ function RequestsPageInner() {
   const [filterPeriode, setFilterPeriode] = useState('mois');
   // Filtre « Date exacte » (période = 'date') : jour de création au format YYYY-MM-DD
   const [filterDateExacte, setFilterDateExacte] = useState('');
+  // Filtre « Mois… » (période = 'moisChoisi') : mois (0-11) et année, par défaut le mois en cours
+  const [filterMois, setFilterMois] = useState(() => new Date().getMonth());
+  const [filterAnnee, setFilterAnnee] = useState(() => new Date().getFullYear());
   const [filterAssigne, setFilterAssigne] = useState('all');
   const [users, setUsers] = useState<{ id: string; name: string }[]>([]);
   const [selected, setSelected]   = useState<RequestDetail | null>(null);
@@ -631,7 +637,8 @@ function RequestsPageInner() {
       // serveur (cf. src/lib/leave.ts + /api/orders, /api/quotes) — pas besoin de la
       // repasser en query param ici.
       const dateExacte = filterPeriode === 'date' ? parseDateExacte(filterDateExacte) : null;
-      const from = dateExacte ? dateExacte.toISOString() : periodeToFrom(filterPeriode);
+      const debutMois = filterPeriode === 'moisChoisi' ? new Date(filterAnnee, filterMois, 1) : null;
+      const from = dateExacte ? dateExacte.toISOString() : debutMois ? debutMois.toISOString() : periodeToFrom(filterPeriode);
       const qs = from ? `?from=${encodeURIComponent(from)}` : '';
 
       const [ordRes, quoRes] = await Promise.all([
@@ -661,7 +668,7 @@ function RequestsPageInner() {
     } finally {
       if (!silent) setLoading(false);
     }
-  }, [filterPeriode, filterDateExacte, isAdmin, currentUserId]);
+  }, [filterPeriode, filterDateExacte, filterMois, filterAnnee, isAdmin, currentUserId]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
   
@@ -746,6 +753,7 @@ function RequestsPageInner() {
       const [d, m, y] = r.date.split('/').map(Number);
       const jour = new Date(y, m - 1, d);
       if (dateExacte) return jour.getTime() === dateExacte.getTime();
+      if (filterPeriode === 'moisChoisi') return jour.getFullYear() === filterAnnee && jour.getMonth() === filterMois;
       return !periodeStart || jour >= periodeStart;
     })();
     return matchSearch && matchStatut && matchAssigne && matchPeriode;
@@ -890,7 +898,9 @@ function RequestsPageInner() {
     : users.find((u) => u.id === filterAssigne)?.name ?? 'Responsable';
   const activeFilters = [
     filterStatut === 'all' ? 'Tous les statuts' : filterStatut,
-    dateExacte ? `Date : ${dateExacte.toLocaleDateString('fr-FR')}` : (PERIODE_LABEL[filterPeriode] ?? filterPeriode),
+    dateExacte ? `Date : ${dateExacte.toLocaleDateString('fr-FR')}`
+      : filterPeriode === 'moisChoisi' ? `${MOIS_NOMS[filterMois]} ${filterAnnee}`
+      : (PERIODE_LABEL[filterPeriode] ?? filterPeriode),
     assigneLabel,
   ];
 
@@ -1017,9 +1027,26 @@ function RequestsPageInner() {
               { value: '6mois', label: '6 derniers mois' },
               { value: 'annee', label: 'Cette année' },
               { value: 'tout',  label: 'Tout afficher' },
+              { value: 'moisChoisi', label: 'Mois…' },
               { value: 'date',  label: 'Date exacte…' },
             ]}
           />
+          {filterPeriode === 'moisChoisi' && (
+            <>
+              <AdminSelect
+                className="flex-shrink-0"
+                value={String(filterMois)}
+                onChange={(v) => setFilterMois(Number(v))}
+                options={MOIS_NOMS.map((nom, i) => ({ value: String(i), label: nom }))}
+              />
+              <AdminSelect
+                className="flex-shrink-0"
+                value={String(filterAnnee)}
+                onChange={(v) => setFilterAnnee(Number(v))}
+                options={Array.from({ length: 4 }, (_, i) => new Date().getFullYear() - i).map((a) => ({ value: String(a), label: String(a) }))}
+              />
+            </>
+          )}
           {filterPeriode === 'date' && (
             <input
               type="date"
@@ -1056,7 +1083,7 @@ function RequestsPageInner() {
           )}
         </div>
         {(search || filterStatut !== 'all' || filterPeriode !== 'mois' || filterAssigne !== 'all') && (
-          <button onClick={() => { setSearch(''); setFilterStatut('all'); setFilterPeriode('mois'); setFilterDateExacte(''); setFilterAssigne('all'); }} className="text-[12px] font-semibold text-[#8A9BB5] hover:text-[#374151] self-start md:self-auto">Effacer</button>
+          <button onClick={() => { setSearch(''); setFilterStatut('all'); setFilterPeriode('mois'); setFilterDateExacte(''); setFilterMois(new Date().getMonth()); setFilterAnnee(new Date().getFullYear()); setFilterAssigne('all'); }} className="text-[12px] font-semibold text-[#8A9BB5] hover:text-[#374151] self-start md:self-auto">Effacer</button>
         )}
       </div>
 
