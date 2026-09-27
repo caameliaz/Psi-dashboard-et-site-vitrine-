@@ -181,7 +181,11 @@ function AssignModal({ employees, products, onClose, onSave }: {
                 <div key={i} className="flex gap-2 items-center">
                   <select value={l.productId} onChange={(e) => setLine(i, { productId: e.target.value })} className={inputClass}>
                     <option value="">Choisir une référence</option>
-                    {availableProducts.map((p) => <option key={p.id} value={p.id}>{p.name || p.reference} ({p.reference}) — {horsCommerciaux(p)} hors commerciaux</option>)}
+                    {/* Toutes les références : celles sans stock libre restent visibles mais grisées */}
+                    {availableProducts.map((p) => <option key={p.id} value={p.id}>{p.name || p.reference} ({p.reference}) — {horsCommerciaux(p)} disponible(s)</option>)}
+                    {products.filter((p) => horsCommerciaux(p) <= 0).map((p) => (
+                      <option key={p.id} value={p.id} disabled>{p.name || p.reference} ({p.reference}) — 0 disponible, réapprovisionner d&apos;abord</option>
+                    ))}
                   </select>
                   <input value={l.quantity} onChange={(e) => setLine(i, { quantity: e.target.value.replace(/[^\d.]/g, '') })} inputMode="decimal"
                     placeholder="Qté" max={prod ? horsCommerciaux(prod) : undefined} style={{ width: 80 }} className={inputClass} />

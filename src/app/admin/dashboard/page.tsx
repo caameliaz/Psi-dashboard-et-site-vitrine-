@@ -9,6 +9,7 @@ import dynamic from 'next/dynamic';
 import type { Order, Quote } from '@/types';
 import { notifBell } from '@/lib/notif-bell-store';
 import { exportDashboardExcel } from '@/lib/export-dashboard';
+import { printDashboardPdf } from '@/lib/export-dashboard-pdf';
 import { useRole } from '@/lib/role-context';
 import { useSession } from 'next-auth/react';
 import { Modal } from '@/components/ui/Modal';
@@ -242,6 +243,7 @@ export default function DashboardPage() {
   // Commercial dont on filtre les ventes par dates : la sélection (admin) ou soi-même (employé)
   const ventesUserId = isAdmin ? (selectedCommercial || null) : myId;
   const [goalsOpen, setGoalsOpen] = useState(false);
+  const [pdfOpen, setPdfOpen] = useState(false);
   const [todayStats, setTodayStats] = useState({ commandes: 0, attente: 0, confirmes: 0 });
   const [topProduits, setTopProduits] = useState<{ ref: string; qty: number; label: string; color: string }[]>([]);
   const [sourceStats, setSourceStats] = useState({ site: 0, manuel: 0 });
@@ -578,6 +580,14 @@ export default function DashboardPage() {
             >
               <svg width={15} height={15} fill="none" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/><path d="M14 2v6h6M9 13l6 6M15 13l-6 6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
               Exporter
+            </button>
+            <button
+              onClick={() => setPdfOpen(true)}
+              title="Rapport PDF du tableau de bord (chiffres clés et graphiques d'un mois)"
+              className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl border border-[#E2E8F0] bg-white text-[13px] font-semibold text-[#DC2626] hover:bg-[#F8FAFC] transition-colors shadow-sm"
+            >
+              <svg width={15} height={15} fill="none" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/><path d="M14 2v6h6M8 13h8M8 17h5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
+              PDF
             </button>
             {isAdmin && (
               <button
@@ -1130,6 +1140,8 @@ export default function DashboardPage() {
         />
       )}
 
+      {pdfOpen && <PdfModal isAdmin={isAdmin} onClose={() => setPdfOpen(false)} />}
+
       {goalsOpen && (
         <GoalsModal
           objectifs={objectifs}
@@ -1144,6 +1156,49 @@ export default function DashboardPage() {
 }
 
 // ── Modale Objectifs (admin) : objectif global + un objectif par employé ──────
+// ── Modale PDF : choix du mois (mois en cours par défaut) ────────────────────
+const MOIS_PDF = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
+
+function PdfModal({ isAdmin, onClose }: { isAdmin: boolean; onClose: () => void }) {
+  const [mois, setMois] = useState(() => new Date().getMonth());
+  const [annee, setAnnee] = useState(() => new Date().getFullYear());
+  const annees = Array.from({ length: 4 }, (_, i) => new Date().getFullYear() - i);
+  const sel = 'w-full border border-[#E2E8F0] rounded-lg px-3 py-2 text-[13px] bg-white focus:outline-none focus:ring-2 focus:ring-[#4CAF4F]/30';
+
+  return (
+    <Modal title="Rapport PDF du tableau de bord" onClose={onClose}>
+      <div className="space-y-4">
+        <p className="text-[12px] text-[#8A9BB5] leading-relaxed">
+          Chiffres clés, ventes sur 6 mois, commandes et devis, top produits et wilayas du mois choisi.
+          La fenêtre d&apos;impression s&apos;ouvre : choisissez <b>« Enregistrer au format PDF »</b>.
+        </p>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-[12px] font-bold text-[#374151] mb-1.5">Mois</label>
+            <select value={mois} onChange={(e) => setMois(Number(e.target.value))} className={sel}>
+              {MOIS_PDF.map((m, i) => <option key={m} value={i}>{m}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-[12px] font-bold text-[#374151] mb-1.5">Année</label>
+            <select value={annee} onChange={(e) => setAnnee(Number(e.target.value))} className={sel}>
+              {annees.map((a) => <option key={a} value={a}>{a}</option>)}
+            </select>
+          </div>
+        </div>
+        <div className="flex gap-2 pt-1">
+          <button onClick={onClose} className="flex-1 px-4 py-2.5 rounded-lg border border-[#E2E8F0] text-[13px] font-semibold text-[#374151] hover:bg-[#F8FAFC]">Annuler</button>
+          {/* printDashboardPdf ouvre la fenêtre DANS le clic (sinon bloquée comme pop-up) */}
+          <button onClick={() => { printDashboardPdf({ mois, annee, isAdmin }); onClose(); }}
+            className="flex-1 px-4 py-2.5 rounded-lg text-[13px] font-bold text-white bg-[#4CAF4F] hover:bg-[#43A047]">
+            Générer le PDF
+          </button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
 function GoalsModal({ objectifs, onClose, onSaved }: {
   objectifs: { global: number; byUser: Record<string, number> };
   onClose: () => void;
