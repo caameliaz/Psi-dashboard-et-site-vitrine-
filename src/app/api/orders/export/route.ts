@@ -19,8 +19,8 @@ export async function GET() {
         },
         createdBy: { select: { name: true } },
       },
-      // Par date décroissante : plus récemment livrées en premier, puis date de commande
-      orderBy: [{ deliveredAt: 'desc' }, { createdAt: 'desc' }],
+      // Par date croissante : les plus anciennes livraisons en premier, puis date de commande
+      orderBy: [{ deliveredAt: 'asc' }, { createdAt: 'asc' }],
     });
 
     return NextResponse.json(orders);

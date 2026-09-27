@@ -945,8 +945,8 @@ function RequestsPageInner() {
           <button
             onClick={() => {
               const label = activeTab === 'devis' ? 'Devis' : activeTab === 'commandes' ? 'Commandes' : 'Demandes';
-              // Export trié par date, la plus récente en premier
-              const parDate = [...filtered].sort((a, b) => dateKey(b) - dateKey(a));
+              // Export trié par date croissante (la plus ancienne en premier)
+              const parDate = [...filtered].sort((a, b) => dateKey(a) - dateKey(b));
               exportTableauExcel(parDate, `PSI_${label}`, label, activeFilters.join(' | '));
             }}
             className="hidden md:flex items-center gap-1.5 px-3 py-2 rounded-xl text-[13px] font-semibold border border-[#E2E8F0] text-[#374151] hover:bg-[#F8FAFC] transition-colors"
