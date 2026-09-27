@@ -360,6 +360,7 @@ model Order {
   paymentDate     DateTime? // date de règlement (facultative, modifiable après validation)
   vatEnabled      Boolean        @default(false) // TVA appliquée (info seule — le montant saisi est final)
   deliveredAt     DateTime? // date du passage au statut LIVRE (ventes/livraisons du dashboard)
+  priceIncludesVat Boolean       @default(false) // montants saisis déjà TTC (ventes importées) → ne pas rajouter 19 % à l'affichage / dans les documents
   salesRepName    String? // nom du commercial importé, avant rattachement à un compte
   createdBy       User?          @relation("OrderCreatedBy", fields: [createdById], references: [id])
   createdById     String? // null si commande du site public
@@ -447,6 +448,7 @@ model Quote {
   paymentDate     DateTime?
   vatEnabled      Boolean        @default(false)
   deliveredAt     DateTime? // date du passage au statut LIVRE (ventes/livraisons du dashboard)
+  priceIncludesVat Boolean       @default(false) // montants saisis déjà TTC (ventes importées) → ne pas rajouter 19 % à l'affichage / dans les documents
   salesRepName    String?
   createdBy       User?          @relation("QuoteCreatedBy", fields: [createdById], references: [id])
   createdById     String?

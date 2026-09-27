@@ -144,6 +144,8 @@ export async function POST(request: NextRequest) {
         paymentMethod: modePaiement,
         paymentDate: dateReglement,
         vatEnabled: tva,
+        // Montant / prix unitaire du fichier = déjà TTC quand la facture commence par F
+        priceIncludesVat: true,
         salesRepName: commercial,
         createdById: session.user.id,
         // ⚠️ Date RÉELLE de la vente, pas la date d'import

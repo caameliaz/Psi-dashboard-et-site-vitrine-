@@ -116,6 +116,8 @@ export interface RequestDetail {
   paymentMethod?: string | null;
   paymentDate?: string | null;
   vatEnabled?: boolean;
+  // Montants déjà TTC (ventes importées) : la TVA est déduite, pas ajoutée
+  priceIncludesVat?: boolean;
   salesRepName?: string | null;   // commercial importé, avant rattachement à un compte
   priority?: boolean;             // commande/devis prioritaire (passe en tête des FIFO du stock)
 }
@@ -140,9 +142,12 @@ async function exportExcel(item: RequestDetail) {
           return { categorie: '—', designation: m ? m[1].trim() : p.trim(), quantite: m ? Number(m[2]) : 0, pu: 0 };
         });
 
-  const ht = lignesData.reduce((acc, l) => acc + l.quantite * l.pu, 0);
+  // Somme des lignes : HT en temps normal, déjà TTC pour les ventes importées
+  const sommeLignes = lignesData.reduce((acc, l) => acc + l.quantite * l.pu, 0);
   const hasTva = item.vatEnabled === true;
-  const ttc = hasTva ? Math.round(ht * 1.19) : ht;
+  const dejaTtc = hasTva && item.priceIncludesVat === true;
+  const ht = dejaTtc ? Math.round(sommeLignes / 1.19) : sommeLignes;
+  const ttc = dejaTtc ? sommeLignes : hasTva ? Math.round(sommeLignes * 1.19) : sommeLignes;
 
   const rows: (string | number)[][] = [];
   const push = (r: (string | number)[]) => rows.push(r);
@@ -244,9 +249,12 @@ async function printDoc(item: RequestDetail) {
           return { designation: m ? m[1].trim() : p.trim(), categorie: '—', quantite: m ? Number(m[2]) : 0, pu: 0 };
         });
 
-  const ht = lignesData.reduce((acc, l) => acc + l.quantite * l.pu, 0);
+  // Somme des lignes : HT en temps normal, déjà TTC pour les ventes importées
+  const sommeLignes = lignesData.reduce((acc, l) => acc + l.quantite * l.pu, 0);
   const hasTva = item.vatEnabled === true;
-  const ttc = hasTva ? Math.round(ht * 1.19) : ht;
+  const dejaTtc = hasTva && item.priceIncludesVat === true;
+  const ht = dejaTtc ? Math.round(sommeLignes / 1.19) : sommeLignes;
+  const ttc = dejaTtc ? sommeLignes : hasTva ? Math.round(sommeLignes * 1.19) : sommeLignes;
 
   const rows = lignesData.map(l => {
     const totalLigne = l.quantite * l.pu;

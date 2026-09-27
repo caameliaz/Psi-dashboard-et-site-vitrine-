@@ -98,6 +98,7 @@ export function orderToDetail(o: any, fallback?: ClientFallback): RequestDetail 
     paymentMethod: o.paymentMethod ?? null,
     paymentDate: o.paymentDate ? new Date(o.paymentDate).toLocaleDateString('fr-FR') : null,
     vatEnabled: Boolean(o.vatEnabled),
+    priceIncludesVat: Boolean(o.priceIncludesVat),
     // `tva` pilote les documents exportés (bon de commande, PDF) : on le
     // renseigne depuis vatEnabled pour n'avoir QU'UNE source de vérité.
     tva: Boolean(o.vatEnabled),
@@ -120,8 +121,9 @@ export function quoteToDetail(q: any, fallback?: ClientFallback): RequestDetail 
   // Total : le prix global proposé prime ; sinon on somme les prix unitaires des lignes.
   const totalLignes = items.reduce((acc, i) => acc + i.quantite * i.prixUnitaire, 0);
   let totalDevis = q.proposedPrice != null ? Number(q.proposedPrice) : totalLignes;
-  // Si la TVA est activée, on applique 19% au montant HT pour obtenir le TTC
-  if (q.vatEnabled) {
+  // Si la TVA est activée, on applique 19% au montant HT pour obtenir le TTC —
+  // SAUF si le montant est déjà TTC (ventes importées : priceIncludesVat)
+  if (q.vatEnabled && !q.priceIncludesVat) {
     totalDevis = Math.round(totalDevis * 1.19);
   }
 
@@ -149,6 +151,7 @@ export function quoteToDetail(q: any, fallback?: ClientFallback): RequestDetail 
     paymentMethod: q.paymentMethod ?? null,
     paymentDate: q.paymentDate ? new Date(q.paymentDate).toLocaleDateString('fr-FR') : null,
     vatEnabled: Boolean(q.vatEnabled),
+    priceIncludesVat: Boolean(q.priceIncludesVat),
     // `tva` pilote les documents exportés (bon de commande, PDF) : on le
     // renseigne depuis vatEnabled pour n'avoir QU'UNE source de vérité.
     tva: Boolean(q.vatEnabled),
