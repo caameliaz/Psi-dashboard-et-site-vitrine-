@@ -44,3 +44,15 @@
 /* Scrollbar masquée (contenu toujours scrollable) — utilisée dans les panneaux détail */
 .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 .no-scrollbar::-webkit-scrollbar { display: none; }
+
+/* Survol "flottant" — légère élévation + ombre accentuée, pour les cards et boutons */
+.hover-lift {
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+.hover-lift:hover {
+  transform: translateY(-4px);
+}
+@media (prefers-reduced-motion: reduce) {
+  .hover-lift { transition: none; }
+  .hover-lift:hover { transform: none; }
+}

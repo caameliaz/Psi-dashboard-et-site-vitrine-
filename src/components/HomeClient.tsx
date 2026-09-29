@@ -1,9 +1,9 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { CategoryBrowser } from '@/components/CategoryBrowser';
 import { QuoteCTA } from '@/components/QuoteCTA';
+import { Reveal } from '@/components/Reveal';
 import { useTranslation } from '@/lib/i18n';
 import type { Cat, Prod } from '@/lib/hardcodedCatalog';
 
@@ -11,39 +11,6 @@ interface HomeClientProps {
   initialContent: Record<string, string>;
   initialCategories: Cat[];
   initialProducts: Prod[];
-}
-
-// Fait apparaître un item de la section Qualité en glissant de la droite vers
-// sa place, avec un délai croissant selon sa position (haut → bas) pour un
-// effet d'apparition en cascade au scroll.
-function QualityItem({ delayMs, children }: { delayMs: number; children: React.ReactNode }) {
-  const ref = useRef<HTMLDivElement>(null);
-  const [visible, setVisible] = useState(false);
-
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const observer = new IntersectionObserver(
-      ([entry]) => { if (entry.isIntersecting) { setVisible(true); observer.disconnect(); } },
-      { threshold: 0.2 }
-    );
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, []);
-
-  return (
-    <div
-      ref={ref}
-      className="transition-all duration-700 ease-out"
-      style={{
-        opacity: visible ? 1 : 0,
-        transform: visible ? 'translate(0, 0)' : 'translate(-32px, -24px)',
-        transitionDelay: visible ? `${delayMs}ms` : '0ms',
-      }}
-    >
-      {children}
-    </div>
-  );
 }
 
 // Met "papier thermique" en vert dans le titre du hero, que ce soit le texte
@@ -86,7 +53,7 @@ export function HomeClient({ initialContent, initialCategories, initialProducts 
 
         <div className="relative w-full max-w-[1280px] mx-auto px-6 md:px-12 py-20">
           <div className="max-w-[760px] flex flex-col gap-6">
-            <div className="flex flex-col gap-3">
+            <Reveal className="flex flex-col gap-3">
               <h1 className="text-[32px] md:text-[44px] font-extrabold text-white leading-tight tracking-tight">
                 {renderHeroTitle(heroTitre)}
               </h1>
@@ -94,12 +61,12 @@ export function HomeClient({ initialContent, initialCategories, initialProducts 
               <p className="text-[14px] md:text-[16px] text-white/80 leading-relaxed">
                 {heroSousTitre}
               </p>
-            </div>
+            </Reveal>
 
-            <div className="flex flex-row flex-wrap gap-4 mt-4">
+            <Reveal delayMs={150} className="flex flex-row flex-wrap gap-4 mt-4">
               <Link
                 href="/products"
-                className="flex items-center gap-2 bg-[#4CAF4F] text-white text-[14px] font-semibold px-6 py-3 rounded-lg shadow-[0px_4px_14px_rgba(76,175,79,0.5)] hover:bg-[#43A047] transition-all"
+                className="hover-lift flex items-center gap-2 bg-[#4CAF4F] text-white text-[14px] font-semibold px-6 py-3 rounded-lg shadow-[0px_4px_14px_rgba(76,175,79,0.5)] hover:bg-[#43A047] hover:shadow-[0px_8px_24px_rgba(76,175,79,0.6)] transition-all"
               >
                 {t('hero.cta_order')}
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
@@ -108,11 +75,11 @@ export function HomeClient({ initialContent, initialCategories, initialProducts 
               </Link>
               <Link
                 href="/quote"
-                className="flex items-center gap-2 bg-transparent border-2 border-white text-white text-[14px] font-semibold px-6 py-3 rounded-lg hover:bg-white hover:text-[#263238] transition-all"
+                className="hover-lift flex items-center gap-2 bg-transparent border-2 border-white text-white text-[14px] font-semibold px-6 py-3 rounded-lg hover:bg-white hover:text-[#263238] transition-all"
               >
                 Demander un devis
               </Link>
-            </div>
+            </Reveal>
           </div>
         </div>
       </section>
@@ -123,14 +90,14 @@ export function HomeClient({ initialContent, initialCategories, initialProducts 
       <section id="products" className="bg-white pt-10 pb-8 px-6 md:px-12">
         <div className="max-w-[1280px] mx-auto flex flex-col gap-10">
 
-          <div className="flex flex-col items-center gap-3 text-center">
+          <Reveal className="flex flex-col items-center gap-3 text-center">
             <h2 className="text-[28px] md:text-[36px] font-bold text-[#388E3C] leading-tight">
               {t('products_section.title')}
             </h2>
             <p className="text-[18px] md:text-[20px] text-[#1A1A1A] max-w-[520px] leading-relaxed [font-family:var(--font-noto-serif)]">
               {t('products_section.subtitle')}
             </p>
-          </div>
+          </Reveal>
 
           <CategoryBrowser 
             limit={6} 
@@ -145,11 +112,11 @@ export function HomeClient({ initialContent, initialCategories, initialProducts 
       ════════════════════════════════════════════════════════════ */}
       <section id="contact" className="bg-[#F5F7FA] pt-6 px-8 md:px-20 mt-2 md:mt-3 mb-14 md:mb-20">
         <div className="flex flex-col gap-12 md:gap-14">
-          <div className="flex flex-col gap-3 items-center text-center">
+          <Reveal className="flex flex-col gap-3 items-center text-center">
             <h2 className="text-[26px] md:text-[34px] font-bold text-[#388E3C] italic leading-snug">
               {t('quality.title2')}
             </h2>
-          </div>
+          </Reveal>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-20 gap-y-14 md:gap-x-28 md:gap-y-20">
             {[
@@ -178,7 +145,7 @@ export function HomeClient({ initialContent, initialCategories, initialProducts 
               // (index 0/2 = colonne gauche, 1/3 = colonne droite).
               const delayByIndex = [150, 0, 450, 300];
               return (
-                <QualityItem key={item.titleKey} delayMs={delayByIndex[i]}>
+                <Reveal key={item.titleKey} delayMs={delayByIndex[i]} y={-24}>
                   <div className="flex flex-col gap-6 min-w-0">
                     <div className="flex items-center gap-5">
                       <div className="w-14 h-14 md:w-16 md:h-16 flex items-center justify-center flex-shrink-0">
@@ -188,7 +155,7 @@ export function HomeClient({ initialContent, initialCategories, initialProducts 
                     </div>
                     <p className="text-[16px] md:text-[19px] text-[#1A1A1A] leading-loose">{t(item.descKey)}</p>
                   </div>
-                </QualityItem>
+                </Reveal>
               );
             })}
           </div>
@@ -204,9 +171,11 @@ export function HomeClient({ initialContent, initialCategories, initialProducts 
       ════════════════════════════════════════════════════════════ */}
       <section id="about" className="bg-white pt-8 pb-20 px-6 md:px-12">
         <div className="max-w-[1280px] mx-auto flex flex-col gap-8">
-          <h2 className="text-[28px] md:text-[36px] font-bold text-[#388E3C] leading-tight">
-            {t('about.title')}
-          </h2>
+          <Reveal>
+            <h2 className="text-[28px] md:text-[36px] font-bold text-[#388E3C] leading-tight">
+              {t('about.title')}
+            </h2>
+          </Reveal>
           <div className="flex flex-col lg:flex-row gap-10 lg:gap-16 items-start">
             <div className="flex flex-col gap-5 text-[16px] md:text-[17px] text-[#717171] leading-[1.75] flex-1">
               {/* Le contenu éditable en base n'existe qu'en FRANÇAIS : dans les

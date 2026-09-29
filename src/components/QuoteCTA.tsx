@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useTranslation } from '@/lib/i18n';
+import { Reveal } from '@/components/Reveal';
 
 // Container "besoin d'un devis" — utilisé sur l'accueil et la fiche produit.
 // fullBleed : le fond prend toute la largeur de l'écran, mais le contenu reste
@@ -10,7 +11,7 @@ export function QuoteCTA({ id, fullBleed = false }: { id?: string; fullBleed?: b
   const { t } = useTranslation();
 
   const content = (
-    <div className={`flex flex-col items-center text-center gap-5 ${fullBleed ? 'max-w-[1280px] mx-auto px-6 md:px-12 py-10 md:py-12' : ''}`}>
+    <Reveal className={`flex flex-col items-center text-center gap-5 ${fullBleed ? 'max-w-[1280px] mx-auto px-6 md:px-12 py-10 md:py-12' : ''}`}>
       <h4 className="text-[26px] md:text-[34px] font-bold text-[#263238] leading-tight">
         Vous avez un besoin spécifique ?
       </h4>
@@ -19,11 +20,11 @@ export function QuoteCTA({ id, fullBleed = false }: { id?: string; fullBleed?: b
       </p>
       <Link
         href="/quote"
-        className="bg-[#4CAF4F] text-white text-[16px] font-semibold px-8 py-3.5 rounded-lg shadow-[0_8px_24px_rgba(76,175,79,0.3)] hover:bg-[#43A047] transition-all"
+        className="hover-lift bg-[#4CAF4F] text-white text-[16px] font-semibold px-8 py-3.5 rounded-lg shadow-[0_8px_24px_rgba(76,175,79,0.3)] hover:bg-[#43A047] hover:shadow-[0_12px_32px_rgba(76,175,79,0.4)] transition-all"
       >
         {t('quote_cta.btn')}
       </Link>
-    </div>
+    </Reveal>
   );
 
   if (fullBleed) {

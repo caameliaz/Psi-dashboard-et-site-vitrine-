@@ -158,7 +158,7 @@ function CategoryCard({ category, products }: { category: Cat; products: Prod[] 
   return (
     // Carte délimitée : bordure grise + fond blanc, pour que chaque produit
     // se distingue nettement du fond de page (surtout sur mobile).
-    <div className="flex flex-col gap-3 rounded-2xl border border-[#E4EBF5] bg-white p-3 pb-4 shadow-[0_2px_12px_rgba(171,190,209,0.18)] hover:shadow-[0_6px_24px_rgba(171,190,209,0.35)] transition-shadow">
+    <div className="hover-lift flex flex-col gap-3 rounded-2xl border border-[#E4EBF5] bg-white p-3 pb-4 shadow-[0_2px_12px_rgba(171,190,209,0.18)] hover:shadow-[0_6px_24px_rgba(171,190,209,0.35)]">
       {/* Image catégorie — garde son propre container. Avec une vraie photo, elle se fond
           dans le fond de la page (pas de carte blanche/ombre) et reste entière (object-contain). */}
       <Link

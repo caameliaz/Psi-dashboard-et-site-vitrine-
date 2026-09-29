@@ -9,7 +9,7 @@ export function ProductCard({ product }: { product: Product }) {
   const addItem = useCartStore((s) => s.addItem);
 
   return (
-    <div className="bg-white rounded-2xl shadow-[0_4px_24px_rgba(171,190,209,0.35)] hover:shadow-[0_8px_32px_rgba(171,190,209,0.5)] transition-shadow flex flex-col overflow-hidden">
+    <div className="hover-lift bg-white rounded-2xl shadow-[0_4px_24px_rgba(171,190,209,0.35)] hover:shadow-[0_8px_32px_rgba(171,190,209,0.5)] flex flex-col overflow-hidden">
       {/* Image */}
       <div className="bg-[#F5F7FA] h-28 md:h-52 flex items-center justify-center overflow-hidden">
         {product.photo ? (

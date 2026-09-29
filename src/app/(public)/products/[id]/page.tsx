@@ -61,7 +61,12 @@ export default function ProductDetailPage() {
   }, []);
 
   const category = cats.find(c => c.id === id);
-  const otherCats = cats.filter(c => c.id !== id);
+  // Masque les catégories sans aucun produit visible sur le site (ex: catégorie
+  // entièrement désactivée) — `products` vient de /api/products, déjà filtré
+  // sur active && visibleOnSite côté public.
+  const otherCats = cats.filter(c =>
+    c.id !== id && products.some(p => p.category?.id === c.id && p.width > 0 && p.length > 0)
+  );
   const items = useMemo(
     () => products.filter(p => p.category?.id === id && p.width > 0 && p.length > 0),
     [products, id]
@@ -191,7 +196,7 @@ export default function ProductDetailPage() {
   const addButton = current && (
     <button
       onClick={() => addItem({ productId: current.id, quantity: qty, reference: current.reference, unitPrice: current.price })}
-      className="w-full flex items-center justify-center gap-2 bg-[#4CAF4F] text-white text-[13px] sm:text-[15px] font-bold py-3.5 rounded-xl hover:bg-[#43A047] shadow-[0_4px_14px_rgba(76,175,79,0.4)] transition-all"
+      className="hover-lift w-full flex items-center justify-center gap-2 bg-[#4CAF4F] text-white text-[13px] sm:text-[15px] font-bold py-3.5 rounded-xl hover:bg-[#43A047] shadow-[0_4px_14px_rgba(76,175,79,0.4)] hover:shadow-[0_8px_24px_rgba(76,175,79,0.5)] transition-all"
     >
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" className="flex-shrink-0">
         <path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
@@ -327,7 +332,7 @@ export default function ProductDetailPage() {
             </h2>
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-5">
               {otherCats.map((c) => (
-                <div key={c.id} className="border border-[#E0E0E0] rounded-2xl overflow-hidden flex flex-col shadow-[0_2px_10px_rgba(171,190,209,0.35)] hover:shadow-[0_8px_24px_rgba(171,190,209,0.5)] transition-shadow duration-200">
+                <div key={c.id} className="hover-lift border border-[#E0E0E0] rounded-2xl overflow-hidden flex flex-col shadow-[0_2px_10px_rgba(171,190,209,0.35)] hover:shadow-[0_8px_24px_rgba(171,190,209,0.5)]">
                   <Link href={`/products/${c.id}`} className="bg-[#F5F7FA] h-40 md:h-44 flex items-center justify-center overflow-hidden">
                     {c.photo ? (
                       <img src={c.photo} alt={c.name} className="w-full h-full object-cover" />
@@ -342,7 +347,7 @@ export default function ProductDetailPage() {
                     <p className="text-[14px] font-bold text-[#263238]">{c.name}</p>
                     <Link
                       href={`/products/${c.id}`}
-                      className="border-2 border-[#4CAF4F] text-[#4CAF4F] text-[13px] font-semibold px-5 py-2 rounded-full hover:bg-[#4CAF4F] hover:text-white transition-all"
+                      className="hover-lift border-2 border-[#4CAF4F] text-[#4CAF4F] text-[13px] font-semibold px-5 py-2 rounded-full hover:bg-[#4CAF4F] hover:text-white transition-all"
                     >
                       {t('product_detail.discover')}
                     </Link>

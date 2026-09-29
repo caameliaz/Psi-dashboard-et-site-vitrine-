@@ -150,7 +150,7 @@ export function Navbar() {
           <CartDropdown variant="desktop" />
 
           {/* CTA */}
-          <Link href="/quote" className="bg-[#4CAF4F] text-white text-[15px] font-semibold px-7 py-2.5 rounded-lg flex items-center gap-2 hover:bg-[#43A047] shadow-[0_4px_14px_rgba(76,175,79,0.4)] hover:shadow-[0_6px_20px_rgba(76,175,79,0.5)] transition-all shrink-0">
+          <Link href="/quote" className="hover-lift bg-[#4CAF4F] text-white text-[15px] font-semibold px-7 py-2.5 rounded-lg flex items-center gap-2 hover:bg-[#43A047] shadow-[0_4px_14px_rgba(76,175,79,0.4)] hover:shadow-[0_6px_20px_rgba(76,175,79,0.5)] transition-all shrink-0">
             {t('hero.cta_quote')}
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
               <path d="M3 8h10M9 4l4 4-4 4" stroke="white" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
