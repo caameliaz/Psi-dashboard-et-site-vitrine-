@@ -1073,7 +1073,7 @@ function RequestsPageInner() {
       </div>
 
       {/* Recherche seule sur sa ligne, puis les 3 filtres sur la ligne d'en dessous */}
-      <div className="mb-4 flex flex-col md:flex-row md:items-center gap-2">
+      <div className="mb-4 flex flex-col md:flex-row md:flex-wrap md:items-center gap-2">
         {/* Recherche — pleine largeur sur sa propre ligne (mobile) */}
         <div className="relative w-full md:w-[220px] md:flex-shrink-0">
           <svg className="absolute left-2.5 top-1/2 -translate-y-1/2" width={13} height={13} fill="none">
@@ -1083,15 +1083,15 @@ function RequestsPageInner() {
           <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Rechercher..." className="px-2 py-2 pl-7 w-full rounded-lg border border-[#E2E8F0] text-[13px] text-[#0F172A] bg-white focus:outline-none focus:border-[#4CAF4F] focus:ring-1 focus:ring-[#4CAF4F] transition-colors" />
         </div>
         {/* Les filtres — sur une même ligne ; à la ligne sur ordinateur si ça ne tient pas (jamais de débordement) */}
-        <div className="flex items-center md:flex-wrap gap-2 min-w-0">
+        <div className="flex items-center md:flex-wrap gap-2 min-w-0 md:order-3 md:basis-full">
           <AdminSelect
-            className="flex-1 min-w-0"
+            className="flex-1 min-w-0 md:min-w-[150px]"
             value={filterStatut}
             onChange={setFilterStatut}
             options={[{ value: 'all', label: 'Statut' }, ...allStatuts.map((s) => ({ value: s, label: s }))]}
           />
           <AdminSelect
-            className="flex-1 min-w-0"
+            className="flex-1 min-w-0 md:min-w-[150px]"
             value={filterPeriode}
             onChange={setFilterPeriode}
             options={[
@@ -1133,7 +1133,7 @@ function RequestsPageInner() {
             />
           )}
           <AdminSelect
-            className="flex-1 min-w-0"
+            className="flex-1 min-w-0 md:min-w-[150px]"
             value={filterAssigne}
             onChange={setFilterAssigne}
             options={[
@@ -1145,7 +1145,7 @@ function RequestsPageInner() {
           {/* Paiement + Facture : admins uniquement, ordinateur uniquement */}
           {isAdmin && (
           <AdminSelect
-            className="hidden md:block flex-1 min-w-0"
+            className="hidden md:block flex-1 min-w-0 md:min-w-[150px]"
             value={filterPaiement}
             onChange={setFilterPaiement}
             options={[
@@ -1157,7 +1157,7 @@ function RequestsPageInner() {
           )}
           {isAdmin && (
           <AdminSelect
-            className="hidden md:block flex-1 min-w-0"
+            className="hidden md:block flex-1 min-w-0 md:min-w-[150px]"
             value={filterFacture}
             onChange={setFilterFacture}
             options={[
@@ -1197,7 +1197,7 @@ function RequestsPageInner() {
           )}
         </div>
         {(search || filterStatut !== 'all' || filterPeriode !== 'mois' || filterAssigne !== 'all' || filterPaiement !== 'all' || filterFacture !== 'all') && (
-          <button onClick={() => { setSearch(''); setFilterStatut('all'); setFilterPeriode('mois'); setFilterDateExacte(''); setFilterMois(new Date().getMonth()); setFilterAnnee(new Date().getFullYear()); setFilterAssigne('all'); setFilterPaiement('all'); setFilterFacture('all'); }} className="text-[12px] font-semibold text-[#8A9BB5] hover:text-[#374151] self-start md:self-auto">Effacer</button>
+          <button onClick={() => { setSearch(''); setFilterStatut('all'); setFilterPeriode('mois'); setFilterDateExacte(''); setFilterMois(new Date().getMonth()); setFilterAnnee(new Date().getFullYear()); setFilterAssigne('all'); setFilterPaiement('all'); setFilterFacture('all'); }} className="text-[12px] font-semibold text-[#8A9BB5] hover:text-[#374151] self-start md:self-auto md:order-2">Effacer</button>
         )}
       </div>
 
