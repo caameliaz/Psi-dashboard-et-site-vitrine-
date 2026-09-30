@@ -6,7 +6,7 @@ import { styleBandRow, styleHeaderRow, styleDataRows, styleSectionTitle, styleFi
 // chaque ligne produit → aucune cellule vide, l'Excel reste filtrable/triable.
 // Exception : « Total commande » n'est écrit que sur la 1re ligne de chaque commande,
 // pour que la somme de la colonne dans Excel donne le vrai total.
-const NUM_COLS = 17;
+const NUM_COLS = 19;
 const pad = (r: (string | number)[]) => { while (r.length < NUM_COLS) r.push(''); return r; };
 
 // Annulé / Retourné : pas une vente → ligne gardée (statut visible) mais montants
@@ -41,7 +41,7 @@ export async function exportTableauExcel(
   const headerRowIdx = allRows.length;
   push([
     'Référence', 'Type', 'Date', 'Client', 'Entreprise', 'Téléphone', 'Wilaya', 'Commune',
-    'Statut', 'TVA', 'Catégorie', 'Produit', 'Métrage (m)', 'Qté', 'Prix unitaire (DA)', 'Total ligne (DA)', 'Total commande (DA)',
+    'Statut', 'Type de paiement', 'Facture', 'TVA', 'Catégorie', 'Produit', 'Métrage (m)', 'Qté', 'Prix unitaire (DA)', 'Total ligne (DA)', 'Total commande (DA)',
   ]);
   const dataStart = allRows.length;
 
@@ -63,6 +63,8 @@ export async function exportTableauExcel(
       push([
         r.ref, r.type, dateStr, r.client, r.entreprise || '—', r.telephone || '—',
         r.wilaya || '—', r.commune || '—', r.statut,
+        r.paymentMethod || '—',
+        r.invoiceNumber?.trim() ? 'Avec' : 'Sans',
         r.vatEnabled ? 'Oui' : 'Non',
         l.categorie || '—', l.designation || '—',
         l.metrage != null ? l.metrage : '—',
@@ -107,6 +109,8 @@ export async function exportTableauExcel(
     { wch: 16 }, // Wilaya
     { wch: 16 }, // Commune
     { wch: 13 }, // Statut
+    { wch: 16 }, // Type de paiement
+    { wch: 10 }, // Facture
     { wch: 7 },  // TVA
     { wch: 18 }, // Catégorie
     { wch: 30 }, // Produit

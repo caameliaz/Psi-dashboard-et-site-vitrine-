@@ -13,7 +13,7 @@ interface AdminSelectProps {
 
 export function AdminSelect({ value, onChange, options, className = '' }: AdminSelectProps) {
   const [open, setOpen] = useState(false);
-  const [maxHeight, setMaxHeight] = useState(256);
+  const [maxHeight, setMaxHeight] = useState(600);
   const ref = useRef<HTMLDivElement>(null);
   // Quand l'appelant impose w-full (grille serrée), on ne force pas la largeur mini.
   const fullWidth = className.includes('w-full');
@@ -42,7 +42,9 @@ export function AdminSelect({ value, onChange, options, className = '' }: AdminS
     if (!open || !ref.current) return;
     const rect = ref.current.getBoundingClientRect();
     const available = window.innerHeight - rect.bottom - 16;
-    setMaxHeight(Math.max(120, Math.min(256, available)));
+    // Plus de plafond à 256 px : le menu s'ouvre en entier (sans défiler) tant qu'il tient
+    // à l'écran — sur Mac la barre de défilement est masquée et cachait la fin de la liste.
+    setMaxHeight(Math.max(120, available));
   }, [open]);
 
   // Empêche la page (et l'overlay de modale derrière) de défiler pendant qu'un

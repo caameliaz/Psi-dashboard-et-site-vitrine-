@@ -661,6 +661,10 @@ function RequestsPageInner() {
   const [filterMois, setFilterMois] = useState(() => new Date().getMonth());
   const [filterAnnee, setFilterAnnee] = useState(() => new Date().getFullYear());
   const [filterAssigne, setFilterAssigne] = useState('all');
+  // Filtre « Type de paiement » : 'all' | 'none' (non renseigné) | un mode de PAYMENT_METHODS
+  const [filterPaiement, setFilterPaiement] = useState('all');
+  // Filtre « Facture » : 'all' | 'avec' (numéro de facture renseigné) | 'sans'
+  const [filterFacture, setFilterFacture] = useState('all');
   const [users, setUsers] = useState<{ id: string; name: string }[]>([]);
   const [selected, setSelected]   = useState<RequestDetail | null>(null);
   const [showCreate, setShowCreate] = useState(false);
@@ -801,7 +805,11 @@ function RequestsPageInner() {
       if (filterPeriode === 'moisChoisi') return jour.getFullYear() === filterAnnee && jour.getMonth() === filterMois;
       return !periodeStart || jour >= periodeStart;
     })();
-    return matchSearch && matchAssigne && matchPeriode;
+    const matchPaiement = filterPaiement === 'all'
+      || (filterPaiement === 'none' ? !r.paymentMethod : r.paymentMethod === filterPaiement);
+    const aFacture = !!r.invoiceNumber?.trim();
+    const matchFacture = filterFacture === 'all' || (filterFacture === 'avec' ? aFacture : !aFacture);
+    return matchSearch && matchAssigne && matchPeriode && matchPaiement && matchFacture;
   };
   const filtered = sorted.filter((r) => matchHorsStatut(r) && (filterStatut === 'all' || r.statut === filterStatut));
 
@@ -963,6 +971,8 @@ function RequestsPageInner() {
       : filterPeriode === 'moisChoisi' ? `${MOIS_NOMS[filterMois]} ${filterAnnee}`
       : (PERIODE_LABEL[filterPeriode] ?? filterPeriode),
     assigneLabel,
+    ...(filterFacture === 'all' ? [] : [filterFacture === 'avec' ? 'Avec facture' : 'Sans facture']),
+    ...(filterPaiement === 'all' ? [] : [filterPaiement === 'none' ? 'Paiement non renseigné' : `Paiement : ${filterPaiement}`]),
   ];
 
   return (
@@ -1072,8 +1082,8 @@ function RequestsPageInner() {
           </svg>
           <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Rechercher..." className="px-2 py-2 pl-7 w-full rounded-lg border border-[#E2E8F0] text-[13px] text-[#0F172A] bg-white focus:outline-none focus:border-[#4CAF4F] focus:ring-1 focus:ring-[#4CAF4F] transition-colors" />
         </div>
-        {/* Les 3 filtres — sur une même ligne */}
-        <div className="flex items-center gap-2 min-w-0">
+        {/* Les filtres — sur une même ligne ; à la ligne sur ordinateur si ça ne tient pas (jamais de débordement) */}
+        <div className="flex items-center md:flex-wrap gap-2 min-w-0">
           <AdminSelect
             className="flex-1 min-w-0"
             value={filterStatut}
@@ -1132,41 +1142,79 @@ function RequestsPageInner() {
               ...users.map((u) => ({ value: u.id, label: u.name })),
             ]}
           />
+          {/* Paiement + Facture : admins uniquement, ordinateur uniquement */}
+          {isAdmin && (
+          <AdminSelect
+            className="hidden md:block flex-1 min-w-0"
+            value={filterPaiement}
+            onChange={setFilterPaiement}
+            options={[
+              { value: 'all',  label: 'Type de paiement' },
+              ...PAYMENT_METHODS.map((m) => ({ value: m, label: m })),
+              { value: 'none', label: 'Non renseigné' },
+            ]}
+          />
+          )}
+          {isAdmin && (
+          <AdminSelect
+            className="hidden md:block flex-1 min-w-0"
+            value={filterFacture}
+            onChange={setFilterFacture}
+            options={[
+              { value: 'all',  label: 'Facture' },
+              { value: 'avec', label: 'Avec facture' },
+              { value: 'sans', label: 'Sans facture' },
+            ]}
+          />
+          )}
           {/* Raccourci "Mes commandes" — admin uniquement, DESKTOP seulement (sur
               mobile, il est maintenant dans la ligne du titre, cf. plus haut).
               Poussé à droite (ml-auto) ; off = fond blanc/bordure+texte vert, on = vert plein. */}
           {isAdmin && currentUserId && (
-            <button
-              onClick={() => setFilterAssigne((v) => v === currentUserId ? 'all' : currentUserId)}
-              className={`hidden md:block ml-auto px-3 py-2.5 rounded-xl text-[13px] font-bold border-2 transition-colors whitespace-nowrap flex-shrink-0 ${
-                filterAssigne === currentUserId
-                  ? 'bg-[#4CAF4F] border-[#4CAF4F] text-white'
-                  : 'bg-white border-[#4CAF4F] text-[#4CAF4F] hover:bg-[#F0FDF4]'
-              }`}
-            >
-              Mes commandes
-            </button>
+            <div className="hidden md:flex ml-auto items-center gap-2 flex-shrink-0">
+              {/* "Toutes les ventes" : période = Tout afficher (depuis toujours) ; re-clic = Ce mois */}
+              <button
+                onClick={() => setFilterPeriode((v) => v === 'tout' ? 'mois' : 'tout')}
+                className={`px-3 py-2.5 rounded-xl text-[13px] font-bold border-2 transition-colors whitespace-nowrap ${
+                  filterPeriode === 'tout'
+                    ? 'bg-[#4CAF4F] border-[#4CAF4F] text-white'
+                    : 'bg-white border-[#4CAF4F] text-[#4CAF4F] hover:bg-[#F0FDF4]'
+                }`}
+              >
+                Toutes les ventes
+              </button>
+              <button
+                onClick={() => setFilterAssigne((v) => v === currentUserId ? 'all' : currentUserId)}
+                className={`px-3 py-2.5 rounded-xl text-[13px] font-bold border-2 transition-colors whitespace-nowrap ${
+                  filterAssigne === currentUserId
+                    ? 'bg-[#4CAF4F] border-[#4CAF4F] text-white'
+                    : 'bg-white border-[#4CAF4F] text-[#4CAF4F] hover:bg-[#F0FDF4]'
+                }`}
+              >
+                Mes commandes
+              </button>
+            </div>
           )}
         </div>
-        {(search || filterStatut !== 'all' || filterPeriode !== 'mois' || filterAssigne !== 'all') && (
-          <button onClick={() => { setSearch(''); setFilterStatut('all'); setFilterPeriode('mois'); setFilterDateExacte(''); setFilterMois(new Date().getMonth()); setFilterAnnee(new Date().getFullYear()); setFilterAssigne('all'); }} className="text-[12px] font-semibold text-[#8A9BB5] hover:text-[#374151] self-start md:self-auto">Effacer</button>
+        {(search || filterStatut !== 'all' || filterPeriode !== 'mois' || filterAssigne !== 'all' || filterPaiement !== 'all' || filterFacture !== 'all') && (
+          <button onClick={() => { setSearch(''); setFilterStatut('all'); setFilterPeriode('mois'); setFilterDateExacte(''); setFilterMois(new Date().getMonth()); setFilterAnnee(new Date().getFullYear()); setFilterAssigne('all'); setFilterPaiement('all'); setFilterFacture('all'); }} className="text-[12px] font-semibold text-[#8A9BB5] hover:text-[#374151] self-start md:self-auto">Effacer</button>
         )}
       </div>
 
       <div className="rounded-2xl border-2 border-[#E2E8F0] overflow-x-auto shadow-sm bg-white [scrollbar-width:none] [&::-webkit-scrollbar]:hidden min-h-[50vh]">
-        <table className="w-full min-w-[720px]" style={{ borderCollapse: 'collapse' }}>
+        <table className="w-full min-w-[980px]" style={{ borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ background: '#F8FAFC' }}>
-              {['N°', 'Type', 'Source', 'Entreprise', 'Client', 'Responsable', 'Date', 'Statut'].map((h) => (
+              {['N°', 'Type', 'Source', 'Entreprise', 'Client', 'Responsable', 'Date', 'Total', 'Paiement', 'Facture', 'Statut'].map((h) => (
                 <th key={h} className="px-5 py-3.5 text-left font-semibold text-[#8A9BB5] uppercase tracking-wider" style={{ fontSize: 11 }}>{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={8} className="px-6 py-14 text-center text-[13px] text-[#8A9BB5]">Chargement…</td></tr>
+              <tr><td colSpan={11} className="px-6 py-14 text-center text-[13px] text-[#8A9BB5]">Chargement…</td></tr>
             ) : filtered.length === 0 ? (
-              <tr><td colSpan={8} className="px-6 py-14 text-center text-[13px] text-[#8A9BB5]">Aucune demande trouvée</td></tr>
+              <tr><td colSpan={11} className="px-6 py-14 text-center text-[13px] text-[#8A9BB5]">Aucune demande trouvée</td></tr>
             ) : filtered.map((row, i) => {
               const isEnAttente = row.statut === 'En attente';
               const isArchived  = ARCHIVED.includes(row.statut);
@@ -1200,6 +1248,9 @@ function RequestsPageInner() {
                       : <span className="text-[#CBD5E1] italic">—</span>}
                   </td>
                   <td className="px-5 py-3.5 text-[13px] text-[#8A9BB5] tabular-nums">{row.date}</td>
+                  <td className="px-5 py-3.5 text-[13px] font-semibold text-[#0F172A] tabular-nums whitespace-nowrap">{row.montant}</td>
+                  <td className="px-5 py-3.5 text-[13px] text-[#374151] whitespace-nowrap">{row.paymentMethod ?? <span className="text-[#CBD5E1]">—</span>}</td>
+                  <td className="px-5 py-3.5 text-[13px] whitespace-nowrap">{row.invoiceNumber?.trim() ? <span className="font-semibold text-[#166534]">Avec</span> : <span className="text-[#8A9BB5]">Sans</span>}</td>
                   <td className="px-5 py-3.5"><StatusPill status={row.statut} /></td>
                 </tr>
               );
