@@ -11,3 +11,16 @@ export function canonPaiement(v: string | null | undefined): string | null {
   if (!v) return null;
   return PAR_CLE.get(sansAccent(v)) ?? null;
 }
+
+// Numéro de facture : seul un numéro commençant par « F » (F004-2026…) est une vraie facture.
+// « BL… » = bon de livraison, ou tout autre format → compte comme SANS facture.
+export function aUneFacture(invoiceNumber: string | null | undefined): boolean {
+  return /^f/i.test((invoiceNumber ?? '').trim());
+}
+
+// Mode de paiement à afficher/filtrer d'une demande : un numéro en « BL » (bon de livraison)
+// vaut toujours « Espèces » ; sinon le mode enregistré, normalisé.
+export function paiementDe(r: { paymentMethod?: string | null; invoiceNumber?: string | null }): string | null {
+  if (/^bl/i.test((r.invoiceNumber ?? '').trim())) return 'Espèces';
+  return canonPaiement(r.paymentMethod);
+}

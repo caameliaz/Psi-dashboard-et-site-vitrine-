@@ -1,4 +1,4 @@
-import { canonPaiement } from '@/lib/payment-method';
+import { paiementDe, aUneFacture } from '@/lib/payment-method';
 import type { RequestDetail } from '@/components/ui/RequestPanel';
 import { styleBandRow, styleHeaderRow, styleDataRows, styleSectionTitle, styleFiltersLine, styleTotalHighlight } from '@/lib/xlsx-style';
 
@@ -64,8 +64,8 @@ export async function exportTableauExcel(
       push([
         r.ref, r.type, dateStr, r.client, r.entreprise || '—', r.telephone || '—',
         r.wilaya || '—', r.commune || '—', r.statut,
-        canonPaiement(r.paymentMethod) ?? '—',
-        r.invoiceNumber?.trim() ? 'Avec' : 'Sans',
+        paiementDe(r) ?? '—',
+        aUneFacture(r.invoiceNumber) ? 'Avec' : 'Sans',
         r.vatEnabled ? 'Oui' : 'Non',
         l.categorie || '—', l.designation || '—',
         l.metrage != null ? l.metrage : '—',
