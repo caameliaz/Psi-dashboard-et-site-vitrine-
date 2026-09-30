@@ -51,6 +51,9 @@ const SOURCE_COLOR: Record<'SITE' | 'OTHER', { bg: string; color: string; border
 // Palette diagrammes — sobre & pro, sans vert ni bleu : violet grisé, ambre, terracotta, ardoise, taupe, mauve
 const TOP_COLORS = ['#7C6BAF', '#E0A458', '#C97B63', '#5E6B7A', '#B0A38F', '#8A6FA8'];
 
+// Toutes les références sont affichées : au-delà de la palette, teintes sobres générées
+const couleurTop = (i: number) => TOP_COLORS[i] ?? `hsl(${(i * 47 + 20) % 360}, 28%, 56%)`;
+
 function SourceChart({ stats }: { stats: { site: number; manuel: number } }) {
   const total = (stats.site ?? 0) + (stats.manuel ?? 0);
   if (total === 0) return <p className="text-[12px] text-[#ABBED1]">Aucune donnée</p>;
@@ -85,7 +88,7 @@ function SourceChart({ stats }: { stats: { site: number; manuel: number } }) {
   );
 }
 
-function PieChart({ data }: { data: { ref: string; qty: number; label: string; color: string }[] }) {
+function PieChart({ data }: { data: { ref: string; qty: number; label: string; color: string; horsCatalogue?: boolean }[] }) {
   const [hovered, setHovered] = useState<number | null>(null);
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
   // Largeur du conteneur du graphique — sert à savoir si la carte flottante (tooltip) a la
@@ -106,7 +109,7 @@ function PieChart({ data }: { data: { ref: string; qty: number; label: string; c
         pct: 100,
       }]
     : data.map((d) => {
-        const sweep = (d.qty / total) * (2 * Math.PI) - gap;
+        const sweep = Math.max((d.qty / total) * (2 * Math.PI) - gap, 0.004);
         const x1 = cx + R * Math.cos(angle);
         const y1 = cy + R * Math.sin(angle);
         angle += sweep + gap;
@@ -152,7 +155,7 @@ function PieChart({ data }: { data: { ref: string; qty: number; label: string; c
       </svg>
 
       {/* Légende — empilées verticalement, texte plus grand sur mobile */}
-      <div className="flex flex-col gap-2 md:gap-4 w-full md:w-auto">
+      <div className={`flex flex-col w-full md:w-auto max-h-[230px] overflow-y-auto pr-1 ${slices.length > 6 ? 'gap-1.5 md:gap-2' : 'gap-2 md:gap-4'}`}>
         {slices.map((s, i) => (
           <div key={i} className="flex items-center gap-2 md:gap-2.5 cursor-pointer"
             onMouseEnter={() => setHovered(i)} onMouseLeave={() => setHovered(null)}
@@ -177,6 +180,7 @@ function PieChart({ data }: { data: { ref: string; qty: number; label: string; c
           </div>
           <p className="text-[16px] md:text-[18px] font-extrabold leading-none" style={{ color: hov.color }}>{hov.pct}%</p>
           <p className="text-[9px] md:text-[10px] text-[#8A9BB5] mt-1">{hov.qty} unités</p>
+          {hov.horsCatalogue && <p className="text-[9px] md:text-[10px] font-semibold text-[#B45309] mt-0.5">Hors catalogue</p>}
         </div>
       )}
     </div>
@@ -245,7 +249,7 @@ export default function DashboardPage() {
   const [goalsOpen, setGoalsOpen] = useState(false);
   const [pdfOpen, setPdfOpen] = useState(false);
   const [todayStats, setTodayStats] = useState({ commandes: 0, attente: 0, confirmes: 0 });
-  const [topProduits, setTopProduits] = useState<{ ref: string; qty: number; label: string; color: string }[]>([]);
+  const [topProduits, setTopProduits] = useState<{ ref: string; qty: number; label: string; color: string; horsCatalogue?: boolean }[]>([]);
   const [sourceStats, setSourceStats] = useState({ site: 0, manuel: 0 });
   const [evolution, setEvolution] = useState(0);
   const [topWilayas, setTopWilayas] = useState<{ wilaya: string; count: number }[]>([]);
@@ -259,7 +263,7 @@ export default function DashboardPage() {
   const [allUsers, setAllUsers] = useState<{ id: string; name: string }[]>([]);
 
   // États filtrés pour chaque container (indépendants)
-  const [filteredTopProduits, setFilteredTopProduits] = useState<{ ref: string; qty: number; label: string; color: string }[] | null>(null);
+  const [filteredTopProduits, setFilteredTopProduits] = useState<{ ref: string; qty: number; label: string; color: string; horsCatalogue?: boolean }[] | null>(null);
   const [filteredAnalyticsData, setFilteredAnalyticsData] = useState<{ monthly: { total: number; byCategory: { category: string; views: number; color: string }[] }; weekly: { week: string; categories: { category: string; views: number; color: string }[] }[] } | null>(null);
   const [filteredCommandesMois, setFilteredCommandesMois] = useState<number | null>(null);
   const [filteredDevisMois, setFilteredDevisMois] = useState<number | null>(null);
@@ -272,6 +276,8 @@ export default function DashboardPage() {
   const [filteredConversionRates, setFilteredConversionRates] = useState<{ label: string; rate: number }[] | null>(null);
 
   // Date filtering states for each container
+  // Camembert « Top produits » : true = toutes les ventes depuis toujours (bouton « Tout »)
+  const [topProduitsTout, setTopProduitsTout] = useState(false);
   const [topProduitsDateRange, setTopProduitsDateRange] = useState<{ start: string | null; end: string | null }>({ start: null, end: null });
   const [visitesDateRange, setVisitesDateRange] = useState<{ start: string | null; end: string | null }>({ start: null, end: null });
   const [siteModalOpen, setSiteModalOpen] = useState(false);
@@ -337,8 +343,8 @@ export default function DashboardPage() {
           const res = await fetch(baseUrl, { credentials: 'include' });
           if (res.ok) {
             const data = await res.json();
-            const filtered = (data.topProduits as { ref: string; qty: number; label: string }[]).map((p, i) => ({
-              ...p, color: TOP_COLORS[i] ?? '#8A9BB5',
+            const filtered = (data.topProduits as { ref: string; qty: number; label: string; horsCatalogue?: boolean }[]).map((p, i) => ({
+              ...p, color: couleurTop(i),
             }));
             console.log('📊 Données filtrées topProduits:', filtered);
             setFilteredTopProduits(filtered);
@@ -447,8 +453,8 @@ export default function DashboardPage() {
         setObjectifs(data.objectifs ?? { global: 0, byUser: {} });
         setVentesTotal(data.ventesTotal ?? null);
         setTopProduits(
-          (data.topProduits as { ref: string; qty: number; label: string }[]).map((p, i) => ({
-            ...p, color: TOP_COLORS[i] ?? '#8A9BB5',
+          (data.topProduits as { ref: string; qty: number; label: string; horsCatalogue?: boolean }[]).map((p, i) => ({
+            ...p, color: couleurTop(i),
           }))
         );
         const allDetails = [
@@ -516,6 +522,29 @@ export default function DashboardPage() {
 
   const evolutionCommandesAffichee = filteredEvolutionCommandes ?? evolution;
   const evolutionDevisAffichee = filteredEvolutionDevis ?? stats.evolutionDevis;
+
+  // Bouton « Tout » du camembert Top produits : toutes les ventes depuis toujours. Re-clic = retour au mois.
+  const toutBtn = (
+    <button
+      onClick={() => {
+        if (topProduitsTout) {
+          setTopProduitsTout(false);
+          fetchData(false, { containerId: 'topProduits', startDate: null, endDate: null });
+        } else {
+          setTopProduitsTout(true);
+          const d = new Date();
+          const fin = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+          fetchData(false, { containerId: 'topProduits', startDate: '2000-01-01', endDate: fin });
+        }
+      }}
+      className={`px-3 py-1.5 rounded-lg border text-[11px] font-semibold transition-colors shadow-sm ${
+        topProduitsTout ? 'bg-[#4CAF4F] border-[#4CAF4F] text-white' : 'bg-white border-[#E2E8F0] text-[#374151] hover:bg-[#F8FAFC]'
+      }`}
+      title="Toutes les ventes depuis toujours"
+    >
+      Tout
+    </button>
+  );
 
   const SortIcon = ({ col }: { col: SortKey }) => (
     <span className="ml-1 inline-block opacity-40 text-[10px]">{sortKey === col ? (sortAsc ? '▲' : '▼') : '⇅'}</span>
@@ -666,11 +695,15 @@ export default function DashboardPage() {
         {/* Camembert — Top produits */}
         <div className="bg-white rounded-2xl border border-[#E2E8F0] p-3.5 shadow-sm flex flex-col">
           <div className="flex items-center justify-between mb-1">
-            <p className="text-[10px] font-bold text-[#ABBED1] uppercase tracking-widest">Top produits</p>
-            <DateRangePicker onDateChange={(start, end) => {
-              setTopProduitsDateRange({ start, end });
-              fetchData(false, { containerId: 'topProduits', startDate: start, endDate: end });
-            }} />
+            <p className="text-[10px] font-bold text-[#ABBED1] uppercase tracking-widest whitespace-nowrap truncate min-w-0">Top produits</p>
+            <div className="flex items-center gap-1.5 flex-shrink-0">
+              {toutBtn}
+              <DateRangePicker onDateChange={(start, end) => {
+                setTopProduitsTout(false);
+                setTopProduitsDateRange({ start, end });
+                fetchData(false, { containerId: 'topProduits', startDate: start, endDate: end });
+              }} />
+            </div>
           </div>
           <p className="text-[12px] font-semibold text-[#0F172A] mb-2">Par produit</p>
           {loading ? <p className="text-[11px] text-[#8A9BB5] py-4">Chargement…</p> : (
@@ -749,15 +782,19 @@ export default function DashboardPage() {
         {/* Camembert — Top produits */}
         <div className="bg-white rounded-2xl border border-[#E2E8F0] p-5 shadow-sm flex flex-col">
           <div className="flex items-center justify-between mb-1">
-            <p className="text-[11px] font-bold text-[#ABBED1] uppercase tracking-widest">Top produits {filteredTopProduits === null && 'ce mois'}</p>
-            <DateRangePicker onDateChange={(start, end) => {
-              setTopProduitsDateRange({ start, end });
-              fetchData(false, { containerId: 'topProduits', startDate: start, endDate: end });
-            }} />
+            <p className="text-[11px] font-bold text-[#ABBED1] uppercase tracking-widest whitespace-nowrap truncate min-w-0">Top produits {filteredTopProduits === null && 'ce mois'}</p>
+            <div className="flex items-center gap-1.5 flex-shrink-0">
+              {toutBtn}
+              <DateRangePicker onDateChange={(start, end) => {
+                setTopProduitsTout(false);
+                setTopProduitsDateRange({ start, end });
+                fetchData(false, { containerId: 'topProduits', startDate: start, endDate: end });
+              }} />
+            </div>
           </div>
           <p className="text-[13px] font-semibold text-[#0F172A] mb-4">Par produit</p>
-          {loading ? <p className="text-[12px] text-[#8A9BB5] py-4">Chargement…</p> : (
-            <div className="flex items-center justify-center flex-1">
+          {loading ? <p className="text-[12px] text-[#8A9BB5] py-4 min-h-[190px]">Chargement…</p> : (
+            <div className="flex items-center justify-center flex-1 min-h-[190px]">
               <PieChart data={filteredTopProduits || topProduits} />
             </div>
           )}

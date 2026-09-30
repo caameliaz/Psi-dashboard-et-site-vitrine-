@@ -80,7 +80,8 @@ export async function GET(request: NextRequest) {
       attenteDevis,
       confirmesCommandes,
       confirmesDevis,
-      topProduits,
+      topProduitsCommandes,
+      topProduitsDevis,
       sourceOrders,
       sourceQuotes,
       ordersByWilaya,
@@ -123,13 +124,17 @@ export async function GET(request: NextRequest) {
       // Confirmés (statut VALIDE) : commandes + devis
       prisma.order.count({ where: { status: 'VALIDE' } }),
       prisma.quote.count({ where: { status: 'VALIDE' } }),
-      // Top produits dans l'intervalle filtré
+      // Top produits dans l'intervalle filtré — commandes (le top 6 est fait après fusion avec les devis)
       prisma.orderItem.groupBy({
-        by: ['productId'],
+        by: ['productId', 'description'],
         where: { order: { createdAt: { gte: startOfMonth, lte: endDate }, status: { notIn: ['ANNULE', 'RETOURNE'] } } },
         _sum: { quantity: true },
-        orderBy: { _sum: { quantity: 'desc' } },
-        take: 6,
+      }),
+      // … et devis (ce sont aussi des ventes), mêmes règles : hors annulés / retournés
+      prisma.quoteItem.groupBy({
+        by: ['productId', 'description'],
+        where: { quote: { createdAt: { gte: startOfMonth, lte: endDate }, status: { notIn: ['ANNULE', 'RETOURNE'] } } },
+        _sum: { quantity: true },
       }),
       prisma.order.groupBy({ by: ['source'], _count: { id: true } }),
       prisma.quote.groupBy({ by: ['source'], _count: { id: true } }),
@@ -185,40 +190,39 @@ export async function GET(request: NextRequest) {
       }),
     ]);
 
-    // Résoudre refs + catégories pour topProduits
-    const productIds = topProduits.map((g) => g.productId).filter((id): id is string => id != null);
-    const products = await prisma.product.findMany({
-      where: { id: { in: productIds } },
-      select: { id: true, reference: true, metrage: true, category: { select: { id: true, name: true } } },
-    });
+    // Fusion commandes + devis, UNE PART PAR RÉFÉRENCE (le métrage est facultatif → jamais affiché
+    // ni séparé : « 80/80 » reste « 80/80 » quel que soit le rouleau). Tout est renvoyé, pas seulement
+    // un top 6. Lignes HORS catalogue (devis importés, ex. Moon Mobil : « 57× 69 (60 metres) ») :
+    // description normalisée (× → /, métrage retiré) pour retomber sur la référence du catalogue ;
+    // si cette référence n'existe pas au catalogue, la part est marquée « hors catalogue ».
+    const refLibre = (d: string) =>
+      d.replace(/×/g, '/').replace(/\s*\(\s*\d+(?:[.,]\d+)?\s*m(?:[eè]tres?)?\s*\)\s*/gi, ' ')
+        .replace(/\s*\/\s*/g, '/').replace(/\s+/g, ' ').trim();
+    const cle = (l: string) => l.toLowerCase().replace(/\s+/g, '');
+
+    const productIds = [...new Set([...topProduitsCommandes, ...topProduitsDevis].map((g) => g.productId).filter((id): id is string => id != null))];
+    const [products, catalogue] = await Promise.all([
+      prisma.product.findMany({ where: { id: { in: productIds } }, select: { id: true, reference: true } }),
+      prisma.product.findMany({ select: { reference: true } }),
+    ]);
     const productMap = Object.fromEntries(products.map((p) => [p.id, p]));
+    const refsCatalogue = new Set(catalogue.map((p) => cle(p.reference)));
 
-    // Construire top par catégorie : meilleur produit par catégorie (max 6 catégories)
-    const topWithMeta = topProduits.filter((g) => g.productId != null).map((g) => {
-      const p = productMap[g.productId as string];
-      const ref = p?.reference ?? 'Inconnu';
-      return {
-        ref: p?.metrage != null ? `${ref} · ${p.metrage} m` : ref,
-        qty: g._sum.quantity ?? 0,
-        categoryId: p?.category?.id ?? null,
-        categoryName: p?.category?.name ?? 'Sans catégorie',
-      };
-    });
-
-    const categories = [...new Set(topWithMeta.map((t) => t.categoryId))];
-    let topProduitsFinal: { ref: string; qty: number; label: string }[];
-
-    if (categories.length <= 2) {
-      // Fallback : top 6 produits en général
-      topProduitsFinal = topWithMeta.slice(0, 6).map((t) => ({ ref: t.ref, qty: t.qty, label: t.ref }));
-    } else {
-      // Un meilleur produit par catégorie (déjà trié par qty desc)
-      const seen = new Set<string | null>();
-      topProduitsFinal = topWithMeta
-        .filter((t) => { if (seen.has(t.categoryId)) return false; seen.add(t.categoryId); return true; })
-        .slice(0, 6)
-        .map((t) => ({ ref: t.ref, qty: t.qty, label: t.categoryName }));
+    const parRef = new Map<string, { ref: string; qty: number }>();
+    for (const g of [...topProduitsCommandes, ...topProduitsDevis]) {
+      const ref = g.productId != null
+        ? (productMap[g.productId]?.reference ?? 'Inconnu')
+        : g.description?.trim() ? refLibre(g.description) : null;
+      if (!ref) continue;
+      const k = cle(ref);
+      const cur = parRef.get(k) ?? { ref, qty: 0 };
+      cur.qty += g._sum.quantity ?? 0;
+      parRef.set(k, cur);
     }
+
+    const topProduitsFinal: { ref: string; qty: number; label: string; horsCatalogue: boolean }[] =
+      [...parRef.entries()].sort((a, b) => b[1].qty - a[1].qty)
+        .map(([k, t]) => ({ ref: t.ref, qty: t.qty, label: t.ref, horsCatalogue: !refsCatalogue.has(k) }));
 
     // Source : tout ce qui n'est pas SITE → Manuel
     const sourceCounts = { site: 0, manuel: 0 };
