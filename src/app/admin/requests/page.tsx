@@ -1023,14 +1023,20 @@ function RequestsPageInner() {
             </button>
           )}
           <button
-            onClick={() => {
-              const onglet = activeTab === 'devis' ? 'Devis' : activeTab === 'commandes' ? 'Commandes' : 'Commandes + devis';
-              // Même période / responsable / recherche / onglet que la page ; statut ignoré (Livré seulement)
-              const filtres = activeFilters.filter((f) => f !== (filterStatut === 'all' ? 'Tous les statuts' : filterStatut));
-              exportVentesExcel(sorted.filter(matchHorsStatut), [onglet, ...filtres].join(' | '));
+            onClick={async () => {
+              // Le Rapport ignore TOUS les filtres de la page (période, onglet, responsable…) :
+              // il recharge tout l'historique (commandes + devis) et ne garde que les « Livré ».
+              try {
+                const [ordRes, quoRes] = await Promise.all([fetch('/api/orders'), fetch('/api/quotes')]);
+                if (!ordRes.ok || !quoRes.ok) throw new Error('fetch');
+                const [ords, quos] = await Promise.all([ordRes.json(), quoRes.json()]);
+                exportVentesExcel([...ords.map(orderToDetail), ...quos.map(quoteToDetail)], "Aucun filtre — tout l'historique");
+              } catch {
+                alert("Le rapport n'a pas pu être généré (chargement des données échoué). Réessayez.");
+              }
             }}
             className="hidden md:flex items-center gap-1.5 px-3 py-2 rounded-xl text-[13px] font-semibold border border-[#E2E8F0] text-[#374151] hover:bg-[#F8FAFC] hover:border-[#4CAF4F] hover:text-[#4CAF4F] transition-colors"
-            title="Rapport des ventes livrées (commandes + devis) : par produit et par mois, selon les filtres de la page">
+            title="Rapport de toutes les ventes livrées (commandes + devis), tout l'historique : par produit et par mois. Ignore les filtres de la page.">
             <svg width={14} height={14} fill="none" viewBox="0 0 24 24">
               <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6z" stroke="currentColor" strokeWidth="1.8"/>
               <path d="M14 2v6h6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
