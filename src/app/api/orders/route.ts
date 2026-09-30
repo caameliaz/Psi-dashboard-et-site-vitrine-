@@ -52,7 +52,7 @@ export async function GET(request: NextRequest) {
         client: { include: { phones: true } },
         items: {
           include: {
-            product: { include: { category: true } },
+            product: { include: { category: { select: { id: true, name: true } } } },
             purchaseListItem: { select: { status: true } },
             productionListItem: { select: { status: true } },
           },
