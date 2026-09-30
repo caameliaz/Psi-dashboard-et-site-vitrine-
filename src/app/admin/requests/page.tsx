@@ -815,6 +815,14 @@ function RequestsPageInner() {
   };
   const filtered = sorted.filter((r) => matchHorsStatut(r) && (filterStatut === 'all' || r.statut === filterStatut));
 
+  // Montant total des demandes affichées (selon TOUS les filtres). Annulé / Retourné exclus,
+  // comme dans l'export Excel ; « Sur devis » / « — » (pas de prix) comptent 0.
+  const montantToNum = (m: string) =>
+    Number(String(m).replace(/\s/g, '').replace('DA', '').replace('TTC', '').replace(',', '.')) || 0;
+  const comptees = filtered.filter((r) => r.statut !== 'Annulé' && r.statut !== 'Retourné');
+  const totalMontant = comptees.reduce((acc, r) => acc + montantToNum(r.montant), 0);
+  const filtreActif = !!search || filterStatut !== 'all' || filterPeriode !== 'mois' || filterAssigne !== 'all' || filterPaiement.length > 0 || filterFacture !== 'all';
+
   const handleStatusChange = async (ref: string, newStatut: string, force = false) => {
     const item = selected ?? rawItems.find((r) => r.ref === ref || r.id === ref);
     if (!item?.id) return;
@@ -990,6 +998,16 @@ function RequestsPageInner() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          {/* Montant total selon les filtres — admins uniquement */}
+          {isAdmin && !loading && (
+            <div className={`flex flex-col items-end px-3 py-1.5 rounded-xl border bg-white leading-tight ${filtreActif ? 'border-[#4CAF4F]' : 'border-[#E2E8F0]'}`}
+              title="Somme des montants des demandes affichées (annulées et retournées exclues)">
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-[#8A9BB5]">Montant</span>
+              <span className="text-[15px] md:text-[16px] font-extrabold text-[#0F172A] tabular-nums whitespace-nowrap">
+                {totalMontant.toLocaleString('fr-FR', { maximumFractionDigits: 2 })} DA
+              </span>
+            </div>
+          )}
           {/* "Mes commandes" — mobile uniquement ici (desktop : reste dans la ligne de
               filtres, cf. plus bas). Compact : bordure fine, texte réduit. */}
           {isAdmin && currentUserId && (
