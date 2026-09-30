@@ -1089,12 +1089,14 @@ function RequestsPageInner() {
           <AdminSelect
             className="flex-1 min-w-0 md:min-w-[150px] md:flex-none"
             value={filterStatut}
+            highlight={filterStatut !== 'all'}
             onChange={setFilterStatut}
             options={[{ value: 'all', label: 'Statut' }, ...allStatuts.map((s) => ({ value: s, label: s }))]}
           />
           <AdminSelect
             className="flex-1 min-w-0 md:min-w-[150px] md:flex-none"
             value={filterPeriode}
+            highlight={filterPeriode !== 'mois'}
             onChange={setFilterPeriode}
             options={[
               { value: '7j',    label: '7 derniers jours' },
@@ -1137,6 +1139,7 @@ function RequestsPageInner() {
           <AdminSelect
             className="flex-1 min-w-0 md:min-w-[150px] md:flex-none"
             value={filterAssigne}
+            highlight={filterAssigne !== 'all'}
             onChange={setFilterAssigne}
             options={[
               { value: 'all',  label: 'Responsable' },
@@ -1161,6 +1164,7 @@ function RequestsPageInner() {
           <AdminSelect
             className="hidden md:block flex-1 min-w-0 md:min-w-[150px] md:flex-none"
             value={filterFacture}
+            highlight={filterFacture !== 'all'}
             onChange={setFilterFacture}
             options={[
               { value: 'all',  label: 'Facture' },

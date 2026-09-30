@@ -9,9 +9,11 @@ interface AdminSelectProps {
   onChange: (value: string) => void;
   options: Option[];
   className?: string;
+  // Filtre actif (≠ valeur par défaut) : bordure verte pour qu'on voie qu'il restreint la liste
+  highlight?: boolean;
 }
 
-export function AdminSelect({ value, onChange, options, className = '' }: AdminSelectProps) {
+export function AdminSelect({ value, onChange, options, className = '', highlight = false }: AdminSelectProps) {
   const [open, setOpen] = useState(false);
   const [maxHeight, setMaxHeight] = useState(600);
   const ref = useRef<HTMLDivElement>(null);
@@ -67,7 +69,7 @@ export function AdminSelect({ value, onChange, options, className = '' }: AdminS
         } ${
           open
             ? 'border-[#4CAF4F] ring-[3px] ring-[#4CAF4F]/15'
-            : 'border-[#E2E8F0] hover:border-[#ABBED1]'
+            : highlight ? 'border-[#4CAF4F]' : 'border-[#E2E8F0] hover:border-[#ABBED1]'
         }`}
       >
         <span className="truncate min-w-0">{selected?.label ?? value}</span>
