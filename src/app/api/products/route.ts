@@ -20,10 +20,18 @@ export async function GET(request: NextRequest) {
       // Site public : actif ET visible sur le site — deux cases indépendantes
       // (un produit peut être actif/géré au dashboard sans être affiché en vitrine).
       where: all ? undefined : { active: true, visibleOnSite: true },
+      // `photo` (base64, plusieurs dizaines de Ko/produit) n'est affiché nulle part dans
+      // l'app — ni ici ni dans category imbriquée (les photos de catégorie viennent
+      // toujours d'un fetch séparé sur /api/categories) — donc jamais servi ici : c'était
+      // la 1ère cause du dépassement de quota Fast Origin Transfer Vercel (chaque appel
+      // renvoyait la photo de TOUS les produits, sur chaque page admin/publique).
+      // `recipeItems` (coût/recette matière) n'est utile qu'aux 2 pages admin qui gèrent
+      // les recettes (?all=true) — jamais exposé publiquement (donnée sensible en plus).
+      omit: { photo: true },
       include: {
-        category: true,
+        category: { omit: { photo: true } },
         customFields: { include: { definition: true } },
-        recipeItems: { include: { rawMaterial: true } },
+        ...(all ? { recipeItems: { include: { rawMaterial: true } } } : {}),
       },
       orderBy: { createdAt: 'desc' },
     });

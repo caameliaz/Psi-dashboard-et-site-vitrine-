@@ -33,7 +33,12 @@ async function getProducts(): Promise<Prod[]> {
     const products = await prisma.product.findMany({
       // Actif ET visible sur le site — indépendant l'un de l'autre (cf. Product.visibleOnSite).
       where: { active: true, visibleOnSite: true },
-      include: { category: true },
+      // `photo` (produit ET catégorie imbriquée) n'est jamais affiché nulle part côté produit —
+      // seule `getCategories()` ci-dessus sert la photo de catégorie, une seule fois. L'inclure
+      // ici la dupliquait dans le HTML initial (SSR) pour CHAQUE produit, à chaque visite de
+      // la page d'accueil — grosse partie du dépassement de quota Fast Origin Transfer Vercel.
+      omit: { photo: true },
+      include: { category: { omit: { photo: true } } },
       orderBy: { createdAt: 'desc' },
     });
     return products as any;
