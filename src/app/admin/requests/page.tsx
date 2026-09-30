@@ -724,7 +724,9 @@ function RequestsPageInner() {
   useEffect(() => { fetchAll(); }, [fetchAll]);
   
   // Rafraîchissement toutes les 20 s, en pause quand l'onglet est caché
-  usePolling(() => fetchAll(true), 20000);
+  // Pas de rafraîchissement auto sur « Tout afficher » : tout l'historique pèse ~11 Mo par requête
+  // (quota de transfert Vercel) — on rafraîchit à la main / au changement de filtre.
+  usePolling(() => fetchAll(true), 20000, filterPeriode !== 'tout');
 
   // ── Gestion du bouton retour du navigateur pour fermer le panneau de détail ──
   useEffect(() => {
