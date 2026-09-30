@@ -985,6 +985,17 @@ function RequestsPageInner() {
     ...(filterPaiement.length === 0 ? [] : [`Paiement : ${filterPaiement.map((v) => v === 'none' ? 'non renseigné' : v).join(', ')}`]),
   ];
 
+  // Case « Montant » (fond transparent, cadre gris ; vert si un filtre est actif) — admins uniquement
+  const montantBox = (
+    <div className={`flex flex-col items-end px-3 py-1.5 rounded-xl border bg-transparent leading-tight ${filtreActif ? 'border-[#4CAF4F]' : 'border-[#CBD5E1]'}`}
+      title="Somme des montants des demandes affichées (annulées et retournées exclues)">
+      <span className="text-[10px] font-semibold uppercase tracking-wider text-[#8A9BB5]">Montant</span>
+      <span className="text-[15px] md:text-[16px] font-extrabold text-[#0F172A] tabular-nums whitespace-nowrap">
+        {totalMontant.toLocaleString('fr-FR', { maximumFractionDigits: 2 })} DA
+      </span>
+    </div>
+  );
+
   return (
     <div className="w-full max-w-full overflow-x-hidden">
       {/* Titre + boutons export/création en haut à droite. Sur mobile : "Mes commandes"
@@ -998,16 +1009,8 @@ function RequestsPageInner() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {/* Montant total selon les filtres — admins uniquement */}
-          {isAdmin && !loading && (
-            <div className={`flex flex-col items-end px-3 py-1.5 rounded-xl border bg-white leading-tight ${filtreActif ? 'border-[#4CAF4F]' : 'border-[#E2E8F0]'}`}
-              title="Somme des montants des demandes affichées (annulées et retournées exclues)">
-              <span className="text-[10px] font-semibold uppercase tracking-wider text-[#8A9BB5]">Montant</span>
-              <span className="text-[15px] md:text-[16px] font-extrabold text-[#0F172A] tabular-nums whitespace-nowrap">
-                {totalMontant.toLocaleString('fr-FR', { maximumFractionDigits: 2 })} DA
-              </span>
-            </div>
-          )}
+          {/* Montant total (mobile) : ordinateur → dans la ligne des filtres, à droite */}
+          {isAdmin && !loading && <div className="md:hidden">{montantBox}</div>}
           {/* "Mes commandes" — mobile uniquement ici (desktop : reste dans la ligne de
               filtres, cf. plus bas). Compact : bordure fine, texte réduit. */}
           {isAdmin && currentUserId && (
@@ -1225,6 +1228,7 @@ function RequestsPageInner() {
               </button>
             </div>
           )}
+          {isAdmin && !loading && <div className="hidden md:block ml-auto flex-shrink-0">{montantBox}</div>}
         </div>
         {(search || filterStatut !== 'all' || filterPeriode !== 'mois' || filterAssigne !== 'all' || filterPaiement.length > 0 || filterFacture !== 'all') && (
           <button onClick={() => { setSearch(''); setFilterStatut('all'); setFilterPeriode('mois'); setFilterDateExacte(''); setFilterMois(new Date().getMonth()); setFilterAnnee(new Date().getFullYear()); setFilterAssigne('all'); setFilterPaiement([]); setFilterFacture('all'); }} className="text-[12px] font-semibold text-[#8A9BB5] hover:text-[#374151] self-start md:self-auto md:order-2">Effacer</button>
