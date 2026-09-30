@@ -6,6 +6,7 @@ import { StatusPill } from '@/components/ui/StatusPill';
 import { Modal } from '@/components/ui/Modal';
 import { RequestPanel, type RequestDetail } from '@/components/ui/RequestPanel';
 import { AdminSelect } from '@/components/ui/AdminSelect';
+import { PAYMENT_METHODS, canonPaiement } from '@/lib/payment-method';
 import { AdminMultiSelect } from '@/components/ui/AdminMultiSelect';
 import { WilayaSelect } from '@/components/ui/WilayaSelect';
 import { CommuneSelect } from '@/components/ui/CommuneSelect';
@@ -35,7 +36,7 @@ function useLockBodyScroll() {
 const ARCHIVED = ['Livré', 'Annulé'];
 
 // Modes de paiement proposés à la validation d'une commande / d'un devis
-export const PAYMENT_METHODS = ['Espèces', 'Chèque', 'Virement', 'Versement', 'À crédit', 'Dépensé', 'Offert'];
+export { PAYMENT_METHODS };
 
 function getSourceLabel(src: string) { return src === 'SITE' ? 'Site web' : 'Manuel'; }
 const SOURCE_COLOR: Record<'SITE' | 'OTHER', { bg: string; color: string; border: string }> = {
@@ -807,7 +808,7 @@ function RequestsPageInner() {
       return !periodeStart || jour >= periodeStart;
     })();
     const matchPaiement = filterPaiement.length === 0
-      || (r.paymentMethod ? filterPaiement.includes(r.paymentMethod) : filterPaiement.includes('none'));
+      || filterPaiement.includes(canonPaiement(r.paymentMethod) ?? 'none');
     const aFacture = !!r.invoiceNumber?.trim();
     const matchFacture = filterFacture === 'all' || (filterFacture === 'avec' ? aFacture : !aFacture);
     return matchSearch && matchAssigne && matchPeriode && matchPaiement && matchFacture;
@@ -1250,7 +1251,7 @@ function RequestsPageInner() {
                   </td>
                   <td className="px-5 py-3.5 text-[13px] text-[#8A9BB5] tabular-nums">{row.date}</td>
                   <td className="px-5 py-3.5 text-[13px] font-semibold text-[#0F172A] tabular-nums whitespace-nowrap">{row.montant}</td>
-                  <td className="px-5 py-3.5 text-[13px] text-[#374151] whitespace-nowrap">{row.paymentMethod ?? <span className="text-[#CBD5E1]">—</span>}</td>
+                  <td className="px-5 py-3.5 text-[13px] text-[#374151] whitespace-nowrap">{canonPaiement(row.paymentMethod) ?? <span className="text-[#CBD5E1]">—</span>}</td>
                   <td className="px-5 py-3.5 text-[13px] whitespace-nowrap">{row.invoiceNumber?.trim() ? <span className="font-semibold text-[#166534]">Avec</span> : <span className="text-[#8A9BB5]">Sans</span>}</td>
                   <td className="px-5 py-3.5"><StatusPill status={row.statut} /></td>
                 </tr>
