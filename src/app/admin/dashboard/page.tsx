@@ -119,6 +119,8 @@ function PieChart({ data }: { data: { ref: string; qty: number; label: string; c
         return { ...d, path: `M${x1},${y1} A${R},${R} 0 ${large},1 ${x2},${y2}`, pct: Math.round((d.qty / total) * 100) };
       });
   const hov = hovered !== null ? slices[hovered] : null;
+  const DUREE_ANIM = 0.9; // secondes pour tracer le tour complet
+  const animKey = data.map((d) => `${d.ref}:${d.qty}`).join('|');
 
   const TOOLTIP_WIDTH = 130; // minWidth (110) + marge de sécurité
   // Bascule le tooltip à GAUCHE du point s'il n'y a pas la place de l'ouvrir à droite
@@ -145,13 +147,22 @@ function PieChart({ data }: { data: { ref: string; qty: number; label: string; c
   return (
     <div className="relative flex flex-row-reverse md:flex-row items-center gap-3 md:gap-8 mt-10 md:mt-0 mr-4 md:mr-0"
       onMouseMove={handleMove} onTouchStart={handleTouch}>
-      <svg width="176" height="176" viewBox="0 0 176 176" className="flex-shrink-0">
-        {slices.map((s, i) => (
-          <path key={i} d={s.path} fill="none" stroke={s.color} strokeWidth={stroke} strokeLinecap="butt"
-            opacity={hovered === null || hovered === i ? 1 : 0.25}
-            style={{ cursor: 'pointer', transition: 'opacity 0.15s' }}
-            onMouseEnter={() => setHovered(i)} onMouseLeave={() => setHovered(null)} />
-        ))}
+      {/* Animation de construction : les parts se tracent l'une après l'autre (sens horaire) à chaque
+          (re)chargement — `key` change avec les données, ce qui rejoue l'animation à chaque filtre. */}
+      <style>{`@keyframes pie-draw { from { stroke-dashoffset: 100; } to { stroke-dashoffset: 0; } }
+        @media (prefers-reduced-motion: reduce) { .pie-slice { animation: none !important; } }`}</style>
+      <svg key={animKey} width="176" height="176" viewBox="0 0 176 176" className="flex-shrink-0">
+        {slices.map((s, i) => {
+          const debut = slices.slice(0, i).reduce((a, x) => a + x.qty, 0) / total; // part du tour déjà tracée
+          const duree = Math.max(0.12, (s.qty / total) * DUREE_ANIM);
+          return (
+            <path key={i} className="pie-slice" d={s.path} fill="none" stroke={s.color} strokeWidth={stroke} strokeLinecap="butt"
+              pathLength={100} strokeDasharray={100}
+              opacity={hovered === null || hovered === i ? 1 : 0.25}
+              style={{ cursor: 'pointer', transition: 'opacity 0.15s', animation: `pie-draw ${duree}s linear ${debut * DUREE_ANIM}s both` }}
+              onMouseEnter={() => setHovered(i)} onMouseLeave={() => setHovered(null)} />
+          );
+        })}
       </svg>
 
       {/* Légende — empilées verticalement, texte plus grand sur mobile */}
