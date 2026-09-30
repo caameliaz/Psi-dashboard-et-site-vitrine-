@@ -675,7 +675,7 @@ function EditOrderModal({ item, onClose, onSaved }: {
   const [tva, setTva] = useState<boolean>(item.vatEnabled === true);
   const [saving, setSaving] = useState(false);
   // Commande déjà livrée (admin) : justification obligatoire + question "ajuster le stock ?"
-  const livree = !estDevis && item.statut === 'Livré';
+  const livree = item.statut === 'Livré';
   const [justification, setJustification] = useState('');
   const [askStock, setAskStock] = useState(false);
 

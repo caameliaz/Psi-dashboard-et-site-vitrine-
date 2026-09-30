@@ -1238,34 +1238,36 @@ export async function deliverStock(kind: Kind, parentId: string) {
 // qui reste), moins livré / ligne retirée → revient dans le disponible.
 export interface DeliveredEditLine { productId?: string | null; description?: string | null; quantity: number; unitPrice: number; metrage?: number | null }
 
-export async function editDeliveredOrderItems(orderId: string, lines: DeliveredEditLine[], adjustStock: boolean): Promise<string[]> {
-  const existing = await prisma.orderItem.findMany({ where: { orderId } });
-  const byProduct = new Map(existing.filter((e) => e.productId).map((e) => [e.productId as string, e]));
+export async function editDeliveredItems(kind: Kind, parentId: string, lines: DeliveredEditLine[], adjustStock: boolean): Promise<string[]> {
+  const parentWhere = itemWhereParent(kind, parentId);
+  const items = itemDelegate(kind) as any; // même forme pour OrderItem et QuoteItem
+  const existing = await items.findMany({ where: parentWhere });
+  const byProduct = new Map<string, any>(existing.filter((e: any) => e.productId).map((e: any): [string, any] => [e.productId as string, e]));
   const newProductIds = new Set(lines.filter((l) => l.productId).map((l) => l.productId as string));
   const stockDelta = new Map<string, number>(); // > 0 : davantage de pièces sorties du stock
   const bump = (productId: string, n: number) => stockDelta.set(productId, (stockDelta.get(productId) ?? 0) + n);
 
   for (const [productId, e] of byProduct) if (!newProductIds.has(productId)) bump(productId, -e.quantity);
-  await prisma.orderItem.deleteMany({ where: { orderId, productId: null } });
-  await prisma.orderItem.deleteMany({ where: { orderId, productId: { notIn: Array.from(newProductIds) } } });
+  await items.deleteMany({ where: { ...parentWhere, productId: null } });
+  await items.deleteMany({ where: { ...parentWhere, productId: { notIn: Array.from(newProductIds) } } });
 
   for (const l of lines) {
     const e = l.productId ? byProduct.get(l.productId) : undefined;
     if (e) {
       bump(e.productId as string, l.quantity - e.quantity);
-      await prisma.orderItem.update({
+      await items.update({
         where: { id: e.id },
-        data: { quantity: l.quantity, unitPrice: l.unitPrice, metrage: l.metrage ?? null, ...(adjustStock && { resolvedQuantity: l.quantity }) },
+        data: { quantity: l.quantity, unitPrice: kind === 'quote' ? (l.unitPrice || null) : l.unitPrice, metrage: l.metrage ?? null, ...(adjustStock && { resolvedQuantity: l.quantity }) },
       });
     } else {
       if (l.productId) bump(l.productId, l.quantity);
-      await prisma.orderItem.create({
+      await items.create({
         data: {
-          orderId,
+          ...parentWhere,
           productId: l.productId || null,
           description: l.productId ? null : (l.description ?? null),
           quantity: l.quantity,
-          unitPrice: l.unitPrice,
+          unitPrice: kind === 'quote' ? (l.unitPrice || null) : l.unitPrice,
           metrage: l.metrage ?? null,
           stockPath: 'FROM_STOCK',
           resolvedQuantity: adjustStock && l.productId ? l.quantity : 0,
@@ -1294,6 +1296,9 @@ export async function editDeliveredOrderItems(orderId: string, lines: DeliveredE
   }
   return done;
 }
+
+export const editDeliveredOrderItems = (orderId: string, lines: DeliveredEditLine[], adjustStock: boolean) =>
+  editDeliveredItems('order', orderId, lines, adjustStock);
 
 // ── Distribution d'une quantité produite/reçue vers les commandes/devis liés ──
 // FIFO par date de création réelle. La portion effectivement affectée à une commande/devis
