@@ -115,7 +115,7 @@ export default function LoginPage() {
       <div className="bg-white rounded-2xl border border-[#E4EBF5] shadow-sm w-full max-w-sm px-7 py-9 md:px-9 md:py-10">
         <div className="flex flex-col items-center mb-8">
           <Image
-            src="/Logo PSI-new.jpeg"
+            src="/logo-psi.webp"
             alt="PSI Logo"
             width={56}
             height={56}

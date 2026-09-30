@@ -10,7 +10,8 @@ import {
   previewFreeTextResolution, resolveFreeTextItems, editDeliveredOrderItems,
 } from '@/lib/order-stock';
 
-// Statuts où les lignes ne peuvent plus être modifiées (déjà sorties du stock/annulées)
+// Statuts où les lignes ne peuvent plus être modifiées (déjà sorties du stock/annulées) —
+// "Livrée" reste modifiable, mais seulement par un admin (cf. PATCH, isAdmin).
 const LOCKED_STATUSES = ['LIVRE', 'ANNULE', 'RETOURNE'];
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -121,7 +122,10 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
     }
 
     // Remplacement complet des lignes de la commande (bouton "Modifier")
-    // body.items = [{ productId | description, quantity, unitPrice, metrage }] — pas de modif si livrée/annulée/retournée
+    // body.items = [{ productId | description, quantity, unitPrice, metrage }] — pas de modif si
+    // annulée/retournée ; livrée reste modifiable, mais réservé aux admins (correction d'erreur
+    // après coup — les autres rôles doivent passer par un admin).
+    const isAdmin = (session.user as any).role === 'ADMIN';
     let current: { status: string } | null = null;
     let itemsAudit: string | null = null; // avant → après des lignes, pour l'audit
     let deliveredEditReason: string | null = null;
@@ -133,7 +137,7 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
         if (!isDeliveredEdit) {
           return NextResponse.json({ error: 'Impossible de modifier une commande retournée ou annulée' }, { status: 409 });
         }
-        if (session.user.role !== 'ADMIN') {
+        if (!isAdmin) {
           return NextResponse.json({ error: 'Seul un administrateur peut modifier une commande livrée' }, { status: 403 });
         }
         deliveredEditReason = String(body.justification ?? '').trim();

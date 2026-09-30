@@ -125,7 +125,7 @@ export function Navbar() {
 
         {/* ── Logo ── */}
         <Link href="/" className="flex items-center shrink-0">
-          <img src="/Logo PSI-new.jpeg" alt="PSI" className="h-10 md:h-16 w-auto object-contain" style={{ maskImage: 'radial-gradient(ellipse 80% 80% at 50% 50%, black 55%, transparent 100%)', WebkitMaskImage: 'radial-gradient(ellipse 80% 80% at 50% 50%, black 55%, transparent 100%)' }} />
+          <img src="/logo-psi.webp" alt="PSI" className="h-10 md:h-16 w-auto object-contain" style={{ maskImage: 'radial-gradient(ellipse 80% 80% at 50% 50%, black 55%, transparent 100%)', WebkitMaskImage: 'radial-gradient(ellipse 80% 80% at 50% 50%, black 55%, transparent 100%)' }} />
         </Link>
 
         {/* ── Desktop nav ── */}

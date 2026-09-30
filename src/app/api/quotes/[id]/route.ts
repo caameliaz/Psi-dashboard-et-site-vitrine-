@@ -7,7 +7,7 @@ import { notifyStatusChange, notifyAssignment } from '@/lib/notify-activity';
 import {
   confirmStock, cancelStock, deliverStock, returnStock, releaseOrderItemStock, adjustOrderItemQuantity,
   forceCompleteOrder, previewForceCompleteShortfall, syncCommercialAssignmentForParent,
-  previewFreeTextResolution, resolveFreeTextItems,
+  previewFreeTextResolution, resolveFreeTextItems, editDeliveredItems,
 } from '@/lib/order-stock';
 
 // Statuts où les lignes ne peuvent plus être modifiées (déjà sorties du stock/annulées)
@@ -106,18 +106,54 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
     // Modification des produits du devis (comme pour les commandes).
     // Un devis peut porter un prix unitaire par ligne (facultatif) → conservé
     // pour le détail, le PDF et l'Excel, en plus du total global (proposedPrice).
+    // Livré reste modifiable, mais réservé aux admins (correction d'erreur après coup).
+    const isAdmin = (session.user as any).role === 'ADMIN';
     let current: { status: string } | null = null;
+    let itemsAudit: string | null = null; // avant → après des lignes, pour l'audit
+    let deliveredEditReason: string | null = null;
     if (body.items && Array.isArray(body.items)) {
       current = await prisma.quote.findUnique({ where: { id }, select: { status: true } });
+      const isDeliveredEdit = current?.status === 'LIVRE';
       if (current && LOCKED_STATUSES.includes(current.status)) {
-        return NextResponse.json({ error: 'Impossible de modifier un devis livré, retourné ou annulé' }, { status: 409 });
+        // Livré : modifiable par un admin seulement, avec justification (tracée dans l'audit) —
+        // même règle que pour les commandes.
+        if (!isDeliveredEdit) {
+          return NextResponse.json({ error: 'Impossible de modifier un devis retourné ou annulé' }, { status: 409 });
+        }
+        if (!isAdmin) {
+          return NextResponse.json({ error: 'Seul un administrateur peut modifier un devis livré' }, { status: 403 });
+        }
+        deliveredEditReason = String(body.justification ?? '').trim();
+        if (!deliveredEditReason) {
+          return NextResponse.json({ error: 'Une justification est obligatoire pour modifier un devis livré' }, { status: 400 });
+        }
       }
       // Une référence LIBRE n'a pas de productId : son libellé est dans `description`.
       const validItems = (body.items as { productId?: string; description?: string; quantity?: number; metrage?: number; unitPrice?: number }[])
         .filter((it) => (it.productId || (it.description && it.description.trim() !== '')) && (it.quantity ?? 0) > 0);
 
+      const before = await prisma.quoteItem.findMany({ where: { quoteId: id }, include: { product: { select: { reference: true } } } });
+      const fmtBefore = before.map((i) => `${i.product?.reference ?? i.description ?? '?'} ×${i.quantity}${i.unitPrice ? ` à ${i.unitPrice} DA` : ''}`).join(' ; ') || '—';
+      const productRefs = new Map(
+        (await prisma.product.findMany({ where: { id: { in: validItems.filter((i) => i.productId).map((i) => i.productId as string) } }, select: { id: true, reference: true } }))
+          .map((p) => [p.id, p.reference])
+      );
+      const fmtAfter = validItems.map((i) => `${i.productId ? (productRefs.get(i.productId) ?? '?') : (i.description ?? '?')} ×${i.quantity}${i.unitPrice ? ` à ${i.unitPrice} DA` : ''}`).join(' ; ') || '—';
+      itemsAudit = `Avant : ${fmtBefore} | Après : ${fmtAfter}`;
+
       const isConfirmed = current && (current.status === 'VALIDE' || current.status === 'PRODUITE');
-      if (isConfirmed) {
+      if (isDeliveredEdit) {
+        // Devis livré : le stock est déjà sorti, on ne rejoue pas le moteur de confirmation.
+        const adjusted = await editDeliveredItems(
+          'quote',
+          id,
+          validItems.map((it) => ({ productId: it.productId || null, description: it.description ?? null, quantity: it.quantity!, unitPrice: Number(it.unitPrice) || 0, metrage: it.metrage ?? null })),
+          body.adjustStock === true,
+        );
+        itemsAudit += body.adjustStock === true
+          ? ` | Stock ajusté : ${adjusted.length > 0 ? adjusted.join(', ') : 'aucun changement'}`
+          : ' | Stock laissé tel quel';
+      } else if (isConfirmed) {
         // Devis déjà confirmé : on ne rejoue le moteur de stock QUE pour ce qui change
         // réellement (cf. même correctif que pour les commandes, order-stock.ts) — sinon
         // une simple hausse/baisse de quantité peut fusionner avec la ligne de liste
@@ -248,7 +284,14 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
       : body.autoAssignStock !== undefined ? (body.autoAssignStock ? 'Auto-attribution au commercial activée' : 'Auto-attribution au commercial désactivée')
       : 'Devis modifié';
     const quoteLabel = quote.clientCompany || quote.clientName || quote.client?.name || '';
-    createAudit({ userId: session.user.id, action, entity: 'DEVIS', entityId: id, detail: quoteLabel ? `${quote.ref} — ${quoteLabel}` : (quote.ref ?? id), quoteId: id });
+    const auditBase = quoteLabel ? `${quote.ref} — ${quoteLabel}` : (quote.ref ?? id);
+    createAudit({
+      userId: session.user.id,
+      action: deliveredEditReason ? 'Devis livré modifié' : action,
+      entity: 'DEVIS', entityId: id,
+      detail: [auditBase, deliveredEditReason ? `Justification : ${deliveredEditReason}` : null, itemsAudit].filter(Boolean).join(' — '),
+      quoteId: id,
+    });
 
     // ── Répercussion sur le stock selon la transition de statut ────────────────
     let stockWarning: string | null = null;

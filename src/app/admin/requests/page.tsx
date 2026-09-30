@@ -470,7 +470,7 @@ export function CreateForm({ defaultType, onClose, onSave, users, currentUserId,
 
             {/* En-têtes colonnes — masqués sur mobile (chaque ligne devient une carte
                 avec ses propres libellés). Alignés sur la 1re ligne de chaque bloc. */}
-            <div className="hidden md:grid gap-2 mb-1" style={{ gridTemplateColumns: '1fr 1fr 72px' }}>
+            <div className="hidden md:grid gap-2 mb-1" style={{ gridTemplateColumns: 'minmax(0,1.4fr) minmax(0,1fr) 60px' }}>
               <span className="text-[10px] font-bold text-[#ABBED1] uppercase tracking-wide">Catégorie</span>
               <span className="text-[10px] font-bold text-[#ABBED1] uppercase tracking-wide">Référence</span>
               <span className="text-[10px] font-bold text-[#ABBED1] uppercase tracking-wide">Métrage (m)</span>
@@ -483,7 +483,7 @@ export function CreateForm({ defaultType, onClose, onSave, users, currentUserId,
                 <div key={i} className="rounded-xl border border-[#E2E8F0] p-3 md:p-0 md:border-0 md:rounded-none">
                   {/* Mobile : Catégorie SEULE sur sa ligne, puis Référence + Métrage en dessous.
                       Ordinateur : les 3 côte à côte comme avant. */}
-                  <div className="md:grid md:gap-2 md:items-center" style={{ gridTemplateColumns: '1fr 1fr 72px' }}>
+                  <div className="md:grid md:gap-2 md:items-center" style={{ gridTemplateColumns: 'minmax(0,1.4fr) minmax(0,1fr) 60px' }}>
                     <div className="mb-2 md:mb-0">
                       <span className="md:hidden block text-[10px] font-bold text-[#ABBED1] uppercase tracking-wide mb-1">Catégorie</span>
                       <AdminSelect

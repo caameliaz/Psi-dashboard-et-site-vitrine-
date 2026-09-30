@@ -24,7 +24,7 @@ export function Footer() {
         {/* Brand */}
         <div className="flex flex-col gap-5">
           <div className="flex items-center gap-3">
-            <img src="/Logo PSI-new.jpeg" alt="PSI" className="h-[72px] w-[72px] object-contain" style={{ maskImage: 'radial-gradient(ellipse 80% 80% at 50% 50%, black 55%, transparent 100%)', WebkitMaskImage: 'radial-gradient(ellipse 80% 80% at 50% 50%, black 55%, transparent 100%)' }} />
+            <img src="/logo-psi.webp" alt="PSI" className="h-[72px] w-[72px] object-contain" style={{ maskImage: 'radial-gradient(ellipse 80% 80% at 50% 50%, black 55%, transparent 100%)', WebkitMaskImage: 'radial-gradient(ellipse 80% 80% at 50% 50%, black 55%, transparent 100%)' }} />
             <div className="flex flex-col">
               <span className="text-white text-[20px] font-bold tracking-tight leading-none">PSI</span>
               <span className="text-[#89939E] text-[12px] mt-0.5">www.psi.dz</span>

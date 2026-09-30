@@ -9,13 +9,14 @@ const playfairDisplay = Playfair_Display({ subsets: ["latin"], variable: "--font
 
 export const metadata: Metadata = {
   title: "SARL Paper Solutions Industry",
-  description: "Premium thermal paper products for businesses across Algeria",
+  description: "PSI fabrique et fournit du papier thermique premium (rouleaux de caisse, étiquettes thermiques) pour les entreprises en Algérie.",
 };
 
+// `maximumScale` retiré : bloquer le zoom est un défaut d'accessibilité (relevé par Lighthouse) —
+// les utilisateurs malvoyants doivent pouvoir zoomer sur mobile.
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
-  maximumScale: 1,
 };
 
 export default function RootLayout({
@@ -25,9 +26,6 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="fr" className={`h-full antialiased ${openSans.variable} ${notoSerif.variable} ${playfairDisplay.variable}`} suppressHydrationWarning>
-      <head>
-        <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
-      </head>
       <body className="min-h-full flex flex-col">
         <SessionWrapper>{children}</SessionWrapper>
       </body>

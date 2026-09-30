@@ -120,12 +120,12 @@ export function Sidebar({ mobileOpen = false, onCloseMobile }: { mobileOpen?: bo
       {/* Logo */}
       {collapsed ? (
         <div className="flex flex-col items-center py-4 border-b border-[#E4EBF5]">
-          <Image src="/Logo PSI-new.jpeg" alt="PSI Logo" width={32} height={32} className="w-8 h-8 object-contain rounded-full"/>
+          <Image src="/logo-psi.webp" alt="PSI Logo" width={32} height={32} className="w-8 h-8 object-contain rounded-full"/>
         </div>
       ) : (
         <div className="flex items-center px-4 py-5 border-b border-[#E4EBF5]" style={{ minHeight: 80 }}>
           <div className="flex items-center gap-3 min-w-0">
-            <Image src="/Logo PSI-new.jpeg" alt="PSI Logo" width={36} height={36} className="w-9 h-9 object-contain rounded-full flex-shrink-0"/>
+            <Image src="/logo-psi.webp" alt="PSI Logo" width={36} height={36} className="w-9 h-9 object-contain rounded-full flex-shrink-0"/>
             <div className="leading-tight min-w-0">
               <p className="text-[13px] font-bold text-[#0F172A]">Paper Solutions</p>
               <p className="text-[13px] font-bold text-[#0F172A]">Industry</p>
