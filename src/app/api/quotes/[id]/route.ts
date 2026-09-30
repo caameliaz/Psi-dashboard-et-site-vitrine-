@@ -9,6 +9,7 @@ import {
   forceCompleteOrder, previewForceCompleteShortfall, syncCommercialAssignmentForParent,
   previewFreeTextResolution, resolveFreeTextItems, editDeliveredItems,
 } from '@/lib/order-stock';
+import { buildFicheUpdate } from '@/lib/fiche-edit';
 
 // Statuts où les lignes ne peuvent plus être modifiées (déjà sorties du stock/annulées)
 const LOCKED_STATUSES = ['LIVRE', 'ANNULE', 'RETOURNE'];
@@ -111,6 +112,28 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
     let current: { status: string } | null = null;
     let itemsAudit: string | null = null; // avant → après des lignes, pour l'audit
     let deliveredEditReason: string | null = null;
+
+    // Modification de la FICHE (client, facturation, dates…) — admin seulement, même règle que
+    // pour les commandes. Validée AVANT toute écriture (les lignes plus bas).
+    let ficheData: Record<string, unknown> = {};
+    let ficheChanges: string[] = [];
+    if (body.fiche && typeof body.fiche === 'object') {
+      if (!isAdmin) return NextResponse.json({ error: 'Seul un administrateur peut modifier la fiche du devis' }, { status: 403 });
+      const cur = await prisma.quote.findUnique({ where: { id } });
+      if (!cur) return NextResponse.json({ error: 'Devis introuvable' }, { status: 404 });
+      if (cur.status === 'ANNULE' || cur.status === 'RETOURNE') {
+        return NextResponse.json({ error: 'Impossible de modifier un devis retourné ou annulé' }, { status: 409 });
+      }
+      const isLivre = cur.status === 'LIVRE';
+      const built = buildFicheUpdate('quote', cur as unknown as Record<string, unknown>, body.fiche, isLivre);
+      if (!built.ok) return NextResponse.json({ error: built.error }, { status: 400 });
+      if (built.changes.length > 0 && isLivre) {
+        deliveredEditReason = String(body.justification ?? '').trim();
+        if (!deliveredEditReason) return NextResponse.json({ error: 'Une justification est obligatoire pour modifier un devis livré' }, { status: 400 });
+      }
+      ficheData = built.data;
+      ficheChanges = built.changes;
+    }
     if (body.items && Array.isArray(body.items)) {
       current = await prisma.quote.findUnique({ where: { id }, select: { status: true } });
       const isDeliveredEdit = current?.status === 'LIVRE';
@@ -264,6 +287,7 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
         ...(body.deliveryDelay !== undefined && { deliveryDelay: body.deliveryDelay }),
         ...(body.paymentTerms !== undefined && { paymentTerms: body.paymentTerms }),
         ...(body.adminRemarks !== undefined && { adminRemarks: body.adminRemarks }),
+        ...ficheData,
       },
       include: {
         client: { include: { phones: true } },
@@ -287,9 +311,9 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
     const auditBase = quoteLabel ? `${quote.ref} — ${quoteLabel}` : (quote.ref ?? id);
     createAudit({
       userId: session.user.id,
-      action: deliveredEditReason ? 'Devis livré modifié' : action,
+      action: deliveredEditReason ? 'Devis livré modifié' : (ficheChanges.length > 0 && body.status === undefined && body.items === undefined ? 'Fiche devis modifiée' : action),
       entity: 'DEVIS', entityId: id,
-      detail: [auditBase, deliveredEditReason ? `Justification : ${deliveredEditReason}` : null, itemsAudit].filter(Boolean).join(' — '),
+      detail: [auditBase, deliveredEditReason ? `Justification : ${deliveredEditReason}` : null, ficheChanges.length > 0 ? `Fiche : ${ficheChanges.join(' ; ')}` : null, itemsAudit].filter(Boolean).join(' — '),
       quoteId: id,
     });
 

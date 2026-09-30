@@ -62,6 +62,23 @@ export interface ClientFallback {
   email?: string;
 }
 
+/** Valeurs BRUTES (dates ISO, notes…) pour le formulaire « Modifier » — les champs d'affichage
+ *  ci-dessus sont déjà mis en forme (dates en JJ/MM/AAAA, « — » si vide). */
+function rawFiche(x: any): NonNullable<RequestDetail['raw']> {
+  const day = (d: any) => (d ? new Date(d).toISOString().slice(0, 10) : '');
+  return {
+    createdAt: day(x.createdAt),
+    deliveredAt: day(x.deliveredAt),
+    paymentDate: day(x.paymentDate),
+    notes: x.notes ?? '',
+    source: x.source ?? '',
+    clientName: x.clientName ?? x.client?.name ?? '',
+    clientCompany: x.clientCompany ?? x.client?.company ?? '',
+    clientPhone: x.clientPhone ?? '',
+    clientCommune: x.clientCommune ?? x.client?.commune ?? '',
+  };
+}
+
 /** Commande (format base) → RequestDetail. */
 export function orderToDetail(o: any, fallback?: ClientFallback): RequestDetail {
   const phone =
@@ -82,7 +99,7 @@ export function orderToDetail(o: any, fallback?: ClientFallback): RequestDetail 
     client: o.clientName || o.client?.name || fallback?.client || '—',
     entreprise: o.clientCompany || o.client?.company || fallback?.entreprise || '—',
     telephone: phone,
-    wilaya: o.client?.wilaya ?? o.clientWilaya ?? fallback?.wilaya ?? '',
+    wilaya: o.clientWilaya ?? o.client?.wilaya ?? fallback?.wilaya ?? '',
     commune: o.clientCommune ?? o.client?.commune ?? fallback?.commune ?? '',
     adresse: o.client?.address ?? fallback?.adresse ?? '',
     email: o.client?.email ?? fallback?.email ?? '',
@@ -106,6 +123,7 @@ export function orderToDetail(o: any, fallback?: ClientFallback): RequestDetail 
     salesRepName: o.salesRepName ?? null,
     priority: Boolean(o.priority),
     date: new Date(o.createdAt).toLocaleDateString('fr-FR'),
+    raw: rawFiche(o),
     heure: new Date(o.createdAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
   };
 }
@@ -145,7 +163,7 @@ export function quoteToDetail(q: any, fallback?: ClientFallback): RequestDetail 
     client: q.clientName || q.client?.name || fallback?.client || '—',
     entreprise: q.clientCompany || q.client?.company || fallback?.entreprise || '—',
     telephone: phone,
-    wilaya: q.client?.wilaya ?? q.clientWilaya ?? fallback?.wilaya ?? '',
+    wilaya: q.clientWilaya ?? q.client?.wilaya ?? fallback?.wilaya ?? '',
     commune: q.clientCommune ?? q.client?.commune ?? fallback?.commune ?? '',
     adresse: q.client?.address ?? fallback?.adresse ?? '',
     email: q.client?.email ?? fallback?.email ?? '',
@@ -168,6 +186,7 @@ export function quoteToDetail(q: any, fallback?: ClientFallback): RequestDetail 
     salesRepName: q.salesRepName ?? null,
     priority: Boolean(q.priority),
     date: new Date(q.createdAt).toLocaleDateString('fr-FR'),
+    raw: rawFiche(q),
     heure: new Date(q.createdAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
     message: q.message ?? '',
   };

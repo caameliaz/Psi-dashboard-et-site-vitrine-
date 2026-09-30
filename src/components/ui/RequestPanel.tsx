@@ -118,6 +118,8 @@ export interface RequestDetail {
   vatEnabled?: boolean;
   // Montants déjà TTC (ventes importées) : la TVA est déduite, pas ajoutée
   priceIncludesVat?: boolean;
+  // Valeurs brutes de la fiche (formulaire « Modifier » réservé aux admins) — cf. request-detail.ts
+  raw?: { createdAt: string; deliveredAt: string; paymentDate: string; notes: string; source: string; clientName: string; clientCompany: string; clientPhone: string; clientCommune: string };
   salesRepName?: string | null;   // commercial importé, avant rattachement à un compte
   priority?: boolean;             // commande/devis prioritaire (passe en tête des FIFO du stock)
 }
@@ -679,6 +681,32 @@ function EditOrderModal({ item, onClose, onSaved }: {
   const [justification, setJustification] = useState('');
   const [askStock, setAskStock] = useState(false);
 
+  // Fiche complète (client, facturation, dates…) — réservée aux admins. Valeurs de départ tirées
+  // de `item` (mise en forme) et `item.raw` (dates ISO, notes… cf. request-detail.ts).
+  const { isAdmin: adminModal } = useRole();
+  const dash = (v?: string | null) => (v && v !== '—' ? v : '');
+  const initialFiche = {
+    clientName: item.raw?.clientName ?? dash(item.client),
+    clientCompany: item.raw?.clientCompany ?? dash(item.entreprise),
+    clientPhone: item.raw?.clientPhone || dash(item.telephone),
+    clientWilaya: dash(item.wilaya),
+    clientCommune: item.raw?.clientCommune ?? dash(item.commune),
+    invoiceNumber: item.invoiceNumber ?? '',
+    paymentMethod: item.paymentMethod ?? '',
+    paymentDate: item.raw?.paymentDate ?? '',
+    vatEnabled: item.vatEnabled === true,
+    source: item.raw?.source || item.source || 'AUTRE',
+    notes: item.raw?.notes ?? '',
+    createdAt: item.raw?.createdAt ?? '',
+    deliveredAt: item.raw?.deliveredAt ?? '',
+  };
+  const [fiche, setFiche] = useState(initialFiche);
+  const [ficheOpen, setFicheOpen] = useState(false);
+  const setF = (patch: Partial<typeof initialFiche>) => setFiche((p) => ({ ...p, ...patch }));
+  const ficheDirty = adminModal && JSON.stringify(fiche) !== JSON.stringify(initialFiche);
+  // Signature des lignes à l'ouverture → on ne pose la question du stock que si elles ont changé.
+  const [linesSig0, setLinesSig0] = useState('');
+
   useEffect(() => {
     fetch('/api/categories').then(r => r.ok ? r.json() : []).then((cats: any[]) =>
       setCategories(cats.map((c) => ({ id: c.id, name: c.name })))
@@ -701,7 +729,9 @@ function EditOrderModal({ item, onClose, onSaved }: {
           metrage: it.metrage ?? null,
         };
       });
-      setLines(init.length > 0 ? init : [{ categoryId: '', productId: null, designation: '', quantite: 1, prixUnitaire: 0, metrage: null }]);
+      const start = init.length > 0 ? init : [{ categoryId: '', productId: null, designation: '', quantite: 1, prixUnitaire: 0, metrage: null }];
+      setLines(start);
+      setLinesSig0(JSON.stringify(start.map(({ productId, designation, quantite, prixUnitaire, metrage }) => ({ productId, designation, quantite, prixUnitaire, metrage }))));
     }).catch(() => {
       // Sans catalogue, la modale resterait vide et un enregistrement effacerait les lignes.
       alert('Impossible de charger le catalogue produits. Fermez cette fenêtre et réessayez.');
@@ -731,10 +761,13 @@ function EditOrderModal({ item, onClose, onSaved }: {
   const inputCls = "px-3 py-2 rounded-xl border border-[#E2E8F0] text-[13px] text-[#0F172A] focus:outline-none focus:border-[#4CAF4F] focus:ring-[2px] focus:ring-[#4CAF4F]/15 transition-all";
 
   // Bouton Enregistrer : pour une commande livrée, exige la justification puis pose la question du stock.
+  const linesDirty = linesSig0 !== '' && JSON.stringify(lines.map(({ productId, designation, quantite, prixUnitaire, metrage }) => ({ productId, designation, quantite, prixUnitaire, metrage }))) !== linesSig0;
   const onSaveClick = () => {
     if (livree) {
-      if (!justification.trim()) { alert('Une justification est obligatoire pour modifier une commande livrée.'); return; }
-      setAskStock(true);
+      if (!linesDirty && !ficheDirty) { onClose(); return; } // rien n'a changé
+      if (!justification.trim()) { alert(`Une justification est obligatoire pour modifier ${estDevis ? 'un devis livré' : 'une commande livrée'}.`); return; }
+      if (linesDirty) { setAskStock(true); return; } // le stock ne concerne que les lignes
+      save(false);
       return;
     }
     save();
@@ -763,7 +796,17 @@ function EditOrderModal({ item, onClose, onSaved }: {
     const res = await fetch(`/api/${estDevis ? 'quotes' : 'orders'}/${item.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ items, ...extra, ...(livree && { justification: justification.trim(), adjustStock: adjustStock === true }) }),
+      body: JSON.stringify({
+        // Livré : les lignes ne sont renvoyées que si elles ont changé (sinon seule la fiche part)
+        ...((!livree || linesDirty) && { items }),
+        ...extra,
+        ...(livree && { justification: justification.trim(), adjustStock: adjustStock === true }),
+        ...(adminModal && ficheDirty && { fiche: {
+          ...fiche,
+          ...(estDevis && { vatEnabled: undefined }), // devis : la TVA a son propre réglage ci-dessous
+          ...(!livree && { createdAt: undefined, deliveredAt: undefined }), // dates : demande livrée seulement
+        } }),
+      }),
     });
     setSaving(false);
     if (!res.ok) {
@@ -867,6 +910,70 @@ function EditOrderModal({ item, onClose, onSaved }: {
               <svg width={14} height={14} fill="none" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
               Ajouter un produit
             </button>
+
+            {/* Fiche complète — admins seulement */}
+            {adminModal && (
+              <div className="mt-4 border-t border-[#F2F4F7] pt-3">
+                <button type="button" onClick={() => setFicheOpen((v) => !v)}
+                  className="flex items-center gap-1.5 text-[12px] font-bold text-[#374151] hover:text-[#0F172A]">
+                  <span style={{ display: 'inline-block', transform: ficheOpen ? 'rotate(90deg)' : 'none', transition: 'transform .15s' }}>›</span>
+                  Informations de {estDevis ? 'ce devis' : 'cette commande'} (admin){ficheDirty ? ' · modifié' : ''}
+                </button>
+                {ficheOpen && (
+                  <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {([
+                      ['clientName', 'Nom du client'], ['clientCompany', 'Entreprise'],
+                      ['clientPhone', 'Téléphone'], ['clientWilaya', 'Wilaya'],
+                      ['clientCommune', 'Commune'], ['invoiceNumber', 'N° de facture'],
+                    ] as const).map(([k, label]) => (
+                      <div key={k}>
+                        <span className="block text-[10px] font-bold text-[#ABBED1] uppercase tracking-wide mb-1">{label}</span>
+                        <input value={fiche[k]} onChange={(e) => setF({ [k]: e.target.value } as Partial<typeof initialFiche>)} className={inputCls + ' w-full'} />
+                      </div>
+                    ))}
+                    <div>
+                      <span className="block text-[10px] font-bold text-[#ABBED1] uppercase tracking-wide mb-1">Mode de paiement</span>
+                      <select value={fiche.paymentMethod} onChange={(e) => setF({ paymentMethod: e.target.value })} className={inputCls + ' w-full bg-white'}>
+                        <option value="">—</option>
+                        {['Espèces', 'Chèque', 'Virement', 'Versement', 'À crédit', 'Dépensé', 'Offert'].map((m) => <option key={m} value={m}>{m}</option>)}
+                        {fiche.paymentMethod && !['Espèces', 'Chèque', 'Virement', 'Versement', 'À crédit', 'Dépensé', 'Offert'].includes(fiche.paymentMethod) && <option value={fiche.paymentMethod}>{fiche.paymentMethod}</option>}
+                      </select>
+                    </div>
+                    <div>
+                      <span className="block text-[10px] font-bold text-[#ABBED1] uppercase tracking-wide mb-1">Date de règlement</span>
+                      <input type="date" value={fiche.paymentDate} onChange={(e) => setF({ paymentDate: e.target.value })} className={inputCls + ' w-full'} />
+                    </div>
+                    <div>
+                      <span className="block text-[10px] font-bold text-[#ABBED1] uppercase tracking-wide mb-1">Source</span>
+                      <select value={fiche.source} onChange={(e) => setF({ source: e.target.value })} className={inputCls + ' w-full bg-white'}>
+                        {[['SITE', 'Site'], ['ADMIN', 'Admin'], ['WHATSAPP', 'WhatsApp'], ['TELEPHONE', 'Téléphone'], ['AUTRE', 'Autre'], ['ROLLINK', 'Rollink']].map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                      </select>
+                    </div>
+                    {!estDevis && (
+                      <label className="flex items-center gap-2 text-[13px] font-semibold text-[#374151] self-end pb-2">
+                        <input type="checkbox" checked={fiche.vatEnabled} onChange={(e) => setF({ vatEnabled: e.target.checked })} /> TVA appliquée
+                      </label>
+                    )}
+                    {livree && (
+                      <>
+                        <div>
+                          <span className="block text-[10px] font-bold text-[#ABBED1] uppercase tracking-wide mb-1">Date de {estDevis ? 'la demande' : 'la commande'}</span>
+                          <input type="date" value={fiche.createdAt} onChange={(e) => setF({ createdAt: e.target.value })} className={inputCls + ' w-full'} />
+                        </div>
+                        <div>
+                          <span className="block text-[10px] font-bold text-[#ABBED1] uppercase tracking-wide mb-1">Date de livraison</span>
+                          <input type="date" value={fiche.deliveredAt} onChange={(e) => setF({ deliveredAt: e.target.value })} className={inputCls + ' w-full'} />
+                        </div>
+                      </>
+                    )}
+                    <div className="sm:col-span-2">
+                      <span className="block text-[10px] font-bold text-[#ABBED1] uppercase tracking-wide mb-1">Notes</span>
+                      <textarea value={fiche.notes} onChange={(e) => setF({ notes: e.target.value })} rows={2} className={inputCls + ' w-full resize-none'} />
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {estDevis && (
