@@ -155,7 +155,7 @@ function PieChart({ data }: { data: { ref: string; qty: number; label: string; c
       </svg>
 
       {/* Légende — empilées verticalement, texte plus grand sur mobile */}
-      <div className={`flex flex-col w-full md:w-auto max-h-[230px] overflow-y-auto pr-1 ${slices.length > 6 ? 'gap-1.5 md:gap-2' : 'gap-2 md:gap-4'}`}>
+      <div className={`flex flex-col w-full md:w-auto ${slices.length > 6 ? 'gap-1.5 md:gap-2' : 'gap-2 md:gap-4'}`}>
         {slices.map((s, i) => (
           <div key={i} className="flex items-center gap-2 md:gap-2.5 cursor-pointer"
             onMouseEnter={() => setHovered(i)} onMouseLeave={() => setHovered(null)}
