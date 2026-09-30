@@ -336,6 +336,9 @@ export async function POST(request: NextRequest) {
                 productId: i.productId,
                 description: i.productId ? null : i.ref,
                 quantity: i.quantity,
+                // Prix unitaire du fichier conservé (sinon le détail affichait « — » partout) ;
+                // le montant global du devis reste dans proposedPrice.
+                unitPrice: i.unitPrice > 0 ? i.unitPrice : null,
               })),
             },
           },

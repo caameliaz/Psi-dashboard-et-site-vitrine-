@@ -119,6 +119,14 @@ export function quoteToDetail(q: any, fallback?: ClientFallback): RequestDetail 
       fallback?.telephone ??
       '');
   const items = toItems(q.items);
+  // Devis à UNE seule ligne sans prix unitaire (ex. devis importés avant que l'import ne le
+  // garde) mais avec un prix global : prix unitaire = prix global ÷ quantité, pour ne pas
+  // afficher « — ». Non arrondi exprès : quantité × prix unitaire retombe exactement sur le
+  // prix global. Avec plusieurs lignes on ne peut pas répartir le prix → « — », le total fait foi.
+  const prixGlobal = q.proposedPrice != null ? Number(q.proposedPrice) : 0;
+  if (items.length === 1 && !(items[0].prixUnitaire > 0) && items[0].quantite > 0 && prixGlobal > 0) {
+    items[0] = { ...items[0], prixUnitaire: prixGlobal / items[0].quantite };
+  }
   const produits = items.map((i) => `${i.designation} × ${i.quantite}`).join(', ') || '—';
   // Total : le prix global proposé prime ; sinon on somme les prix unitaires des lignes.
   const totalLignes = items.reduce((acc, i) => acc + i.quantite * i.prixUnitaire, 0);
