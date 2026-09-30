@@ -1085,13 +1085,13 @@ function RequestsPageInner() {
         {/* Les filtres — sur une même ligne ; à la ligne sur ordinateur si ça ne tient pas (jamais de débordement) */}
         <div className="flex items-center md:flex-wrap gap-2 min-w-0 md:order-3 md:basis-full">
           <AdminSelect
-            className="flex-1 min-w-0 md:min-w-[150px]"
+            className="flex-1 min-w-0 md:min-w-[150px] md:flex-none"
             value={filterStatut}
             onChange={setFilterStatut}
             options={[{ value: 'all', label: 'Statut' }, ...allStatuts.map((s) => ({ value: s, label: s }))]}
           />
           <AdminSelect
-            className="flex-1 min-w-0 md:min-w-[150px]"
+            className="flex-1 min-w-0 md:min-w-[150px] md:flex-none"
             value={filterPeriode}
             onChange={setFilterPeriode}
             options={[
@@ -1133,7 +1133,7 @@ function RequestsPageInner() {
             />
           )}
           <AdminSelect
-            className="flex-1 min-w-0 md:min-w-[150px]"
+            className="flex-1 min-w-0 md:min-w-[150px] md:flex-none"
             value={filterAssigne}
             onChange={setFilterAssigne}
             options={[
@@ -1145,7 +1145,7 @@ function RequestsPageInner() {
           {/* Paiement + Facture : admins uniquement, ordinateur uniquement */}
           {isAdmin && (
           <AdminSelect
-            className="hidden md:block flex-1 min-w-0 md:min-w-[150px]"
+            className="hidden md:block flex-1 min-w-0 md:min-w-[150px] md:flex-none"
             value={filterPaiement}
             onChange={setFilterPaiement}
             options={[
@@ -1157,7 +1157,7 @@ function RequestsPageInner() {
           )}
           {isAdmin && (
           <AdminSelect
-            className="hidden md:block flex-1 min-w-0 md:min-w-[150px]"
+            className="hidden md:block flex-1 min-w-0 md:min-w-[150px] md:flex-none"
             value={filterFacture}
             onChange={setFilterFacture}
             options={[
@@ -1171,7 +1171,7 @@ function RequestsPageInner() {
               mobile, il est maintenant dans la ligne du titre, cf. plus haut).
               Poussé à droite (ml-auto) ; off = fond blanc/bordure+texte vert, on = vert plein. */}
           {isAdmin && currentUserId && (
-            <div className="hidden md:flex ml-auto items-center gap-2 flex-shrink-0">
+            <div className="hidden md:flex items-center gap-2 flex-shrink-0">
               {/* "Toutes les ventes" : période = Tout afficher (depuis toujours) ; re-clic = Ce mois */}
               <button
                 onClick={() => setFilterPeriode((v) => v === 'tout' ? 'mois' : 'tout')}
