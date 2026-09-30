@@ -6,6 +6,7 @@ import { StatusPill } from '@/components/ui/StatusPill';
 import { Modal } from '@/components/ui/Modal';
 import { RequestPanel, type RequestDetail } from '@/components/ui/RequestPanel';
 import { AdminSelect } from '@/components/ui/AdminSelect';
+import { AdminMultiSelect } from '@/components/ui/AdminMultiSelect';
 import { WilayaSelect } from '@/components/ui/WilayaSelect';
 import { CommuneSelect } from '@/components/ui/CommuneSelect';
 import { ClientAutocomplete } from '@/components/ui/ClientAutocomplete';
@@ -661,8 +662,8 @@ function RequestsPageInner() {
   const [filterMois, setFilterMois] = useState(() => new Date().getMonth());
   const [filterAnnee, setFilterAnnee] = useState(() => new Date().getFullYear());
   const [filterAssigne, setFilterAssigne] = useState('all');
-  // Filtre « Type de paiement » : 'all' | 'none' (non renseigné) | un mode de PAYMENT_METHODS
-  const [filterPaiement, setFilterPaiement] = useState('all');
+  // Filtre « Type de paiement » (choix multiple) : modes de PAYMENT_METHODS et/ou 'none' (non renseigné) ; vide = tous
+  const [filterPaiement, setFilterPaiement] = useState<string[]>([]);
   // Filtre « Facture » : 'all' | 'avec' (numéro de facture renseigné) | 'sans'
   const [filterFacture, setFilterFacture] = useState('all');
   const [users, setUsers] = useState<{ id: string; name: string }[]>([]);
@@ -805,8 +806,8 @@ function RequestsPageInner() {
       if (filterPeriode === 'moisChoisi') return jour.getFullYear() === filterAnnee && jour.getMonth() === filterMois;
       return !periodeStart || jour >= periodeStart;
     })();
-    const matchPaiement = filterPaiement === 'all'
-      || (filterPaiement === 'none' ? !r.paymentMethod : r.paymentMethod === filterPaiement);
+    const matchPaiement = filterPaiement.length === 0
+      || (r.paymentMethod ? filterPaiement.includes(r.paymentMethod) : filterPaiement.includes('none'));
     const aFacture = !!r.invoiceNumber?.trim();
     const matchFacture = filterFacture === 'all' || (filterFacture === 'avec' ? aFacture : !aFacture);
     return matchSearch && matchAssigne && matchPeriode && matchPaiement && matchFacture;
@@ -972,7 +973,7 @@ function RequestsPageInner() {
       : (PERIODE_LABEL[filterPeriode] ?? filterPeriode),
     assigneLabel,
     ...(filterFacture === 'all' ? [] : [filterFacture === 'avec' ? 'Avec facture' : 'Sans facture']),
-    ...(filterPaiement === 'all' ? [] : [filterPaiement === 'none' ? 'Paiement non renseigné' : `Paiement : ${filterPaiement}`]),
+    ...(filterPaiement.length === 0 ? [] : [`Paiement : ${filterPaiement.map((v) => v === 'none' ? 'non renseigné' : v).join(', ')}`]),
   ];
 
   return (
@@ -1144,12 +1145,12 @@ function RequestsPageInner() {
           />
           {/* Paiement + Facture : admins uniquement, ordinateur uniquement */}
           {isAdmin && (
-          <AdminSelect
+          <AdminMultiSelect
             className="hidden md:block flex-1 min-w-0 md:min-w-[150px] md:flex-none"
-            value={filterPaiement}
+            values={filterPaiement}
             onChange={setFilterPaiement}
+            placeholder="Type de paiement"
             options={[
-              { value: 'all',  label: 'Type de paiement' },
               ...PAYMENT_METHODS.map((m) => ({ value: m, label: m })),
               { value: 'none', label: 'Non renseigné' },
             ]}
@@ -1196,8 +1197,8 @@ function RequestsPageInner() {
             </div>
           )}
         </div>
-        {(search || filterStatut !== 'all' || filterPeriode !== 'mois' || filterAssigne !== 'all' || filterPaiement !== 'all' || filterFacture !== 'all') && (
-          <button onClick={() => { setSearch(''); setFilterStatut('all'); setFilterPeriode('mois'); setFilterDateExacte(''); setFilterMois(new Date().getMonth()); setFilterAnnee(new Date().getFullYear()); setFilterAssigne('all'); setFilterPaiement('all'); setFilterFacture('all'); }} className="text-[12px] font-semibold text-[#8A9BB5] hover:text-[#374151] self-start md:self-auto md:order-2">Effacer</button>
+        {(search || filterStatut !== 'all' || filterPeriode !== 'mois' || filterAssigne !== 'all' || filterPaiement.length > 0 || filterFacture !== 'all') && (
+          <button onClick={() => { setSearch(''); setFilterStatut('all'); setFilterPeriode('mois'); setFilterDateExacte(''); setFilterMois(new Date().getMonth()); setFilterAnnee(new Date().getFullYear()); setFilterAssigne('all'); setFilterPaiement([]); setFilterFacture('all'); }} className="text-[12px] font-semibold text-[#8A9BB5] hover:text-[#374151] self-start md:self-auto md:order-2">Effacer</button>
         )}
       </div>
 
