@@ -270,7 +270,7 @@ async function printDoc(item: RequestDetail) {
   // Charge le logo et le convertit en data-URL pour l'embarquer dans le HTML
   let logoHtml = '<div class="brand">PSI</div><div class="brand-sub">Paper Solutions Industry</div>';
   try {
-    const resp = await fetch('/Logo PSI-new.jpeg');
+    const resp = await fetch('/logo-psi.webp');
     const blob = await resp.blob();
     const b64 = await new Promise<string>((res) => {
       const r = new FileReader();
@@ -766,7 +766,7 @@ function EditOrderModal({ item, onClose, onSaved }: {
 
           <div className="flex-1 overflow-y-auto -mx-1 px-1">
             {/* En-têtes — même disposition que le formulaire de création */}
-            <div className="hidden md:grid gap-2 mb-1 px-1" style={{ gridTemplateColumns: '1fr 1fr 72px' }}>
+            <div className="hidden md:grid gap-2 mb-1 px-1" style={{ gridTemplateColumns: 'minmax(0,1.4fr) minmax(0,1fr) 60px' }}>
               <span className="text-[10px] font-bold text-[#ABBED1] uppercase tracking-wide">Catégorie</span>
               <span className="text-[10px] font-bold text-[#ABBED1] uppercase tracking-wide">Référence</span>
               <span className="text-[10px] font-bold text-[#ABBED1] uppercase tracking-wide">Métrage (m)</span>
@@ -780,7 +780,7 @@ function EditOrderModal({ item, onClose, onSaved }: {
                 return (
                 <div key={i} className="rounded-xl border border-[#E2E8F0] p-3 md:p-0 md:border-0 md:rounded-none">
                   {/* Catégorie seule sur mobile, puis Référence + Métrage */}
-                  <div className="md:grid md:gap-2 md:items-center" style={{ gridTemplateColumns: '1fr 1fr 72px' }}>
+                  <div className="md:grid md:gap-2 md:items-center" style={{ gridTemplateColumns: 'minmax(0,1.4fr) minmax(0,1fr) 60px' }}>
                     <div className="mb-2 md:mb-0">
                       <span className="md:hidden block text-[10px] font-bold text-[#ABBED1] uppercase tracking-wide mb-1">Catégorie</span>
                       <AdminSelect
@@ -1364,7 +1364,11 @@ export function RequestPanel({ item, onClose, onStatusChange, onConfirmQuoteWith
                   {isCommande ? 'Produits commandés' : 'Spécifications demandées'}
                 </p>
                 <div className="rounded-xl border-2 border-[#E2E8F0] overflow-hidden">
-                  <div className="grid grid-cols-[1fr_auto_auto_auto] gap-x-3 bg-[#F8FAFC] px-4 py-2 border-b border-[#E2E8F0]">
+                  {/* Largeurs FIXES (pas `auto`) pour Qté/Prix unit./Total : chaque ligne ci-dessous
+                      est sa propre grille — avec `auto`, chacune calcule sa largeur de colonne
+                      selon SON propre contenu, donc les colonnes ne s'alignaient pas d'une ligne
+                      à l'autre. Des tailles fixes, identiques partout, gardent tout aligné. */}
+                  <div className="grid grid-cols-[1fr_72px_90px_100px] gap-x-3 bg-[#F8FAFC] px-4 py-2 border-b border-[#E2E8F0]">
                     <span className="text-[10px] font-bold text-[#ABBED1] uppercase tracking-wider">Référence</span>
                     <span className="text-[10px] font-bold text-[#ABBED1] uppercase tracking-wider text-right">Qté</span>
                     <span className="text-[10px] font-bold text-[#ABBED1] uppercase tracking-wider text-right">Prix unit.</span>
@@ -1382,7 +1386,7 @@ export function RequestPanel({ item, onClose, onStatusChange, onConfirmQuoteWith
                     // Devis à prix global (pas de prix par ligne) → « — », le montant est dans le Total en bas
                     const aUnPrix = l.pu > 0;
                     return (
-                      <div key={i} className="grid grid-cols-[1fr_auto_auto_auto] gap-x-3 items-center px-4 py-3 border-b border-[#E2E8F0] last:border-b-0">
+                      <div key={i} className="grid grid-cols-[1fr_72px_90px_100px] gap-x-3 items-center px-4 py-3 border-b border-[#E2E8F0] last:border-b-0">
                         <span className="text-[13px] font-medium text-[#374151] min-w-0 break-words">{l.ref}</span>
                         <span className="text-[13px] font-semibold text-[#8A9BB5] tabular-nums text-right whitespace-nowrap">{l.qte > 0 ? `${l.qte} roul.` : '—'}</span>
                         <span className="text-[13px] text-[#374151] tabular-nums text-right whitespace-nowrap">{aUnPrix ? dh(l.pu) : '—'}</span>
@@ -1588,7 +1592,9 @@ export function RequestPanel({ item, onClose, onStatusChange, onConfirmQuoteWith
                   <svg width={13} height={13} fill="none" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>
                   Notes{notes.length > 0 ? ` (${notes.length})` : ''}
                 </button>
-                {!isArchived && canModifierStatuts && (
+                {/* "Livrée" reste modifiable, mais seulement par un admin (correction d'erreur
+                    après coup) — Annulée/Retournée restent verrouillées pour tout le monde. */}
+                {(!isArchived || (item.statut === 'Livré' && isAdmin)) && canModifierStatuts && (
                   <button onClick={() => setShowEdit(true)}
                     className="flex items-center gap-1.5 px-3 h-9 rounded-full border text-[11px] font-bold transition-colors"
                     style={{ borderColor: '#4CAF4F40', color: '#4CAF4F' }}

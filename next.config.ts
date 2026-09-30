@@ -19,6 +19,20 @@ const nextConfig: NextConfig = {
   // Toutes les IP locales du PC + localhost (recalculé à chaque démarrage de `npm run dev`).
   allowedDevOrigins: localIPs(),
 
+  // ── SEO : une seule version canonique du domaine (évite le contenu dupliqué
+  //    psi.dz / www.psi.dz aux yeux de Google) — www.psi.dz est déjà le domaine
+  //    affiché partout (Footer, documents PDF), donc c'est le canonique retenu ici.
+  async redirects() {
+    return [
+      {
+        source: '/:path*',
+        has: [{ type: 'host', value: 'psi.dz' }],
+        destination: 'https://www.psi.dz/:path*',
+        permanent: true,
+      },
+    ];
+  },
+
   // ── En-têtes de sécurité (appliqués à toutes les pages) ──────────────────
   async headers() {
     return [

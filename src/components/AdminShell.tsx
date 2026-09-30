@@ -97,7 +97,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
               </svg>
             </button>
             <Image 
-              src="/Logo PSI-new.jpeg" 
+              src="/logo-psi.webp" 
               alt="PSI" 
               width={65} 
               height={65}

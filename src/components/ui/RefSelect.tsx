@@ -21,7 +21,7 @@ export function RefSelect({ value, products, onChange, allowFree = false }: {
   // Mode saisie libre : champ texte simple
   if (freeMode) {
     return (
-      <div className="relative">
+      <div className="relative min-w-0">
         <input
           value={value}
           onChange={e => onChange(e.target.value, true)}
@@ -40,7 +40,7 @@ export function RefSelect({ value, products, onChange, allowFree = false }: {
   const selected = products.find(p => p.reference === value);
 
   return (
-    <div className="relative">
+    <div className="relative min-w-0">
       <button type="button" onClick={() => setOpen(o => !o)}
         className="w-full flex items-center justify-between px-3.5 py-3 rounded-xl border border-[#E2E8F0] bg-white text-[15px] transition-colors hover:border-[#4CAF4F] focus:outline-none"
         style={{ color: value ? '#0F172A' : '#94A3B8' }}>

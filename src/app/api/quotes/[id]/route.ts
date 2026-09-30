@@ -106,10 +106,12 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
     // Modification des produits du devis (comme pour les commandes).
     // Un devis peut porter un prix unitaire par ligne (facultatif) → conservé
     // pour le détail, le PDF et l'Excel, en plus du total global (proposedPrice).
+    // Livré reste modifiable, mais réservé aux admins (correction d'erreur après coup).
+    const isAdmin = (session.user as any).role === 'ADMIN';
     let current: { status: string } | null = null;
     if (body.items && Array.isArray(body.items)) {
       current = await prisma.quote.findUnique({ where: { id }, select: { status: true } });
-      if (current && LOCKED_STATUSES.includes(current.status)) {
+      if (current && LOCKED_STATUSES.includes(current.status) && !(isAdmin && current.status === 'LIVRE')) {
         return NextResponse.json({ error: 'Impossible de modifier un devis livré, retourné ou annulé' }, { status: 409 });
       }
       // Une référence LIBRE n'a pas de productId : son libellé est dans `description`.

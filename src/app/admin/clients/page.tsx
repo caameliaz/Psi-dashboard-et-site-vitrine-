@@ -923,8 +923,11 @@ function ClientsPageInner() {
 
   return (
     <div className="w-full">
-      {/* Header — sur mobile : "Mes clients" + rond "+" sur la même ligne que le titre. */}
-      <div className="mb-6 flex items-start justify-between gap-3">
+      {/* Header — titre à gauche, actions à droite (même ligne, jamais en dessous) :
+          mobile = "Mes clients" + rond "+" ; desktop = les 3 boutons complets. Chaque bloc
+          d'actions n'occupe que sa propre largeur (flex item, pas de div pleine largeur
+          séparée en dessous) — sinon ça laisse un vide sous le titre. */}
+      <div className="mb-3 flex items-start justify-between gap-3">
         <div>
           <h1 className="text-[20px] md:text-[22px] font-bold text-[#0F172A]">Clients</h1>
           <p className="text-[13px] text-[#8A9BB5] mt-0.5">
@@ -953,29 +956,26 @@ function ClientsPageInner() {
             </button>
           )}
         </div>
+        {canEditClients && (
+          <div className="hidden md:flex items-center gap-2 flex-shrink-0 flex-wrap justify-end">
+            <button onClick={() => { setAddForm({ ...emptyClient }); setShowAdd(true); }} className="flex items-center gap-2 px-4 py-2 rounded-xl text-[13px] font-semibold text-white transition-colors whitespace-nowrap" style={{ background: '#4CAF4F' }}>
+              + Nouveau client
+            </button>
+            <button onClick={() => setShowSectors(true)} className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-[13px] font-semibold text-[#374151] border border-[#E2E8F0] bg-white hover:bg-[#F8FAFC] transition-colors whitespace-nowrap">
+              Secteurs
+            </button>
+            {/* Import Excel : ordinateur uniquement (choix de fichier peu pratique sur mobile) */}
+            <button onClick={() => setShowImport(true)} className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-[13px] font-semibold text-[#374151] border border-[#E2E8F0] bg-white hover:bg-[#F8FAFC] transition-colors whitespace-nowrap">
+              <svg width={15} height={15} fill="none" viewBox="0 0 24 24"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              Importer Excel
+            </button>
+          </div>
+        )}
       </div>
-
-      {/* Actions : Nouveau client + Secteurs (+ Import Excel sur ordi seulement) —
-          DESKTOP seulement (mobile : rond "+" dans le header, cf. plus haut). */}
-      {canEditClients && (
-        <div className="hidden md:flex items-center justify-end gap-2 mb-3 flex-wrap">
-          <button onClick={() => { setAddForm({ ...emptyClient }); setShowAdd(true); }} className="flex items-center gap-2 px-4 py-2 rounded-xl text-[13px] font-semibold text-white transition-colors whitespace-nowrap" style={{ background: '#4CAF4F' }}>
-            + Nouveau client
-          </button>
-          <button onClick={() => setShowSectors(true)} className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-[13px] font-semibold text-[#374151] border border-[#E2E8F0] bg-white hover:bg-[#F8FAFC] transition-colors whitespace-nowrap">
-            Secteurs
-          </button>
-          {/* Import Excel : ordinateur uniquement (choix de fichier peu pratique sur mobile) */}
-          <button onClick={() => setShowImport(true)} className="hidden md:flex items-center gap-1.5 px-4 py-2 rounded-xl text-[13px] font-semibold text-[#374151] border border-[#E2E8F0] bg-white hover:bg-[#F8FAFC] transition-colors whitespace-nowrap">
-            <svg width={15} height={15} fill="none" viewBox="0 0 24 24"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg>
-            Importer Excel
-          </button>
-        </div>
-      )}
       {/* Secteurs reste accessible sur mobile aussi (pas de bouton "+ Nouveau client"
           en double, mais Secteurs n'a pas d'équivalent rond) */}
       {canEditClients && (
-        <div className="md:hidden mb-3">
+        <div className="md:hidden mb-2">
           <button onClick={() => setShowSectors(true)} className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-[13px] font-semibold text-[#374151] border border-[#E2E8F0] bg-white hover:bg-[#F8FAFC] transition-colors whitespace-nowrap">
             Secteurs
           </button>
@@ -983,7 +983,7 @@ function ClientsPageInner() {
       )}
 
       {/* Barre de recherche — pleine largeur */}
-      <div className="relative mb-3">
+      <div className="relative mb-2">
         <span className="absolute left-3 top-1/2 -translate-y-1/2"><IconSearch /></span>
         <input
           value={search}
@@ -994,7 +994,7 @@ function ClientsPageInner() {
       </div>
 
       {/* Les 3 filtres + raccourci "Mes clients" (admin, poussé à droite) — même ligne */}
-      <div className="flex flex-col md:flex-row md:items-center gap-2 mb-6">
+      <div className="flex flex-col md:flex-row md:items-center gap-2 mb-4">
         <div className="grid grid-cols-3 gap-2 flex-1 min-w-0">
           <AdminSelect
             className="w-full"

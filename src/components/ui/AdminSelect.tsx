@@ -13,6 +13,7 @@ interface AdminSelectProps {
 
 export function AdminSelect({ value, onChange, options, className = '' }: AdminSelectProps) {
   const [open, setOpen] = useState(false);
+  const [maxHeight, setMaxHeight] = useState(256);
   const ref = useRef<HTMLDivElement>(null);
   // Quand l'appelant impose w-full (grille serrée), on ne force pas la largeur mini.
   const fullWidth = className.includes('w-full');
@@ -31,6 +32,28 @@ export function AdminSelect({ value, onChange, options, className = '' }: AdminS
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, []);
+
+  // Le menu desktop est `position: absolute` sous le bouton : sans borne dynamique,
+  // il peut dépasser le bas de l'écran (bouton bas dans une modale/formulaire long).
+  // On calcule la place réellement dispo jusqu'au bas du viewport (marge 16px) à
+  // l'ouverture, pour qu'il s'arrête avant le bord et défile lui-même (au lieu que
+  // ce soit la page/l'overlay en dessous qui défile).
+  useEffect(() => {
+    if (!open || !ref.current) return;
+    const rect = ref.current.getBoundingClientRect();
+    const available = window.innerHeight - rect.bottom - 16;
+    setMaxHeight(Math.max(120, Math.min(256, available)));
+  }, [open]);
+
+  // Empêche la page (et l'overlay de modale derrière) de défiler pendant qu'un
+  // menu desktop est ouvert : sinon un scroll au-dessus du menu bouge le fond au
+  // lieu du menu, qui donne l'impression qu'"on ne peut pas tout voir".
+  useEffect(() => {
+    if (!open) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, [open]);
 
   return (
     <div ref={ref} className={`relative min-w-0 ${className}`}>
@@ -82,8 +105,14 @@ export function AdminSelect({ value, onChange, options, className = '' }: AdminS
             </div>
           </div>
 
-          {/* Desktop : dropdown classique positionné sous le bouton. */}
-          <div className="hidden md:block absolute left-0 top-[calc(100%+6px)] z-[9999] bg-white border border-[#E2E8F0] rounded-xl shadow-[0_8px_32px_rgba(171,190,209,0.45)] overflow-hidden min-w-full">
+          {/* Desktop : dropdown classique positionné sous le bouton. Hauteur dynamique
+              (calculée dans le useEffect ci-dessus) au lieu d'un `max-h` fixe : s'arrête
+              un peu avant le bas de l'écran et défile lui-même pour tout montrer, même
+              quand le bouton est bas dans une modale/formulaire (cf. secteurs d'activité). */}
+          <div
+            className="hidden md:block absolute left-0 top-[calc(100%+6px)] z-[9999] bg-white border border-[#E2E8F0] rounded-xl shadow-[0_8px_32px_rgba(171,190,209,0.45)] overflow-y-auto min-w-full"
+            style={{ maxHeight }}
+          >
             {options.map((opt) => (
               <button
                 key={opt.value}

@@ -10,7 +10,8 @@ import {
   previewFreeTextResolution, resolveFreeTextItems,
 } from '@/lib/order-stock';
 
-// Statuts où les lignes ne peuvent plus être modifiées (déjà sorties du stock/annulées)
+// Statuts où les lignes ne peuvent plus être modifiées (déjà sorties du stock/annulées) —
+// "Livrée" reste modifiable, mais seulement par un admin (cf. PATCH, isAdmin).
 const LOCKED_STATUSES = ['LIVRE', 'ANNULE', 'RETOURNE'];
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -121,11 +122,14 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
     }
 
     // Remplacement complet des lignes de la commande (bouton "Modifier")
-    // body.items = [{ productId | description, quantity, unitPrice, metrage }] — pas de modif si livrée/annulée/retournée
+    // body.items = [{ productId | description, quantity, unitPrice, metrage }] — pas de modif si
+    // annulée/retournée ; livrée reste modifiable, mais réservé aux admins (correction d'erreur
+    // après coup — les autres rôles doivent passer par un admin).
+    const isAdmin = (session.user as any).role === 'ADMIN';
     let current: { status: string } | null = null;
     if (body.items && Array.isArray(body.items)) {
       current = await prisma.order.findUnique({ where: { id }, select: { status: true } });
-      if (current && LOCKED_STATUSES.includes(current.status)) {
+      if (current && LOCKED_STATUSES.includes(current.status) && !(isAdmin && current.status === 'LIVRE')) {
         return NextResponse.json({ error: 'Impossible de modifier une commande livrée, retournée ou annulée' }, { status: 409 });
       }
       // Une référence LIBRE n'a pas de productId : son libellé est dans `description`.
