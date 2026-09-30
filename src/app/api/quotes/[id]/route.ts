@@ -251,6 +251,7 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
     createAudit({ userId: session.user.id, action, entity: 'DEVIS', entityId: id, detail: quoteLabel ? `${quote.ref} — ${quoteLabel}` : (quote.ref ?? id), quoteId: id });
 
     // ── Répercussion sur le stock selon la transition de statut ────────────────
+    let stockWarning: string | null = null;
     try {
       if (body.autoAssignStock !== undefined) {
         await syncCommercialAssignmentForParent('quote', id);
@@ -287,6 +288,8 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
       }
     } catch (stockError) {
       console.error('[quotes] Erreur de mise à jour du stock :', stockError);
+      stockWarning = `Le statut a été enregistré mais la mise à jour du stock a échoué (${stockError instanceof Error ? stockError.message : 'erreur inconnue'}). Vérifiez le stock de ce devis.`;
+      createAudit({ userId: session.user.id, action: 'Erreur de mise à jour du stock', entity: 'DEVIS', entityId: id, detail: `${quote.ref ?? id} — ${stockError instanceof Error ? stockError.message : String(stockError)}`, quoteId: id });
     }
 
     // Modification des PRODUITS (sans changement de statut) → notification aussi.
@@ -323,7 +326,7 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
       }).catch(() => {});
     }
 
-    return NextResponse.json(quote);
+    return NextResponse.json(stockWarning ? { ...quote, stockWarning } : quote);
   } catch (e) {
     console.error(e);
     return NextResponse.json({ error: 'Failed to update quote' }, { status: 500 });

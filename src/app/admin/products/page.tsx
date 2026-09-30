@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { Modal } from '@/components/ui/Modal';
 import { useRole } from '@/lib/role-context';
 import { RequirePerm } from '@/components/RequirePerm';
+import { apiError } from '@/lib/api-error';
 
 function IconPencil() {
   return (
@@ -538,10 +539,12 @@ function ProductsPageInner() {
   });
 
   const toggleRef = async (r: Ref) => {
-    await fetch(`/api/products/${r.id}`, {
+    const res = await fetch(`/api/products/${r.id}`, {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ active: !r.active }),
     });
+    const err = await apiError(res, 'Le changement d’état du produit');
+    if (err) alert(err);
     await fetchProducts();
   };
 
@@ -641,10 +644,12 @@ function ProductsPageInner() {
 
   const handleDeactivateRef = async () => {
     if (!deleteRef) return;
-    await fetch(`/api/products/${deleteRef.id}`, {
+    const res = await fetch(`/api/products/${deleteRef.id}`, {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ active: false }),
     });
+    const err = await apiError(res, 'La désactivation du produit');
+    if (err) alert(err);
     await fetchProducts();
     setDeleteRef(null);
   };

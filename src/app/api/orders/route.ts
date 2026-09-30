@@ -9,6 +9,7 @@ import { createAudit } from '@/lib/audit';
 import { rateLimit } from '@/lib/rate-limit';
 import { validateEmail, validatePhone, validateText, validateQuantity, validatePositiveNumber, firstError } from '@/lib/validation';
 import { resolveClientVisibility } from '@/lib/leave';
+import { saveInfoToClientProfile } from '@/lib/client-profile';
 
 export async function GET(request: NextRequest) {
   const guard = await requirePermission('voir_commandes');
@@ -91,9 +92,9 @@ export async function POST(request: NextRequest) {
       rawItems.length > 50 ? 'Trop de lignes (max 50).' : null,
       ...rawItems.map((it, i) => {
         if (it.description != null && String(it.description).length > 300) return `Description ligne ${i + 1} trop longue (300 caractères max).`;
-        // Le prix saisi côté client n'est utilisé QUE pour les lignes libres (sans productId) —
-        // pour un produit du catalogue, le prix est de toute façon recalculé serveur ci-dessous.
-        if (!it.productId && it.unitPrice != null) return validatePositiveNumber(it.unitPrice, `Prix ligne ${i + 1}`);
+        // Le prix saisi est utilisé pour les lignes libres, et pour les produits du catalogue
+        // uniquement si la commande est créée par un utilisateur connecté (cf. `trusted`).
+        if ((!it.productId || session?.user?.id) && it.unitPrice != null) return validatePositiveNumber(it.unitPrice, `Prix ligne ${i + 1}`);
         return null;
       }),
     ]);
@@ -154,7 +155,14 @@ export async function POST(request: NextRequest) {
       }).catch(() => {});
     }
 
-    const VALID_SOURCES = ['SITE', 'ADMIN', 'WHATSAPP', 'TELEPHONE', 'AUTRE'];
+    // Choix fait dans le pop-up du formulaire : reporter sur la fiche client les infos saisies
+    // qu'elle n'a pas (téléphone, email, commune). Sinon elles restent seulement sur la commande.
+    // On n'écrase jamais une valeur déjà présente sur la fiche.
+    if (body.client?.saveToProfile === true && session?.user?.id && client) {
+      client = await saveInfoToClientProfile(client, { phone: primaryPhone, email: body.client?.email, commune: body.client?.commune });
+    }
+
+    const VALID_SOURCES =['SITE', 'ADMIN', 'WHATSAPP', 'TELEPHONE', 'AUTRE'];
     const source = VALID_SOURCES.includes(body.source) ? body.source : 'SITE';
 
     const ref = await generateOrderRef(client.wilaya);
@@ -173,10 +181,21 @@ export async function POST(request: NextRequest) {
       ? await prisma.product.findMany({ where: { id: { in: productIds } }, select: { id: true, price: true } })
       : [];
     const priceById = new Map(dbProducts.map((p) => [p.id, p.price]));
+    // Utilisateur connecté (admin/commercial) : son prix saisi prime sur le catalogue (remise,
+    // prix négocié…). Commande du site public (pas de session) : prix catalogue imposé.
+    const trusted = Boolean(session?.user?.id);
+
+    // Date de règlement antérieure à aujourd'hui (heure d'Alger) → vente déjà réalisée : la
+    // commande est créée directement Livrée, datée du jour de règlement (comme les ventes
+    // importées — cf. ventes/import : createdAt = deliveredAt, sans mouvement de stock).
+    const paymentDate = trusted && body.paymentDate ? new Date(body.paymentDate) : null;
+    const todayAlgiers = new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Algiers' });
+    const paidInPast = Boolean(paymentDate && !isNaN(paymentDate.getTime()) && paymentDate.toISOString().slice(0, 10) < todayAlgiers);
 
     const order = await prisma.order.create({
       data: {
         ref,
+        ...(paidInPast && { status: 'LIVRE' as const, createdAt: paymentDate!, deliveredAt: paymentDate! }),
         clientId: client.id,
         // Snapshot de ce qui a été saisi POUR CETTE commande (pas la fiche client
         // potentiellement dédupliquée sur un autre nom via le téléphone/l'entreprise).
@@ -184,6 +203,8 @@ export async function POST(request: NextRequest) {
         clientCompany: clientCompany || client.company || null,
         clientWilaya: body.client?.wilaya || client.wilaya || null,
         clientCommune: body.client?.commune || client.commune || null,
+        // Numéro saisi pour CETTE commande (même si la fiche client n'a pas été mise à jour)
+        clientPhone: primaryPhone || null,
         source: source as any,
         createdById: session?.user?.id ?? null,
         // Assignation : valeur fournie explicitement, sinon le responsable habituel du
@@ -199,7 +220,9 @@ export async function POST(request: NextRequest) {
             productId: item.productId || null,
             description: item.productId ? null : (item.description ?? null),
             quantity: item.quantity as number,
-            unitPrice: item.productId ? (priceById.get(item.productId) ?? 0) : Math.max(0, Number(item.unitPrice) || 0),
+            unitPrice: item.productId && !(trusted && item.unitPrice != null)
+              ? (priceById.get(item.productId) ?? 0)
+              : Math.max(0, Number(item.unitPrice) || 0),
             metrage: item.metrage ?? null,
           })),
         },
@@ -234,7 +257,7 @@ export async function POST(request: NextRequest) {
       action: 'Commande créée',
       entity: 'COMMANDE',
       entityId: order.id,
-      detail: `${client.company ?? client.name} — ${validItems.length} article(s)`,
+      detail: `${client.company ?? client.name} — ${validItems.length} article(s)${paidInPast ? ' — créée directement Livrée (date de règlement passée)' : ''}`,
       orderId: order.id,
     });
     return NextResponse.json(order, { status: 201 });

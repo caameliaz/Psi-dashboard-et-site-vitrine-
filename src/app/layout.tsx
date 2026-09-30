@@ -8,7 +8,7 @@ const notoSerif = Noto_Serif({ subsets: ["latin"], variable: "--font-noto-serif"
 const playfairDisplay = Playfair_Display({ subsets: ["latin"], variable: "--font-playfair" });
 
 export const metadata: Metadata = {
-  title: "PSI - Thermal Paper Solutions",
+  title: "SARL Paper Solutions Industry",
   description: "Premium thermal paper products for businesses across Algeria",
 };
 

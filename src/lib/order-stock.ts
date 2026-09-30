@@ -1231,6 +1231,70 @@ export async function deliverStock(kind: Kind, parentId: string) {
   }
 }
 
+// ── Correction des lignes d'une commande DÉJÀ LIVRÉE (admin, avec justification) ─────────────
+// Le stock est déjà sorti (`reserved` a baissé à la livraison) : on ne rejoue donc PAS le moteur
+// de confirmation. Par défaut on corrige seulement les lignes. Si `adjustStock` est vrai, la
+// différence est répercutée sur `available` : plus livré → sort du disponible (plafonné à ce
+// qui reste), moins livré / ligne retirée → revient dans le disponible.
+export interface DeliveredEditLine { productId?: string | null; description?: string | null; quantity: number; unitPrice: number; metrage?: number | null }
+
+export async function editDeliveredOrderItems(orderId: string, lines: DeliveredEditLine[], adjustStock: boolean): Promise<string[]> {
+  const existing = await prisma.orderItem.findMany({ where: { orderId } });
+  const byProduct = new Map(existing.filter((e) => e.productId).map((e) => [e.productId as string, e]));
+  const newProductIds = new Set(lines.filter((l) => l.productId).map((l) => l.productId as string));
+  const stockDelta = new Map<string, number>(); // > 0 : davantage de pièces sorties du stock
+  const bump = (productId: string, n: number) => stockDelta.set(productId, (stockDelta.get(productId) ?? 0) + n);
+
+  for (const [productId, e] of byProduct) if (!newProductIds.has(productId)) bump(productId, -e.quantity);
+  await prisma.orderItem.deleteMany({ where: { orderId, productId: null } });
+  await prisma.orderItem.deleteMany({ where: { orderId, productId: { notIn: Array.from(newProductIds) } } });
+
+  for (const l of lines) {
+    const e = l.productId ? byProduct.get(l.productId) : undefined;
+    if (e) {
+      bump(e.productId as string, l.quantity - e.quantity);
+      await prisma.orderItem.update({
+        where: { id: e.id },
+        data: { quantity: l.quantity, unitPrice: l.unitPrice, metrage: l.metrage ?? null, ...(adjustStock && { resolvedQuantity: l.quantity }) },
+      });
+    } else {
+      if (l.productId) bump(l.productId, l.quantity);
+      await prisma.orderItem.create({
+        data: {
+          orderId,
+          productId: l.productId || null,
+          description: l.productId ? null : (l.description ?? null),
+          quantity: l.quantity,
+          unitPrice: l.unitPrice,
+          metrage: l.metrage ?? null,
+          stockPath: 'FROM_STOCK',
+          resolvedQuantity: adjustStock && l.productId ? l.quantity : 0,
+        },
+      });
+    }
+  }
+
+  const done: string[] = [];
+  if (adjustStock) {
+    for (const [productId, delta] of stockDelta) {
+      if (delta === 0) continue;
+      const p = await prisma.product.findUnique({ where: { id: productId }, select: { reference: true, available: true } });
+      if (!p) continue;
+      if (delta > 0) {
+        const take = Math.min(p.available, delta);
+        if (take > 0) await prisma.product.update({ where: { id: productId }, data: { available: { decrement: take } } });
+        done.push(`${p.reference} −${take}${take < delta ? ` (manque ${delta - take})` : ''}`);
+      } else {
+        await prisma.product.update({ where: { id: productId }, data: { available: { increment: -delta } } });
+        done.push(`${p.reference} +${-delta}`);
+      }
+      // Le disponible a changé → le proposer aux commandes en attente sur ce produit (FIFO).
+      if (delta < 0) await reallocateAvailableStock(productId);
+    }
+  }
+  return done;
+}
+
 // ── Distribution d'une quantité produite/reçue vers les commandes/devis liés ──
 // FIFO par date de création réelle. La portion effectivement affectée à une commande/devis
 // va dans `reserved` ; le reliquat éventuel (sans commande liée) va dans `available`.

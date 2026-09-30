@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Modal } from '@/components/ui/Modal';
 import { RequirePerm } from '@/components/RequirePerm';
+import { apiError } from '@/lib/api-error';
 
 type Category = 'CONFIRMATION' | 'DEVIS' | 'LIVRAISON' | 'RELANCE' | 'AUTRE';
 
@@ -94,25 +95,31 @@ function TemplatesPageInner() {
   useEffect(() => { fetchTemplates(); }, [fetchTemplates]);
 
   const handleAdd = async () => {
-    await fetch('/api/templates', {
+    const res = await fetch('/api/templates', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(form),
     });
+    const err = await apiError(res, 'La création du modèle');
+    if (err) { alert(err); return; }
     setShowAdd(false); setForm({ ...emptyForm }); fetchTemplates();
   };
 
   const handleEdit = async () => {
     if (!editTpl) return;
-    await fetch(`/api/templates/${editTpl.id}`, {
+    const res = await fetch(`/api/templates/${editTpl.id}`, {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(form),
     });
+    const err = await apiError(res, 'La modification du modèle');
+    if (err) { alert(err); return; }
     setEditTpl(null); fetchTemplates();
   };
 
   const handleDelete = async () => {
     if (!deleteTpl) return;
-    await fetch(`/api/templates/${deleteTpl.id}`, { method: 'DELETE' });
+    const res = await fetch(`/api/templates/${deleteTpl.id}`, { method: 'DELETE' });
+    const err = await apiError(res, 'La suppression du modèle');
+    if (err) { alert(err); return; }
     setDeleteTpl(null); fetchTemplates();
   };
 

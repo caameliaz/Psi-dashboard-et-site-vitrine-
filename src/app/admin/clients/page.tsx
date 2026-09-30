@@ -163,12 +163,17 @@ function NewOrderForm({ client, onClose }: { client: ClientRecord; onClose: () =
           message: produits,
           items: [],
         };
-    await fetch(endpoint, {
+    const res = await fetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
     setSaving(false);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      alert(err.error ?? `La création a échoué (erreur ${res.status}).`);
+      return;
+    }
     onClose();
   };
 
@@ -251,11 +256,16 @@ function ClientSlideIn({ client, onClose, onEdit, onDelete, onReactivate, onDele
     const dbId = (client as any)._dbId ?? client.id;
     setAssigning(true);
     try {
-      await fetch(`/api/clients/${dbId}`, {
+      const res = await fetch(`/api/clients/${dbId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ assignedToId: newId }),
       });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        alert(err.error ?? `L'assignation a échoué (erreur ${res.status}).`);
+        return;
+      }
       setAssignedToId(newId);
       onReassigned?.();
     } finally {
@@ -547,7 +557,17 @@ function ClientSlideIn({ client, onClose, onEdit, onDelete, onReactivate, onDele
           onStatusChange={async (_ref, newStatut) => {
             if (!selectedRequest.id) return;
             const endpoint = selectedRequest.type === 'Devis' ? `/api/quotes/${selectedRequest.id}` : `/api/orders/${selectedRequest.id}`;
-            await fetch(endpoint, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: UI_TO_DB[newStatut] ?? newStatut }) });
+            const res = await fetch(endpoint, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: UI_TO_DB[newStatut] ?? newStatut }) });
+            const data = await res.json().catch(() => null);
+            // Avant : le panneau affichait le nouveau statut même si l'enregistrement avait échoué.
+            if (!res.ok) {
+              alert(data?.error === 'PRODUCT_SHORTFALL'
+                ? 'Stock insuffisant pour passer cette commande en « Disponible ». Faites-le depuis la page Demandes pour choisir de forcer ou non.'
+                : (data?.error ?? `Le changement de statut a échoué (erreur ${res.status}). Rien n'a été enregistré.`));
+              onRefresh?.();
+              return;
+            }
+            if (data?.stockWarning) alert(data.stockWarning);
             // Statut final → ferme le détail. Sinon garde ouvert avec le nouveau statut.
             if (newStatut === 'Livré' || newStatut === 'Annulé' || newStatut === 'Retourné') setSelectedRequest(null);
             else setSelectedRequest((prev) => (prev ? { ...prev, statut: newStatut } : prev));
@@ -560,7 +580,12 @@ function ClientSlideIn({ client, onClose, onEdit, onDelete, onReactivate, onDele
             if (prix?.totalOverride !== undefined) proposedPrice = prix.totalOverride;
             else if (prix?.itemPrices) proposedPrice = (it.items ?? []).reduce((acc, x) => { const p = prix.itemPrices!.find((y) => y.designation === x.designation); return acc + x.quantite * (p?.unitPrice ?? 0); }, 0);
             // ⚠️ On n'envoie PAS le statut — juste le prix
-            await fetch(`/api/quotes/${it.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ proposedPrice, vatEnabled: it.vatEnabled }) });
+            const priceRes = await fetch(`/api/quotes/${it.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ proposedPrice, vatEnabled: it.vatEnabled }) });
+            if (!priceRes.ok) {
+              const err = await priceRes.json().catch(() => ({}));
+              alert(err.error ?? `Le prix n'a pas pu être enregistré (erreur ${priceRes.status}).`);
+              return;
+            }
             // On garde le panneau ouvert — pas de setSelectedRequest(null)
             onRefresh?.();
           }}
@@ -1337,7 +1362,8 @@ function SectorsModal({ sectors, onChange, onClose }: {
   };
   const remove = async (id: string) => {
     if (!window.confirm('Supprimer ce secteur ? Les clients rattachés perdront leur secteur.')) return;
-    await fetch(`/api/sectors/${id}`, { method: 'DELETE' });
+    const res = await fetch(`/api/sectors/${id}`, { method: 'DELETE' });
+    if (!res.ok) { const e = await res.json().catch(() => ({})); alert(e.error ?? `La suppression a échoué (erreur ${res.status}).`); return; }
     onChange();
   };
 

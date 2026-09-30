@@ -65,6 +65,7 @@ export interface ClientFallback {
 /** Commande (format base) → RequestDetail. */
 export function orderToDetail(o: any, fallback?: ClientFallback): RequestDetail {
   const phone =
+    o.clientPhone ||
     o.client?.phones?.find((p: any) => p.primary)?.number ??
     o.client?.phones?.[0]?.number ??
     fallback?.telephone ??
@@ -112,6 +113,7 @@ export function orderToDetail(o: any, fallback?: ClientFallback): RequestDetail 
 /** Devis (format base) → RequestDetail. */
 export function quoteToDetail(q: any, fallback?: ClientFallback): RequestDetail {
   const phone =
+    q.clientPhone ||
     q.client?.phones?.find((p: any) => p.primary)?.number ??
     q.client?.phones?.[0]?.number ??
     fallback?.telephone ??

@@ -54,11 +54,13 @@ function ContentPageInner() {
   const save = async (section: string, updates: Record<string, string>) => {
     setSaving((p) => ({ ...p, [section]: true }));
     try {
-      await fetch('/api/content', {
+      const res = await fetch('/api/content', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updates),
       });
+      // Avant : « Enregistré ✓ » s'affichait même quand la sauvegarde avait échoué.
+      if (!res.ok) { alert((await res.json().catch(() => null))?.error ?? `L'enregistrement a échoué (erreur ${res.status}).`); return; }
       setSaved((p) => ({ ...p, [section]: true }));
       setTimeout(() => setSaved((p) => ({ ...p, [section]: false })), 2000);
     } finally {

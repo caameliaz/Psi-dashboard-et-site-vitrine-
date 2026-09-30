@@ -13,6 +13,7 @@ import { ClientAssignmentPanel } from '@/components/ui/ClientAssignmentPanel';
 // les permissions stock plus récentes n'y apparaissaient plus du tout, impossible
 // de les cocher à la création d'un compte). Ne plus jamais dupliquer cette liste ici.
 import { ALL_PERMISSIONS, type PermKey } from '@/lib/permissions';
+import { apiError } from '@/lib/api-error';
 
 const ADMIN_PERMS: PermKey[]   = ALL_PERMISSIONS.map((p) => p.key);
 const EMPLOYE_PERMS: PermKey[] = ['voir_commandes', 'modifier_statuts', 'voir_clients', 'voir_produits', 'voir_historique'];
@@ -976,14 +977,16 @@ function UsersPageInner() {
   };
 
   const handleDeleteCustomRole = async (id: string) => {
-    await fetch(`/api/roles/${id}`, { method: 'DELETE' });
+    const res = await fetch(`/api/roles/${id}`, { method: 'DELETE' });
+    const err = await apiError(res, 'La suppression du rôle');
+    if (err) { alert(err); return; }
     setCustomRoles((prev) => prev.filter((r) => r.id !== id));
   };
 
   // Édition inline depuis le panneau profil (reste sur la même page)
   const handleSaveProfile = async (u: User, data: { name: string; email: string; role: string; password?: string; permissions: PermKey[] }) => {
     const roleDb = data.role === 'Admin' ? 'ADMIN' : 'EMPLOYEE';
-    await fetch(`/api/users/${u.id}`, {
+    const res = await fetch(`/api/users/${u.id}`, {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         name: data.name, email: data.email, role: roleDb,
@@ -991,6 +994,8 @@ function UsersPageInner() {
         ...(roleDb === 'EMPLOYEE' ? { permissions: data.permissions } : {}),
       }),
     });
+    const err = await apiError(res, 'L’enregistrement du profil');
+    if (err) { alert(err); return; }
     await fetchUsers();
     // Met à jour le panneau ouvert avec les nouvelles valeurs
     const uiRole = roleDb === 'ADMIN' ? 'Admin' : 'Employe';

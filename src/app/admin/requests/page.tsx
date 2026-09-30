@@ -127,6 +127,7 @@ export async function submitNewRequest(
           id: item._clientId || undefined,
           name: item.client, company: item._entreprise || undefined, phone: item._telephone ? normalizePhone(item._telephone) : undefined,
           email: item._email ? normalizeEmail(item._email) : undefined, wilaya: item._wilaya || 'Non spécifié', commune: item._commune || undefined,
+          saveToProfile: item._saveToProfile === true,
         },
         items: lignes.filter((l: any) => l.ref).map((l: any) => ({ productId: l.productId ?? undefined, description: l.productId ? undefined : l.ref, quantity: l.qte, unitPrice: l.pu, metrage: l.metrage ? Number(l.metrage) : undefined })),
         assignedToId: item._assignedToId ?? undefined, source: 'AUTRE',
@@ -139,6 +140,7 @@ export async function submitNewRequest(
         name: item.client, company: item._entreprise || undefined, phone: item._telephone ? normalizePhone(item._telephone) : undefined,
         email: item._email ? normalizeEmail(item._email) : undefined, wilaya: item._wilaya || 'Non spécifié', commune: item._commune || undefined, 
         message: item._message || '',
+        saveToProfile: item._saveToProfile === true,
         items: lignes.filter((l: any) => l.ref).map((l: any) => ({ productId: l.productId ?? undefined, description: l.productId ? undefined : l.ref, quantity: l.qte, unitPrice: l.pu || undefined, metrage: l.metrage ? Number(l.metrage) : undefined })),
         // Prix déjà défini à la création (somme des lignes) → pas de re-saisie à la
         // confirmation. Vaut 0 si aucun prix rempli (le prix sera demandé au moment
@@ -217,9 +219,9 @@ export function CreateForm({ defaultType, onClose, onSave, users, currentUserId,
   const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
 
   useEffect(() => {
-    fetch('/api/products?all=true').then(r => r.json()).then((data: any[]) => {
+    fetch('/api/products?all=true').then(r => r.ok ? r.json() : Promise.reject(new Error(String(r.status)))).then((data: any[]) => {
       setProducts(data.map(p => ({ id: p.id, reference: p.reference, name: p.name ?? null, price: p.price ?? 0, categoryId: p.categoryId ?? p.category?.id ?? '' })));
-    }).catch(() => {});
+    }).catch(() => setFormError('Impossible de charger le catalogue produits : les références ne s’afficheront pas. Fermez et rouvrez le formulaire.'));
     fetch('/api/categories').then(r => r.ok ? r.json() : []).then((data: any[]) => {
       setCategories(data.map((c) => ({ id: c.id, name: c.name })));
     }).catch(() => {});
@@ -242,9 +244,14 @@ export function CreateForm({ defaultType, onClose, onSave, users, currentUserId,
   const ht = lignes.reduce((acc, l) => acc + l.qte * l.pu, 0);
   const total = tva ? Math.round(ht * 1.19) : ht;
 
-  const handleSave = async () => {
+  // Pop-up "enregistrer sur la fiche client ?" — infos saisies que la fiche existante n'a pas.
+  const [profilePrompt, setProfilePrompt] = useState<{ clientLabel: string; gaps: string[] } | null>(null);
+
+  // `saveToProfile` : undefined = pas encore demandé (on vérifie la fiche), true/false = choix fait.
+  const handleSave = async (saveToProfile?: boolean) => {
     setFormError('');
     setFieldErrors({});
+    setProfilePrompt(null);
     // Champs obligatoires : entreprise, téléphone, wilaya, commune, ≥ 1 ligne.
     if (!entreprise.trim()) { setFieldErrors({ entreprise: "Nom de l'entreprise requis" }); setTimeout(() => document.querySelector('[placeholder="Nom entreprise"]')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100); return; }
     if (!telephone.trim()) { setFieldErrors({ telephone: 'Numéro de téléphone requis' }); setTimeout(() => document.querySelector('[placeholder="+213 5XX XXX XXX"]')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100); return; }
@@ -254,6 +261,27 @@ export function CreateForm({ defaultType, onClose, onSave, users, currentUserId,
     // Format des données (téléphone / email) — message clair, pas d'envoi silencieux.
     const vErr = firstError([validatePhone(telephone, true), validateEmail(email)]);
     if (vErr) { const errMsg = messageErreur(vErr); if (errMsg.includes('téléphone') || errMsg.includes('phone')) { setFieldErrors({ telephone: errMsg }); setTimeout(() => document.querySelector('[placeholder="+213 5XX XXX XXX"]')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100); return; } else if (errMsg.includes('email')) { setFieldErrors({ email: errMsg }); setTimeout(() => document.querySelector('[placeholder="client@email.com"]')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100); return; } else { return setFormError(errMsg); } }
+    // Commande sur un client déjà en base : si la saisie apporte une info que sa fiche n'a pas
+    // (téléphone, email, commune), on demande quoi en faire avant de créer.
+    if (saveToProfile === undefined) {
+      try {
+        const qs = new URLSearchParams({
+          ...(prefill?.clientId ? { id: prefill.clientId } : {}),
+          phone: normalizePhone(telephone.trim()), company: entreprise.trim(), name: client.trim() || entreprise.trim(),
+        });
+        const r = await fetch(`/api/clients/match?${qs}`);
+        if (r.ok) {
+          const found = (await r.json()).client as { name: string; company: string | null; email: string | null; commune: string | null; phones: string[] } | null;
+          if (found) {
+            const gaps: string[] = [];
+            if (!found.phones.includes(normalizePhone(telephone.trim()))) gaps.push(`le téléphone ${telephone.trim()}`);
+            if (email.trim() && !found.email) gaps.push("l'email");
+            if (commune.trim() && !found.commune) gaps.push('la commune');
+            if (gaps.length > 0) { setProfilePrompt({ clientLabel: found.company || found.name, gaps }); return; }
+          }
+        }
+      } catch { /* vérification facultative : en cas d'échec on crée quand même la commande */ }
+    }
     setSaving(true);
     const now = new Date();
     const produits = lignes.filter(l => l.ref).map(l => `${l.ref} × ${l.qte}`).join(', ');
@@ -287,6 +315,7 @@ export function CreateForm({ defaultType, onClose, onSave, users, currentUserId,
       _paymentMethod: paymentMethod || undefined,
       _paymentDate: paymentDate || undefined,
       _vatEnabled: vatEnabled,
+      _saveToProfile: saveToProfile === true,
     } as any);
     setSaving(false);
     // Échec (ex. erreur serveur, validation API) → on GARDE le formulaire ouvert
@@ -579,9 +608,23 @@ export function CreateForm({ defaultType, onClose, onSave, users, currentUserId,
             {formError}
           </div>
         )}
+        {profilePrompt && (
+          <div className="mx-6 mb-3 rounded-xl border-2 border-[#FDE68A] bg-[#FFFBEB] p-3.5">
+            <p className="text-[13px] font-bold text-[#92400E] mb-1">Info absente de la fiche client</p>
+            <p className="text-[12px] text-[#92400E] mb-3">
+              La fiche de <span className="font-bold">{profilePrompt.clientLabel}</span> n&apos;a pas : {profilePrompt.gaps.join(', ')}.
+              Les enregistrer sur la fiche client, ou les garder seulement sur cette commande ?
+            </p>
+            <div className="flex gap-2 flex-wrap">
+              <button onClick={() => setProfilePrompt(null)} className="px-3 py-2 rounded-xl border border-[#E2E8F0] bg-white text-[12px] font-semibold text-[#374151]">Retour</button>
+              <button onClick={() => handleSave(false)} className="flex-1 px-3 py-2 rounded-xl border border-[#E2E8F0] bg-white text-[12px] font-bold text-[#374151]">Laisser sur la commande</button>
+              <button onClick={() => handleSave(true)} className="flex-1 px-3 py-2 rounded-xl text-[12px] font-bold text-white" style={{ background: '#4CAF4F' }}>Enregistrer sur la fiche</button>
+            </div>
+          </div>
+        )}
         <div className="flex gap-3 px-6 py-4 border-t border-[#F2F4F7]">
           <button onClick={onClose} className="flex-1 px-4 py-2.5 rounded-xl border border-[#E2E8F0] text-[13px] font-semibold text-[#374151] hover:bg-[#F8FAFC] transition-colors">Annuler</button>
-          <button onClick={handleSave} disabled={saving}
+          <button onClick={() => handleSave()} disabled={saving || !!profilePrompt}
             className="flex-1 px-4 py-2.5 rounded-xl text-[13px] font-bold text-white disabled:opacity-40 transition-opacity"
             style={{ background: '#4CAF4F' }}>
             {saving ? 'Création…' : `Créer ${type === 'Commande' ? 'la commande' : 'le devis'}`}
@@ -645,6 +688,8 @@ function RequestsPageInner() {
         fetch(`/api/orders${qs}`),
         fetch(`/api/quotes${qs}`),
       ]);
+      // Rafraîchissement manuel raté → on le signale (en arrière-plan on reste discret, il y a le polling).
+      if (!silent && (!ordRes.ok || !quoRes.ok)) alert('Le chargement des commandes/devis a échoué. La liste affichée peut être obsolète — rechargez la page.');
       let freshOrders: RequestDetail[] | null = null;
       let freshQuotes: RequestDetail[] | null = null;
       if (ordRes.ok) {
@@ -776,7 +821,7 @@ function RequestsPageInner() {
     // Le corps de la réponse ne peut être lu qu'UNE SEULE FOIS (`res.json()`/`res.text()`
     // lèvent sinon "body stream already read") — on le lit ici une bonne fois pour toutes,
     // qu'on ait besoin de l'inspecter (409) ou juste de le logger (autre échec).
-    const data = !res.ok ? await res.json().catch(() => null) : null;
+    const data = await res.json().catch(() => null);
 
     // "Marquer Produit" avec un manquant (rien pour le couvrir, même après avoir cherché dans
     // le disponible et chez les commandes déjà Produites/Confirmées — jamais de fabrication,
@@ -788,7 +833,13 @@ function RequestsPageInner() {
       return;
     }
 
-    if (!res.ok) console.error('PATCH failed', data);
+    // Échec ou stock non mis à jour : on le DIT (avant, seul un console.error passait inaperçu).
+    if (!res.ok) {
+      console.error('PATCH failed', data);
+      alert(data?.error ?? `Le changement de statut a échoué (erreur ${res.status}). Rien n'a été enregistré.`);
+    } else if (data?.stockWarning) {
+      alert(data.stockWarning);
+    }
     // fetchAll resynchronise le détail ouvert : on ne ferme jamais le panneau,
     // l'utilisateur enchaîne ses actions et ferme lui-même quand il a fini.
     await fetchAll(true);
@@ -811,7 +862,11 @@ function RequestsPageInner() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ assignedToId }),
     });
-    if (!res.ok) { console.error('Assign failed', await res.text()); return; }
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      alert(err.error ?? `L'assignation a échoué (erreur ${res.status}).`);
+      return;
+    }
     await fetchAll(true);
     // Met à jour le panneau ouvert avec le nouvel assigné
     setSelected(prev => prev ? { ...prev, assignedToId, assignedToName: users.find(u => u.id === assignedToId)?.name ?? null } : prev);
@@ -854,11 +909,16 @@ function RequestsPageInner() {
     const itemPrices = prix?.itemPrices;
     // ⚠️ On n'envoie PAS le statut ici — juste le prix et la TVA.
     // Le statut change uniquement via le bouton "Confirmer" (handleStatusChange).
-    await fetch(`/api/quotes/${item.id}`, {
+    const priceRes = await fetch(`/api/quotes/${item.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ proposedPrice, vatEnabled: item.vatEnabled, itemPrices }),
     });
+    if (!priceRes.ok) {
+      const err = await priceRes.json().catch(() => ({}));
+      alert(err.error ?? `Le prix n'a pas pu être enregistré (erreur ${priceRes.status}).`);
+      return;
+    }
     // On reste sur le détail : fetchAll resynchronise le panneau (montant + statut).
     await fetchAll(true);
   };
