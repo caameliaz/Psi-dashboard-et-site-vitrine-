@@ -66,10 +66,10 @@ export interface ClientFallback {
 export function orderToDetail(o: any, fallback?: ClientFallback): RequestDetail {
   const phone =
     o.clientPhone ||
-    o.client?.phones?.find((p: any) => p.primary)?.number ??
-    o.client?.phones?.[0]?.number ??
-    fallback?.telephone ??
-    '';
+    (o.client?.phones?.find((p: any) => p.primary)?.number ??
+      o.client?.phones?.[0]?.number ??
+      fallback?.telephone ??
+      '');
   const items = toItems(o.items);
   const produits = items.map((i) => `${i.designation} × ${i.quantite}`).join(', ') || '—';
   const total = items.reduce((acc, i) => acc + i.quantite * i.prixUnitaire, 0);
@@ -114,10 +114,10 @@ export function orderToDetail(o: any, fallback?: ClientFallback): RequestDetail 
 export function quoteToDetail(q: any, fallback?: ClientFallback): RequestDetail {
   const phone =
     q.clientPhone ||
-    q.client?.phones?.find((p: any) => p.primary)?.number ??
-    q.client?.phones?.[0]?.number ??
-    fallback?.telephone ??
-    '';
+    (q.client?.phones?.find((p: any) => p.primary)?.number ??
+      q.client?.phones?.[0]?.number ??
+      fallback?.telephone ??
+      '');
   const items = toItems(q.items);
   const produits = items.map((i) => `${i.designation} × ${i.quantite}`).join(', ') || '—';
   // Total : le prix global proposé prime ; sinon on somme les prix unitaires des lignes.
