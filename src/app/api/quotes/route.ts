@@ -9,6 +9,7 @@ import { createAudit } from '@/lib/audit';
 import { rateLimit } from '@/lib/rate-limit';
 import { validateEmail, validatePhone, validateText, validateQuantity, firstError } from '@/lib/validation';
 import { resolveClientVisibility } from '@/lib/leave';
+import { saveInfoToClientProfile } from '@/lib/client-profile';
 
 export async function GET(request: NextRequest) {
   const guard = await requirePermission('voir_commandes');
@@ -152,6 +153,11 @@ export async function POST(request: NextRequest) {
       }).catch(() => {});
     }
 
+    // Choix du pop-up du formulaire : reporter le téléphone/email/commune saisis sur la fiche client.
+    if (body.saveToProfile === true && session?.user?.id) {
+      client = await saveInfoToClientProfile(client, { phone: primaryPhone, email: body.email, commune: body.commune });
+    }
+
     const VALID_SOURCES = ['SITE', 'ADMIN', 'WHATSAPP', 'TELEPHONE', 'AUTRE'];
     const source = VALID_SOURCES.includes(body.source) ? body.source : 'SITE';
 
@@ -166,6 +172,8 @@ export async function POST(request: NextRequest) {
         clientCompany: clientCompany || client.company || null,
         clientWilaya: body.wilaya || client.wilaya || null,
         clientCommune: body.commune || client.commune || null,
+        // Numéro saisi pour CE devis (même si la fiche client n'a pas été mise à jour)
+        clientPhone: primaryPhone || null,
         message: body.message ?? '',
         source: source as any,
         createdById: session?.user?.id ?? null,

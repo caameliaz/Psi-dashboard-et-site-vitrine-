@@ -674,12 +674,16 @@ function EditOrderModal({ item, onClose, onSaved }: {
   const [lines, setLines] = useState<EditLine[]>([]);
   const [tva, setTva] = useState<boolean>(item.vatEnabled === true);
   const [saving, setSaving] = useState(false);
+  // Commande déjà livrée (admin) : justification obligatoire + question "ajuster le stock ?"
+  const livree = !estDevis && item.statut === 'Livré';
+  const [justification, setJustification] = useState('');
+  const [askStock, setAskStock] = useState(false);
 
   useEffect(() => {
     fetch('/api/categories').then(r => r.ok ? r.json() : []).then((cats: any[]) =>
       setCategories(cats.map((c) => ({ id: c.id, name: c.name })))
-    ).catch(() => {});
-    fetch('/api/products').then(r => r.json()).then((data: ProdOption[]) => {
+    ).catch(() => alert('Impossible de charger les catégories. Rechargez la page.'));
+    fetch('/api/products').then(r => r.ok ? r.json() : Promise.reject(new Error(String(r.status)))).then((data: ProdOption[]) => {
       setProducts(data);
       // Initialise les lignes depuis la commande, en retrouvant le productId via la référence
       const init: EditLine[] = (item.items ?? []).map(it => {
@@ -698,7 +702,11 @@ function EditOrderModal({ item, onClose, onSaved }: {
         };
       });
       setLines(init.length > 0 ? init : [{ categoryId: '', productId: null, designation: '', quantite: 1, prixUnitaire: 0, metrage: null }]);
-    }).catch(() => {});
+    }).catch(() => {
+      // Sans catalogue, la modale resterait vide et un enregistrement effacerait les lignes.
+      alert('Impossible de charger le catalogue produits. Fermez cette fenêtre et réessayez.');
+      onClose();
+    });
     // ⚠️ [] et NON [item.items] : `item.items` est un nouveau tableau à chaque
     // rafraîchissement (toutes les 15s) → l'effet se relançait et `setLines`
     // ÉCRASAIT la saisie en cours (une réf. libre ajoutée disparaissait).
@@ -722,8 +730,19 @@ function EditOrderModal({ item, onClose, onSaved }: {
   const total = lines.reduce((acc, l) => acc + l.quantite * l.prixUnitaire, 0);
   const inputCls = "px-3 py-2 rounded-xl border border-[#E2E8F0] text-[13px] text-[#0F172A] focus:outline-none focus:border-[#4CAF4F] focus:ring-[2px] focus:ring-[#4CAF4F]/15 transition-all";
 
-  const save = async () => {
+  // Bouton Enregistrer : pour une commande livrée, exige la justification puis pose la question du stock.
+  const onSaveClick = () => {
+    if (livree) {
+      if (!justification.trim()) { alert('Une justification est obligatoire pour modifier une commande livrée.'); return; }
+      setAskStock(true);
+      return;
+    }
+    save();
+  };
+
+  const save = async (adjustStock?: boolean) => {
     if (!item.id) return;
+    setAskStock(false);
     setSaving(true);
     // Une référence LIBRE n'a pas de productId : on l'envoie via `description`,
     // sinon la ligne était purement et simplement supprimée à l'enregistrement.
@@ -744,7 +763,7 @@ function EditOrderModal({ item, onClose, onSaved }: {
     const res = await fetch(`/api/${estDevis ? 'quotes' : 'orders'}/${item.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ items, ...extra }),
+      body: JSON.stringify({ items, ...extra, ...(livree && { justification: justification.trim(), adjustStock: adjustStock === true }) }),
     });
     setSaving(false);
     if (!res.ok) {
@@ -879,12 +898,33 @@ function EditOrderModal({ item, onClose, onSaved }: {
             )}
           </div>
 
-          <div className="flex gap-3">
-            <button onClick={onClose} className="flex-1 px-4 py-2.5 rounded-xl border border-[#E2E8F0] text-[13px] font-semibold text-[#374151]">Annuler</button>
-            <button onClick={save} disabled={saving} className="flex-1 px-4 py-2.5 rounded-xl text-[13px] font-bold text-white disabled:opacity-60" style={{ background: '#4CAF4F' }}>
-              {saving ? 'Enregistrement…' : 'Enregistrer'}
-            </button>
-          </div>
+          {livree && (
+            <div className="mb-3">
+              <label className="block text-[11px] font-bold text-[#0F172A] uppercase tracking-wide mb-1">Justification (obligatoire)</label>
+              <textarea value={justification} onChange={e => setJustification(e.target.value)} rows={2}
+                placeholder="Pourquoi modifier cette commande déjà livrée ?"
+                className={inputCls + ' w-full resize-none'} />
+            </div>
+          )}
+
+          {askStock ? (
+            <div className="rounded-xl border-2 border-[#FDE68A] bg-[#FFFBEB] p-3">
+              <p className="text-[13px] font-bold text-[#92400E] mb-1">Ajuster le stock ?</p>
+              <p className="text-[12px] text-[#92400E] mb-3">Oui : la différence de quantité est répercutée sur le stock disponible. Non : le stock reste tel quel.</p>
+              <div className="flex gap-2">
+                <button onClick={() => setAskStock(false)} className="px-3 py-2 rounded-xl border border-[#E2E8F0] bg-white text-[12px] font-semibold text-[#374151]">Retour</button>
+                <button onClick={() => save(false)} className="flex-1 px-3 py-2 rounded-xl border border-[#E2E8F0] bg-white text-[12px] font-bold text-[#374151]">Non, laisser tel quel</button>
+                <button onClick={() => save(true)} className="flex-1 px-3 py-2 rounded-xl text-[12px] font-bold text-white" style={{ background: '#4CAF4F' }}>Oui, ajuster</button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex gap-3">
+              <button onClick={onClose} className="flex-1 px-4 py-2.5 rounded-xl border border-[#E2E8F0] text-[13px] font-semibold text-[#374151]">Annuler</button>
+              <button onClick={onSaveClick} disabled={saving} className="flex-1 px-4 py-2.5 rounded-xl text-[13px] font-bold text-white disabled:opacity-60" style={{ background: '#4CAF4F' }}>
+                {saving ? 'Enregistrement…' : 'Enregistrer'}
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </>
@@ -1088,10 +1128,11 @@ export function RequestPanel({ item, onClose, onStatusChange, onConfirmQuoteWith
     if (!res.ok) { alert('Ré-assignation impossible'); return; }
     // Justification (non-admin) → note interne
     if (reason.trim()) {
-      await fetch(notesBase, {
+      const noteRes = await fetch(notesBase, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ content: `[Changement de client] ${reason.trim()}` }),
-      }).catch(() => {});
+      }).catch(() => null);
+      if (!noteRes?.ok) alert('Le client a été changé, mais la justification n’a pas pu être enregistrée dans les notes.');
     }
     setShowReassign(false);
     // Refresh SANS rejouer un changement de statut (sinon notif parasite "mis en attente").

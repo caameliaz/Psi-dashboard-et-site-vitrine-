@@ -1099,7 +1099,16 @@ export default function DashboardPage() {
             const item = selectedRequest;
             if (!item?.id) return;
             const endpoint = item.type === 'Devis' ? `/api/quotes/${item.id}` : `/api/orders/${item.id}`;
-            await fetch(endpoint, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: UI_TO_DB[newStatut] ?? newStatut }) });
+            const res = await fetch(endpoint, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: UI_TO_DB[newStatut] ?? newStatut }) });
+            const data = await res.json().catch(() => null);
+            if (!res.ok) {
+              alert(data?.error === 'PRODUCT_SHORTFALL'
+                ? 'Stock insuffisant pour passer cette commande en « Disponible ». Faites-le depuis la page Demandes pour choisir de forcer ou non.'
+                : (data?.error ?? `Le changement de statut a échoué (erreur ${res.status}). Rien n'a été enregistré.`));
+              fetchData(true);
+              return;
+            }
+            if (data?.stockWarning) alert(data.stockWarning);
             setSelectedRequest(null);
             fetchData(true);
           }}
@@ -1117,11 +1126,16 @@ export default function DashboardPage() {
                 }, 0);
               }
               // ⚠️ On n'envoie PAS le statut — juste le prix
-              await fetch(`/api/quotes/${item.id}`, {
+              const priceRes = await fetch(`/api/quotes/${item.id}`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ proposedPrice, vatEnabled: item.vatEnabled }),
               });
+              if (!priceRes.ok) {
+                const err = await priceRes.json().catch(() => ({}));
+                alert(err.error ?? `Le prix n'a pas pu être enregistré (erreur ${priceRes.status}).`);
+                return;
+              }
             }
             // On garde le panneau ouvert — pas de setSelectedRequest(null)
             fetchData(true);

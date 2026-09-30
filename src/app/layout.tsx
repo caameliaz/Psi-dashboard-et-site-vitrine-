@@ -8,7 +8,7 @@ const notoSerif = Noto_Serif({ subsets: ["latin"], variable: "--font-noto-serif"
 const playfairDisplay = Playfair_Display({ subsets: ["latin"], variable: "--font-playfair" });
 
 export const metadata: Metadata = {
-  title: "PSI - Thermal Paper Solutions",
+  title: "SARL Paper Solutions Industry",
   description: "PSI fabrique et fournit du papier thermique premium (rouleaux de caisse, étiquettes thermiques) pour les entreprises en Algérie.",
 };
 

@@ -348,6 +348,7 @@ model Order {
   clientCompany   String?
   clientWilaya    String?
   clientCommune   String? // snapshot de la commune saisie POUR cette demande
+  clientPhone     String? // snapshot du téléphone saisi POUR cette commande (prime sur la fiche client à l'affichage)
   items           OrderItem[]
   status          RequestStatus  @default(EN_ATTENTE)
   source          OrderSource    @default(SITE)
@@ -433,6 +434,7 @@ model Quote {
   clientCompany   String?
   clientWilaya    String?
   clientCommune   String?
+  clientPhone     String? // snapshot du téléphone saisi POUR ce devis (prime sur la fiche client à l'affichage)
   items           QuoteItem[]
   message         String // description libre du client
   status          RequestStatus  @default(EN_ATTENTE)
@@ -730,4 +732,31 @@ enum AuditEntity {
   STATUT
   STOCK
   MATIERE
+}
+
+// ─── PANIERS DU SITE PUBLIC (suivi anonyme, pas d'identité) ──────────────────
+// Objectif : mesurer combien de paniers sont créés / abandonnés / convertis en
+// commande ou devis — AUCUNE donnée personnelle : `anonId` est un identifiant
+// aléatoire généré côté navigateur (cookie), jamais relié à un client.
+// - EN_COURS   : le panier a du contenu, pas encore de commande/devis
+// - ABANDONNE  : plus de 24h sans modification, toujours EN_COURS à ce moment
+//   (recalculé à la demande par `marquerPaniersAbandonnes`, pas de cron)
+// - CONVERTI   : la commande/devis a été validée (`clearCart()` a réussi)
+model CartSession {
+  id          String            @id @default(cuid())
+  anonId      String            @unique // identifiant anonyme (cookie navigateur), pas une identité
+  status      CartSessionStatus @default(EN_COURS)
+  itemsCount  Int // nombre total d'unités dans le panier au dernier changement
+  totalAmount Float // montant total au dernier changement (DA)
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt // dernière modification du contenu → sert au calcul des 24h
+  convertedAt DateTime? // horodatage de la conversion en commande/devis
+
+  @@index([status, updatedAt])
+}
+
+enum CartSessionStatus {
+  EN_COURS
+  ABANDONNE
+  CONVERTI
 }

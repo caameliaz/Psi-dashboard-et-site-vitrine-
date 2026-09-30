@@ -7,7 +7,7 @@ import { notifyStatusChange, notifyAssignment } from '@/lib/notify-activity';
 import {
   confirmStock, cancelStock, deliverStock, returnStock, releaseOrderItemStock, adjustOrderItemQuantity,
   forceCompleteOrder, previewForceCompleteShortfall, syncCommercialAssignmentForParent,
-  previewFreeTextResolution, resolveFreeTextItems,
+  previewFreeTextResolution, resolveFreeTextItems, editDeliveredOrderItems,
 } from '@/lib/order-stock';
 
 // Statuts où les lignes ne peuvent plus être modifiées (déjà sorties du stock/annulées) —
@@ -127,18 +127,49 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
     // après coup — les autres rôles doivent passer par un admin).
     const isAdmin = (session.user as any).role === 'ADMIN';
     let current: { status: string } | null = null;
+    let itemsAudit: string | null = null; // avant → après des lignes, pour l'audit
+    let deliveredEditReason: string | null = null;
     if (body.items && Array.isArray(body.items)) {
       current = await prisma.order.findUnique({ where: { id }, select: { status: true } });
-      if (current && LOCKED_STATUSES.includes(current.status) && !(isAdmin && current.status === 'LIVRE')) {
-        return NextResponse.json({ error: 'Impossible de modifier une commande livrée, retournée ou annulée' }, { status: 409 });
+      const isDeliveredEdit = current?.status === 'LIVRE';
+      if (current && LOCKED_STATUSES.includes(current.status)) {
+        // Livrée : modifiable par un admin seulement, avec justification (tracée dans l'audit).
+        if (!isDeliveredEdit) {
+          return NextResponse.json({ error: 'Impossible de modifier une commande retournée ou annulée' }, { status: 409 });
+        }
+        if (!isAdmin) {
+          return NextResponse.json({ error: 'Seul un administrateur peut modifier une commande livrée' }, { status: 403 });
+        }
+        deliveredEditReason = String(body.justification ?? '').trim();
+        if (!deliveredEditReason) {
+          return NextResponse.json({ error: 'Une justification est obligatoire pour modifier une commande livrée' }, { status: 400 });
+        }
       }
       // Une référence LIBRE n'a pas de productId : son libellé est dans `description`.
       // (avant, ces lignes étaient filtrées → elles disparaissaient à chaque modification)
       const validItems = (body.items as { productId?: string; description?: string; quantity?: number; unitPrice?: number; metrage?: number }[])
         .filter((it) => (it.productId || (it.description && it.description.trim() !== '')) && (it.quantity ?? 0) > 0);
 
+      const before = await prisma.orderItem.findMany({ where: { orderId: id }, include: { product: { select: { reference: true } } } });
+      const fmtBefore = before.map((i) => `${i.product?.reference ?? i.description ?? '?'} ×${i.quantity} à ${i.unitPrice} DA`).join(' ; ') || '—';
+      const productRefs = new Map(
+        (await prisma.product.findMany({ where: { id: { in: validItems.filter((i) => i.productId).map((i) => i.productId as string) } }, select: { id: true, reference: true } }))
+          .map((p) => [p.id, p.reference])
+      );
+      const fmtAfter = validItems.map((i) => `${i.productId ? (productRefs.get(i.productId) ?? '?') : (i.description ?? '?')} ×${i.quantity} à ${i.unitPrice ?? 0} DA`).join(' ; ') || '—';
+      itemsAudit = `Avant : ${fmtBefore} | Après : ${fmtAfter}`;
+
       const isConfirmed = current && (current.status === 'VALIDE' || current.status === 'PRODUITE');
-      if (isConfirmed) {
+      if (isDeliveredEdit) {
+        const adjusted = await editDeliveredOrderItems(
+          id,
+          validItems.map((it) => ({ productId: it.productId || null, description: it.description ?? null, quantity: it.quantity!, unitPrice: it.unitPrice ?? 0, metrage: it.metrage ?? null })),
+          body.adjustStock === true,
+        );
+        itemsAudit += body.adjustStock === true
+          ? ` | Stock ajusté : ${adjusted.length > 0 ? adjusted.join(', ') : 'aucun changement'}`
+          : ' | Stock laissé tel quel';
+      } else if (isConfirmed) {
         // Commande déjà confirmée : on ne rejoue le moteur de stock QUE pour ce qui
         // change réellement, au lieu de tout relâcher puis tout reconfirmer — sinon
         // une simple hausse/baisse de quantité peut se retrouver fusionnée avec une
@@ -246,9 +277,20 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
       : body.autoAssignStock !== undefined ? (body.autoAssignStock ? 'Auto-attribution au commercial activée' : 'Auto-attribution au commercial désactivée')
       : 'Commande modifiée';
     const orderLabel = order.clientCompany || order.clientName || order.client?.name || '';
-    createAudit({ userId: session.user.id, action, entity: 'COMMANDE', entityId: id, detail: orderLabel ? `${order.ref} — ${orderLabel}` : order.ref, orderId: id });
+    const auditBase = orderLabel ? `${order.ref} — ${orderLabel}` : order.ref;
+    const auditDetail = [
+      auditBase,
+      deliveredEditReason ? `Justification : ${deliveredEditReason}` : null,
+      itemsAudit,
+    ].filter(Boolean).join(' — ');
+    createAudit({
+      userId: session.user.id,
+      action: deliveredEditReason ? 'Commande livrée modifiée' : action,
+      entity: 'COMMANDE', entityId: id, detail: auditDetail, orderId: id,
+    });
 
     // ── Répercussion sur le stock selon la transition de statut ────────────────
+    let stockWarning: string | null = null;
     try {
       // `autoAssignStock` vient de changer (case cochée/décochée) → le resolvedQuantity des
       // articles ne bouge pas, mais la CIBLE de l'auto-attribution change instantanément :
@@ -295,6 +337,10 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
       }
     } catch (stockError) {
       console.error('[orders] Erreur de mise à jour du stock :', stockError);
+      // Le statut est déjà enregistré mais le stock n'a pas suivi : on ne le cache plus.
+      // Trace dans l'historique + avertissement renvoyé à l'écran (cf. `stockWarning`).
+      stockWarning = `Le statut a été enregistré mais la mise à jour du stock a échoué (${stockError instanceof Error ? stockError.message : 'erreur inconnue'}). Vérifiez le stock de cette commande.`;
+      createAudit({ userId: session.user.id, action: 'Erreur de mise à jour du stock', entity: 'COMMANDE', entityId: id, detail: `${auditBase} — ${stockError instanceof Error ? stockError.message : String(stockError)}`, orderId: id });
     }
 
     // Modification des PRODUITS (sans changement de statut) → on prévient quand même :
@@ -332,7 +378,7 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
       }).catch(() => {});
     }
 
-    return NextResponse.json(order);
+    return NextResponse.json(stockWarning ? { ...order, stockWarning } : order);
   } catch (e) {
     console.error(e);
     return NextResponse.json({ error: 'Failed to update order' }, { status: 500 });
