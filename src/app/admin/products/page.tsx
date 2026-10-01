@@ -498,7 +498,7 @@ function ProductsPageInner() {
   const catPhotoRef = useRef<HTMLInputElement>(null);
 
   const fetchCategories = useCallback(async () => {
-    const res = await fetch('/api/categories');
+    const res = await fetch('/api/categories?withPhoto=true');
     if (res.ok) {
       const data = await res.json();
       const list: Cat[] = data.map((c: any) => ({ id: c.id, name: c.name, prefix: c.prefix ?? null, photo: c.photo ?? null, description: c.description ?? null, count: c._count?.products ?? 0 }));

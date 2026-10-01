@@ -3,10 +3,15 @@ import { prisma } from '@/lib/prisma';
 import { requirePermission } from '@/lib/permissions';
 
 // GET /api/categories — toutes les catégories (public)
-export async function GET() {
+// `photo` (base64, souvent >10 Ko/catégorie) est omis par défaut : la plupart des appelants
+// ne s'en servent que pour un menu déroulant (id/nom). ?withPhoto=true pour les vues qui
+// affichent vraiment l'image (page produit, vitrine catégories, gestion catégories admin).
+export async function GET(request: NextRequest) {
+  const withPhoto = request.nextUrl.searchParams.get('withPhoto') === 'true';
   try {
     const categories = await prisma.category.findMany({
       orderBy: { order: 'asc' },
+      omit: withPhoto ? undefined : { photo: true },
       include: { _count: { select: { products: true } } },
     });
     return NextResponse.json(categories);

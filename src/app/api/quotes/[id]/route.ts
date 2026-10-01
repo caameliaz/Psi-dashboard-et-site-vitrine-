@@ -30,7 +30,7 @@ export async function GET(_request: NextRequest, { params }: Ctx) {
         client: { include: { phones: true } },
         items: {
           include: {
-            product: { include: { category: { select: { id: true, name: true } } } },
+            product: { omit: { photo: true }, include: { category: { select: { id: true, name: true } } } },
             purchaseListItem: { select: { status: true } },
             productionListItem: { select: { status: true } },
           },
@@ -293,7 +293,7 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
         client: { include: { phones: true } },
         items: {
           include: {
-            product: true,
+            product: { omit: { photo: true } },
             purchaseListItem: { select: { status: true } },
             productionListItem: { select: { status: true } },
           },

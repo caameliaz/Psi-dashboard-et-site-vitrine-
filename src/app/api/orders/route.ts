@@ -52,7 +52,9 @@ export async function GET(request: NextRequest) {
         client: { include: { phones: true } },
         items: {
           include: {
-            product: { include: { category: { select: { id: true, name: true } } } },
+            // `photo` (base64) n'est jamais affiché dans les commandes/devis — l'omettre
+            // évite de le renvoyer pour chaque item à chaque appel (liste pollée /20s).
+            product: { omit: { photo: true }, include: { category: { select: { id: true, name: true } } } },
             purchaseListItem: { select: { status: true } },
             productionListItem: { select: { status: true } },
           },

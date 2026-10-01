@@ -54,7 +54,7 @@ export default function ProductDetailPage() {
   };
 
   useEffect(() => {
-    fetch('/api/categories').then(r => r.ok ? r.json() : []).then((data: any[]) =>
+    fetch('/api/categories?withPhoto=true').then(r => r.ok ? r.json() : []).then((data: any[]) =>
       setCats(data.map(c => ({ id: c.id, name: c.name, photo: c.photo ?? null, description: c.description ?? null })))
     ).catch(() => {});
     fetch('/api/products').then(r => r.ok ? r.json() : []).then(setProducts).catch(() => {});

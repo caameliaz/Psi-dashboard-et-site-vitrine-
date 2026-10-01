@@ -31,7 +31,7 @@ export async function GET(_request: NextRequest, { params }: Ctx) {
         client: { include: { phones: true } },
         items: {
           include: {
-            product: { include: { category: { select: { id: true, name: true } } } },
+            product: { omit: { photo: true }, include: { category: { select: { id: true, name: true } } } },
             purchaseListItem: { select: { status: true } },
             productionListItem: { select: { status: true } },
           },
@@ -115,7 +115,7 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
 
     // Mise à jour des prix unitaires par produit si fournis
     if (body.itemPrices && Array.isArray(body.itemPrices)) {
-      const existing = await prisma.orderItem.findMany({ where: { orderId: id }, include: { product: true } });
+      const existing = await prisma.orderItem.findMany({ where: { orderId: id }, include: { product: { select: { reference: true } } } });
       await Promise.all(body.itemPrices.map(async (ip: { designation: string; unitPrice: number }) => {
         const match = existing.find(e => e.product?.reference === ip.designation);
         if (match) await prisma.orderItem.update({ where: { id: match.id }, data: { unitPrice: ip.unitPrice } });
@@ -286,7 +286,7 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
         client: { include: { phones: true } },
         items: {
           include: {
-            product: true,
+            product: { omit: { photo: true } },
             purchaseListItem: { select: { status: true } },
             productionListItem: { select: { status: true } },
           },
