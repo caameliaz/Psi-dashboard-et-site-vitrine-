@@ -85,6 +85,7 @@ export default function ProfilePage() {
   const [email, setEmail] = useState('');
   const [telephone, setTelephone] = useState('');
   const [role, setRole] = useState('');
+  const [roleLabel, setRoleLabel] = useState(''); // « Admin 2 » (rôle perso) ou Admin / Employé
   const [depuis, setDepuis] = useState('');
   const [savedInfo, setSavedInfo] = useState(false);
   const [infoError, setInfoError] = useState('');
@@ -107,6 +108,7 @@ export default function ProfilePage() {
       if (!u) return;
       setNom(u.name ?? ''); setEmail(u.email ?? ''); setTelephone(u.phone ?? '');
       setRole(u.role === 'ADMIN' ? 'Admin' : 'Employé');
+      setRoleLabel(u.role === 'ADMIN' ? 'Admin' : (u.customRole?.name ?? 'Employé'));
       setDepuis(u.createdAt ? new Date(u.createdAt).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' }) : '');
       setRecapDaily(u.recapDaily ?? true);
       setRecapWeekly(u.recapWeekly ?? true);
@@ -180,7 +182,7 @@ export default function ProfilePage() {
           <p className="text-[20px] font-bold text-[#0F172A]">{nom || '…'}</p>
           <p className="text-[13px] text-[#8A9BB5] mt-0.5">{email}</p>
           <div className="flex items-center gap-2 mt-2">
-            <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-[#F3E8FF] text-[#6B21A8]">{role}</span>
+            <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-[#F3E8FF] text-[#6B21A8]">{roleLabel || role}</span>
             {depuis && <span className="text-[11px] text-[#ABBED1]">Membre depuis {depuis}</span>}
           </div>
         </div>
@@ -208,7 +210,7 @@ export default function ProfilePage() {
             <div>
               <label className={labelClass}>Rôle</label>
               <div className="px-4 py-2.5 rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] text-[14px] text-[#8A9BB5] select-none">
-                {role} — non modifiable
+                {roleLabel || role} — non modifiable
               </div>
             </div>
             <div className="flex items-center justify-end gap-3 pt-1">

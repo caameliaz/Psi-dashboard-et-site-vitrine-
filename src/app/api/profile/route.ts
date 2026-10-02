@@ -10,7 +10,7 @@ export async function GET() {
 
   const user = await prisma.user.findUnique({
     where: { id: session.user.id },
-    select: { id: true, name: true, email: true, phone: true, role: true, createdAt: true, recapDaily: true, recapWeekly: true },
+    select: { id: true, name: true, email: true, phone: true, role: true, customRole: { select: { name: true } }, createdAt: true, recapDaily: true, recapWeekly: true },
   });
   if (!user) return NextResponse.json({ error: 'Introuvable' }, { status: 404 });
   return NextResponse.json(user);

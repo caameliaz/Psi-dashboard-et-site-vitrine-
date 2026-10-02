@@ -3,6 +3,7 @@ import Credentials from 'next-auth/providers/credentials';
 import bcrypt from 'bcryptjs';
 import { prisma } from './prisma';
 import { isBlocked, recordFail, recordSuccess } from './login-guard';
+import { createAudit, LOGIN_ACTION } from './audit';
 import type { Role } from '@/types';
 
 // Durée de session selon la case "Se souvenir de moi" à la connexion (cf. jwt callback) —
@@ -76,6 +77,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           data: { twoFactorCode: null, twoFactorExpires: null, twoFactorAttempts: 0 },
         });
 
+        // Journal des connexions (visible seulement par le compte désigné dans /api/audit)
+        createAudit({ userId: user.id, action: LOGIN_ACTION, entity: 'UTILISATEUR', entityId: user.id, detail: user.name });
+
         return {
           id: user.id,
           email: user.email,
@@ -105,8 +109,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         token.role = user.role as Role;
         token.permissions = (user as { permissions?: string[] }).permissions ?? [];
         // Stocker sessionVersion initial pour pouvoir détecter une invalidation
-        const dbUser = await prisma.user.findUnique({ where: { id: user.id } });
+        const dbUser = await prisma.user.findUnique({ where: { id: user.id }, include: { customRole: { select: { name: true } } } });
         token.sessionVersion = dbUser?.sessionVersion ?? 0;
+        token.customRoleName = dbUser?.customRole?.name ?? null; // étiquette du rôle perso (ex. « Admin 2 »)
         // "Se souvenir de moi" — mémorisé sur le token lui-même (pas seulement lu une fois à la
         // connexion) pour que chaque ré-émission glissante (updateAge, branche else ci-dessous)
         // sache quelle durée reconduire, pas seulement la toute première émission.
@@ -119,12 +124,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         // garderait tous les droits (ADMIN = toutes permissions) jusqu'à sa reconnexion.
         const dbUser = await prisma.user.findUnique({
           where: { id: token.sub! },
-          select: { sessionVersion: true, active: true, permissions: true, role: true },
+          select: { sessionVersion: true, active: true, permissions: true, role: true, customRole: { select: { name: true } } },
         });
         if (!dbUser || !dbUser.active || dbUser.sessionVersion !== token.sessionVersion) {
           return null;
         }
         token.role = dbUser.role as Role;
+        token.customRoleName = dbUser.customRole?.name ?? null;
         token.permissions = dbUser.permissions ?? [];
         // Reconduit l'expiration selon le choix fait à LA CONNEXION (glissant, comme le reste
         // de la session) — jamais l'inverse : un token émis "non mémorisé" ne doit jamais se
@@ -138,6 +144,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         session.user.id = token.sub!;
         session.user.role = token.role as Role;
         session.user.permissions = (token.permissions as string[]) ?? [];
+        session.user.customRoleName = (token.customRoleName as string | null) ?? null;
       }
       return session;
     }

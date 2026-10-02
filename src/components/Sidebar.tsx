@@ -92,7 +92,8 @@ export function Sidebar({ mobileOpen = false, onCloseMobile }: { mobileOpen?: bo
   const { data: session } = useSession();
   const [collapsed, setCollapsed] = useState(false);
   const userName  = session?.user?.name ?? '—';
-  const userRole  = role === 'ADMIN' ? 'Admin' : 'Employé';
+  // Rôle perso (ex. « Admin 2 ») : son nom remplace « Employé » (le rôle réel, lui, reste Employé)
+  const userRole  = role === 'ADMIN' ? 'Admin' : (session?.user?.customRoleName || 'Employé');
   const userInitials = userName.split(' ').map((p) => p[0]).join('').slice(0, 2).toUpperCase();
 
   return (

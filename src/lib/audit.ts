@@ -14,6 +14,10 @@ export function statusLabel(s: string) {
   return STATUS_LABELS[s] ?? s;
 }
 
+// Journal des CONNEXIONS : action « Connexion » (entité UTILISATEUR). Visible dans l'Historique par ce seul compte.
+export const LOGIN_ACTION = 'Connexion';
+export const LOGIN_LOG_VIEWER_EMAIL = 'cameliamerniz@gmail.com';
+
 type Entity = 'COMMANDE' | 'DEVIS' | 'PRODUIT' | 'CLIENT' | 'UTILISATEUR' | 'CONTENU' | 'TEMPLATE' | 'STATUT' | 'STOCK' | 'MATIERE';
 
 export function createAudit({

@@ -8,6 +8,7 @@ declare module "next-auth" {
       email: string;
       role: Role;
       permissions: string[];
+      customRoleName?: string | null; // nom du rôle perso (étiquette), ex. « Admin 2 »
     };
   }
 
@@ -22,6 +23,7 @@ declare module "next-auth/jwt" {
   interface JWT {
     role: Role;
     permissions?: string[];
+    customRoleName?: string | null;
     sessionVersion?: number;
     // "Se souvenir de moi" coché à la connexion (cf. auth.ts) — mémorisé sur le token pour que
     // chaque ré-émission glissante (updateAge) reconduise la bonne durée, pas seulement la
