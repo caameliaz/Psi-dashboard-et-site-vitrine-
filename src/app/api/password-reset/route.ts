@@ -40,34 +40,42 @@ export async function POST(request: NextRequest) {
         },
       });
 
-      // 2. Envoie le nouveau mot de passe À L'UTILISATEUR
+      // ⚠️ Tout est ATTENDU avant de répondre : sur Vercel (serverless) la fonction est gelée dès que la
+      // réponse part, et un e-mail lancé « en tâche de fond » (sans await) pouvait ne JAMAIS partir —
+      // le mot de passe était changé mais l'utilisateur ne recevait rien.
       const self = renderPasswordResetSelfEmail({ name: user.name, email: user.email, password: newPassword });
-      sendEmail({ to: user.email, subject: self.subject, html: self.html, attachments: [logoAttachment] })
-        .catch(() => {});
+      const resultats = await Promise.allSettled([
+        // 2. Envoie le nouveau mot de passe À L'UTILISATEUR
+        sendEmail({ to: user.email, subject: self.subject, html: self.html, attachments: [logoAttachment] }),
 
-      // 3. Informe les admins (traçabilité) — SANS le mot de passe
-      createNotif({
-        type: 'ACTION_AUTRE',
-        title: 'Mot de passe réinitialisé',
-        message: `${user.name} (${user.email}) a demandé un nouveau mot de passe — envoyé automatiquement par email.`,
-        adminOnly: true,
-        link: '/admin/settings/users',
-      }).catch(() => {});
+        // 3. Informe les admins (traçabilité) — SANS le mot de passe
+        createNotif({
+          type: 'ACTION_AUTRE',
+          title: 'Mot de passe réinitialisé',
+          message: `${user.name} (${user.email}) a demandé un nouveau mot de passe — envoyé automatiquement par email.`,
+          adminOnly: true,
+          link: '/admin/settings/users',
+        }),
 
-      prisma.user
-        .findMany({ where: { role: 'ADMIN', active: true }, select: { email: true } })
-        .then((admins) => {
-          const mail = renderPasswordResetRequestEmail({ name: user.name, email: user.email });
-          // Alerte e-mail réservée à la propriétaire du compte (les autres admins ont la notif dans l'admin)
-          return Promise.all(
-            admins
-              .filter((a) => isOwnerEmail(a.email))
-              .map((a) =>
-                sendEmail({ to: a.email!, subject: mail.subject, html: mail.html, attachments: [logoAttachment] }),
-              ),
-          );
-        })
-        .catch(() => {});
+        prisma.user
+          .findMany({ where: { role: 'ADMIN', active: true }, select: { email: true } })
+          .then((admins) => {
+            const mail = renderPasswordResetRequestEmail({ name: user.name, email: user.email });
+            // Alerte e-mail réservée à la propriétaire du compte (les autres admins ont la notif dans l'admin)
+            return Promise.all(
+              admins
+                .filter((a) => isOwnerEmail(a.email))
+                .map((a) =>
+                  sendEmail({ to: a.email!, subject: mail.subject, html: mail.html, attachments: [logoAttachment] }),
+                ),
+            );
+          }),
+      ]);
+      // sendEmail ne lève pas d'exception : il renvoie { success:false } — on le journalise pour le voir dans les logs Vercel
+      const envoiUser = resultats[0];
+      if (envoiUser.status === 'rejected' || (envoiUser.status === 'fulfilled' && !envoiUser.value.success)) {
+        console.error('[password-reset] E-mail du nouveau mot de passe NON envoyé à', user.email, envoiUser);
+      }
     }
 
     return NextResponse.json({ success: true });

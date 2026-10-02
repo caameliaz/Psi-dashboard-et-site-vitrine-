@@ -89,15 +89,16 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
         role: user.role,
         roleName: user.customRoleId ? (await prisma.customRole.findUnique({ where: { id: user.customRoleId }, select: { name: true } }))?.name ?? null : null,
       });
-      sendEmail({ to: user.email ?? body.email, subject: mail.subject, html: mail.html, attachments: [logoAttachment] })
-        .catch(() => {});
+      // await : sur Vercel, un envoi lancé sans await peut ne jamais partir (fonction gelée à la réponse)
+      const r = await sendEmail({ to: user.email ?? body.email, subject: mail.subject, html: mail.html, attachments: [logoAttachment] }).catch((e) => ({ success: false as const, error: String(e) }));
+      if (!r.success) console.error('[users] E-mail de bienvenue non envoyé:', r.error);
     }
 
     // Réinitialisation de mot de passe → le nouveau est envoyé par email AUX ADMINS,
     // pour qu'ils puissent le transmettre sans avoir à le recopier de l'écran.
     if (body.password !== undefined) {
       const resetBy = session.user.name ?? session.user.email ?? 'Un administrateur';
-      prisma.user
+      await prisma.user
         .findMany({ where: { role: 'ADMIN', active: true }, select: { email: true } })
         .then((admins) => {
           const mail = renderPasswordResetDoneEmail({
