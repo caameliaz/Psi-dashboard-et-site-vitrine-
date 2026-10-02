@@ -117,7 +117,7 @@ export async function exportClientExcel(c: ClientExportData) {
 export async function printClientDoc(c: ClientExportData) {
   let logoHtml = '<div style="font-size:20px;font-weight:800;letter-spacing:-0.5px">PSI</div><div style="font-size:10px;color:#666">Paper Solutions Industry</div>';
   try {
-    const resp = await fetch('/Logo PSI-new.jpeg');
+    const resp = await fetch('/Logo PSI-avectexte.jpeg');
     const blob = await resp.blob();
     const b64 = await new Promise<string>((res) => {
       const r = new FileReader();

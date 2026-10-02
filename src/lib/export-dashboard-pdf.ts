@@ -87,7 +87,7 @@ export async function printDashboardPdf(opts: { mois: number; annee: number; isA
 
   let logoHtml = '<div style="font-size:20px;font-weight:800">PSI</div><div style="font-size:10px;color:#666">Paper Solutions Industry</div>';
   try {
-    const blob = await (await fetch('/Logo PSI-new.jpeg')).blob();
+    const blob = await (await fetch('/Logo PSI-avectexte.jpeg')).blob();
     const b64 = await new Promise<string>((res) => { const r = new FileReader(); r.onload = () => res(r.result as string); r.readAsDataURL(blob); });
     logoHtml = `<img src="${b64}" alt="PSI" style="height:46px;display:block"/>`;
   } catch { /* logo texte */ }
