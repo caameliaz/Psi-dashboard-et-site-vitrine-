@@ -26,7 +26,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Trop de tentatives. Réessayez dans 15 minutes.' }, { status: 429 });
     }
 
-    const user = await prisma.user.findUnique({ where: { email: clean } });
+    // Insensible à la casse (cf. auth.ts) : l'adresse enregistrée peut contenir des majuscules
+    const user = await prisma.user.findFirst({ where: { email: { equals: clean, mode: 'insensitive' } } });
     if (!user || !user.active) {
       recordFail('login', clean);
       return NextResponse.json({ error: 'Identifiant ou mot de passe incorrect.' }, { status: 401 });

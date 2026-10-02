@@ -37,8 +37,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         // ── Anti brute-force : max 5 tentatives ÉCHOUÉES / 15 min par email ──
         if (isBlocked('login', email)) return null;
 
-        const user = await prisma.user.findUnique({
-          where: { email: credentials.email as string }
+        // Recherche INSENSIBLE à la casse : certains comptes ont une adresse enregistrée avec des majuscules
+        // (« Sid.stiti@… ») alors que l'étape du code la met en minuscules → ils ne pouvaient jamais se connecter.
+        const user = await prisma.user.findFirst({
+          where: { email: { equals: email.trim(), mode: 'insensitive' } }
         });
 
         if (!user || !user.active) { recordFail('login', email); return null; }

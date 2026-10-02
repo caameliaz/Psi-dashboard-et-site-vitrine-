@@ -71,7 +71,7 @@ export async function POST(req: Request) {
 
     // Verifier si email deja utilise (seulement si fourni)
     if (email) {
-      const existing = await prisma.user.findUnique({ where: { email } });
+      const existing = await prisma.user.findFirst({ where: { email: { equals: String(email).trim(), mode: 'insensitive' } } });
       if (existing) {
         return NextResponse.json({ error: 'Email already in use' }, { status: 400 });
       }
@@ -84,7 +84,7 @@ export async function POST(req: Request) {
     const user = await prisma.user.create({
       data: {
         name: name.trim(),
-        email: email?.trim() || null,
+        email: email?.trim().toLowerCase() || null, // toujours en minuscules (la connexion est insensible à la casse)
         password: hashedPassword,
         role,
         active: true,
