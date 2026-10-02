@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
+import { OWNER_EMAIL } from '@/lib/owner';
 import { initials } from '@/lib/utils';
 import { Modal } from '@/components/ui/Modal';
 import { AdminSelect } from '@/components/ui/AdminSelect';
@@ -419,13 +420,14 @@ interface LeaveInfo {
   allowFullHistory: boolean;
 }
 
-function UserSlideIn({ user, onClose, onDelete, onPermChange, onPermSetAll, customRoles, onSaveProfile, onResetPassword, onReactivate, onToggleTwoFactor, initialEditing = false }: {
+function UserSlideIn({ user, onClose, onDelete, onPermChange, onPermSetAll, customRoles, onSaveProfile, onResetPassword, onSendFixMail, onReactivate, onToggleTwoFactor, initialEditing = false }: {
   user: User; onClose: () => void; onDelete: () => void;
   onPermChange: (userId: number, perm: PermKey, value: boolean) => void;
   onPermSetAll: (userId: number, perms: PermKey[]) => void;
   customRoles: CustomRole[];
   onSaveProfile: (user: User, data: { name: string; email: string; role: string; password?: string; permissions: PermKey[] }) => Promise<void>;
   onResetPassword: (user: User) => Promise<void>;
+  onSendFixMail?: (user: User) => Promise<void>; // fourni UNIQUEMENT à la propriétaire du compte
   onReactivate: (user: User) => Promise<void>;
   onToggleTwoFactor: (user: User, disabled: boolean) => Promise<void>;
   initialEditing?: boolean;
@@ -437,6 +439,7 @@ function UserSlideIn({ user, onClose, onDelete, onPermChange, onPermSetAll, cust
   const [editing, setEditing] = useState(initialEditing);
   const [saving, setSaving] = useState(false);
   const [resetting, setResetting] = useState(false);
+  const [sendingFix, setSendingFix] = useState(false);
   const [reactivating, setReactivating] = useState(false);
   const [togglingTwoFactor, setTogglingTwoFactor] = useState(false);
   const [fNom, setFNom] = useState(user.nom);
@@ -654,6 +657,20 @@ function UserSlideIn({ user, onClose, onDelete, onPermChange, onPermSetAll, cust
               {resetting ? 'Génération…' : '🔑 Réinitialiser le mot de passe'}
             </button>
             <p className="text-[11px] text-[#ABBED1] mt-2">Un nouveau mot de passe sera généré et affiché (à transmettre à l&apos;utilisateur).</p>
+            {onSendFixMail && (
+              <>
+                <button
+                  onClick={async () => {
+                    if (!window.confirm(`Envoyer à ${user.nom} un e-mail « erreur résolue » avec un NOUVEAU mot de passe ?`)) return;
+                    setSendingFix(true); try { await onSendFixMail(user); } finally { setSendingFix(false); }
+                  }}
+                  disabled={sendingFix}
+                  className="w-full mt-3 px-4 py-2.5 rounded-xl border border-[#BBF7D0] bg-[#F0FDF4] text-[13px] font-semibold text-[#166534] hover:bg-[#DCFCE7] transition-colors disabled:opacity-60">
+                  {sendingFix ? 'Envoi…' : '✉️ Envoyer le mail « erreur résolue »'}
+                </button>
+                <p className="text-[11px] text-[#ABBED1] mt-2">Réservé à votre compte : génère un nouveau mot de passe et l&apos;envoie à l&apos;utilisateur avec un message d&apos;excuse.</p>
+              </>
+            )}
 
             {/* Exemption TEMPORAIRE du code de connexion par email (boîte qui ne reçoit plus les mails) */}
             {user.twoFactorDisabled && (
@@ -859,6 +876,7 @@ function DeleteUserModal({ user, candidats, peutSupprimer, onDeactivate, onDelet
 /* ─── Page principale ─── */
 function UsersPageInner() {
   const { data: session } = useSession();
+  const isOwnerAccount = (session?.user?.email ?? '').toLowerCase() === OWNER_EMAIL; // bouton « erreur résolue » réservé
   const [users, setUsers]           = useState<User[]>([]);
   const [loading, setLoading]       = useState(true);
   const [search, setSearch]         = useState('');
@@ -975,6 +993,18 @@ function UsersPageInner() {
     } else {
       alert('Échec de la réinitialisation.');
     }
+  };
+
+  // Mail « erreur résolue » (réservé à la propriétaire) : nouveau mot de passe + e-mail d'excuse à l'utilisateur
+  const handleSendFixMail = async (u: User) => {
+    const res = await fetch(`/api/users/${u.id}/send-fix-mail`, { method: 'POST' });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) { alert(data.error ?? 'Envoi impossible.'); return; }
+    await fetchUsers();
+    setProfilUser((prev) => prev && prev.id === u.id ? { ...prev, resetRequested: false } : prev);
+    // Le mot de passe s'affiche TOUJOURS (à transmettre par WhatsApp si l'e-mail n'est pas parti)
+    setNewCreds({ nom: u.nom, email: u.email, password: data.password });
+    alert(data.emailSent ? `E-mail envoyé à ${u.email}.` : `⚠️ L'e-mail n'a PAS pu partir (${data.emailError ?? 'erreur'}). Transmettez le mot de passe affiché par WhatsApp.`);
   };
 
   const handleAddCustomRole = async (role: CustomRole) => {
@@ -1181,6 +1211,7 @@ function UsersPageInner() {
           initialEditing={profilEditing}
           onSaveProfile={handleSaveProfile}
           onResetPassword={handleResetPassword}
+          onSendFixMail={isOwnerAccount ? handleSendFixMail : undefined}
           onReactivate={handleReactivateUser}
           onToggleTwoFactor={handleToggleTwoFactor} />
       )}
