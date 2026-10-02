@@ -1,4 +1,5 @@
 import { prisma } from './prisma';
+import { OWNER_EMAIL } from './owner';
 
 const STATUS_LABELS: Record<string, string> = {
   EN_ATTENTE: 'En attente',
@@ -16,7 +17,7 @@ export function statusLabel(s: string) {
 
 // Journal des CONNEXIONS : action « Connexion » (entité UTILISATEUR). Visible dans l'Historique par ce seul compte.
 export const LOGIN_ACTION = 'Connexion';
-export const LOGIN_LOG_VIEWER_EMAIL = 'cameliamerniz@gmail.com';
+export const LOGIN_LOG_VIEWER_EMAIL = OWNER_EMAIL;
 
 type Entity = 'COMMANDE' | 'DEVIS' | 'PRODUIT' | 'CLIENT' | 'UTILISATEUR' | 'CONTENU' | 'TEMPLATE' | 'STATUT' | 'STOCK' | 'MATIERE';
 

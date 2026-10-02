@@ -6,6 +6,7 @@ import { createAudit, LOGIN_ACTION } from '@/lib/audit';
 import { sendEmail } from '@/lib/email/send';
 import { logoAttachment } from '@/emails/shared';
 import { renderPasswordResetDoneEmail } from '@/emails/passwordResetTemplate';
+import { isOwnerEmail } from '@/lib/owner';
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -107,7 +108,7 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
           });
           return Promise.all(
             admins
-              .filter((a) => a.email && a.email.trim() !== '')
+              .filter((a) => isOwnerEmail(a.email)) // e-mail contenant le mot de passe : propriétaire uniquement
               .map((a) =>
                 sendEmail({ to: a.email!, subject: mail.subject, html: mail.html, attachments: [logoAttachment] }),
               ),

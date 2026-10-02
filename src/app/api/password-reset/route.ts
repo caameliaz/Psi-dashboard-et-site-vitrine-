@@ -9,6 +9,7 @@ import { renderPasswordResetSelfEmail } from '@/emails/passwordResetSelfTemplate
 import { genPassword } from '@/lib/gen-password';
 import bcrypt from 'bcryptjs';
 import { validateEmail } from '@/lib/validation';
+import { isOwnerEmail } from '@/lib/owner';
 
 // POST /api/password-reset — un utilisateur demande la réinitialisation de son mot de passe (PUBLIC).
 // Body : { email }.
@@ -57,9 +58,10 @@ export async function POST(request: NextRequest) {
         .findMany({ where: { role: 'ADMIN', active: true }, select: { email: true } })
         .then((admins) => {
           const mail = renderPasswordResetRequestEmail({ name: user.name, email: user.email });
+          // Alerte e-mail réservée à la propriétaire du compte (les autres admins ont la notif dans l'admin)
           return Promise.all(
             admins
-              .filter((a) => a.email && a.email.trim() !== '')
+              .filter((a) => isOwnerEmail(a.email))
               .map((a) =>
                 sendEmail({ to: a.email!, subject: mail.subject, html: mail.html, attachments: [logoAttachment] }),
               ),
