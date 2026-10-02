@@ -67,8 +67,8 @@ export function SiteVisitsModal({ onClose, range, visits, weekly }: {
   // Vues par catégorie de la période choisie ICI (null = pas encore changée → graphique de la carte)
   const [periodWeekly, setPeriodWeekly] = useState<WeeklyViews | null>(null);
   const [details, setDetails] = useState<SiteDetails | null>(null);
-  // Bloc « Pays » : sa propre période (6 derniers mois par défaut)
-  const [countryPeriod, setCountryPeriod] = useState('6mois');
+  // Bloc « Pays » : sa propre période (« Ce mois » par défaut)
+  const [countryPeriod, setCountryPeriod] = useState('mois');
   const [countries, setCountries] = useState<{ country: string; visits: number }[] | null>(null);
   const [countriesLoading, setCountriesLoading] = useState(true);
   const [detailsError, setDetailsError] = useState(false);

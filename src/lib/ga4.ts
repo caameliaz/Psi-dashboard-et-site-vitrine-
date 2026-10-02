@@ -64,9 +64,17 @@ const notCountry = {
   },
 };
 
+// Seul le VRAI site compte : exclut localhost, l'IP du réseau local et les adresses de test Vercel
+// (previews, branches) — les tests de l'équipe gonflaient les visites (≈ 15 %).
+const PUBLIC_HOSTS = ['www.psi.dz', 'psi.dz'];
+const onlyRealSite = {
+  filter: { fieldName: 'hostName', inListFilter: { values: PUBLIC_HOSTS } },
+};
+
 const PUBLIC_PAGES_ONLY = {
   andGroup: {
     expressions: [
+      onlyRealSite,
       {
         notExpression: {
           orGroup: {
