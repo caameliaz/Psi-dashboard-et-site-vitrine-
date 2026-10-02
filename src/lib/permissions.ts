@@ -26,11 +26,26 @@ export const ALL_PERMISSIONS = [
   { key: 'recevoir_recaps',    label: 'Recevoir les récaps par email',  short: 'Récaps email'        },
   { key: 'modifier_contenu',   label: 'Modifier le contenu du site',    short: 'Modifier contenu'    },
   { key: 'gerer_utilisateurs', label: 'Gérer les utilisateurs',         short: 'Gérer utilisateurs'  },
+  // ── Compte « admin lecture seule » (cf. LECTURE_SEULE_PRESET) ──
+  { key: 'voir_tout',          label: 'Voir TOUS les clients, commandes & ventes (pas seulement les siens)', short: 'Voir tous clients/ventes' },
+  { key: 'voir_contenu',       label: 'Consulter le contenu du site & les messages (sans modifier)', short: 'Voir contenu du site' },
+  { key: 'lecture_seule',      label: 'LECTURE SEULE : bloque TOUTE modification, création et suppression', short: 'Lecture seule' },
 ] as const;
 
 export type PermKey = typeof ALL_PERMISSIONS[number]['key'];
 
-export const ALL_PERM_KEYS: PermKey[] = ALL_PERMISSIONS.map((p) => p.key);
+// Permissions RESTRICTIVES : elles retirent des droits au lieu d'en donner → jamais incluses
+// dans « Tout » ni dans les droits d'un ADMIN.
+export const RESTRICTIVE_PERMS: PermKey[] = ['lecture_seule'];
+
+export const ALL_PERM_KEYS: PermKey[] = ALL_PERMISSIONS.map((p) => p.key).filter((k) => !RESTRICTIVE_PERMS.includes(k));
+
+// Profil « admin lecture seule » : voit tout (clients, commandes, dashboard, produits, stock,
+// recettes, messages, contenu du site) et ne peut RIEN modifier (verrou serveur : src/proxy.ts).
+export const LECTURE_SEULE_PRESET: PermKey[] = [
+  'voir_tout', 'voir_commandes', 'voir_clients', 'voir_produits', 'voir_stock',
+  'voir_contenu', 'lecture_seule',
+];
 
 // Permissions par défaut d'un employé (si aucune n'est explicitement définie)
 export const EMPLOYE_DEFAULT_PERMS: PermKey[] = [
@@ -50,6 +65,18 @@ export function getPermissions(user: SessionUser): PermKey[] {
   if (!user) return [];
   if (user.role === 'ADMIN') return [...ALL_PERM_KEYS];
   return (user.permissions ?? []) as PermKey[];
+}
+
+/** Voit tous les clients/commandes/ventes (ADMIN, ou compte avec « voir_tout »). */
+export function seesAll(user: SessionUser): boolean {
+  if (!user) return false;
+  return user.role === 'ADMIN' || ((user.permissions ?? []) as string[]).includes('voir_tout');
+}
+
+/** Compte en lecture seule (jamais un ADMIN) : toute écriture est refusée côté serveur (cf. proxy.ts). */
+export function isReadOnly(user: SessionUser): boolean {
+  if (!user || user.role === 'ADMIN') return false;
+  return ((user.permissions ?? []) as string[]).includes('lecture_seule');
 }
 
 /** Vrai si l'utilisateur possède la permission demandée (ADMIN = toujours). */

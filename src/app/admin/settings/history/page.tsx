@@ -109,7 +109,7 @@ function HistoryPageInner() {
       .catch(() => {});
   }, []);
   // Rafraîchissement toutes les 20 s, en pause quand l'onglet est caché
-  usePolling(() => fetchHistory(true), 20000);
+  usePolling(() => fetchHistory(true), 60000);
 
   const filtered = history.filter((h) => {
     const matchSearch = !search || h.action.toLowerCase().includes(search.toLowerCase()) || h.detail.toLowerCase().includes(search.toLowerCase()) || h.user.toLowerCase().includes(search.toLowerCase());

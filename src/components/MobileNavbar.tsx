@@ -62,7 +62,7 @@ const NAV_ITEMS = [
 
 export function MobileNavbar() {
   const pathname = usePathname();
-  const { can } = useRole();
+  const { can, readOnly } = useRole();
 
   const isActive = (href: string, exact: boolean) =>
     exact ? pathname === href : pathname?.startsWith(href);
@@ -70,7 +70,8 @@ export function MobileNavbar() {
   // Stock : visible avec voir_stock OU voir_listes_stock (l'un ou l'autre suffit —
   // la vue mobile n'affiche ensuite que ce que la permission précise du user autorise).
   const visibleItems = NAV_ITEMS.filter((item) =>
-    item.perm === null || can(item.perm) || (item.key === 'stock' && can('voir_listes_stock'))
+    (item.key !== 'create' || !readOnly) &&
+    (item.perm === null || can(item.perm) || (item.key === 'stock' && can('voir_listes_stock')))
   );
 
   return (

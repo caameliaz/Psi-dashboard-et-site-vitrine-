@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { requirePermission } from '@/lib/permissions';
+import { requirePermission, seesAll } from '@/lib/permissions';
 import { prisma } from '@/lib/prisma';
 import { createNotif } from '@/lib/notifications';
 import { generateOrderRef } from '@/lib/generate-ref';
@@ -30,7 +30,7 @@ export async function GET(request: NextRequest) {
   // ses clients assignés (+ ceux confiés le temps d'un congé dont il est remplaçant),
   // et pour ces derniers, seulement depuis le début de l'intérim sauf si l'admin a
   // coché "voir tout l'historique" sur ce congé (cf. src/lib/leave.ts).
-  if (guard.session!.user.role !== 'ADMIN') {
+  if (!seesAll(guard.session!.user)) {
     const userId = guard.session!.user.id;
     const { historyClientIds, interimSince } = await resolveClientVisibility(userId);
 
@@ -49,7 +49,7 @@ export async function GET(request: NextRequest) {
     const orders = await prisma.order.findMany({
       where: Object.keys(whereClause).length > 0 ? whereClause : undefined,
       include: {
-        client: { include: { phones: true } },
+        client: { omit: { photo: true }, include: { phones: true } },
         items: {
           include: {
             // `photo` (base64) n'est jamais affiché dans les commandes/devis — l'omettre
@@ -229,7 +229,7 @@ export async function POST(request: NextRequest) {
           })),
         },
       },
-      include: { items: true, client: { include: { phones: true } } },
+      include: { items: true, client: { omit: { photo: true }, include: { phones: true } } },
     });
 
     const isAdmin = body.source !== 'SITE';

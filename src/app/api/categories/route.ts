@@ -8,13 +8,15 @@ import { requirePermission } from '@/lib/permissions';
 // affichent vraiment l'image (page produit, vitrine catégories, gestion catégories admin).
 export async function GET(request: NextRequest) {
   const withPhoto = request.nextUrl.searchParams.get('withPhoto') === 'true';
+  // Gestion admin (?admin=true) : toujours frais. Le reste est mis en cache CDN 60 s.
+  const admin = request.nextUrl.searchParams.get('admin') === 'true';
   try {
     const categories = await prisma.category.findMany({
       orderBy: { order: 'asc' },
       omit: withPhoto ? undefined : { photo: true },
       include: { _count: { select: { products: true } } },
     });
-    return NextResponse.json(categories);
+    return NextResponse.json(categories, admin ? undefined : { headers: { 'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300' } });
   } catch (e) {
     console.error(e);
     return NextResponse.json({ error: 'Failed to fetch categories' }, { status: 500 });

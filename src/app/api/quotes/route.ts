@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { requirePermission } from '@/lib/permissions';
+import { requirePermission, seesAll } from '@/lib/permissions';
 import { prisma } from '@/lib/prisma';
 import { createNotif } from '@/lib/notifications';
 import { generateQuoteRef } from '@/lib/generate-ref';
@@ -28,7 +28,7 @@ export async function GET(request: NextRequest) {
 
   // Sécurité serveur (cf. commentaire équivalent dans /api/orders) : mêmes règles de
   // visibilité client/congé appliquées aux devis.
-  if (guard.session!.user.role !== 'ADMIN') {
+  if (!seesAll(guard.session!.user)) {
     const userId = guard.session!.user.id;
     const { historyClientIds, interimSince } = await resolveClientVisibility(userId);
 
@@ -47,7 +47,7 @@ export async function GET(request: NextRequest) {
     const quotes = await prisma.quote.findMany({
       where: Object.keys(whereClause).length > 0 ? whereClause : undefined,
       include: {
-        client: { include: { phones: true } },
+        client: { omit: { photo: true }, include: { phones: true } },
         items: {
           include: {
             product: { omit: { photo: true }, include: { category: { select: { id: true, name: true } } } },
@@ -198,7 +198,7 @@ export async function POST(request: NextRequest) {
           })),
         },
       },
-      include: { items: true, client: { include: { phones: true } } },
+      include: { items: true, client: { omit: { photo: true }, include: { phones: true } } },
     });
 
     const isAdmin = body.source !== 'SITE';

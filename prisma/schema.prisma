@@ -563,6 +563,7 @@ model CustomRole {
   name        String   @unique
   permissions String[]
   createdAt   DateTime @default(now())
+  users       User[]
 }
 
 model User {
@@ -575,6 +576,10 @@ model User {
   phone              String?
   photo              String?
   permissions        String[]           @default([])
+  // Rôle personnalisé choisi à la création (ex. « Admin 2 ») — SEULEMENT l'étiquette affichée : le rôle réel
+  // reste EMPLOYEE et les droits viennent de `permissions`. Supprimer le rôle remet null (ON DELETE SET NULL).
+  customRoleId       String?
+  customRole         CustomRole?        @relation(fields: [customRoleId], references: [id], onDelete: SetNull)
   sessionVersion     Int                @default(0) // incrémenté pour invalider tous les cookies
   resetRequested     Boolean            @default(false) // l'utilisateur a demandé une réinit. de mot de passe
   resetRequestedAt   DateTime?

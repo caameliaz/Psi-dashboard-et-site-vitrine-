@@ -11,7 +11,7 @@ export async function GET() {
 
   try {
     const contacts = await prisma.contactRequest.findMany({
-      include: { client: { include: { phones: true } } },
+      include: { client: { omit: { photo: true }, include: { phones: true } } },
       orderBy: { createdAt: 'desc' },
     });
     return NextResponse.json(contacts);

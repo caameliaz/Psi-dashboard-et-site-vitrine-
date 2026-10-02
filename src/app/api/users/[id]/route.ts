@@ -45,6 +45,11 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
     if (body.name !== undefined) data.name = body.name;
     if (body.email !== undefined) data.email = body.email;
     if (body.role !== undefined) data.role = body.role;
+    // Rôle personnalisé (étiquette) : id d'un rôle existant, ou null pour l'enlever. Un ADMIN n'en a jamais.
+    if (body.customRoleId !== undefined || body.role === 'ADMIN') {
+      const wanted = body.role === 'ADMIN' || !body.customRoleId ? null : String(body.customRoleId);
+      data.customRoleId = wanted && (await prisma.customRole.findUnique({ where: { id: wanted }, select: { id: true } })) ? wanted : null;
+    }
     if (body.active !== undefined) data.active = body.active;
     if (body.phone !== undefined) data.phone = body.phone;
     if (body.photo !== undefined) data.photo = body.photo;
@@ -61,7 +66,7 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
       where: { id },
       data,
       select: {
-        id: true, name: true, email: true, role: true,
+        id: true, name: true, email: true, role: true, customRoleId: true,
         active: true, phone: true, photo: true, permissions: true, createdAt: true, twoFactorDisabled: true,
       },
     });

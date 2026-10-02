@@ -35,7 +35,7 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
         cancelReason: body.cancelReason,
       },
       include: {
-        client: { include: { phones: true } },
+        client: { omit: { photo: true }, include: { phones: true } },
         items: { include: { product: true } },
         createdBy: { select: { id: true, name: true } },
       },

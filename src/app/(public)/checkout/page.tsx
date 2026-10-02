@@ -9,6 +9,7 @@ import { WilayaSelect } from '@/components/ui/WilayaSelect';
 import { CommuneSelect } from '@/components/ui/CommuneSelect';
 import { useTranslation } from '@/lib/i18n';
 import { validateEmail, validatePhone, firstError } from '@/lib/validation';
+import { reportCartConverted } from '@/lib/cart-tracking';
 
 export default function CheckoutPage() {
   const { t } = useTranslation();
@@ -73,6 +74,7 @@ export default function CheckoutPage() {
         setSubmitError(err.error ?? t('checkout.error'));
         return;
       }
+      reportCartConverted();
       clearCart();
       setSubmitted(true);
     } catch {

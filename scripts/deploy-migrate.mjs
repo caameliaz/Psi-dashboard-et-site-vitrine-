@@ -10,8 +10,26 @@
  * On réveille donc la base AVANT de migrer, et on réessaie si besoin.
  */
 import { execSync } from 'node:child_process';
+import fs from 'node:fs';
+import path from 'node:path';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+function nettoyerFichiersPrismaTemporaires() {
+  const dir = path.join(process.cwd(), 'node_modules', '.prisma', 'client');
+  if (!fs.existsSync(dir)) return;
+
+  for (const nom of fs.readdirSync(dir)) {
+    if (nom.startsWith('query_engine-windows.dll.node.tmp') || nom === 'query_engine-windows.dll.node') {
+      try {
+        fs.rmSync(path.join(dir, nom), { force: true });
+      } catch {
+        // Certains fichiers restent verrouillés quelques instants sur Windows ;
+        // on laisse le retry suivant réessayer proprement.
+      }
+    }
+  }
+}
 
 async function reveillerBase() {
   const { PrismaClient } = await import('@prisma/client');
@@ -42,6 +60,7 @@ for (let essai = 1; essai <= 3; essai++) {
     // Sans cette régénération, le client Prisma reste celui d'AVANT l'ajout de
     // nouveaux champs → erreurs "does not exist in type ...CreateInput".
     console.log('[migrate] régénération du client Prisma…');
+    nettoyerFichiersPrismaTemporaires();
     execSync('npx prisma generate', { stdio: 'inherit' });
     process.exit(0);
   } catch {

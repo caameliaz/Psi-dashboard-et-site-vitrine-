@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Modal } from '@/components/ui/Modal';
 import { RequirePerm } from '@/components/RequirePerm';
+import { useRole } from '@/lib/role-context';
 import { apiError } from '@/lib/api-error';
 
 type Category = 'CONFIRMATION' | 'DEVIS' | 'LIVRAISON' | 'RELANCE' | 'AUTRE';
@@ -77,6 +78,8 @@ function TemplateForm({ form, setForm, onSubmit, onClose, submitLabel }: {
 }
 
 function TemplatesPageInner() {
+  const { can: canRole } = useRole();
+  const canEdit = canRole('modifier_contenu'); // sans ce droit (compte lecture seule) : consultation uniquement
   const [templates, setTemplates] = useState<Template[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
@@ -129,7 +132,9 @@ function TemplatesPageInner() {
   const byCat = CATEGORIES.map((c) => ({ ...c, items: templates.filter((t) => t.category === c.key) })).filter((g) => g.items.length > 0);
 
   return (
+    <fieldset disabled={!canEdit} className="contents">
     <div className="w-full">
+      {!canEdit && <p className="mb-4 px-3 py-2 rounded-lg bg-[#EFF6FF] border border-[#BFDBFE] text-[12px] font-semibold text-[#1E40AF]">Mode lecture seule — consultation uniquement.</p>}
       <div className="flex items-start justify-between mb-8 gap-4">
         <div>
           <h1 className="text-[22px] font-bold text-[#0F172A]">Messages types</h1>
@@ -207,9 +212,10 @@ function TemplatesPageInner() {
         </Modal>
       )}
     </div>
+    </fieldset>
   );
 }
 
 export default function TemplatesPage() {
-  return <RequirePerm perm="modifier_contenu"><TemplatesPageInner /></RequirePerm>;
+  return <RequirePerm perm={['modifier_contenu', 'voir_contenu']}><TemplatesPageInner /></RequirePerm>;
 }

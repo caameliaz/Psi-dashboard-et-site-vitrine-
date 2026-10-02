@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
   try {
     const [monthly, weekly] = await Promise.all([
       getMonthlyPageViews(range),
-      getWeeklyPageViews(),
+      getWeeklyPageViews(range),
     ]);
 
     return NextResponse.json({

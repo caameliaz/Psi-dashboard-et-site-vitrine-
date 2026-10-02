@@ -8,8 +8,7 @@ import { useTranslation } from '@/lib/i18n';
 
 interface ProductPhoto {
   id: string;
-  photo?: string | null;
-  category?: { photo?: string | null } | null;
+  categoryId?: string | null;
 }
 
 // Icône panier + badge, avec un mini-aperçu qui s'ouvre au hover
@@ -29,9 +28,14 @@ export function CartDropdown({ variant = 'desktop' }: { variant?: 'desktop' | 'm
 
   useEffect(() => {
     if (!open || Object.keys(photosById).length > 0) return;
-    fetch('/api/products').then(r => r.ok ? r.json() : []).then((data: ProductPhoto[]) => {
+    // /api/products ne renvoie plus de photos (quota) : la miniature = photo de la catégorie.
+    Promise.all([
+      fetch('/api/products').then(r => r.ok ? r.json() : []),
+      fetch('/api/categories?withPhoto=true').then(r => r.ok ? r.json() : []),
+    ]).then(([data, cats]: [ProductPhoto[], { id: string; photo?: string | null }[]]) => {
+      const catPhoto = new Map(cats.map((c) => [c.id, c.photo ?? null]));
       const map: Record<string, string | null> = {};
-      data.forEach((p) => { map[p.id] = p.photo ?? p.category?.photo ?? null; });
+      data.forEach((p) => { map[p.id] = (p.categoryId && catPhoto.get(p.categoryId)) || null; });
       setPhotosById(map);
     }).catch(() => {});
   }, [open, photosById]);

@@ -20,7 +20,7 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
         ...(body.status !== undefined && { status: body.status }),
         ...(body.notes !== undefined && { notes: body.notes }),
       },
-      include: { client: { include: { phones: true } } },
+      include: { client: { omit: { photo: true }, include: { phones: true } } },
     });
 
     return NextResponse.json(contact);

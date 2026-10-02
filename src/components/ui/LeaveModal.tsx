@@ -37,7 +37,7 @@ export function LeaveModal({ employeeId, employeeName, onClose, onCreated }: {
       setSubstitutes(all.filter((u) => u.id !== employeeId));
     }).catch(() => {});
     // Clients actuellement assignés à cet employé — seuls réassignables pour ce congé.
-    fetch('/api/clients').then((r) => r.ok ? r.json() : []).then((all: any[]) => {
+    fetch('/api/clients?mini=true').then((r) => r.ok ? r.json() : []).then((all: any[]) => {
       const owned = all.filter((c) => c.assignedToId === employeeId);
       setClients(owned.map((c) => ({ id: c.id, name: c.name, company: c.company })));
     }).catch(() => {});

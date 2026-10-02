@@ -28,6 +28,8 @@ interface ClientRecord {
   // Chaque entrée est un RequestDetail COMPLET (produit par la lib partagée
   // src/lib/request-detail.ts) → le détail est identique partout.
   historique: RequestDetail[];
+  // true tant que l'historique n'est pas chargé (la liste paginée ne renvoie que des cartes légères).
+  historiqueLoading?: boolean;
 }
 import { StatusPill } from '@/components/ui/StatusPill';
 import { initials } from '@/lib/utils';
@@ -38,6 +40,7 @@ import { CommuneSelect } from '@/components/ui/CommuneSelect';
 import { exportClientExcel, printClientDoc, type ClientExportData } from '@/lib/export-client';
 import { RequirePerm } from '@/components/RequirePerm';
 import { useRole } from '@/lib/role-context';
+import { compressImage } from '@/lib/compress-image';
 import { AdminSelect } from '@/components/ui/AdminSelect';
 import { orderToDetail, quoteToDetail, UI_TO_DB } from '@/lib/request-detail';
 import { CreateForm, submitNewRequest } from '@/app/admin/requests/page';
@@ -250,6 +253,15 @@ function ClientSlideIn({ client, onClose, onEdit, onDelete, onReactivate, onDele
   const [pendingAssign, setPendingAssign] = useState<{ id: string | null; name: string } | null>(null);
   const ac = avatarColor(client.id);
 
+  // La liste ne contient pas la photo (base64 lourd) : on la charge à l'ouverture fiche.
+  useEffect(() => {
+    if (client.photo) return;
+    const dbId = (client as any)._dbId ?? client.id;
+    fetch(`/api/clients/${dbId}?photoOnly=true`).then(r => r.ok ? r.json() : null)
+      .then(d => { if (d?.photo) setPhoto(d.photo); }).catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [client.id]);
+
   const confirmReassign = async () => {
     if (!pendingAssign) return;
     const newId = pendingAssign.id;
@@ -284,9 +296,7 @@ function ClientSlideIn({ client, onClose, onEdit, onDelete, onReactivate, onDele
   const handlePhoto = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => setPhoto(ev.target?.result as string);
-    reader.readAsDataURL(file);
+    compressImage(file, 256).then(setPhoto).catch(() => {});
   };
 
   const clientExport: ClientExportData = {
@@ -512,7 +522,10 @@ function ClientSlideIn({ client, onClose, onEdit, onDelete, onReactivate, onDele
                   </button>
                 );
               })}
-              {client.historique.length === 0 && (
+              {client.historiqueLoading && (
+                <p className="text-[13px] text-[#8A9BB5] text-center py-8">Chargement…</p>
+              )}
+              {!client.historiqueLoading && client.historique.length === 0 && (
                 <p className="text-[13px] text-[#8A9BB5] text-center py-8">Aucune commande ni devis</p>
               )}
             </div>
@@ -702,7 +715,8 @@ function dbClientToRecord(c: any): ClientRecord {
     .sort((a, b) => b._ts - a._ts)
     .map(({ _ts, ...rest }) => rest);
 
-  const lastDate = historique[0]?.date ?? '—';
+  const lastDate = historique[0]?.date
+    ?? (c.lastActivityAt ? new Date(c.lastActivityAt).toLocaleDateString('fr-FR') : '—');
 
   return {
     id: c.id,               // string UUID from DB
@@ -726,6 +740,7 @@ function dbClientToRecord(c: any): ClientRecord {
     deactivatedByName: c.deactivatedBy?.name ?? null,
     deactivatedAt: c.deactivatedAt ? new Date(c.deactivatedAt).toLocaleDateString('fr-FR') : null,
     historique,
+    historiqueLoading: c.orders === undefined,
   };
 }
 
@@ -765,67 +780,112 @@ function ClientsPageInner() {
     if (r.ok) { const d = await r.json(); setSectors(d.map((s: any) => ({ id: s.id, name: s.name }))); }
   }, []);
 
-  const fetchClients = useCallback(async (silent = false) => {
-    if (!silent) setLoading(true);
+  // ── Pagination serveur : 20 cartes à la fois ; filtres/tri/recherche appliqués par l'API ──
+  const PAGE_SIZE = 20;
+  const [total, setTotal] = useState(0);        // clients correspondant aux filtres
+  const [totalAll, setTotalAll] = useState(0);  // tous les clients visibles (actifs + désactivés)
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const reqRef = useRef(0);
+  const resetReqRef = useRef(0);
+  const clientsLenRef = useRef(0);
+  clientsLenRef.current = clients.length;
+  const selectedRef = useRef<ClientRecord | null>(null);
+  selectedRef.current = selected;
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search.trim()), 300);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  const buildQuery = useCallback((skip: number, take: number) => {
+    const sp = new URLSearchParams({
+      page: 'true', skip: String(skip), take: String(take),
+      sort: sortBy, actif: filterActif, sector: filterSector,
+    });
+    if (debouncedSearch) sp.set('search', debouncedSearch);
+    if (onlyMine) sp.set('mine', 'true');
+    return sp.toString();
+  }, [sortBy, filterActif, filterSector, debouncedSearch, onlyMine]);
+
+  // Charge/rafraîchit la fiche COMPLÈTE (historique) d'un client — la liste n'en renvoie plus.
+  const loadRecord = useCallback(async (id: string) => {
     try {
-      // On charge AUSSI les clients désactivés : le filtre se fait côté interface
-      const res = await fetch('/api/clients?inactifs=true');
+      const res = await fetch(`/api/clients/${id}?record=true`);
       if (res.ok) {
-        const data = await res.json();
-        const records = data.map(dbClientToRecord);
-        setClients(records);
-        // Garde la fiche ouverte à jour en temps réel (historique, compteurs…)
-        setSelected((prev) => prev ? (records.find((r: ClientRecord) => r._dbId === prev._dbId) ?? prev) : prev);
+        const rec = dbClientToRecord(await res.json());
+        setSelected((prev) => (prev && prev._dbId === id ? rec : prev));
+        return;
       }
-    } finally {
-      if (!silent) setLoading(false);
-    }
+    } catch { /* on retombe sur le repli ci-dessous */ }
+    setSelected((prev) => (prev && prev._dbId === id ? { ...prev, historiqueLoading: false } : prev));
   }, []);
 
+  const fetchClients = useCallback(async (silent = false) => {
+    const myReq = ++reqRef.current;
+    const myReset = silent ? resetReqRef.current : ++resetReqRef.current;
+    if (!silent) setLoading(true);
+    try {
+      // Rafraîchissement silencieux : on recharge autant de cartes que déjà affichées.
+      const take = silent ? Math.min(200, Math.max(PAGE_SIZE, clientsLenRef.current)) : PAGE_SIZE;
+      const res = await fetch(`/api/clients?${buildQuery(0, take)}`);
+      if (res.ok && myReq === reqRef.current) {
+        const data = await res.json();
+        setClients(data.items.map(dbClientToRecord));
+        setTotal(data.total);
+        setTotalAll(data.totalAll);
+      }
+    } finally {
+      if (!silent && myReset === resetReqRef.current) setLoading(false);
+    }
+    // Garde la fiche ouverte à jour (historique, compteurs…)
+    const sel = selectedRef.current;
+    if (silent && sel) loadRecord(String(sel._dbId ?? sel.id));
+  }, [buildQuery, loadRecord]);
+
+  const loadMore = async () => {
+    if (loadingMore) return;
+    setLoadingMore(true);
+    const myReq = ++reqRef.current; // invalide un rafraîchissement silencieux en vol
+    try {
+      const res = await fetch(`/api/clients?${buildQuery(clientsLenRef.current, PAGE_SIZE)}`);
+      if (res.ok && myReq === reqRef.current) {
+        const data = await res.json();
+        const more: ClientRecord[] = data.items.map(dbClientToRecord);
+        setClients((prev) => {
+          const seen = new Set(prev.map((c) => c.id));
+          return [...prev, ...more.filter((c) => !seen.has(c.id))];
+        });
+        setTotal(data.total);
+        setTotalAll(data.totalAll);
+      }
+    } finally {
+      setLoadingMore(false);
+    }
+  };
+
+  const openClient = (c: ClientRecord) => {
+    setSelected(c);
+    loadRecord(String(c._dbId ?? c.id));
+  };
+
+  // Recharge la liste (retour en page 1) à chaque changement de filtre / tri / recherche.
   useEffect(() => { fetchClients(); }, [fetchClients]);
   useEffect(() => { fetchSectors(); fetchUsers(); }, [fetchSectors, fetchUsers]);
-  
-  // Rafraîchissement toutes les 20 s, en pause quand l'onglet est caché
-  usePolling(() => fetchClients(true), 20000);
+
+  // Rafraîchissement toutes les 60 s, en pause quand l'onglet est caché
+  usePolling(() => fetchClients(true), 60000);
 
   // Ouverture directe d'une fiche via ?open=<clientId> (depuis l'historique / une notif)
-  // — inclut les clients désactivés (?inactifs=true) pour voir la justif.
+  // — marche aussi pour les clients désactivés (pour voir la justif).
   useEffect(() => {
     const openId = new URLSearchParams(window.location.search).get('open');
     if (!openId) return;
-    fetch('/api/clients?inactifs=true')
-      .then((r) => (r.ok ? r.json() : []))
-      .then((data: any[]) => {
-        const found = data.find((c) => c.id === openId);
-        if (found) setSelected(dbClientToRecord(found));
-      })
+    fetch(`/api/clients/${openId}?record=true`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((found) => { if (found) setSelected(dbClientToRecord(found)); })
       .catch(() => {});
   }, []);
-
-  const parseDate = (s: string) => { const [d, m, y] = (s || '').split('/').map(Number); return new Date(y || 0, (m || 1) - 1, d || 1).getTime(); };
-
-  const filtered = clients
-    .filter((c) => {
-      const q = search.toLowerCase();
-      const matchSearch = !q || c.entreprise.toLowerCase().includes(q) || c.contact.toLowerCase().includes(q) || c.wilaya.toLowerCase().includes(q);
-      const matchSector = filterSector === 'all'
-        || (filterSector === 'none' ? !c.sectorId : c.sectorId === filterSector);
-      // Par défaut on n'affiche que les clients actifs
-      const estActif = c.active !== false;
-      const matchActif = filterActif === 'tous' || (filterActif === 'inactifs' ? !estActif : estActif);
-      // "Mes clients" (admin uniquement) : uniquement les clients dont il est responsable.
-      const matchMine = !onlyMine || c.assignedToId === currentUserId;
-      return matchSearch && matchSector && matchActif && matchMine;
-    })
-    .sort((a, b) => {
-      switch (sortBy) {
-        case 'nom':        return (a.entreprise || a.contact).localeCompare(b.entreprise || b.contact);
-        case 'commandes':  return (b.commandes + b.devis) - (a.commandes + a.devis);
-        case 'wilaya':     return (a.wilaya || '').localeCompare(b.wilaya || '');
-        case 'recent':
-        default:           return parseDate(b.derniere) - parseDate(a.derniere);
-      }
-    });
 
   const handleAdd = async () => {
     // Validation des saisies (email, téléphone, nom) avant envoi
@@ -837,13 +897,19 @@ function ClientsPageInner() {
     if (err) { alert(messageErreur(err)); return; }
 
     // Avertit si l'entreprise existe déjà (doublon) — mais laisse créer si confirmé
+    // (la liste est paginée : on interroge la liste minimale de TOUS les clients, désactivés compris)
+    let allClients: any[] = [];
+    try {
+      const r = await fetch('/api/clients?mini=true&inactifs=true');
+      if (r.ok) allClients = await r.json();
+    } catch { /* contrôle best-effort */ }
     const ent = addForm.entreprise.trim().toLowerCase();
-    if (ent && clients.some((c) => (c.entreprise || '').trim().toLowerCase() === ent)) {
+    if (ent && allClients.some((c) => (c.company ?? c.name ?? '').trim().toLowerCase() === ent)) {
       if (!window.confirm(`Une entreprise « ${addForm.entreprise.trim()} » est déjà cliente. Créer quand même un nouveau client ?`)) return;
     }
     // Avertit si le téléphone est déjà utilisé par un autre client
     const tel = normalizePhone(addForm.telephone);
-    if (tel && clients.some((c) => normalizePhone(c.telephone || '') === tel)) {
+    if (tel && allClients.some((c) => (c.phones ?? []).some((p: { number: string }) => normalizePhone(p.number || '') === tel))) {
       if (!window.confirm(`Le numéro ${addForm.telephone.trim()} est déjà enregistré pour un autre client. Continuer ?`)) return;
     }
 
@@ -956,9 +1022,9 @@ function ClientsPageInner() {
         <div>
           <h1 className="text-[20px] md:text-[22px] font-bold text-[#0F172A]">Clients</h1>
           <p className="text-[13px] text-[#8A9BB5] mt-0.5">
-            {loading ? 'Chargement…' : filtered.length === clients.length
-              ? `${clients.length} clients enregistrés`
-              : `${filtered.length} sur ${clients.length} clients`}
+            {loading ? 'Chargement…' : total === totalAll
+              ? `${totalAll} clients enregistrés`
+              : `${total} sur ${totalAll} clients`}
           </p>
         </div>
         <div className="flex items-center gap-2 md:hidden flex-shrink-0">
@@ -1075,18 +1141,18 @@ function ClientsPageInner() {
         <div className="text-center py-20 text-[#8A9BB5]">
           <p className="text-[13px]">Chargement…</p>
         </div>
-      ) : filtered.length === 0 ? (
+      ) : clients.length === 0 ? (
         <div className="text-center py-20 text-[#8A9BB5]">
           <p className="text-[15px] font-semibold">Aucun client trouvé</p>
         </div>
       ) : (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 md:gap-3">
-          {filtered.map((c) => {
+          {clients.map((c) => {
             const ac = avatarColor(c.id);
             return (
               <button
                 key={c.id}
-                onClick={() => setSelected(c)}
+                onClick={() => openClient(c)}
                 className="bg-white rounded-xl border border-[#E2E8F0] p-2.5 md:p-3.5 text-left hover:border-[#4CAF4F] hover:shadow-md transition-all group"
               >
                 <div className="flex items-center gap-2 mb-2">
@@ -1122,6 +1188,18 @@ function ClientsPageInner() {
               </button>
             );
           })}
+        </div>
+      )}
+
+      {!loading && clients.length < total && (
+        <div className="flex justify-center mt-4">
+          <button
+            onClick={loadMore}
+            disabled={loadingMore}
+            className="px-5 py-2.5 rounded-xl border border-[#E2E8F0] bg-white text-[13px] font-semibold text-[#374151] hover:bg-[#F8FAFC] transition-colors disabled:opacity-50"
+          >
+            {loadingMore ? 'Chargement…' : `Voir plus (${total - clients.length} restants)`}
+          </button>
         </div>
       )}
 

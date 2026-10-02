@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requirePermission } from '@/lib/permissions';
+import { requirePermission, seesAll } from '@/lib/permissions';
 import { prisma } from '@/lib/prisma';
 import { createAudit } from '@/lib/audit';
 import { notifyDeletion } from '@/lib/notify-activity';
 import { createNotif } from '@/lib/notifications';
 import { resolveClientVisibility } from '@/lib/leave';
+import { CLIENT_RECORD_INCLUDE } from '@/lib/client-queries';
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -15,18 +16,46 @@ export async function GET(_request: NextRequest, { params }: Ctx) {
 
   const { id } = await params;
 
+  // ?record=true — même forme qu'un item de GET /api/clients (fiche + 10 dernières demandes),
+  // pour ouvrir/rafraîchir UNE fiche sans recharger toute la liste. Mêmes règles de visibilité.
+  if (_request.nextUrl.searchParams.get('record') === 'true') {
+    try {
+      if (!seesAll(guard.session!.user)) {
+        const { visibleClientIds } = await resolveClientVisibility(guard.session!.user.id);
+        if (!visibleClientIds.includes(id)) return NextResponse.json({ error: 'Client introuvable' }, { status: 404 });
+      }
+      const rec = await prisma.client.findUnique({ where: { id }, omit: { photo: true }, include: CLIENT_RECORD_INCLUDE });
+      if (!rec) return NextResponse.json({ error: 'Client introuvable' }, { status: 404 });
+      return NextResponse.json(rec);
+    } catch (e) {
+      console.error(e);
+      return NextResponse.json({ error: 'Failed to fetch client' }, { status: 500 });
+    }
+  }
+
+  // Photo (base64) servie à part : la fiche et la liste ne la renvoient pas (quota Fast Origin Transfer).
+  if (_request.nextUrl.searchParams.get('photoOnly') === 'true') {
+    if (!seesAll(guard.session!.user)) {
+      const { visibleClientIds } = await resolveClientVisibility(guard.session!.user.id);
+      if (!visibleClientIds.includes(id)) return NextResponse.json({ photo: null });
+    }
+    const row = await prisma.client.findUnique({ where: { id }, select: { photo: true } });
+    return NextResponse.json({ photo: row?.photo ?? null });
+  }
+
   try {
     const client = await prisma.client.findUnique({
       where: { id },
+      omit: { photo: true },
       include: {
         phones: true,
         notes: { include: { author: { select: { id: true, name: true } } }, orderBy: { createdAt: 'desc' } },
         orders: {
-          include: { items: { include: { product: true } } },
+          include: { items: { include: { product: { omit: { photo: true } } } } },
           orderBy: { createdAt: 'desc' },
         },
         quotes: {
-          include: { items: { include: { product: true } } },
+          include: { items: { include: { product: { omit: { photo: true } } } } },
           orderBy: { createdAt: 'desc' },
         },
         contacts: { orderBy: { createdAt: 'desc' } },
@@ -39,7 +68,7 @@ export async function GET(_request: NextRequest, { params }: Ctx) {
     // Employé : mêmes règles que les listes Commandes/Devis (src/lib/leave.ts) — historique
     // complet seulement pour ses clients d'origine ; client reçu d'un autre commercial ou
     // confié pendant un congé → uniquement depuis la réception. Les admins voient tout.
-    if (guard.session!.user.role !== 'ADMIN') {
+    if (!seesAll(guard.session!.user)) {
       const userId = guard.session!.user.id;
       const { historyClientIds, interimSince } = await resolveClientVisibility(userId);
       const toutHistorique = historyClientIds.includes(id);

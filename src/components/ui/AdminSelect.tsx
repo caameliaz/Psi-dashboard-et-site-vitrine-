@@ -16,6 +16,8 @@ interface AdminSelectProps {
 export function AdminSelect({ value, onChange, options, className = '', highlight = false }: AdminSelectProps) {
   const [open, setOpen] = useState(false);
   const [maxHeight, setMaxHeight] = useState(600);
+  const [openUp, setOpenUp] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
   const ref = useRef<HTMLDivElement>(null);
   // Quand l'appelant impose w-full (grille serrée), on ne force pas la largeur mini.
   const fullWidth = className.includes('w-full');
@@ -43,10 +45,15 @@ export function AdminSelect({ value, onChange, options, className = '', highligh
   useEffect(() => {
     if (!open || !ref.current) return;
     const rect = ref.current.getBoundingClientRect();
-    const available = window.innerHeight - rect.bottom - 16;
+    const below = window.innerHeight - rect.bottom - 16;
+    const above = rect.top - 16;
     // Plus de plafond à 256 px : le menu s'ouvre en entier (sans défiler) tant qu'il tient
     // à l'écran — sur Mac la barre de défilement est masquée et cachait la fin de la liste.
-    setMaxHeight(Math.max(120, available));
+    // Si la liste complète ne tient pas dessous mais tient mieux dessus → on l'ouvre vers le haut.
+    const needed = menuRef.current?.scrollHeight ?? 0;
+    const up = needed > below && above > below;
+    setOpenUp(up);
+    setMaxHeight(Math.max(120, up ? above : below));
   }, [open]);
 
   // Empêche la page (et l'overlay de modale derrière) de défiler pendant qu'un
@@ -114,7 +121,8 @@ export function AdminSelect({ value, onChange, options, className = '', highligh
               un peu avant le bas de l'écran et défile lui-même pour tout montrer, même
               quand le bouton est bas dans une modale/formulaire (cf. secteurs d'activité). */}
           <div
-            className="hidden md:block absolute left-0 top-[calc(100%+6px)] z-[9999] bg-white border border-[#E2E8F0] rounded-xl shadow-[0_8px_32px_rgba(171,190,209,0.45)] overflow-y-auto min-w-full"
+            ref={menuRef}
+            className={`hidden md:block absolute left-0 ${openUp ? 'bottom-[calc(100%+6px)]' : 'top-[calc(100%+6px)]'} z-[9999] bg-white border border-[#E2E8F0] rounded-xl shadow-[0_8px_32px_rgba(171,190,209,0.45)] overflow-y-auto min-w-full w-max`}
             style={{ maxHeight }}
           >
             {options.map((opt) => (
@@ -122,7 +130,7 @@ export function AdminSelect({ value, onChange, options, className = '', highligh
                 key={opt.value}
                 type="button"
                 onClick={() => { onChange(opt.value); setOpen(false); }}
-                className="w-full text-left px-4 py-2.5 text-[14px] transition-colors hover:bg-[#F0FDF4] hover:text-[#166534]"
+                className="w-full text-left whitespace-nowrap px-4 py-2.5 text-[14px] transition-colors hover:bg-[#F0FDF4] hover:text-[#166534]"
                 style={{
                   background: opt.value === value ? '#F0FDF4' : 'transparent',
                   color: opt.value === value ? '#166534' : '#263238',

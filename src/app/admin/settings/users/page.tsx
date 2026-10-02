@@ -12,10 +12,10 @@ import { ClientAssignmentPanel } from '@/components/ui/ClientAssignmentPanel';
 // page maintenait sa propre copie qui avait divergé (voir_stock/modifier_stock et
 // les permissions stock plus récentes n'y apparaissaient plus du tout, impossible
 // de les cocher à la création d'un compte). Ne plus jamais dupliquer cette liste ici.
-import { ALL_PERMISSIONS, type PermKey } from '@/lib/permissions';
+import { ALL_PERMISSIONS, ALL_PERM_KEYS, LECTURE_SEULE_PRESET, type PermKey } from '@/lib/permissions';
 import { apiError } from '@/lib/api-error';
 
-const ADMIN_PERMS: PermKey[]   = ALL_PERMISSIONS.map((p) => p.key);
+const ADMIN_PERMS: PermKey[]   = [...ALL_PERM_KEYS]; // sans les permissions restrictives (lecture_seule)
 const EMPLOYE_PERMS: PermKey[] = ['voir_commandes', 'modifier_statuts', 'voir_clients', 'voir_produits', 'voir_historique'];
 
 interface CustomRole { id: string; nom: string; permissions: PermKey[]; }
@@ -25,6 +25,7 @@ interface User {
   nom: string;
   email: string;
   role: 'Admin' | 'Employe';
+  customRoleId?: string | null; // rôle perso choisi (étiquette) — le rôle réel reste Employe
   statut: 'Actif' | 'Inactif';
   permissions: PermKey[];
   resetRequested?: boolean;
@@ -38,6 +39,7 @@ function dbUserToUser(u: any): User {
     nom: u.name ?? '—',
     email: u.email ?? '—',
     role: u.role === 'ADMIN' ? 'Admin' : 'Employe',
+    customRoleId: u.customRoleId ?? null,
     statut: u.active ? 'Actif' : 'Inactif',
     resetRequested: !!u.resetRequested,
     twoFactorDisabled: !!u.twoFactorDisabled,
@@ -65,10 +67,13 @@ function avatarColor(role: string) {
   return role === 'Admin' ? { bg: '#F3E8FF', text: '#6B21A8' } : { bg: '#D1FAE5', text: '#166534' };
 }
 
-function RoleBadge({ role }: { role: 'Admin' | 'Employe' }) {
+function RoleBadge({ role, customName }: { role: 'Admin' | 'Employe'; customName?: string | null }) {
+  // Rôle perso (ex. « Admin 2 ») : son nom remplace « Employé » (le rôle réel, lui, reste Employé)
+  const style = role === 'Admin' ? { background: '#F3E8FF', color: '#6B21A8' }
+    : customName ? { background: '#EFF6FF', color: '#1D4ED8' } : { background: '#F2F4F7', color: '#374151' };
   return (
-    <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold" style={role === 'Admin' ? { background: '#F3E8FF', color: '#6B21A8' } : { background: '#F2F4F7', color: '#374151' }}>
-      {role === 'Admin' ? 'Admin' : 'Employé'}
+    <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold" style={style}>
+      {role === 'Admin' ? 'Admin' : (customName ?? 'Employé')}
     </span>
   );
 }
@@ -146,6 +151,8 @@ function RoleCreatorOverlay({ onClose, onCreate }: { onClose: () => void; onCrea
               <label className="text-[12px] font-semibold text-[#374151]">Autorisations</label>
               <div className="flex gap-2">
                 <button onClick={() => setPerms([...ADMIN_PERMS])} className="text-[11px] font-semibold text-[#4CAF4F] hover:underline">Tout</button>
+                <span className="text-[#E2E8F0]">·</span>
+                <button onClick={() => setPerms([...LECTURE_SEULE_PRESET])} className="text-[11px] font-semibold text-[#3B82F6] hover:underline">Lecture seule</button>
                 <span className="text-[#E2E8F0]">·</span>
                 <button onClick={() => setPerms([])} className="text-[11px] font-semibold text-[#8A9BB5] hover:underline">Aucun</button>
               </div>
@@ -333,7 +340,7 @@ function CreateUserForm({ onSubmit, onClose, customRoles, onAddCustomRole, onDel
 
           {/* Autorisations inline (grille 3 colonnes) — toujours rendu, animé par max-height */}
           <div style={{
-            maxHeight: showPerms ? '400px' : '0',
+            maxHeight: showPerms ? '700px' : '0', // 21 autorisations (7 lignes) : 400px les rognait
             opacity: showPerms ? 1 : 0,
             overflow: 'hidden',
             transition: 'max-height 0.28s ease, opacity 0.2s ease',
@@ -344,6 +351,8 @@ function CreateUserForm({ onSubmit, onClose, customRoles, onAddCustomRole, onDel
                 <span className="text-[11px] font-bold text-[#8A9BB5] uppercase tracking-widest">Autorisations</span>
                 <div className="flex gap-2">
                   <button onClick={() => setData((d) => ({ ...d, permissions: [...ADMIN_PERMS] }))} className="text-[10px] font-semibold text-[#4CAF4F] hover:underline">Tout</button>
+                  <span className="text-[#E2E8F0]">·</span>
+                  <button onClick={() => setData((d) => ({ ...d, permissions: [...LECTURE_SEULE_PRESET] }))} className="text-[10px] font-semibold text-[#3B82F6] hover:underline">Lecture seule</button>
                   <span className="text-[#E2E8F0]">·</span>
                   <button onClick={() => setData((d) => ({ ...d, permissions: [] }))} className="text-[10px] font-semibold text-[#8A9BB5] hover:underline">Aucun</button>
                 </div>
@@ -535,7 +544,7 @@ function UserSlideIn({ user, onClose, onDelete, onPermChange, onPermSetAll, cust
                 <p className="text-[18px] font-bold text-[#0F172A]">{user.nom}</p>
                 <p className="text-[13px] text-[#8A9BB5] mt-0.5">{user.email}</p>
                 <div className="flex items-center gap-2 mt-2">
-                  <RoleBadge role={user.role} />
+                  <RoleBadge role={user.role} customName={customRoles.find((r) => r.id === user.customRoleId)?.nom} />
                   <StatutBadge statut={user.statut} />
                   {activeLeave && (
                     <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-[#FFF7ED] text-[#9A3412]">
@@ -597,7 +606,9 @@ function UserSlideIn({ user, onClose, onDelete, onPermChange, onPermSetAll, cust
               {isAdmin && <span className="text-[11px] text-[#ABBED1]">Toutes les autorisations (Admin)</span>}
               {unlocked && (
                 <div className="flex gap-2">
-                  <button onClick={() => onPermSetAll(user.id, ALL_PERMISSIONS.map((p) => p.key))} className="text-[11px] font-semibold text-[#4CAF4F] hover:underline">Tout cocher</button>
+                  <button onClick={() => onPermSetAll(user.id, [...ADMIN_PERMS])} className="text-[11px] font-semibold text-[#4CAF4F] hover:underline">Tout cocher</button>
+                  <span className="text-[#E2E8F0]">·</span>
+                  <button onClick={() => onPermSetAll(user.id, [...LECTURE_SEULE_PRESET])} className="text-[11px] font-semibold text-[#3B82F6] hover:underline">Lecture seule</button>
                   <span className="text-[#E2E8F0]">·</span>
                   <button onClick={() => onPermSetAll(user.id, [])} className="text-[11px] font-semibold text-[#8A9BB5] hover:underline">Tout décocher</button>
                 </div>
@@ -938,6 +949,8 @@ function UsersPageInner() {
         email: data.email,
         password: data.motdepasse,
         role: dbRole,
+        // rôle perso choisi dans le formulaire (ni Admin ni Employé simple) → enregistré sur le compte
+        customRoleId: data.role !== 'Admin' && data.role !== 'Employe' ? data.role : null,
         permissions: dbRole === 'ADMIN' ? [] : data.permissions,
       }),
     });
@@ -1069,7 +1082,7 @@ function UsersPageInner() {
     let matchRole = filterRole === 'all' || u.role === filterRole;
     if (!matchRole) {
       const cr = customRoles.find((r) => r.id === filterRole);
-      if (cr) matchRole = u.role === 'Employe' && cr.permissions.length === u.permissions.length && cr.permissions.every((p) => u.permissions.includes(p));
+      if (cr) matchRole = u.customRoleId === cr.id || (u.role === 'Employe' && !u.customRoleId && cr.permissions.length === u.permissions.length && cr.permissions.every((p) => u.permissions.includes(p)));
     }
     return matchSearch && matchRole;
   });
@@ -1136,7 +1149,7 @@ function UsersPageInner() {
                   <div className="h-px bg-[#F2F4F7] my-3" />
 
                   <div className="flex items-center justify-between">
-                    <RoleBadge role={u.role} />
+                    <RoleBadge role={u.role} customName={customRoles.find((r) => r.id === u.customRoleId)?.nom} />
                     <span className="text-[11px] text-[#ABBED1]">
                       <span className="font-bold text-[#374151]">{u.permissions.length}</span>/{ALL_PERMISSIONS.length} droits
                     </span>
@@ -1173,7 +1186,7 @@ function UsersPageInner() {
       )}
 
       {showAdd && (
-        <Modal title="Nouvel utilisateur" onClose={() => setShowAdd(false)}>
+        <Modal title="Nouvel utilisateur" onClose={() => setShowAdd(false)} scrollable>
           <CreateUserForm
             onSubmit={handleAdd}
             onClose={() => setShowAdd(false)}

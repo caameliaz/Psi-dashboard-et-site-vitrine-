@@ -40,7 +40,7 @@ export const fr = {
     badge4_sub: 'Sécurité Sanitaire',
     badge4_desc: 'Un papier thermique garanti 100% sans BPA (Bisphénol A), pour la sécurité de vos clients et de votre personnel. Un choix responsable qui respecte les normes sanitaires européennes.',
     badge4_desc_short: 'Papier thermique garanti 100% sans BPA, pour la sécurité de vos clients.',
-    title2: 'Sécurité, origine, qualité — nos garanties',
+    title2: 'Sécurité, origine, qualité ',
   },
   about: {
     title: 'À propos de PSI',

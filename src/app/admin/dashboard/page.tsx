@@ -244,7 +244,8 @@ export default function DashboardPage() {
   const [stats, setStats]       = useState({ commandes: 0, devisMois: 0, ventesMois: 0, ventesPrevMois: 0, evolutionVentes: 0, evolutionDevis: 0, devis: 0, clients: 0, livrees: 0 });
   const [devisEnAttente, setDevisEnAttente] = useState({ count: 0, montant: 0 });
   const [moisTab, setMoisTab]   = useState<'commandes' | 'devis'>('commandes');
-  const { isAdmin } = useRole();
+  // isAdmin = « voit tout » (admin ou compte lecture seule) ; realAdmin = vrai admin (objectifs modifiables).
+  const { isAdmin: realAdmin, seesAll: isAdmin } = useRole();
   const { data: session } = useSession();
   const myId = (session?.user as { id?: string } | undefined)?.id ?? null;
   const myName = (session?.user as { name?: string } | undefined)?.name ?? 'Moi';
@@ -629,7 +630,7 @@ export default function DashboardPage() {
               <svg width={15} height={15} fill="none" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/><path d="M14 2v6h6M8 13h8M8 17h5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
               PDF
             </button>
-            {isAdmin && (
+            {realAdmin && (
               <button
                 onClick={() => setGoalsOpen(true)}
                 title="Définir les objectifs du mois"

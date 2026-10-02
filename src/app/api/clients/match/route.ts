@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requirePermission } from '@/lib/permissions';
+import { requirePermission, seesAll } from '@/lib/permissions';
 import { prisma } from '@/lib/prisma';
 import { resolveClientVisibility } from '@/lib/leave';
 
@@ -29,7 +29,7 @@ export async function GET(request: NextRequest) {
     }
     if (!client) return NextResponse.json({ client: null });
 
-    if (guard.session!.user.role !== 'ADMIN') {
+    if (!seesAll(guard.session!.user)) {
       const { visibleClientIds } = await resolveClientVisibility(guard.session!.user.id);
       if (!visibleClientIds.includes(client.id)) return NextResponse.json({ client: null });
     }

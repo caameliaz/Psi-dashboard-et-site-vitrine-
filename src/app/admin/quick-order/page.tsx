@@ -5,11 +5,14 @@ import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { CreateForm, submitNewRequest } from '@/app/admin/requests/page';
 import { MobileNavbar } from '@/components/MobileNavbar';
+import { useRole } from '@/lib/role-context';
 
 // Commande rapide — affiche UNIQUEMENT le formulaire (pas de tableau autour).
 // Accessible depuis le bouton rond du menu mobile.
 export default function QuickOrderPage() {
   const router = useRouter();
+  const { readOnly } = useRole();
+  useEffect(() => { if (readOnly) router.replace('/admin/dashboard'); }, [readOnly, router]);
   const { data: session } = useSession();
   const currentUserId = (session?.user as { id?: string } | undefined)?.id;
   const [users, setUsers] = useState<{ id: string; name: string }[]>([]);

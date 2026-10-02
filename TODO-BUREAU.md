@@ -34,3 +34,16 @@ Icosnet refuse l'IP Brevo (`550 … listed as abusive`). Gmail marche.
 - Code de connexion par appli d'authentification (Google Authenticator) au lieu du mail : à demander à Claude, quelques heures.
 - Suivi des paniers du site public (code prêt, non poussé) : à tester puis pousser. Idée ensuite : relance WhatsApp des paniers abandonnés (téléphone tapé avant l'abandon).
 - Stats : provenance des visiteurs, mobile/ordinateur, demandes envoyées depuis le site, produits consultés vs commandés.
+
+
+
+Référence	Quantité
+57/69 (hors catalogue)	8 340
+80/80	3 661
+80/60	1 010
+57/30	690
+57/57 (hors catalogue)	600
+57/40	408
+35/45	240
+100/150-2	192
+20/40	10

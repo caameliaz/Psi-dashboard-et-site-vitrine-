@@ -8,6 +8,7 @@ import { CommuneSelect } from '@/components/ui/CommuneSelect';
 import { useCartStore } from '@/store/cartStore';
 import { useTranslation } from '@/lib/i18n';
 import { validateEmail, validatePhone } from '@/lib/validation';
+import { reportCartConverted } from '@/lib/cart-tracking';
 
 const WHATSAPP_NUMBER = '213770150656';
 const PHONE = '+213770150656';
@@ -176,6 +177,9 @@ export default function QuotePage() {
         setSubmitError(err.error ?? t('quote.error'));
         return;
       }
+      // Le devis peut aussi être fait sans panier (lignes libres) — ne pas marquer
+      // "converti" une session panier qui n'existe pas dans ce cas.
+      if (cartItems.length > 0) reportCartConverted();
       clearCart();
       setSubmitted(true);
     } catch {

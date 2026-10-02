@@ -24,7 +24,7 @@ export async function GET(req: Request) {
 
     // Sinon, retourner tous les users avec toutes les infos
     const users = await prisma.user.findMany({
-      select: { id: true, name: true, email: true, role: true, active: true, permissions: true, resetRequested: true, twoFactorDisabled: true, canHardDelete: true },
+      select: { id: true, name: true, email: true, role: true, customRoleId: true, active: true, permissions: true, resetRequested: true, twoFactorDisabled: true, canHardDelete: true },
       orderBy: { name: 'asc' },
     });
     return NextResponse.json(users);
@@ -42,6 +42,9 @@ export async function POST(req: Request) {
   try {
     const body = await req.json();
     const { name, email, password, role, permissions } = body;
+    // Rôle personnalisé (étiquette) — ignoré pour un ADMIN ; doit exister
+    let customRoleId: string | null = role === 'ADMIN' ? null : (typeof body.customRoleId === 'string' && body.customRoleId ? body.customRoleId : null);
+    if (customRoleId && !(await prisma.customRole.findUnique({ where: { id: customRoleId }, select: { id: true } }))) customRoleId = null;
 
     // Validation
     if (!name || !name.trim()) {
@@ -81,6 +84,7 @@ export async function POST(req: Request) {
         role,
         active: true,
         permissions: role === 'ADMIN' ? [] : (permissions || []),
+        customRoleId,
       },
     });
 

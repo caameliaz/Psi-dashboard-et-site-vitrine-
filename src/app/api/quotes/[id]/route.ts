@@ -27,7 +27,7 @@ export async function GET(_request: NextRequest, { params }: Ctx) {
     const quote = await prisma.quote.findUnique({
       where: { id },
       include: {
-        client: { include: { phones: true } },
+        client: { omit: { photo: true }, include: { phones: true } },
         items: {
           include: {
             product: { omit: { photo: true }, include: { category: { select: { id: true, name: true } } } },
@@ -290,7 +290,7 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
         ...ficheData,
       },
       include: {
-        client: { include: { phones: true } },
+        client: { omit: { photo: true }, include: { phones: true } },
         items: {
           include: {
             product: { omit: { photo: true } },

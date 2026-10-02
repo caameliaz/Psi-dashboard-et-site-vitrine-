@@ -35,7 +35,8 @@ export async function GET(request: NextRequest) {
       },
       orderBy: { createdAt: 'desc' },
     });
-    return NextResponse.json(products);
+    // Vitrine publique : cache CDN 60 s (les pages admin passent ?all=true → jamais en cache).
+    return NextResponse.json(products, all ? undefined : { headers: { 'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300' } });
   } catch (e) {
     console.error(e);
     return NextResponse.json({ error: 'Failed to fetch products' }, { status: 500 });

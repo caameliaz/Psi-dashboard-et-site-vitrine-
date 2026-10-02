@@ -648,7 +648,7 @@ export function CreateForm({ defaultType, onClose, onSave, users, currentUserId,
 
 function RequestsPageInner() {
   const { data: session } = useSession();
-  const { isAdmin } = useRole();
+  const { seesAll: isAdmin, readOnly } = useRole(); // « voit tout » : admin ou compte lecture seule
   const currentUserId = (session?.user as { id?: string } | undefined)?.id;
   const [activeTab, setActiveTab] = useState<'tous' | 'commandes' | 'devis'>('tous');
   const [orders, setOrders]       = useState<RequestDetail[]>([]);
@@ -723,10 +723,10 @@ function RequestsPageInner() {
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
   
-  // Rafraîchissement toutes les 20 s, en pause quand l'onglet est caché
+  // Rafraîchissement toutes les 60 s, en pause quand l'onglet est caché
   // Pas de rafraîchissement auto sur « Tout afficher » : tout l'historique pèse ~11 Mo par requête
   // (quota de transfert Vercel) — on rafraîchit à la main / au changement de filtre.
-  usePolling(() => fetchAll(true), 20000, filterPeriode !== 'tout');
+  usePolling(() => fetchAll(true), 60000, filterPeriode !== 'tout');
 
   // ── Gestion du bouton retour du navigateur pour fermer le panneau de détail ──
   useEffect(() => {
@@ -1061,6 +1061,8 @@ function RequestsPageInner() {
             <svg width={14} height={14} fill="none" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6z" stroke="currentColor" strokeWidth="1.8"/><path d="M14 2v6h6M8 13h8M8 17h8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>
             Exporter
           </button>
+          {/* Compte lecture seule : ni import ni création */}
+          {!readOnly && (<>
           {/* Import de ventes passées — ordinateur uniquement (choix de fichier) */}
           <button onClick={() => setShowImportVentes(true)}
             className="hidden md:flex items-center gap-1.5 px-3 py-2 rounded-xl text-[13px] font-semibold border border-[#E2E8F0] text-[#374151] hover:bg-[#F8FAFC] hover:border-[#4CAF4F] hover:text-[#4CAF4F] transition-colors"
@@ -1077,6 +1079,7 @@ function RequestsPageInner() {
             className="hidden md:block px-4 py-2 rounded-xl text-[13px] font-bold border border-[#4CAF4F] text-[#4CAF4F] hover:bg-[#F0FDF4] transition-colors whitespace-nowrap">
             + Nouveau
           </button>
+          </>)}
         </div>
       </div>
 
@@ -1130,11 +1133,9 @@ function RequestsPageInner() {
             options={[
               { value: '7j',    label: '7 derniers jours' },
               { value: '2sem',  label: '2 dernières semaines' },
-              { value: '3sem',  label: '3 dernières semaines' },
               { value: 'mois',  label: 'Ce mois' },
               { value: '3mois', label: '3 derniers mois' },
               { value: '6mois', label: '6 derniers mois' },
-              { value: 'annee', label: 'Cette année' },
               { value: 'tout',  label: 'Tout afficher' },
               { value: 'moisChoisi', label: 'Mois…' },
               { value: 'date',  label: 'Date exacte…' },

@@ -17,7 +17,7 @@ export function ClientAssignmentPanel({ userId }: { userId: string }) {
 
   const fetchClients = () => {
     setLoading(true);
-    fetch('/api/clients')
+    fetch('/api/clients?mini=true')
       .then((r) => r.ok ? r.json() : [])
       .then((data: any[]) => setAllClients(data.map((c) => ({ id: c.id, name: c.name, company: c.company, assignedToId: c.assignedToId ?? null }))))
       .catch(() => {})

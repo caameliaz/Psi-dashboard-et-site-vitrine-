@@ -5,17 +5,17 @@ import { usePathname } from 'next/navigation';
 import { useRole } from '@/lib/role-context';
 import type { PermKey } from '@/lib/permissions';
 
-const SETTINGS_NAV: { href: string; label: string; perm: PermKey }[] = [
+const SETTINGS_NAV: { href: string; label: string; perm: PermKey | PermKey[] }[] = [
   { href: '/admin/settings/users',   label: 'Users',         perm: 'gerer_utilisateurs' },
-  { href: '/admin/settings/messages', label: 'Messages',     perm: 'modifier_contenu' },
+  { href: '/admin/settings/messages', label: 'Messages',     perm: ['modifier_contenu', 'voir_contenu'] },
   { href: '/admin/settings/history', label: 'Historique',    perm: 'voir_historique' },
-  { href: '/admin/settings/content', label: 'Contenu du site', perm: 'modifier_contenu' },
+  { href: '/admin/settings/content', label: 'Contenu du site', perm: ['modifier_contenu', 'voir_contenu'] },
 ];
 
 export default function SettingsLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { can } = useRole();
-  const items = SETTINGS_NAV.filter((i) => can(i.perm));
+  const items = SETTINGS_NAV.filter((i) => (Array.isArray(i.perm) ? i.perm.some(can) : can(i.perm)));
 
   return (
     <div className="flex gap-5 items-start">

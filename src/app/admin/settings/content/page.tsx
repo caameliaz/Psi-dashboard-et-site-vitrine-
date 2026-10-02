@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { RequirePerm } from '@/components/RequirePerm';
+import { useRole } from '@/lib/role-context';
 
 function IconCheck() {
   return (
@@ -24,6 +25,8 @@ function SaveButton({ onClick, saved, loading }: { onClick: () => void; saved: b
 const inputClass = "w-full px-3 py-2.5 rounded-lg border border-[#E2E8F0] text-sm text-[#0F172A] placeholder-[#94A3B8] focus:outline-none focus:border-[#4CAF4F] focus:ring-1 focus:ring-[#4CAF4F] transition-colors bg-[#F8FAFC]";
 
 function ContentPageInner() {
+  const { can: canRole } = useRole();
+  const canEdit = canRole('modifier_contenu'); // sans ce droit (compte lecture seule) : consultation uniquement
   const [hero,    setHero]    = useState({ titre: '', sousTitre: '' });
   const [about,   setAbout]   = useState({ texte: '' });
   const [contact, setContact] = useState({ adresse: '', email: '', telephone: '', facebook: '', instagram: '' });
@@ -73,7 +76,9 @@ function ContentPageInner() {
   }
 
   return (
+    <fieldset disabled={!canEdit} className="contents">
     <div className="w-full">
+      {!canEdit && <p className="mb-4 px-3 py-2 rounded-lg bg-[#EFF6FF] border border-[#BFDBFE] text-[12px] font-semibold text-[#1E40AF]">Mode lecture seule — consultation uniquement.</p>}
       <div className="mb-8">
         <h1 className="text-[22px] font-bold text-[#0F172A]">Contenu du site</h1>
         <p className="text-[13px] text-[#8A9BB5] mt-1">Modifiez les textes affichés sur le site public</p>
@@ -158,9 +163,10 @@ function ContentPageInner() {
         </div>
       </div>
     </div>
+    </fieldset>
   );
 }
 
 export default function ContentPage() {
-  return <RequirePerm perm="modifier_contenu"><ContentPageInner /></RequirePerm>;
+  return <RequirePerm perm={['modifier_contenu', 'voir_contenu']}><ContentPageInner /></RequirePerm>;
 }

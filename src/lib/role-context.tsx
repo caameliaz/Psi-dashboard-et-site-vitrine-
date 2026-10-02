@@ -8,6 +8,10 @@ import { ALL_PERM_KEYS, type PermKey } from '@/lib/permissions';
 interface RoleContextType {
   role: Role;
   isAdmin: boolean;
+  /** Voit tous les clients/commandes/ventes (ADMIN ou permission « voir_tout »). */
+  seesAll: boolean;
+  /** Compte en lecture seule : aucune création/modification/suppression. */
+  readOnly: boolean;
   permissions: PermKey[];
   /** Vrai tant que la session n'est pas encore chargée (évite le flash de la sidebar). */
   loading: boolean;
@@ -16,7 +20,7 @@ interface RoleContextType {
 }
 
 const RoleContext = createContext<RoleContextType>({
-  role: 'ADMIN', isAdmin: true, permissions: [...ALL_PERM_KEYS], loading: true, can: () => true,
+  role: 'ADMIN', isAdmin: true, seesAll: true, readOnly: false, permissions: [...ALL_PERM_KEYS], loading: true, can: () => true,
 });
 
 export function RoleProvider({ children }: { children: React.ReactNode }) {
@@ -36,9 +40,11 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
     : ((rawPerms ?? []) as PermKey[]);
 
   const can = (perm: PermKey) => isAdmin || permissions.includes(perm);
+  const seesAll = isAdmin || permissions.includes('voir_tout');
+  const readOnly = !isAdmin && permissions.includes('lecture_seule');
 
   return (
-    <RoleContext.Provider value={{ role, isAdmin, permissions, loading, can }}>
+    <RoleContext.Provider value={{ role, isAdmin, seesAll, readOnly, permissions, loading, can }}>
       {children}
     </RoleContext.Provider>
   );

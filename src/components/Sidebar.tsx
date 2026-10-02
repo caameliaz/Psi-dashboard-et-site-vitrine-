@@ -83,7 +83,7 @@ const navItems: { href: string; label: string; Icon: typeof IconHome; perm: Perm
   { href: '/admin/stock',     label: 'Stock',        Icon: IconBox,      perm: 'voir_stock' },
   { href: '/admin/recipes',   label: 'Recettes',     Icon: IconFlask,    perm: 'voir_stock' },
   { href: '/admin/clients',   label: 'Clients',      Icon: IconUsers,    perm: 'voir_clients' },
-  { href: '/admin/settings',  label: 'Réglages',     Icon: IconSettings, perm: ['voir_historique', 'modifier_contenu', 'gerer_utilisateurs'] },
+  { href: '/admin/settings',  label: 'Réglages',     Icon: IconSettings, perm: ['voir_historique', 'modifier_contenu', 'voir_contenu', 'gerer_utilisateurs'] },
 ];
 
 export function Sidebar({ mobileOpen = false, onCloseMobile }: { mobileOpen?: boolean; onCloseMobile?: () => void } = {}) {

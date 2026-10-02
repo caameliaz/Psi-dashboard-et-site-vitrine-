@@ -206,6 +206,25 @@ export function VisitsBarChart({ data }: { data: { category: string; visits: num
   );
 }
 
+// Visites (sessions) PAR MOIS du site public — courbe à points reliés, fenêtre « Site public » du dashboard.
+export function MonthlyVisitsChart({ data }: { data: { label: string; visits: number }[] }) {
+  if (!data || data.length === 0) {
+    return <p className="text-[12px] text-[#8A9BB5] py-4 text-center">Aucune donnée</p>;
+  }
+  return (
+    <ResponsiveContainer width="100%" height={200}>
+      <LineChart data={data} margin={{ left: -12, right: 16, top: 14 }}>
+        <CartesianGrid stroke="#F2F4F7" vertical={false} />
+        <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#8A9BB5' }} padding={{ left: 20, right: 20 }} />
+        <YAxis tick={{ fontSize: 11, fill: '#8A9BB5' }} allowDecimals={false} />
+        <Tooltip {...tooltipStyle()} />
+        <Line type="linear" dataKey="visits" name="Visites" stroke="#4CAF4F" strokeWidth={2.5}
+          dot={{ r: 4, fill: '#4CAF4F', stroke: '#fff', strokeWidth: 2 }} activeDot={{ r: 6 }} />
+      </LineChart>
+    </ResponsiveContainer>
+  );
+}
+
 export function ConversionRateChart({ data }: { data: { label: string; rate: number }[] }) {
   if (!data || data.length === 0) {
     return <div className={CARD}><h3 className="text-[14px] font-bold text-[#0F172A] mb-3">Taux de conversion</h3><p className="text-[12px] text-[#8A9BB5] py-8 text-center">Aucune donnée pour ce mois</p></div>;

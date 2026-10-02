@@ -15,13 +15,14 @@ import type { PermKey } from '@/lib/permissions';
  *     ...contenu de la page...
  *   </RequirePerm>
  */
-export function RequirePerm({ perm, children }: { perm: PermKey; children: React.ReactNode }) {
+export function RequirePerm({ perm, children }: { perm: PermKey | PermKey[]; children: React.ReactNode }) {
   const { can, loading } = useRole();
 
   // Tant que la session charge, on n'affiche rien (évite un flash "Accès refusé").
   if (loading) return null;
 
-  if (!can(perm)) {
+  // Tableau = l'une quelconque des permissions suffit (ex. ['modifier_contenu', 'voir_contenu']).
+  if (!(Array.isArray(perm) ? perm.some(can) : can(perm))) {
     return (
       <div className="flex flex-col items-center justify-center py-24 px-6 text-center">
         <div className="w-14 h-14 rounded-full bg-[#FEF2F2] flex items-center justify-center mb-4">

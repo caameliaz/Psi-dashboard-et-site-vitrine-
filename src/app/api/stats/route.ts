@@ -1,6 +1,7 @@
 import { NextResponse, NextRequest } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { seesAll } from '@/lib/permissions';
 
 // GET /api/stats?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD — agrégats pour le dashboard
 export async function GET(request: NextRequest) {
@@ -344,7 +345,7 @@ export async function GET(request: NextRequest) {
 
     // Chiffre d'affaires TOTAL (toutes les ventes livrées, depuis le début) — admins seulement
     let ventesTotal: { global: number; byUser: Record<string, number> } | null = null;
-    if ((session.user as { role?: string }).role === 'ADMIN') {
+    if (seesAll(session.user)) {
       const [allOrdersLivres, allQuotesLivres] = await Promise.all([
         prisma.order.findMany({ where: { status: 'LIVRE' }, select: { assignedToId: true, items: { select: { quantity: true, unitPrice: true } } } }),
         prisma.quote.findMany({ where: { status: 'LIVRE' }, select: { assignedToId: true, proposedPrice: true } }),
