@@ -8,10 +8,10 @@ const ADMIN_URL = process.env.NEXTAUTH_URL ?? 'https://psi-algerie.com';
 
 // ── Email de BIENVENUE au nouvel utilisateur (sans mot de passe) ────────────
 export function renderWelcomeEmailNoPassword(params: {
-  name: string; email: string; role: string;
+  name: string; email: string; role: string; roleName?: string | null; // roleName = rôle perso (ex. « Admin 2 »)
 }): { subject: string; html: string } {
-  const { name, email, role } = params;
-  const roleLabel = role === 'ADMIN' ? 'Administrateur' : 'Employé';
+  const { name, email, role, roleName } = params;
+  const roleLabel = role === 'ADMIN' ? 'Administrateur' : (roleName || 'Employé');
 
   const body = `
     <p style="margin:0 0 4px;font-size:20px;font-weight:800;color:#0F172A">Bienvenue chez PSI, ${name} 👋</p>
@@ -32,10 +32,10 @@ export function renderWelcomeEmailNoPassword(params: {
 
 // ── Email de BIENVENUE au nouvel utilisateur (avec mot de passe) ─────────────
 export function renderWelcomeEmail(params: {
-  name: string; email: string; password: string; role: string;
+  name: string; email: string; password: string; role: string; roleName?: string | null; // roleName = rôle perso (ex. « Admin 2 »)
 }): { subject: string; html: string } {
-  const { name, email, password, role } = params;
-  const roleLabel = role === 'ADMIN' ? 'Administrateur' : 'Employé';
+  const { name, email, password, role, roleName } = params;
+  const roleLabel = role === 'ADMIN' ? 'Administrateur' : (roleName || 'Employé');
 
   const body = `
     <p style="margin:0 0 4px;font-size:20px;font-weight:800;color:#0F172A">Bienvenue chez PSI, ${name} 👋</p>
@@ -65,10 +65,10 @@ export function renderWelcomeEmail(params: {
 
 // ── Email aux ADMINS : un compte a été créé ──────────────────────────────────
 export function renderAccountCreatedAdminEmail(params: {
-  name: string; email: string; role: string; createdBy: string;
+  name: string; email: string; role: string; createdBy: string; roleName?: string | null;
 }): { subject: string; html: string } {
-  const { name, email, role, createdBy } = params;
-  const roleLabel = role === 'ADMIN' ? 'Administrateur' : 'Employé';
+  const { name, email, role, createdBy, roleName } = params;
+  const roleLabel = role === 'ADMIN' ? 'Administrateur' : (roleName || 'Employé');
 
   const body = `
     <p style="margin:0 0 4px;font-size:20px;font-weight:800;color:#0F172A">Nouveau compte créé</p>

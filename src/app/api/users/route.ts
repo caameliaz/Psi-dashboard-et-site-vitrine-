@@ -44,7 +44,12 @@ export async function POST(req: Request) {
     const { name, email, password, role, permissions } = body;
     // Rôle personnalisé (étiquette) — ignoré pour un ADMIN ; doit exister
     let customRoleId: string | null = role === 'ADMIN' ? null : (typeof body.customRoleId === 'string' && body.customRoleId ? body.customRoleId : null);
-    if (customRoleId && !(await prisma.customRole.findUnique({ where: { id: customRoleId }, select: { id: true } }))) customRoleId = null;
+    // (on garde aussi son nom : il est écrit dans l'e-mail de bienvenue)
+    let customRoleName: string | null = null;
+    if (customRoleId) {
+      const cr = await prisma.customRole.findUnique({ where: { id: customRoleId }, select: { name: true } });
+      if (cr) customRoleName = cr.name; else customRoleId = null;
+    }
 
     // Validation
     if (!name || !name.trim()) {
@@ -99,6 +104,7 @@ export async function POST(req: Request) {
           email: email.trim(),
           password,
           role,
+          roleName: customRoleName,
         });
         await sendEmail({
           to: email.trim(),

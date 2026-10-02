@@ -86,6 +86,7 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
         name: user.name ?? 'Utilisateur',
         email: user.email ?? body.email,
         role: user.role,
+        roleName: user.customRoleId ? (await prisma.customRole.findUnique({ where: { id: user.customRoleId }, select: { name: true } }))?.name ?? null : null,
       });
       sendEmail({ to: user.email ?? body.email, subject: mail.subject, html: mail.html, attachments: [logoAttachment] })
         .catch(() => {});
