@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { useState, useEffect, useCallback } from 'react';
 import { usePolling } from '@/lib/use-polling';
@@ -16,6 +16,7 @@ interface HistoryEntry {
   id: number;
   user: string;
   userRole: 'Admin' | 'Employe';
+  userRoleLabel: string; // « Admin », « Employé » ou nom du rôle perso (ex. « Adminr/o »)
   action: string;
   type: ActionType;
   detail: string;
@@ -42,6 +43,7 @@ function dbLogToEntry(log: any): HistoryEntry {
     id: log.id,
     user: log.user?.name ?? '—',
     userRole: log.user?.role === 'ADMIN' ? 'Admin' : 'Employe',
+    userRoleLabel: log.user?.role === 'ADMIN' ? 'Admin' : (log.user?.customRole?.name ?? 'Employé'),
     action: log.action ?? '—',
     type: dbActionType(log.entity),
     detail: log.detail ?? log.entityId ?? '',
@@ -201,7 +203,7 @@ function HistoryPageInner() {
                       <div className="flex items-center gap-2 mt-1.5">
                         <p className="text-[12px] font-semibold text-[#374151]">{h.user}</p>
                         <span className="text-[#E2E8F0]">·</span>
-                        <p className="text-[12px] text-[#8A9BB5]">{h.userRole === 'Admin' ? 'Admin' : 'Employé'}</p>
+                        <p className="text-[12px] text-[#8A9BB5]">{h.userRoleLabel}</p>
                         {clickable && <span className="ml-auto text-[11px] text-[#4CAF4F] font-semibold">{h.clientId ? 'Voir la fiche →' : 'Voir détail →'}</span>}
                       </div>
                     </div>

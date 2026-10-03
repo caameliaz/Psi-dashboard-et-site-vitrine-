@@ -425,7 +425,7 @@ function UserSlideIn({ user, onClose, onDelete, onPermChange, onPermSetAll, cust
   onPermChange: (userId: number, perm: PermKey, value: boolean) => void;
   onPermSetAll: (userId: number, perms: PermKey[]) => void;
   customRoles: CustomRole[];
-  onSaveProfile: (user: User, data: { name: string; email: string; role: string; password?: string; permissions: PermKey[] }) => Promise<void>;
+  onSaveProfile: (user: User, data: { name: string; email: string; role: string; customRoleId: string | null; password?: string; permissions: PermKey[] }) => Promise<void>;
   onResetPassword: (user: User) => Promise<void>;
   onSendFixMail?: (user: User) => Promise<void>; // fourni UNIQUEMENT à la propriétaire du compte
   onReactivate: (user: User) => Promise<void>;
@@ -444,7 +444,9 @@ function UserSlideIn({ user, onClose, onDelete, onPermChange, onPermSetAll, cust
   const [togglingTwoFactor, setTogglingTwoFactor] = useState(false);
   const [fNom, setFNom] = useState(user.nom);
   const [fEmail, setFEmail] = useState(user.email);
-  const [fRole, setFRole] = useState<string>(user.role); // 'Admin' | 'Employe' | id rôle perso
+  // Rôle affiché dans la liste déroulante : le rôle perso du compte s'il en a un, sinon 'Admin' | 'Employe'
+  const currentRoleId = user.customRoleId && customRoles.some((r) => r.id === user.customRoleId) ? user.customRoleId : user.role;
+  const [fRole, setFRole] = useState<string>(currentRoleId);
   const [fPwd, setFPwd] = useState('');
 
   // ── Congés / intérim (uniquement pertinent pour un employé) ──
@@ -484,7 +486,7 @@ function UserSlideIn({ user, onClose, onDelete, onPermChange, onPermSetAll, cust
 
   const inputCls = "w-full px-3 py-2 rounded-lg border border-[#E2E8F0] text-[14px] text-[#0F172A] focus:outline-none focus:border-[#4CAF4F] focus:ring-[3px] focus:ring-[#4CAF4F]/15 transition-all bg-white";
 
-  const startEdit = () => { setFNom(user.nom); setFEmail(user.email); setFRole(user.role); setFPwd(''); setEditing(true); };
+  const startEdit = () => { setFNom(user.nom); setFEmail(user.email); setFRole(currentRoleId); setFPwd(''); setEditing(true); };
 
   const roleOptions = [
     { id: 'Admin', label: 'Admin' },
@@ -497,15 +499,17 @@ function UserSlideIn({ user, onClose, onDelete, onPermChange, onPermSetAll, cust
     try {
       // Détermine les permissions selon le rôle choisi
       let role = fRole;
+      let customRoleId: string | null = null; // rôle perso choisi (étiquette) — null pour Admin / Employé simple
       let permissions: PermKey[];
       if (fRole === 'Admin') { permissions = [...ADMIN_PERMS]; }
       else if (fRole === 'Employe') { permissions = user.role === 'Employe' ? [...user.permissions] : [...EMPLOYE_PERMS]; }
       else {
         const cr = customRoles.find((r) => r.id === fRole);
         permissions = cr ? [...cr.permissions] : [...user.permissions];
+        customRoleId = cr ? cr.id : null;
         role = 'Employe'; // un rôle perso = un employé avec un set de permissions
       }
-      await onSaveProfile(user, { name: fNom, email: fEmail, role, password: fPwd || undefined, permissions });
+      await onSaveProfile(user, { name: fNom, email: fEmail, role, customRoleId, password: fPwd || undefined, permissions });
       setEditing(false);
     } finally { setSaving(false); }
   };
@@ -1027,12 +1031,13 @@ function UsersPageInner() {
   };
 
   // Édition inline depuis le panneau profil (reste sur la même page)
-  const handleSaveProfile = async (u: User, data: { name: string; email: string; role: string; password?: string; permissions: PermKey[] }) => {
+  const handleSaveProfile = async (u: User, data: { name: string; email: string; role: string; customRoleId: string | null; password?: string; permissions: PermKey[] }) => {
     const roleDb = data.role === 'Admin' ? 'ADMIN' : 'EMPLOYEE';
     const res = await fetch(`/api/users/${u.id}`, {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         name: data.name, email: data.email, role: roleDb,
+        customRoleId: roleDb === 'ADMIN' ? null : data.customRoleId, // null = retire l'étiquette (Employé simple / Admin)
         ...(data.password ? { password: data.password } : {}),
         ...(roleDb === 'EMPLOYEE' ? { permissions: data.permissions } : {}),
       }),
@@ -1043,7 +1048,7 @@ function UsersPageInner() {
     // Met à jour le panneau ouvert avec les nouvelles valeurs
     const uiRole = roleDb === 'ADMIN' ? 'Admin' : 'Employe';
     setProfilUser((prev) => prev && prev.id === u.id
-      ? { ...prev, nom: data.name, email: data.email, role: uiRole, permissions: roleDb === 'ADMIN' ? [...ADMIN_PERMS] : data.permissions }
+      ? { ...prev, nom: data.name, email: data.email, role: uiRole, customRoleId: roleDb === 'ADMIN' ? null : data.customRoleId, permissions: roleDb === 'ADMIN' ? [...ADMIN_PERMS] : data.permissions }
       : prev);
   };
 
