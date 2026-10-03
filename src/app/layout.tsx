@@ -7,9 +7,22 @@ const openSans = Open_Sans({ subsets: ["latin"], variable: "--font-open-sans" })
 const notoSerif = Noto_Serif({ subsets: ["latin"], variable: "--font-noto-serif" });
 const playfairDisplay = Playfair_Display({ subsets: ["latin"], variable: "--font-playfair" });
 
+// Domaine canonique (cf. sitemap.ts / robots.ts) : sert à fabriquer les URL absolues des métadonnées.
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.psi.dz';
+
 export const metadata: Metadata = {
-  title: "SARL Paper Solutions Industry",
-  description: "PSI fabrique et fournit du papier thermique premium (rouleaux de caisse, étiquettes thermiques) pour les entreprises en Algérie.",
+  metadataBase: new URL(SITE_URL),
+  // Les pages publiques donnent leur propre titre, complété par le nom de l'entreprise (« … | SARL Paper Solutions Industry »).
+  title: {
+    default: 'SARL Paper Solutions Industry',
+    template: '%s | SARL Paper Solutions Industry',
+  },
+  description: 'PSI fabrique des rouleaux thermiques pour terminaux de paiement (TPE) et caisses enregistreuses, pour les entreprises en Algérie.',
+  openGraph: {
+    siteName: 'SARL Paper Solutions Industry',
+    type: 'website',
+    locale: 'fr_DZ',
+  },
 };
 
 // `maximumScale` retiré : bloquer le zoom est un défaut d'accessibilité (relevé par Lighthouse) —

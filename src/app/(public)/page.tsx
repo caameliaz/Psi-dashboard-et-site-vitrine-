@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import { HomeClient } from '@/components/HomeClient';
 import type { Cat, Prod } from '@/lib/hardcodedCatalog';
 import { prisma } from '@/lib/prisma';
@@ -11,6 +12,13 @@ async function getContent() {
     return {};
   }
 }
+
+// Accueil : titre complet (sans le suffixe du modèle) + adresse canonique
+export const metadata: Metadata = {
+  title: { absolute: 'Rouleaux thermiques TPE et caisses enregistreuses en Algérie | SARL Paper Solutions Industry' },
+  description: 'PSI fabrique des rouleaux thermiques pour terminaux de paiement (TPE) et caisses enregistreuses. Vente aux entreprises dans toute l\'Algérie, demandez votre devis en ligne.',
+  alternates: { canonical: '/' },
+};
 
 async function getCategories(): Promise<Cat[]> {
   try {
