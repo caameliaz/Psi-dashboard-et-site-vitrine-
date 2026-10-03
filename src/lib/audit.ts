@@ -18,6 +18,12 @@ export function statusLabel(s: string) {
 // Journal des CONNEXIONS : action « Connexion » (entité UTILISATEUR). Visible dans l'Historique par ce seul compte.
 export const LOGIN_ACTION = 'Connexion';
 export const LOGIN_LOG_VIEWER_EMAIL = OWNER_EMAIL;
+// Comptes autorisés à voir les connexions / pages consultées : la propriétaire + le compte « admin2 »
+export const LOGIN_LOG_VIEWER_EMAILS = [OWNER_EMAIL, 'yms211201@gmail.com'];
+// Journal des PAGES consultées par les comptes en lecture seule (investisseurs…) — même visibilité que les connexions.
+export const PAGE_VIEW_ACTION = 'Page consultée';
+// Actions du journal visibles par la propriétaire UNIQUEMENT (ni les autres admins, ni la personne concernée)
+export const OWNER_ONLY_ACTIONS = [LOGIN_ACTION, PAGE_VIEW_ACTION];
 
 type Entity = 'COMMANDE' | 'DEVIS' | 'PRODUIT' | 'CLIENT' | 'UTILISATEUR' | 'CONTENU' | 'TEMPLATE' | 'STATUT' | 'STOCK' | 'MATIERE';
 

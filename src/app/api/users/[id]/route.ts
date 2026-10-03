@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requirePermission } from '@/lib/permissions';
 import { prisma } from '@/lib/prisma';
 import bcrypt from 'bcryptjs';
-import { createAudit, LOGIN_ACTION } from '@/lib/audit';
+import { createAudit, OWNER_ONLY_ACTIONS } from '@/lib/audit';
 import { sendEmail } from '@/lib/email/send';
 import { logoAttachment } from '@/emails/shared';
 import { renderPasswordResetDoneEmail } from '@/emails/passwordResetTemplate';
@@ -211,7 +211,7 @@ export async function DELETE(_request: NextRequest, { params }: Ctx) {
       prisma.quote.count({ where: { createdById: id } }),
       prisma.clientNote.count({ where: { authorId: id } }),
       // les simples lignes « Connexion » ne comptent pas comme de l'activité (cf. LOGIN_ACTION)
-      prisma.auditLog.count({ where: { userId: id, NOT: { action: LOGIN_ACTION } } }),
+      prisma.auditLog.count({ where: { userId: id, NOT: { action: { in: OWNER_ONLY_ACTIONS } } } }),
     ]);
     if (orders + quotes + notes + logs > 0) {
       return NextResponse.json(
@@ -221,7 +221,7 @@ export async function DELETE(_request: NextRequest, { params }: Ctx) {
     }
 
     // Ses lignes de connexion référencent le compte : on les efface avec lui
-    await prisma.auditLog.deleteMany({ where: { userId: id, action: LOGIN_ACTION } });
+    await prisma.auditLog.deleteMany({ where: { userId: id, action: { in: OWNER_ONLY_ACTIONS } } });
     await prisma.user.delete({ where: { id } });
     createAudit({ userId: session.user.id, action: 'Utilisateur supprimé', entity: 'UTILISATEUR', entityId: id, detail: `${target.name} (${target.email})` });
     return NextResponse.json({ success: true });

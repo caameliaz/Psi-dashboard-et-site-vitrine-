@@ -7,7 +7,7 @@ const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 // Écritures qu'un compte « lecture seule » garde le droit de faire : tout ce qui concerne SA session /
 // SES notifications (marquer lu, abonnement push), le suivi anonyme du panier et la réinitialisation
 // de mot de passe. Tout le reste (créer, modifier, supprimer) est refusé.
-const READ_ONLY_ALLOWED = [/^\/api\/cart-tracking/, /^\/api\/notifications\//, /^\/api\/push\//, /^\/api\/password-reset/];
+const READ_ONLY_ALLOWED = [/^\/api\/activity$/, /^\/api\/cart-tracking/, /^\/api\/notifications\//, /^\/api\/push\//, /^\/api\/password-reset/];
 
 const withAuth = auth((req) => {
   const { pathname } = req.nextUrl;

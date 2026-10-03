@@ -6,6 +6,7 @@ import { Sidebar } from '@/components/Sidebar';
 import { TopBar } from '@/components/ui/TopBar';
 import { DesktopOnly } from '@/components/DesktopOnly';
 import { notifBell } from '@/lib/notif-bell-store';
+import { PageViewTracker } from '@/components/PageViewTracker';
 import Image from 'next/image';
 
 // Cloche mobile — même source de données que la cloche du dashboard PC
@@ -80,6 +81,8 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
     <>
       {/* Gère les toasts + le panneau de notifications (pas de barre visible) — toujours monté */}
       <TopBar />
+      {/* Journal des pages consultées par les comptes en LECTURE SEULE (visible de la propriétaire uniquement) */}
+      <PageViewTracker />
       <div className="flex min-h-screen" style={{ background: isQuickOrder ? '#FFFFFF' : '#F5F8FC' }}>
         {/* Sidebar : fixe sur desktop, drawer sur mobile */}
         <Sidebar mobileOpen={mobileOpen} onCloseMobile={() => setMobileOpen(false)} />

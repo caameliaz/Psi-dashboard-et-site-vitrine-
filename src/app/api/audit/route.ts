@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requirePermission } from '@/lib/permissions';
 import { prisma } from '@/lib/prisma';
-import { LOGIN_ACTION, LOGIN_LOG_VIEWER_EMAIL } from '@/lib/audit';
+import { OWNER_ONLY_ACTIONS, LOGIN_LOG_VIEWER_EMAILS } from '@/lib/audit';
 
 // GET /api/audit — journal d'audit (permission voir_historique)
 // Admin : toutes les actions
@@ -18,10 +18,10 @@ export async function GET(request: NextRequest) {
 
   const isAdmin = session.user.role === 'ADMIN';
   // Les connexions des utilisateurs ne sont visibles QUE par un compte (pas même les autres admins)
-  const canSeeLogins = (session.user.email ?? '').toLowerCase() === LOGIN_LOG_VIEWER_EMAIL;
+  const canSeeLogins = LOGIN_LOG_VIEWER_EMAILS.includes((session.user.email ?? '').trim().toLowerCase());
   const where = {
     ...(isAdmin ? {} : { userId: session.user.id }),
-    ...(canSeeLogins ? {} : { NOT: { action: LOGIN_ACTION } }),
+    ...(canSeeLogins ? {} : { NOT: { action: { in: OWNER_ONLY_ACTIONS } } }),
   };
 
   try {
@@ -29,7 +29,7 @@ export async function GET(request: NextRequest) {
       prisma.auditLog.findMany({
         where,
         include: {
-          user: { select: { id: true, name: true, role: true } },
+          user: { select: { id: true, name: true, role: true, customRole: { select: { name: true } } } },
         },
         orderBy: { createdAt: 'desc' },
         skip,
