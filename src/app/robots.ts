@@ -7,9 +7,12 @@ export default function robots(): MetadataRoute.Robots {
     rules: {
       userAgent: '*',
       allow: '/',
-      // Dashboard interne, API, panier/checkout : jamais indexables, aucun intérêt SEO
+      // Dashboard interne et API : jamais indexables, aucun intérêt SEO
       // et /admin protège déjà des données clients.
-      disallow: ['/admin', '/api', '/cart', '/checkout'],
+      // /cart et /checkout : volontairement ABSENTS tant que Google les a en index — ils portent un
+      // « noindex » (cf. leur layout) que Google ne peut lire que s'il a le droit de les explorer.
+      // Une fois disparus de Google (site:psi.dz), on peut les remettre ici.
+      disallow: ['/admin', '/api'],
     },
     sitemap: `${SITE_URL}/sitemap.xml`,
   };
