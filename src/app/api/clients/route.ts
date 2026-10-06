@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requirePermission, seesAll } from '@/lib/permissions';
 import { prisma } from '@/lib/prisma';
+import { WHERE_HORS_ROLLINK } from '@/lib/order-filters';
 import { createAudit } from '@/lib/audit';
 import { resolveClientVisibility } from '@/lib/leave';
 import { CLIENT_RECORD_INCLUDE } from '@/lib/client-queries';
@@ -119,7 +120,7 @@ export async function GET(request: NextRequest) {
       const lastActivity = new Map<string, number>();
       if (sort === 'recent' && ids.length) {
         const [lo, lq] = await Promise.all([
-          prisma.order.groupBy({ by: ['clientId'], where: { clientId: { in: ids } }, _max: { createdAt: true } }),
+          prisma.order.groupBy({ by: ['clientId'], where: { ...WHERE_HORS_ROLLINK, clientId: { in: ids } }, _max: { createdAt: true } }),
           prisma.quote.groupBy({ by: ['clientId'], where: { clientId: { in: ids } }, _max: { createdAt: true } }),
         ]);
         for (const g of [...lo, ...lq]) {

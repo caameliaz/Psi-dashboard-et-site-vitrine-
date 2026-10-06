@@ -10,6 +10,7 @@ import { rateLimit } from '@/lib/rate-limit';
 import { validateEmail, validatePhone, validateText, validateQuantity, validatePositiveNumber, firstError } from '@/lib/validation';
 import { resolveClientVisibility } from '@/lib/leave';
 import { saveInfoToClientProfile } from '@/lib/client-profile';
+import { WHERE_HORS_ROLLINK, WHERE_ROLLINK_SEULEMENT } from '@/lib/order-filters';
 
 export async function GET(request: NextRequest) {
   const guard = await requirePermission('voir_commandes');
@@ -19,7 +20,10 @@ export async function GET(request: NextRequest) {
   const fromParam = request.nextUrl.searchParams.get('from');
   const from = fromParam ? new Date(fromParam) : null;
 
-  const whereClause: any = {};
+  // ?source=rollink → UNIQUEMENT les commandes RollLink (toggle de la page Commandes).
+  // Sans ce paramètre → tout SAUF RollLink (elles ne sont jamais mélangées aux autres).
+  const rollinkOnly = request.nextUrl.searchParams.get('source')?.toLowerCase() === 'rollink';
+  const whereClause: any = { ...(rollinkOnly ? WHERE_ROLLINK_SEULEMENT : WHERE_HORS_ROLLINK) };
 
   // Filtre par date si fourni
   if (from && !isNaN(from.getTime())) {

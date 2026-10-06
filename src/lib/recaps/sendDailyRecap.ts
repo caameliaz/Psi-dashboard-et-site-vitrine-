@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma';
+import { WHERE_HORS_ROLLINK } from '@/lib/order-filters';
 import { sendEmail } from '@/lib/email/send';
 import { dailyRecapTemplate, type DailyRecapItem } from '@/emails/dailyRecapTemplate';
 import { logoAttachment } from '@/emails/shared';
@@ -27,7 +28,7 @@ export async function sendDailyRecap(): Promise<SendDailyRecapResult> {
 
   const [orders, quotes, admins] = await Promise.all([
     prisma.order.findMany({
-      where: { createdAt: { gte: todayStart, lte: now } },
+      where: { ...WHERE_HORS_ROLLINK, createdAt: { gte: todayStart, lte: now } },
       include: { client: true, items: true },
       orderBy: { createdAt: 'asc' },
     }),

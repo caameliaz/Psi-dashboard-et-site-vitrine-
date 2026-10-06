@@ -1,6 +1,6 @@
 ﻿'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { usePolling } from '@/lib/use-polling';
 import { StatusPill } from '@/components/ui/StatusPill';
 import { Modal } from '@/components/ui/Modal';
@@ -38,11 +38,13 @@ const ARCHIVED = ['Livré', 'Annulé'];
 // Modes de paiement proposés à la validation d'une commande / d'un devis
 export { PAYMENT_METHODS };
 
-function getSourceLabel(src: string) { return src === 'SITE' ? 'Site web' : 'Manuel'; }
+function getSourceLabel(src: string) { return src === 'SITE' ? 'Site web' : src === 'ROLLINK' ? 'RollLink' : 'Manuel'; }
 const SOURCE_COLOR: Record<'SITE' | 'OTHER', { bg: string; color: string; border: string }> = {
   SITE:  { bg: '#F0FDF4', color: '#166534', border: '#BBF7D0' },
   OTHER: { bg: '#FFF7ED', color: '#92400E', border: '#FDE68A' },
 };
+// Badge RollLink : bien distinct (violet foncé plein) pour reconnaître ces commandes tout de suite
+const ROLLINK_BADGE = { bg: '#5B21B6', color: '#fff', border: '#5B21B6' };
 
 const PERIODE_LABEL: Record<string, string> = {
   '7j': '7 derniers jours', '2sem': '2 dernières semaines', '3sem': '3 dernières semaines',
@@ -651,6 +653,10 @@ function RequestsPageInner() {
   const { seesAll: isAdmin, readOnly } = useRole(); // « voit tout » : admin ou compte lecture seule
   const currentUserId = (session?.user as { id?: string } | undefined)?.id;
   const [activeTab, setActiveTab] = useState<'tous' | 'commandes' | 'devis'>('tous');
+  // Toggle « RollLink » : OFF (défaut) = commandes SANS RollLink ; ON = UNIQUEMENT les commandes RollLink
+  // (jamais mélangées, hors chiffre d'affaires — cf. src/lib/order-filters.ts). Pas de devis en mode RollLink.
+  const [rollink, setRollink] = useState(false);
+  const openRollinkTried = useRef(false);
   const [orders, setOrders]       = useState<RequestDetail[]>([]);
   const [quotes, setQuotes]       = useState<RequestDetail[]>([]);
   const [loading, setLoading]     = useState(true);
@@ -688,11 +694,15 @@ function RequestsPageInner() {
       const dateExacte = filterPeriode === 'date' ? parseDateExacte(filterDateExacte) : null;
       const debutMois = filterPeriode === 'moisChoisi' ? new Date(filterAnnee, filterMois, 1) : null;
       const from = dateExacte ? dateExacte.toISOString() : debutMois ? debutMois.toISOString() : periodeToFrom(filterPeriode);
-      const qs = from ? `?from=${encodeURIComponent(from)}` : '';
+      const params = new URLSearchParams();
+      if (from) params.set('from', from);
+      const qsDevis = params.toString() ? `?${params}` : '';
+      if (rollink) params.set('source', 'rollink');
+      const qs = params.toString() ? `?${params}` : '';
 
       const [ordRes, quoRes] = await Promise.all([
         fetch(`/api/orders${qs}`),
-        fetch(`/api/quotes${qs}`),
+        rollink ? Promise.resolve(new Response('[]')) : fetch(`/api/quotes${qsDevis}`),
       ]);
       // Rafraîchissement manuel raté → on le signale (en arrière-plan on reste discret, il y a le polling).
       if (!silent && (!ordRes.ok || !quoRes.ok)) alert('Le chargement des commandes/devis a échoué. La liste affichée peut être obsolète — rechargez la page.');
@@ -719,7 +729,7 @@ function RequestsPageInner() {
     } finally {
       if (!silent) setLoading(false);
     }
-  }, [filterPeriode, filterDateExacte, filterMois, filterAnnee, isAdmin, currentUserId]);
+  }, [filterPeriode, filterDateExacte, filterMois, filterAnnee, isAdmin, currentUserId, rollink]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
   
@@ -754,9 +764,17 @@ function RequestsPageInner() {
     const openId = new URLSearchParams(window.location.search).get('open');
     if (!openId) return;
     const found = [...orders, ...quotes].find((r) => r.id === openId);
-    if (found) setSelected(found);
+    if (found) { setSelected(found); return; }
+    // Commande RollLink ouverte par lien direct : absente de la liste par défaut → on bascule le toggle
+    if (!rollink && !loading && !openRollinkTried.current) {
+      openRollinkTried.current = true;
+      fetch(`/api/orders/${encodeURIComponent(openId)}`)
+        .then((r) => (r.ok ? r.json() : null))
+        .then((o) => { if (o?.source === 'ROLLINK') setRollink(true); })
+        .catch(() => {});
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [orders, quotes]);
+  }, [orders, quotes, loading]);
 
   // Nouvelle commande pré-remplie depuis la fiche client via ?newFor=<clientId>
   useEffect(() => {
@@ -1106,6 +1124,20 @@ function RequestsPageInner() {
         })}
       </div>
 
+      {/* Toggle RollLink : bascule entre « commandes sans RollLink » (défaut) et « uniquement RollLink » */}
+      <div className="flex items-center gap-3 mb-3 flex-wrap">
+        <button type="button" role="switch" aria-checked={rollink}
+          onClick={() => { setRollink((v) => !v); setActiveTab('tous'); setFilterStatut('all'); setSearch(''); }}
+          className="flex items-center gap-2 px-3 py-2 rounded-xl text-[13px] font-semibold border transition-colors"
+          style={{ background: rollink ? '#5B21B6' : '#fff', color: rollink ? '#fff' : '#374151', borderColor: rollink ? '#5B21B6' : '#E2E8F0' }}>
+          RollLink
+          <span className="relative inline-block w-7 h-4 rounded-full" style={{ background: rollink ? 'rgba(255,255,255,0.4)' : '#CBD5E1' }}>
+            <span className="absolute top-0.5 w-3 h-3 rounded-full bg-white transition-all" style={{ left: rollink ? 14 : 2 }} />
+          </span>
+        </button>
+        {rollink && <span className="text-[12px] text-[#6B7280]">Commandes RollLink : non comptées dans le chiffre d'affaires.</span>}
+      </div>
+
       {/* Recherche seule sur sa ligne, puis les 3 filtres sur la ligne d'en dessous */}
       <div className="mb-4 flex flex-col md:flex-row md:flex-wrap md:items-center gap-2">
         {/* Recherche — pleine largeur sur sa propre ligne (mobile) */}
@@ -1259,7 +1291,7 @@ function RequestsPageInner() {
               const rowBg       = isEnAttente ? '#FFF7ED' : '#fff';
               const rowBgHover  = isEnAttente ? '#FEF3C7' : '#F8FAFC';
               const src         = row.source ?? 'SITE';
-              const srcCfg      = src === 'SITE' ? SOURCE_COLOR.SITE : SOURCE_COLOR.OTHER;
+              const srcCfg      = src === 'SITE' ? SOURCE_COLOR.SITE : src === 'ROLLINK' ? ROLLINK_BADGE : SOURCE_COLOR.OTHER;
               return (
                 <tr key={i} onClick={() => { setSelected(row); setShowCreate(false); }} className="cursor-pointer transition-colors"
                   style={{ background: rowBg, borderTop: '1px solid #F2F4F7' }}
