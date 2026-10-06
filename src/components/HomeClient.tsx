@@ -12,8 +12,6 @@ import { Reveal } from '@/components/Reveal';
 import { useTranslation } from '@/lib/i18n';
 import type { Cat, Prod } from '@/lib/hardcodedCatalog';
 
-const CONTACT_PHONE = '213770150656';
-
 interface HomeClientProps {
   initialContent: Record<string, string>;
   initialCategories: Cat[];
@@ -45,6 +43,8 @@ export function HomeClient({ initialContent, initialCategories, initialProducts 
     || `${t('hero.title_pre')}${t('hero.title_highlight')}${t('hero.title_post')}`;
   const heroSousTitre = (lang === 'fr' && content['hero_sous_titre']) || t('hero.subtitle');
   const aboutTexte      = content['about_texte'] ?? '';
+  // Numéro modifiable depuis le dashboard (Réglages > Contenu), au format international sans « + ».
+  const CONTACT_PHONE = (content['contact_telephone'] ?? '+213770150656').replace(/\D/g, '').replace(/^0/, '213');
 
   return (
     <div className="bg-white">
@@ -81,7 +81,7 @@ export function HomeClient({ initialContent, initialCategories, initialProducts 
                     </svg>
                   ))}
                 </div>
-                <p className="text-[15px] md:text-[16px] text-white/85">{t('hero.clients')}</p>
+                <p className="text-[15px] md:text-[16px] text-white/85">{(lang === 'fr' && content['hero_clients']) || t('hero.clients')}</p>
               </div>
             </Reveal>
           </div>
@@ -153,7 +153,7 @@ export function HomeClient({ initialContent, initialCategories, initialProducts 
       {/* ════════════════════════════════════════════════════════════
           POURQUOI NOUS CHOISIR
       ════════════════════════════════════════════════════════════ */}
-      <WhyChoose />
+      <WhyChoose content={content} />
 
       {/* ════════════════════════════════════════════════════════════
           À PROPOS
@@ -189,7 +189,7 @@ export function HomeClient({ initialContent, initialCategories, initialProducts 
       {/* ════════════════════════════════════════════════════════════
           DEVIS
       ════════════════════════════════════════════════════════════ */}
-      <HomeQuoteForm />
+      <HomeQuoteForm phone={CONTACT_PHONE} content={content} />
 
     </div>
   );

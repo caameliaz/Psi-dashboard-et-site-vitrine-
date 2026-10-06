@@ -12,8 +12,10 @@ const ITEMS = [
 ] as const;
 
 // « Pourquoi nous choisir »: 4 arguments en cartes, photo en diagonale avec fondu sur le côté.
-export function WhyChoose() {
-  const { t } = useTranslation();
+export function WhyChoose({ content = {} }: { content?: Record<string, string> }) {
+  const { t, lang } = useTranslation();
+  // Textes modifiables depuis le dashboard (français uniquement, comme le reste du contenu éditable).
+  const pick = (key: string, fallback: string) => (lang === 'fr' && content[key]) || fallback;
 
   return (
     <section id="why" className="relative overflow-hidden bg-[#F5F7FA] py-16 md:py-24">
@@ -21,10 +23,10 @@ export function WhyChoose() {
         <div className="lg:w-[56%] flex flex-col gap-8">
           <Reveal className="flex flex-col items-start gap-3">
             <ScrollUnderline className="text-[32px] md:text-[48px] font-medium tracking-tight text-[#263238] leading-[1.1]">
-              {t('why.title')}
+              {pick('why_titre', t('why.title'))}
             </ScrollUnderline>
             <p className="text-[15px] md:text-[17px] text-[#263238]/70 max-w-[520px] leading-relaxed">
-              {t('why.subtitle')}
+              {pick('why_sous_titre', t('why.subtitle'))}
             </p>
           </Reveal>
 
@@ -35,8 +37,8 @@ export function WhyChoose() {
                   <div className="w-12 h-12 rounded-xl bg-[#E8F5E9] flex items-center justify-center transition-transform duration-300 group-hover:scale-110">
                     <img src={item.icon} alt="" className="w-7 h-7 object-contain" />
                   </div>
-                  <h3 className="text-[17px] font-semibold text-[#263238] leading-snug">{t(`quality.badge${item.n}_title`)}</h3>
-                  <p className="text-[14px] text-[#263238]/65 leading-relaxed">{t(`quality.badge${item.n}_desc_short`)}</p>
+                  <h3 className="text-[17px] font-semibold text-[#263238] leading-snug">{pick(`why_${item.n}_titre`, t(`quality.badge${item.n}_title`))}</h3>
+                  <p className="text-[14px] text-[#263238]/65 leading-relaxed">{pick(`why_${item.n}_desc`, t(`quality.badge${item.n}_desc_short`))}</p>
                 </div>
               </Reveal>
             ))}

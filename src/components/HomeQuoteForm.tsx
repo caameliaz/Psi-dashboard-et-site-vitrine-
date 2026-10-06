@@ -7,7 +7,6 @@ import { WilayaSelect } from '@/components/ui/WilayaSelect';
 import { CommuneSelect } from '@/components/ui/CommuneSelect';
 import { useTranslation } from '@/lib/i18n';
 
-const CONTACT_PHONE = '213770150656';
 const MAX_LINES = 5;
 
 const INPUT = 'w-full rounded-xl border border-[#E4EBF5] bg-[#F8FAFC] px-4 py-3 text-[15px] text-[#263238] placeholder:text-[#263238]/40 outline-none transition-all focus:border-[#4CAF4F] focus:bg-white focus:ring-4 focus:ring-[#4CAF4F]/15';
@@ -19,8 +18,10 @@ const emptyLine = (): Line => ({ categoryId: '', dimChoice: '', quantity: '' });
 
 // Bloc final de l'accueil: photo de fond, carte divisée en deux (arguments à gauche, formulaire de devis à droite).
 // Le formulaire détaillé (produits, wilaya...) s'ouvre sur place, sans changer de page.
-export function HomeQuoteForm() {
-  const { t } = useTranslation();
+export function HomeQuoteForm({ phone: CONTACT_PHONE, content = {} }: { phone: string; content?: Record<string, string> }) {
+  const { t, lang } = useTranslation();
+  // Textes modifiables depuis le dashboard (français uniquement).
+  const pick = (key: string, fallback: string) => (lang === 'fr' && content[key]) || fallback;
   const [form, setForm] = useState({ name: '', phone: '', company: '', message: '', email: '', wilaya: '', commune: '' });
   const [lines, setLines] = useState<Line[]>([emptyLine()]);
   const [categories, setCategories] = useState<CatOption[]>([]);
@@ -117,16 +118,16 @@ export function HomeQuoteForm() {
           {/* Colonne gauche: arguments + contact direct */}
           <div className="relative flex flex-col gap-6 overflow-hidden rounded-t-[28px] md:rounded-s-[28px] md:rounded-te-none bg-gradient-to-br from-[#263238] to-[#1b2529] p-8 md:p-10 text-white">
             <div aria-hidden="true" className="pointer-events-none absolute -bottom-20 -end-20 w-64 h-64 rounded-full bg-[#4CAF4F]/25 blur-3xl" />
-            <h2 className="relative text-[30px] md:text-[40px] font-medium tracking-tight leading-[1.1]">{t('home_quote.title')}</h2>
-            <p className="relative text-[15px] md:text-[16px] text-white/75 leading-relaxed">{t('home_quote.subtitle')}</p>
+            <h2 className="relative text-[30px] md:text-[40px] font-medium tracking-tight leading-[1.1]">{pick('devis_titre', t('home_quote.title'))}</h2>
+            <p className="relative text-[15px] md:text-[16px] text-white/75 leading-relaxed">{pick('devis_sous_titre', t('home_quote.subtitle'))}</p>
 
             <ul className="relative flex flex-col gap-3">
-              {(['point1', 'point2', 'point3'] as const).map((k) => (
+              {(['point1', 'point2', 'point3'] as const).map((k, i) => (
                 <li key={k} className="flex items-center gap-3 text-[15px] text-white/90">
                   <span className="w-6 h-6 rounded-full bg-[#4CAF4F] flex items-center justify-center shrink-0">
                     <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2.5 6.5l2.2 2.2L9.5 3.8" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
                   </span>
-                  {t(`home_quote.${k}`)}
+                  {pick(`devis_point_${i + 1}`, t(`home_quote.${k}`))}
                 </li>
               ))}
             </ul>

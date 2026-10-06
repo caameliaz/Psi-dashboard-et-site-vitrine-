@@ -1,0 +1,41 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+
+const DEFAULT_PHONE = '+213770150656';
+const WHATSAPP_MSG = encodeURIComponent('Bonjour, je souhaite obtenir des informations sur vos produits PSI.');
+
+// Bouton WhatsApp flottant. Le numéro vient du dashboard (Réglages > Contenu > téléphone).
+export function WhatsAppFloat() {
+  const [phone, setPhone] = useState(DEFAULT_PHONE);
+
+  useEffect(() => {
+    fetch('/api/content')
+      .then((r) => (r.ok ? r.json() : {}))
+      .then((c: Record<string, string>) => { if (c['contact_telephone']) setPhone(c['contact_telephone']); })
+      .catch(() => {});
+  }, []);
+
+  const digits = phone.replace(/\D/g, '').replace(/^0/, '213');
+
+  return (
+    <a
+      href={`https://wa.me/${digits}?text=${WHATSAPP_MSG}`}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="group fixed bottom-24 end-4 md:bottom-6 md:end-6 z-50 flex items-center h-12 md:h-14 rounded-full border border-white/30 bg-gradient-to-br from-[#2BD46B] to-[#128C4A] text-white shadow-[0_8px_24px_rgba(18,140,74,0.45)] hover:shadow-[0_12px_32px_rgba(18,140,74,0.6)] active:scale-95 transition-all duration-300"
+      aria-label="Nous contacter sur WhatsApp"
+    >
+      <span className="max-w-0 overflow-hidden whitespace-nowrap text-[14px] font-semibold opacity-0 transition-all duration-500 ease-out group-hover:max-w-[120px] group-hover:opacity-100 group-hover:ps-5">
+        WhatsApp
+      </span>
+      <span className="relative w-12 h-12 md:w-14 md:h-14 flex items-center justify-center shrink-0">
+        <span className="absolute inset-0 rounded-full bg-[#25D366]/40 animate-ping [animation-duration:3s]" aria-hidden="true" />
+        <svg className="relative" width="26" height="26" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+          <path d="M16 3C9.373 3 4 8.373 4 15c0 2.385.663 4.61 1.816 6.51L4 29l7.697-1.794A12.94 12.94 0 0016 28c6.627 0 12-5.373 12-12S22.627 3 16 3z" fill="white"/>
+          <path d="M22.5 19.5c-.3-.15-1.77-.87-2.04-.97-.27-.1-.47-.15-.67.15-.2.3-.77.97-.94 1.17-.17.2-.35.22-.65.07-.3-.15-1.26-.46-2.4-1.47-.89-.79-1.49-1.76-1.66-2.06-.17-.3-.02-.46.13-.61.13-.13.3-.35.45-.52.15-.17.2-.3.3-.5.1-.2.05-.37-.02-.52-.07-.15-.67-1.6-.92-2.2-.24-.57-.49-.5-.67-.5h-.57c-.2 0-.52.07-.79.37-.27.3-1.02 1-1.02 2.43s1.05 2.82 1.2 3.02c.15.2 2.06 3.15 5 4.42.7.3 1.24.48 1.67.62.7.22 1.34.19 1.84.12.56-.08 1.77-.72 2.02-1.42.25-.7.25-1.3.17-1.42-.07-.12-.27-.2-.57-.35z" fill="#16A34A"/>
+        </svg>
+      </span>
+    </a>
+  );
+}

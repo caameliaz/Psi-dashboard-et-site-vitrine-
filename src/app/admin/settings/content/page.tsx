@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { RequirePerm } from '@/components/RequirePerm';
 import { useRole } from '@/lib/role-context';
+import { fr } from '@/lib/i18n/fr';
 
 function IconCheck() {
   return (
@@ -30,6 +31,9 @@ function ContentPageInner() {
   const [hero,    setHero]    = useState({ titre: '', sousTitre: '' });
   const [about,   setAbout]   = useState({ texte: '' });
   const [contact, setContact] = useState({ adresse: '', email: '', telephone: '', facebook: '', instagram: '' });
+  // Nouvelles sections de l'accueil: « Pourquoi nous choisir », bloc devis, texte sous le bouton de la bannière.
+  const [why,     setWhy]     = useState<Record<string, string>>({});
+  const [devis,   setDevis]   = useState<Record<string, string>>({});
   const [saved,   setSaved]   = useState<Record<string, boolean>>({});
   const [saving,  setSaving]  = useState<Record<string, boolean>>({});
   const [loaded,  setLoaded]  = useState(false);
@@ -42,6 +46,23 @@ function ContentPageInner() {
       });
       setAbout({
         texte: data['about_texte'] ?? 'PSI (Paper Solutions Industry) est une entreprise algérienne spécialisée dans la transformation et la distribution de papier thermique professionnel. Basée à Alger, nous servons commerces, banques, restaurants et pharmacies à travers tout le territoire national.\n\nNous nous approvisionnons exclusivement auprès de fournisseurs européens certifiés, garantissant à nos clients des produits de qualité supérieure, conformes aux normes sanitaires les plus strictes.\n\nNotre mission est d\'offrir des solutions papier fiables, rapides et accessibles à tous les professionnels qui en ont besoin, avec un service client réactif et de proximité.',
+      });
+      const badges = fr.quality as Record<string, string>;
+      setWhy({
+        why_titre: data['why_titre'] ?? fr.why.title,
+        why_sous_titre: data['why_sous_titre'] ?? fr.why.subtitle,
+        ...Object.fromEntries([1, 2, 3, 4].flatMap((n) => [
+          [`why_${n}_titre`, data[`why_${n}_titre`] ?? badges[`badge${n}_title`]],
+          [`why_${n}_desc`, data[`why_${n}_desc`] ?? badges[`badge${n}_desc_short`]],
+        ])),
+      });
+      setDevis({
+        hero_clients: data['hero_clients'] ?? fr.hero.clients,
+        devis_titre: data['devis_titre'] ?? fr.home_quote.title,
+        devis_sous_titre: data['devis_sous_titre'] ?? fr.home_quote.subtitle,
+        devis_point_1: data['devis_point_1'] ?? fr.home_quote.point1,
+        devis_point_2: data['devis_point_2'] ?? fr.home_quote.point2,
+        devis_point_3: data['devis_point_3'] ?? fr.home_quote.point3,
       });
       setContact({
         adresse:   data['contact_adresse']   ?? 'Centre El Qods, Niveau M1, Chéraga, Alger',
@@ -121,6 +142,59 @@ function ContentPageInner() {
                 <SaveButton
                   onClick={() => save('about', { about_texte: about.texte })}
                   saved={!!saved['about']} loading={!!saving['about']} />
+              </div>
+            </div>
+          </div>
+
+          {/* Pourquoi nous choisir */}
+          <div className="bg-white rounded-2xl border border-[#E2E8F0] p-6 shadow-sm">
+            <h2 className="text-[15px] font-bold text-[#0F172A] mb-5">Section « Pourquoi nous choisir »</h2>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-[12px] font-semibold text-[#374151] mb-1.5">Titre</label>
+                <input value={why.why_titre ?? ''} onChange={(e) => setWhy({ ...why, why_titre: e.target.value })} className={inputClass} />
+              </div>
+              <div>
+                <label className="block text-[12px] font-semibold text-[#374151] mb-1.5">Sous-titre</label>
+                <textarea value={why.why_sous_titre ?? ''} onChange={(e) => setWhy({ ...why, why_sous_titre: e.target.value })} rows={2} className={inputClass + ' resize-none'} />
+              </div>
+              {[1, 2, 3, 4].map((n) => (
+                <div key={n} className="rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] p-3 space-y-2">
+                  <label className="block text-[12px] font-semibold text-[#374151]">Argument {n}</label>
+                  <input value={why[`why_${n}_titre`] ?? ''} onChange={(e) => setWhy({ ...why, [`why_${n}_titre`]: e.target.value })} className={inputClass} placeholder="Titre" />
+                  <textarea value={why[`why_${n}_desc`] ?? ''} onChange={(e) => setWhy({ ...why, [`why_${n}_desc`]: e.target.value })} rows={2} className={inputClass + ' resize-none'} placeholder="Description courte" />
+                </div>
+              ))}
+              <div className="flex justify-end pt-1">
+                <SaveButton onClick={() => save('why', why)} saved={!!saved['why']} loading={!!saving['why']} />
+              </div>
+            </div>
+          </div>
+
+          {/* Bannière (texte sous le bouton) + bloc devis */}
+          <div className="bg-white rounded-2xl border border-[#E2E8F0] p-6 shadow-sm">
+            <h2 className="text-[15px] font-bold text-[#0F172A] mb-5">Bannière et bloc devis</h2>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-[12px] font-semibold text-[#374151] mb-1.5">Texte sous le bouton de la bannière</label>
+                <input value={devis.hero_clients ?? ''} onChange={(e) => setDevis({ ...devis, hero_clients: e.target.value })} className={inputClass} />
+              </div>
+              <div>
+                <label className="block text-[12px] font-semibold text-[#374151] mb-1.5">Titre du bloc devis</label>
+                <input value={devis.devis_titre ?? ''} onChange={(e) => setDevis({ ...devis, devis_titre: e.target.value })} className={inputClass} />
+              </div>
+              <div>
+                <label className="block text-[12px] font-semibold text-[#374151] mb-1.5">Sous-titre du bloc devis</label>
+                <textarea value={devis.devis_sous_titre ?? ''} onChange={(e) => setDevis({ ...devis, devis_sous_titre: e.target.value })} rows={2} className={inputClass + ' resize-none'} />
+              </div>
+              {[1, 2, 3].map((n) => (
+                <div key={n}>
+                  <label className="block text-[12px] font-semibold text-[#374151] mb-1.5">Point {n}</label>
+                  <input value={devis[`devis_point_${n}`] ?? ''} onChange={(e) => setDevis({ ...devis, [`devis_point_${n}`]: e.target.value })} className={inputClass} />
+                </div>
+              ))}
+              <div className="flex justify-end pt-1">
+                <SaveButton onClick={() => save('devis', devis)} saved={!!saved['devis']} loading={!!saving['devis']} />
               </div>
             </div>
           </div>
