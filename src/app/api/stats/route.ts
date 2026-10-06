@@ -2,6 +2,7 @@ import { NextResponse, NextRequest } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { seesAll } from '@/lib/permissions';
+import { WHERE_HORS_ROLLINK } from '@/lib/order-filters';
 
 // GET /api/stats?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD — agrégats pour le dashboard
 export async function GET(request: NextRequest) {
@@ -61,7 +62,7 @@ export async function GET(request: NextRequest) {
 
     // Créer les filtres conditionnels pour l'employé
     const userFilter = userIdParam ? { assignedToId: userIdParam } : {};
-    const orderUserWhere = userIdParam ? { assignedToId: userIdParam, status: 'LIVRE' as const } : { status: 'LIVRE' as const };
+    const orderUserWhere = { ...WHERE_HORS_ROLLINK, ...(userIdParam ? { assignedToId: userIdParam } : {}), status: 'LIVRE' as const };
     const quoteUserWhere = userIdParam ? { assignedToId: userIdParam, status: 'LIVRE' as const } : { status: 'LIVRE' as const };
 
     const [
@@ -96,8 +97,8 @@ export async function GET(request: NextRequest) {
       quotesThisMonth,
       quotesDeliveredThisMonth,
     ] = await Promise.all([
-      prisma.order.count({ where: { createdAt: { gte: startOfMonth, lte: endDate } } }),
-      prisma.order.count({ where: { createdAt: { gte: startOfPrevMonth, lt: startOfMonth } } }),
+      prisma.order.count({ where: { ...WHERE_HORS_ROLLINK, createdAt: { gte: startOfMonth, lte: endDate } } }),
+      prisma.order.count({ where: { ...WHERE_HORS_ROLLINK, createdAt: { gte: startOfPrevMonth, lt: startOfMonth } } }),
       prisma.quote.count({ where: { createdAt: { gte: startOfMonth, lte: endDate } } }),
       prisma.quote.count({ where: { createdAt: { gte: startOfPrevMonth, lt: startOfMonth } } }),
       // Commandes LIVRÉES dans l'intervalle (date de livraison) — pour ventes + par commercial + employés
@@ -119,16 +120,16 @@ export async function GET(request: NextRequest) {
       prisma.client.count({ where: { createdAt: { gte: startOfMonth } } }),
       prisma.quote.count({ where: { status: { in: ['EN_ATTENTE', 'CONTACTE'] } } }),
       prisma.quote.aggregate({ _sum: { proposedPrice: true }, where: { status: { in: ['EN_ATTENTE', 'CONTACTE'] } } }),
-      prisma.order.count({ where: { createdAt: { gte: startOfToday } } }),
-      prisma.order.count({ where: { status: 'EN_ATTENTE' } }),
+      prisma.order.count({ where: { ...WHERE_HORS_ROLLINK, createdAt: { gte: startOfToday } } }),
+      prisma.order.count({ where: { ...WHERE_HORS_ROLLINK, status: 'EN_ATTENTE' } }),
       prisma.quote.count({ where: { status: 'EN_ATTENTE' } }),
       // Confirmés (statut VALIDE) : commandes + devis
-      prisma.order.count({ where: { status: 'VALIDE' } }),
+      prisma.order.count({ where: { ...WHERE_HORS_ROLLINK, status: 'VALIDE' } }),
       prisma.quote.count({ where: { status: 'VALIDE' } }),
       // Top produits dans l'intervalle filtré — commandes (le top 6 est fait après fusion avec les devis)
       prisma.orderItem.groupBy({
         by: ['productId', 'description'],
-        where: { order: { createdAt: { gte: startOfMonth, lte: endDate }, status: { notIn: ['ANNULE', 'RETOURNE'] } } },
+        where: { order: { ...WHERE_HORS_ROLLINK, createdAt: { gte: startOfMonth, lte: endDate }, status: { notIn: ['ANNULE', 'RETOURNE'] } } },
         _sum: { quantity: true },
       }),
       // … et devis (ce sont aussi des ventes), mêmes règles : hors annulés / retournés
@@ -137,18 +138,18 @@ export async function GET(request: NextRequest) {
         where: { quote: { createdAt: { gte: startOfMonth, lte: endDate }, status: { notIn: ['ANNULE', 'RETOURNE'] } } },
         _sum: { quantity: true },
       }),
-      prisma.order.groupBy({ by: ['source'], _count: { id: true } }),
+      prisma.order.groupBy({ by: ['source'], where: WHERE_HORS_ROLLINK, _count: { id: true } }),
       prisma.quote.groupBy({ by: ['source'], _count: { id: true } }),
       // Commandes par wilaya (snapshot clientWilaya, fallback géré côté résolution) - avec filtrage par date
       prisma.order.groupBy({ 
         by: ['clientWilaya'], 
-        where: { createdAt: { gte: startOfMonth, lte: endDate } },
+        where: { ...WHERE_HORS_ROLLINK, createdAt: { gte: startOfMonth, lte: endDate } },
         _count: { id: true }, 
         orderBy: { _count: { id: 'desc' } }, 
         take: 10 
       }),
       // Commandes des 6 derniers mois (pour la courbe)
-      prisma.order.findMany({ where: { createdAt: { gte: start6MonthsAgo } }, select: { createdAt: true } }),
+      prisma.order.findMany({ where: { ...WHERE_HORS_ROLLINK, createdAt: { gte: start6MonthsAgo } }, select: { createdAt: true } }),
       prisma.quote.findMany({ where: { createdAt: { gte: start6MonthsAgo } }, select: { createdAt: true } }),
       // Ventes livrées des 6 derniers mois (pour la courbe des ventes)
       prisma.order.findMany({
@@ -160,6 +161,7 @@ export async function GET(request: NextRequest) {
         select: { deliveredAt: true, assignedToId: true, proposedPrice: true },
       }),
       prisma.order.findMany({
+        where: WHERE_HORS_ROLLINK,
         take: 5,
         orderBy: { createdAt: 'desc' },
         select: {
@@ -347,7 +349,7 @@ export async function GET(request: NextRequest) {
     let ventesTotal: { global: number; byUser: Record<string, number> } | null = null;
     if (seesAll(session.user)) {
       const [allOrdersLivres, allQuotesLivres] = await Promise.all([
-        prisma.order.findMany({ where: { status: 'LIVRE' }, select: { assignedToId: true, items: { select: { quantity: true, unitPrice: true } } } }),
+        prisma.order.findMany({ where: { ...WHERE_HORS_ROLLINK, status: 'LIVRE' }, select: { assignedToId: true, items: { select: { quantity: true, unitPrice: true } } } }),
         prisma.quote.findMany({ where: { status: 'LIVRE' }, select: { assignedToId: true, proposedPrice: true } }),
       ]);
       const total = { global: 0, byUser: {} as Record<string, number> };

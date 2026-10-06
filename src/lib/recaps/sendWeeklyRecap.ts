@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma';
+import { WHERE_HORS_ROLLINK } from '@/lib/order-filters';
 import { sendEmail } from '@/lib/email/send';
 import { weeklyRecapTemplate } from '@/emails/weeklyRecapTemplate';
 import { logoAttachment, type RecapItem } from '@/emails/shared';
@@ -32,7 +33,7 @@ export async function sendWeeklyRecap(): Promise<SendWeeklyRecapResult> {
 
   const [orders, quotes, admins] = await Promise.all([
     prisma.order.findMany({
-      where: { createdAt: { gte: lastWeekStart, lt: lastWeekEnd } },
+      where: { ...WHERE_HORS_ROLLINK, createdAt: { gte: lastWeekStart, lt: lastWeekEnd } },
       include: { client: true, items: true },
       orderBy: { createdAt: 'asc' },
     }),

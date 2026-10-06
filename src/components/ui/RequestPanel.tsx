@@ -124,7 +124,12 @@ export interface RequestDetail {
   priority?: boolean;             // commande/devis prioritaire (passe en tête des FIFO du stock)
 }
 
-function getSourceLabel(src: string) { return src === 'SITE' ? 'Site web' : 'Manuel'; }
+function getSourceLabel(src: string) { return src === 'SITE' ? 'Site web' : src === 'ROLLINK' ? 'RollLink' : 'Manuel'; }
+// Badge RollLink : violet foncé plein, bien visible
+const sourceBadgeStyle = (src: string) =>
+  src === 'ROLLINK' ? { background: '#5B21B6', color: '#fff', borderColor: '#5B21B6' }
+  : src === 'SITE' ? { background: SOURCE_COLOR.SITE.bg, color: SOURCE_COLOR.SITE.color, borderColor: SOURCE_COLOR.SITE.border }
+  : { background: SOURCE_COLOR.OTHER.bg, color: SOURCE_COLOR.OTHER.color, borderColor: SOURCE_COLOR.OTHER.border };
 const SOURCE_COLOR: Record<'SITE' | 'OTHER', { bg: string; color: string; border: string }> = {
   SITE:  { bg: '#F0FDF4', color: '#166534', border: '#BBF7D0' },
   OTHER: { bg: '#FFF7ED', color: '#92400E', border: '#FDE68A' },
@@ -1310,7 +1315,7 @@ export function RequestPanel({ item, onClose, onStatusChange, onConfirmQuoteWith
                   <span className="text-[11px] font-semibold" style={{ color: isCommande ? '#4CAF4F' : '#8B5CF6' }}>{item.type}</span>
                   {item.source && (
                     <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full border whitespace-nowrap"
-                      style={{ background: item.source === 'SITE' ? SOURCE_COLOR.SITE.bg : SOURCE_COLOR.OTHER.bg, color: item.source === 'SITE' ? SOURCE_COLOR.SITE.color : SOURCE_COLOR.OTHER.color, borderColor: item.source === 'SITE' ? SOURCE_COLOR.SITE.border : SOURCE_COLOR.OTHER.border }}>
+                      style={sourceBadgeStyle(item.source)}>
                       {getSourceLabel(item.source)}
                     </span>
                   )}
@@ -1330,7 +1335,7 @@ export function RequestPanel({ item, onClose, onStatusChange, onConfirmQuoteWith
                 <div className="flex items-center gap-2 mt-1">
                   {item.source && (
                     <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full border whitespace-nowrap"
-                      style={{ background: item.source === 'SITE' ? SOURCE_COLOR.SITE.bg : SOURCE_COLOR.OTHER.bg, color: item.source === 'SITE' ? SOURCE_COLOR.SITE.color : SOURCE_COLOR.OTHER.color, borderColor: item.source === 'SITE' ? SOURCE_COLOR.SITE.border : SOURCE_COLOR.OTHER.border }}>
+                      style={sourceBadgeStyle(item.source)}>
                       {getSourceLabel(item.source)}
                     </span>
                   )}

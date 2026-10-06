@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { WHERE_HORS_ROLLINK } from '@/lib/order-filters';
 
 // GET /api/orders/export — commandes LIVRE uniquement, pour rapport de ventes Excel
 export async function GET() {
@@ -9,7 +10,7 @@ export async function GET() {
 
   try {
     const orders = await prisma.order.findMany({
-      where: { status: 'LIVRE' },
+      where: { ...WHERE_HORS_ROLLINK, status: 'LIVRE' },
       include: {
         client: { omit: { photo: true }, include: { phones: true } },
         items: {
