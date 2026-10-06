@@ -1,6 +1,6 @@
 'use client';
 
-import Link from 'next/link';
+import { ArrowButton } from '@/components/ArrowButton';
 import { useTranslation } from '@/lib/i18n';
 import { Reveal } from '@/components/Reveal';
 
@@ -18,12 +18,7 @@ export function QuoteCTA({ id, fullBleed = false }: { id?: string; fullBleed?: b
       <p className="text-[16px] md:text-[18px] text-[#4D4D4D] leading-relaxed max-w-[780px]">
         N&apos;hésitez pas à nous solliciter : notre équipe étudie votre demande et vous propose un devis adapté à vos quantités, vos dimensions et vos délais.
       </p>
-      <Link
-        href="/quote"
-        className="hover-lift bg-[#4CAF4F] text-white text-[16px] font-semibold px-8 py-3.5 rounded-lg shadow-[0_8px_24px_rgba(76,175,79,0.3)] hover:bg-[#43A047] hover:shadow-[0_12px_32px_rgba(76,175,79,0.4)] transition-all"
-      >
-        {t('quote_cta.btn')}
-      </Link>
+      <ArrowButton href="/quote" variant="green-white">{t('quote_cta.btn')}</ArrowButton>
     </Reveal>
   );
 

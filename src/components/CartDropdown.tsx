@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCartStore } from '@/store/cartStore';
+import { ArrowButton } from './ArrowButton';
 import { useTranslation } from '@/lib/i18n';
 
 interface ProductPhoto {
@@ -13,7 +14,7 @@ interface ProductPhoto {
 
 // Icône panier + badge, avec un mini-aperçu qui s'ouvre au hover
 // et clic qui mène directement vers la page panier.
-export function CartDropdown({ variant = 'desktop' }: { variant?: 'desktop' | 'mobile' }) {
+export function CartDropdown({ variant = 'desktop', light = false }: { variant?: 'desktop' | 'mobile'; light?: boolean }) {
   const { t } = useTranslation();
   const router = useRouter();
   const items = useCartStore((s) => s.items);
@@ -61,7 +62,7 @@ export function CartDropdown({ variant = 'desktop' }: { variant?: 'desktop' | 'm
     router.push('/cart');
   };
 
-  const iconColor = '#4D4D4D';
+  const iconColor = light ? '#FFFFFF' : '#4D4D4D';
 
   return (
     <div 
@@ -73,7 +74,7 @@ export function CartDropdown({ variant = 'desktop' }: { variant?: 'desktop' | 'm
       <button
         type="button"
         onClick={handleClick}
-        className={variant === 'desktop' ? 'relative p-2 rounded-lg transition-colors hover:bg-[#F5F7FA]' : 'relative p-2'}
+        className={variant === 'desktop' ? `relative p-2 rounded-lg transition-colors ${light ? 'hover:bg-white/15' : 'hover:bg-[#F5F7FA]'}` : 'relative p-2'}
         aria-label={t('cart.title')}
       >
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
@@ -148,13 +149,9 @@ export function CartDropdown({ variant = 'desktop' }: { variant?: 'desktop' | 'm
                   <span className="text-[13px] font-semibold text-[#263238]">{t('cart.total')}</span>
                   <span className="text-[16px] font-bold text-[#4CAF4F]">{totalPrice} DA</span>
                 </div>
-                <Link
-                  href="/cart"
-                  onClick={() => setOpen(false)}
-                  className="w-full bg-[#4CAF4F] text-white text-[13px] font-semibold py-2.5 rounded-xl text-center hover:bg-[#43A047] transition-all"
-                >
+                <ArrowButton href="/cart" onClick={() => setOpen(false)} variant="green-white" className="w-full !text-[13px] !py-2.5">
                   {t('cart.title')}
-                </Link>
+                </ArrowButton>
               </div>
             </>
           )}

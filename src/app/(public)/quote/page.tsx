@@ -6,6 +6,7 @@ import { inputClass, labelClass } from '@/lib/utils';
 import { WilayaSelect } from '@/components/ui/WilayaSelect';
 import { CommuneSelect } from '@/components/ui/CommuneSelect';
 import { useCartStore } from '@/store/cartStore';
+import { ArrowButton } from '@/components/ArrowButton';
 import { useTranslation } from '@/lib/i18n';
 import { validateEmail, validatePhone } from '@/lib/validation';
 import { reportCartConverted } from '@/lib/cart-tracking';
@@ -367,18 +368,9 @@ export default function QuotePage() {
               {submitError && (
                 <p className="text-[13px] text-red-600 bg-red-50 border border-red-200 rounded-xl px-4 py-3">{submitError}</p>
               )}
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full bg-[#4CAF4F] text-white text-[16px] font-semibold py-4 rounded-xl shadow-[0_4px_14px_rgba(76,175,79,0.4)] hover:bg-[#43A047] transition-all disabled:opacity-50 flex items-center justify-center gap-2"
-              >
-                <span>{loading ? t('quote.submitting') : t('quote.submit')}</span>
-                {!loading && (
-                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                    <path d="M3 8h10M9 4l4 4-4 4" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                )}
-              </button>
+              <ArrowButton type="submit" disabled={loading} variant="green-white" className="w-full">
+                {loading ? t('quote.submitting') : t('quote.submit')}
+              </ArrowButton>
             </div>
           </form>
 

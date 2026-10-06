@@ -4,6 +4,8 @@ import { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { useCartStore } from '@/store/cartStore';
+import { ArrowButton } from '@/components/ArrowButton';
+import { SlideInList } from '@/components/SlideInList';
 import { useTranslation } from '@/lib/i18n';
 import { QuoteCTA } from '@/components/QuoteCTA';
 import { FormatPreview } from '@/components/FormatPreview';
@@ -102,7 +104,7 @@ export default function ProductDetailPage() {
 
   const refsBlock = items.length > 0 && (
     <div className="flex flex-col gap-3 mt-2">
-      <h2 className="text-[17px] font-bold text-[#263238]">{t('product_detail.available_refs')}</h2>
+      <h2 className="text-[17px] font-semibold text-[#263238]">{t('product_detail.available_refs')}</h2>
 
       {/* Étiquettes défilables (dimensions + métrage) — la sélectionnée est verte */}
       <div className="flex items-center gap-2">
@@ -169,14 +171,14 @@ export default function ProductDetailPage() {
 
       {/* Usage de la référence sélectionnée (à quoi ça sert) */}
       {current?.usage && (
-        <p className="text-[13px] text-[#717171] leading-relaxed">{current.usage}</p>
+        <SlideInList key={current.id} items={current.usage.split(/\s+[-–—]\s+|\s*[;,]\s*/).filter(Boolean)} />
       )}
     </div>
   );
 
   const specsBlock = specRows.length > 0 && (
     <div className="flex flex-col gap-3 mt-2">
-      <h2 className="text-[17px] font-bold text-[#263238]">{t('product_detail.specs_title')}</h2>
+      <h2 className="text-[17px] font-semibold text-[#263238]">{t('product_detail.specs_title')}</h2>
       <div className="grid grid-cols-2 gap-x-6 gap-y-3.5 rounded-xl border border-[#E0E0E0] p-4">
         {specRows.map((row) => (
           <div key={row.key} className="flex items-center gap-2.5 min-w-0">
@@ -194,16 +196,13 @@ export default function ProductDetailPage() {
   );
 
   const addButton = current && (
-    <button
+    <ArrowButton
       onClick={() => addItem({ productId: current.id, quantity: qty, reference: current.reference, unitPrice: current.price })}
-      className="hover-lift w-full flex items-center justify-center gap-2 bg-[#4CAF4F] text-white text-[13px] sm:text-[15px] font-bold py-3.5 rounded-xl hover:bg-[#43A047] shadow-[0_4px_14px_rgba(76,175,79,0.4)] hover:shadow-[0_8px_24px_rgba(76,175,79,0.5)] transition-all"
+      variant="green-white"
+      className="w-full"
     >
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" className="flex-shrink-0">
-        <path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-        <path d="M16 10a4 4 0 01-8 0" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-      </svg>
-      <span className="truncate">{t('common.add_to_cart')}</span>
-    </button>
+      {t('common.add_to_cart')}
+    </ArrowButton>
   );
 
   const summaryBlock = current && (
@@ -280,7 +279,7 @@ export default function ProductDetailPage() {
 
         {/* ── Mobile : titre → description → photo → refs → total/panier → détails ── */}
         <div className="flex lg:hidden flex-col gap-5">
-          <h1 className="text-[27px] font-extrabold text-[#388E3C] leading-tight">
+          <h1 className="text-[27px] font-medium tracking-tight text-[#263238] leading-[1.1]">
             {category.name}
           </h1>
           {description && (
@@ -304,7 +303,7 @@ export default function ProductDetailPage() {
             <span className="text-[13px] font-bold text-[#4CAF4F] uppercase tracking-wide">
               {t('product_detail.fast_delivery')}
             </span>
-            <h1 className="text-[46px] font-extrabold text-[#388E3C] leading-tight">
+            <h1 className="text-[46px] font-medium tracking-tight text-[#263238] leading-[1.1]">
               {category.name}
             </h1>
             {description && (
@@ -327,7 +326,7 @@ export default function ProductDetailPage() {
         {/* Autres catégories */}
         {otherCats.length > 0 && (
           <div className="flex flex-col gap-6 mt-6">
-            <h2 className="text-[27px] md:text-[32px] font-extrabold text-[#388E3C]">
+            <h2 className="text-[27px] md:text-[32px] font-medium tracking-tight text-[#263238]">
               {t('product_detail.also_liked')}
             </h2>
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-5">
@@ -345,12 +344,9 @@ export default function ProductDetailPage() {
                   </Link>
                   <div className="p-4 flex flex-col items-start gap-3">
                     <p className="text-[14px] font-bold text-[#263238]">{c.name}</p>
-                    <Link
-                      href={`/products/${c.id}`}
-                      className="hover-lift border-2 border-[#4CAF4F] text-[#4CAF4F] text-[13px] font-semibold px-5 py-2 rounded-full hover:bg-[#4CAF4F] hover:text-white transition-all"
-                    >
+                    <ArrowButton href={`/products/${c.id}`} variant="green-white" className="!text-[13px] !py-2">
                       {t('product_detail.discover')}
-                    </Link>
+                    </ArrowButton>
                   </div>
                 </div>
               ))}

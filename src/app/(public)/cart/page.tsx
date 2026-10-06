@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useCartStore } from '@/store/cartStore';
+import { ArrowButton } from '@/components/ArrowButton';
 import { useTranslation } from '@/lib/i18n';
 
 export default function CartPage() {
@@ -27,12 +28,7 @@ export default function CartPage() {
             <h1 className="text-[28px] font-bold text-[#263238] mb-2">{t('cart.empty_title')}</h1>
             <p className="text-[15px] text-[#717171]">{t('cart.empty_sub')}</p>
           </div>
-          <Link
-            href="/products"
-            className="bg-[#4CAF4F] text-white text-[15px] font-semibold px-8 py-3.5 rounded-xl shadow-[0_4px_14px_rgba(76,175,79,0.4)] hover:bg-[#43A047] transition-all"
-          >
-            {t('cart.empty_btn')}
-          </Link>
+          <ArrowButton href="/products" variant="green-white">{t('cart.empty_btn')}</ArrowButton>
         </div>
       </div>
     );
@@ -137,12 +133,7 @@ export default function CartPage() {
                 <span className="text-[22px] font-bold text-[#4CAF4F]">{totalPrice} DA</span>
               </div>
 
-              <Link
-                href="/checkout"
-                className="w-full bg-[#4CAF4F] text-white text-[15px] font-semibold py-3.5 rounded-xl text-center shadow-[0_4px_14px_rgba(76,175,79,0.4)] hover:bg-[#43A047] transition-all"
-              >
-                {t('cart.checkout_btn')}
-              </Link>
+              <ArrowButton href="/checkout" variant="green-white" className="w-full">{t('cart.checkout_btn')}</ArrowButton>
 
               <Link
                 href="/quote"
