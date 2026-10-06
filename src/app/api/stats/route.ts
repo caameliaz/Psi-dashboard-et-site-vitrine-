@@ -3,6 +3,7 @@ import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { seesAll } from '@/lib/permissions';
 import { WHERE_HORS_ROLLINK } from '@/lib/order-filters';
+import { quoteSalesAmount } from '@/lib/montants';
 
 // GET /api/stats?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD — agrégats pour le dashboard
 export async function GET(request: NextRequest) {
@@ -109,14 +110,14 @@ export async function GET(request: NextRequest) {
       // Devis LIVRÉS dans l'intervalle (date de livraison, proposedPrice + assigné)
       prisma.quote.findMany({
         where: { ...quoteUserWhere, deliveredAt: { gte: startOfMonth, lte: endDate } },
-        select: { assignedToId: true, proposedPrice: true },
+        select: { assignedToId: true, proposedPrice: true, vatEnabled: true, priceIncludesVat: true },
       }),
       // Commandes + devis livrés le MOIS PRÉCÉDENT (montant global, pour l'évolution des ventes)
       prisma.orderItem.findMany({
         where: { order: { ...orderUserWhere, deliveredAt: { gte: startOfPrevMonth, lt: startOfMonth } } },
         select: { quantity: true, unitPrice: true },
       }),
-      prisma.quote.aggregate({ _sum: { proposedPrice: true }, where: { ...quoteUserWhere, deliveredAt: { gte: startOfPrevMonth, lt: startOfMonth } } }),
+      prisma.quote.findMany({ where: { ...quoteUserWhere, deliveredAt: { gte: startOfPrevMonth, lt: startOfMonth } }, select: { proposedPrice: true, vatEnabled: true, priceIncludesVat: true } }),
       prisma.client.count({ where: { createdAt: { gte: startOfMonth } } }),
       prisma.quote.count({ where: { status: { in: ['EN_ATTENTE', 'CONTACTE'] } } }),
       prisma.quote.aggregate({ _sum: { proposedPrice: true }, where: { status: { in: ['EN_ATTENTE', 'CONTACTE'] } } }),
@@ -158,7 +159,7 @@ export async function GET(request: NextRequest) {
       }),
       prisma.quote.findMany({
         where: { ...quoteUserWhere, deliveredAt: { gte: start6MonthsAgo } },
-        select: { deliveredAt: true, assignedToId: true, proposedPrice: true },
+        select: { deliveredAt: true, assignedToId: true, proposedPrice: true, vatEnabled: true, priceIncludesVat: true },
       }),
       prisma.order.findMany({
         where: WHERE_HORS_ROLLINK,
@@ -294,8 +295,8 @@ export async function GET(request: NextRequest) {
       });
       quotesLivresFor6Months.forEach((q) => {
         if (q.deliveredAt && monthKeyAlgeria(q.deliveredAt) === key) {
-          serieVentes[idx].ventes += q.proposedPrice ?? 0;
-          serieVentes[idx].devis += q.proposedPrice ?? 0;
+          serieVentes[idx].ventes += quoteSalesAmount(q);
+          serieVentes[idx].devis += quoteSalesAmount(q);
         }
       });
     }
@@ -313,13 +314,13 @@ export async function GET(request: NextRequest) {
 
     let ventesMois = 0;
     ordersLivrees.forEach((o) => { const a = orderAmount(o.items); ventesMois += a; bump(o.assignedToId, a, 'order'); });
-    quotesLivres.forEach((q) => { const a = q.proposedPrice ?? 0; ventesMois += a; bump(q.assignedToId, a, 'quote'); });
+    quotesLivres.forEach((q) => { const a = quoteSalesAmount(q); ventesMois += a; bump(q.assignedToId, a, 'quote'); });
 
     const livreesMois = ordersLivrees.length;
     const devisLivresMois = quotesLivres.length;
 
     // Ventes mois précédent (pour l'évolution %)
-    const ventesPrevMois = orderAmount(prevOrderItems) + (prevQuotesAgg._sum.proposedPrice ?? 0);
+    const ventesPrevMois = orderAmount(prevOrderItems) + prevQuotesAgg.reduce((acc, q) => acc + quoteSalesAmount(q), 0);
     const evolutionVentes = ventesPrevMois === 0
       ? (ventesMois > 0 ? 100 : 0)
       : Math.round(((ventesMois - ventesPrevMois) / ventesPrevMois) * 100);
@@ -350,7 +351,7 @@ export async function GET(request: NextRequest) {
     if (seesAll(session.user)) {
       const [allOrdersLivres, allQuotesLivres] = await Promise.all([
         prisma.order.findMany({ where: { ...WHERE_HORS_ROLLINK, status: 'LIVRE' }, select: { assignedToId: true, items: { select: { quantity: true, unitPrice: true } } } }),
-        prisma.quote.findMany({ where: { status: 'LIVRE' }, select: { assignedToId: true, proposedPrice: true } }),
+        prisma.quote.findMany({ where: { status: 'LIVRE' }, select: { assignedToId: true, proposedPrice: true, vatEnabled: true, priceIncludesVat: true } }),
       ]);
       const total = { global: 0, byUser: {} as Record<string, number> };
       const add = (uid: string | null, montant: number) => {
@@ -358,7 +359,7 @@ export async function GET(request: NextRequest) {
         if (uid) total.byUser[uid] = (total.byUser[uid] ?? 0) + montant;
       };
       allOrdersLivres.forEach((o) => add(o.assignedToId, orderAmount(o.items)));
-      allQuotesLivres.forEach((q) => add(q.assignedToId, q.proposedPrice ?? 0));
+      allQuotesLivres.forEach((q) => add(q.assignedToId, quoteSalesAmount(q)));
       ventesTotal = total;
     }
 
