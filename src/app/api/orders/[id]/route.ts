@@ -60,6 +60,15 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
   try {
     const body = await request.json();
 
+    // Commandes RollLink : jamais livrées dans PSI Dash (facturées et livrées côté RollLink) —
+    // on peut les marquer Disponible, pas Livré (sinon elles entreraient dans les ventes livrées).
+    if (body.status === 'LIVRE') {
+      const src = await prisma.order.findUnique({ where: { id }, select: { source: true } });
+      if (src?.source === 'ROLLINK') {
+        return NextResponse.json({ error: 'Une commande RollLink ne peut pas être marquée Livrée dans PSI Dash' }, { status: 409 });
+      }
+    }
+
     // Changement d'assignation ("pris en charge par") → nécessite la permission assign_commandes
     if (body.assignedToId !== undefined && !hasPermission(session.user as any, 'assign_commandes')) {
       return NextResponse.json({ error: "Vous n'avez pas la permission d'assigner" }, { status: 403 });

@@ -1134,16 +1134,18 @@ function ContactDropdown({ title, color, hoverColor, children, options }: {
 // N'affiche que le tronc commun : Annulé/Retourné sont des embranchements à part, montrés
 // séparément (cf. appelant) plutôt que comme une étape de plus sur cette ligne.
 const PROGRESS_STEPS = ['En attente', 'Confirmé', 'Disponible', 'Livré'] as const;
-function ProgressSteps({ statut }: { statut: string }) {
-  const currentIndex = PROGRESS_STEPS.indexOf(statut as typeof PROGRESS_STEPS[number]);
+// Commandes RollLink : jamais livrées dans PSI Dash (facturées/livrées côté RollLink) → pas d'étape « Livré ».
+function ProgressSteps({ statut, sansLivraison = false }: { statut: string; sansLivraison?: boolean }) {
+  const steps = sansLivraison ? PROGRESS_STEPS.slice(0, 3) : PROGRESS_STEPS;
+  const currentIndex = steps.indexOf(statut as typeof PROGRESS_STEPS[number]);
   return (
     <div className="flex items-center">
-      {PROGRESS_STEPS.map((label, i) => {
+      {steps.map((label, i) => {
         const done = i < currentIndex;
         const active = i === currentIndex;
         const color = done || active ? '#0F172A' : '#CBD5E1';
         return (
-          <div key={label} className={`flex items-center ${i < PROGRESS_STEPS.length - 1 ? 'flex-1' : ''}`}>
+          <div key={label} className={`flex items-center ${i < steps.length - 1 ? 'flex-1' : ''}`}>
             <div className="flex flex-col items-center gap-1.5">
               <div className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0"
                 style={{ background: active ? '#0F172A' : done ? '#EFF6FF' : '#F1F5F9', border: done ? '1.5px solid #93C5FD' : 'none' }}>
@@ -1155,7 +1157,7 @@ function ProgressSteps({ statut }: { statut: string }) {
               </div>
               <span className="text-[10px] font-bold whitespace-nowrap" style={{ color: active ? '#0F172A' : done ? '#3B82F6' : '#94A3B8' }}>{label}</span>
             </div>
-            {i < PROGRESS_STEPS.length - 1 && (
+            {i < steps.length - 1 && (
               <div className="flex-1 h-[2px] mx-1.5 -mt-4" style={{ background: i < currentIndex ? '#3B82F6' : '#E2E8F0' }} />
             )}
           </div>
@@ -1364,7 +1366,7 @@ export function RequestPanel({ item, onClose, onStatusChange, onConfirmQuoteWith
           {/* ── Barre de progression — cycle de vie réel (cf. DB_TO_UI, request-detail.ts) ── */}
           {!isArchived && (
             <div className="px-4 md:px-8 pt-4 pb-1 flex-shrink-0 border-b border-[#F2F4F7]">
-              <ProgressSteps statut={item.statut} />
+              <ProgressSteps statut={item.statut} sansLivraison={item.source === 'ROLLINK'} />
             </div>
           )}
           {isArchived && (
@@ -1785,7 +1787,7 @@ export function RequestPanel({ item, onClose, onStatusChange, onConfirmQuoteWith
                       </button>
                     )}
                     {/* Commande déjà disponible → Marquer Livré (statut final → ferme) */}
-                    {isCommande && item.statut === 'Disponible' && (
+                    {isCommande && item.statut === 'Disponible' && item.source !== 'ROLLINK' && (
                       <button onClick={() => onStatusChange(item.ref, 'Livré')}
                         className="px-4 py-2 rounded-lg text-[13px] font-bold border border-[#4CAF4F] text-[#4CAF4F] hover:bg-[#F0FDF4] transition-colors">
                         Marquer Livré
