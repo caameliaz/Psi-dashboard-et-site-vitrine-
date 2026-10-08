@@ -62,6 +62,15 @@ export default function ProductDetailPage() {
     fetch('/api/products').then(r => r.ok ? r.json() : []).then(setProducts).catch(() => {});
   }, []);
 
+  // Photos supplémentaires de la catégorie (gérées depuis Dashboard > Contenu du site)
+  const [gallery, setGallery] = useState<string[]>([]);
+  const [photoIdx, setPhotoIdx] = useState(0);
+  useEffect(() => {
+    setGallery([]); setPhotoIdx(0);
+    fetch(`/api/content/gallery?categoryId=${id}`).then(r => r.ok ? r.json() : { photos: [] })
+      .then(d => setGallery(d.photos ?? [])).catch(() => {});
+  }, [id]);
+
   const category = cats.find(c => c.id === id);
   // Masque les catégories sans aucun produit visible sur le site (ex: catégorie
   // entièrement désactivée) — `products` vient de /api/products, déjà filtré
@@ -251,14 +260,37 @@ export default function ProductDetailPage() {
     </div>
   );
 
+  // Photo principale de la catégorie + photos supplémentaires, sélectionnables via les miniatures
+  const allPhotos = [...(category.photo ? [category.photo] : []), ...gallery];
+  const mainPhoto = allPhotos[photoIdx] ?? allPhotos[0];
+
   const photoBlock = (heightClass: string) => (
-    <div className={`${category.photo ? '' : 'bg-[#F5F7FA]'} rounded-2xl overflow-hidden ${heightClass} flex items-center justify-center p-3`}>
-      {category.photo ? (
-        <img src={category.photo} alt={category.name} className="w-full h-full object-contain" />
-      ) : (
-        <div className="relative w-20 h-20">
-          <div className="absolute inset-0 rounded-full bg-[#E8F5E9] border-2 border-[#4CAF4F]" />
-          <div className="absolute inset-[30%] rounded-full bg-[#4CAF4F]" />
+    <div className="flex flex-col gap-3">
+      <div className={`${mainPhoto ? '' : 'bg-[#F5F7FA]'} rounded-2xl overflow-hidden ${heightClass} flex items-center justify-center p-3`}>
+        {mainPhoto ? (
+          <img src={mainPhoto} alt={category.name} className="w-full h-full object-contain" />
+        ) : (
+          <div className="relative w-20 h-20">
+            <div className="absolute inset-0 rounded-full bg-[#E8F5E9] border-2 border-[#4CAF4F]" />
+            <div className="absolute inset-[30%] rounded-full bg-[#4CAF4F]" />
+          </div>
+        )}
+      </div>
+      {allPhotos.length > 1 && (
+        <div className="flex gap-3 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          {allPhotos.map((src, i) => (
+            <button
+              key={i}
+              type="button"
+              onClick={() => setPhotoIdx(i)}
+              aria-label={`${category.name} ${i + 1}`}
+              className={`shrink-0 w-20 h-20 rounded-xl bg-white p-1.5 border-2 transition-all ${
+                i === photoIdx ? 'border-[#4CAF4F] shadow-[0_4px_12px_rgba(76,175,79,0.25)]' : 'border-[#E0E0E0] hover:border-[#4CAF4F]/60'
+              }`}
+            >
+              <img src={src} alt="" className="w-full h-full object-contain" />
+            </button>
+          ))}
         </div>
       )}
     </div>

@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { RequirePerm } from '@/components/RequirePerm';
 import { useRole } from '@/lib/role-context';
 import { fr } from '@/lib/i18n/fr';
+import { compressImage } from '@/lib/compress-image';
 
 function IconCheck() {
   return (
@@ -24,6 +25,88 @@ function SaveButton({ onClick, saved, loading }: { onClick: () => void; saved: b
 }
 
 const inputClass = "w-full px-3 py-2.5 rounded-lg border border-[#E2E8F0] text-sm text-[#0F172A] placeholder-[#94A3B8] focus:outline-none focus:border-[#4CAF4F] focus:ring-1 focus:ring-[#4CAF4F] transition-colors bg-[#F8FAFC]";
+
+const MAX_GALLERY = 6;
+
+// Photos supplémentaires affichées en miniatures sous la photo principale d'une page catégorie.
+function CategoryGalleryCard() {
+  const [cats, setCats] = useState<{ id: string; name: string }[]>([]);
+  const [catId, setCatId] = useState('');
+  const [photos, setPhotos] = useState<string[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    fetch('/api/categories').then((r) => r.ok ? r.json() : []).then((data: any[]) => {
+      setCats(data.map((c) => ({ id: c.id, name: c.name })));
+      if (data[0]) setCatId(data[0].id);
+    }).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (!catId) return;
+    setPhotos([]);
+    fetch(`/api/content/gallery?categoryId=${catId}`).then((r) => r.ok ? r.json() : { photos: [] })
+      .then((d) => setPhotos(d.photos ?? [])).catch(() => {});
+  }, [catId]);
+
+  const addFiles = async (files: FileList | null) => {
+    if (!files) return;
+    const room = MAX_GALLERY - photos.length;
+    const added: string[] = [];
+    for (const f of Array.from(files).slice(0, room)) {
+      try { added.push(await compressImage(f, 900, 0.8)); } catch { /* image illisible : ignorée */ }
+    }
+    setPhotos((p) => [...p, ...added]);
+  };
+
+  const save = async () => {
+    setBusy(true);
+    try {
+      const res = await fetch('/api/content', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ [`category_gallery_${catId}`]: JSON.stringify(photos) }),
+      });
+      if (!res.ok) { alert((await res.json().catch(() => null))?.error ?? `L'enregistrement a échoué (erreur ${res.status}).`); return; }
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="bg-white rounded-2xl border border-[#E2E8F0] p-6 shadow-sm">
+      <h2 className="text-[15px] font-bold text-[#0F172A] mb-1">Photos des pages catégorie</h2>
+      <p className="text-[12px] text-[#8A9BB5] mb-5">Photos supplémentaires affichées en miniatures sous la photo principale (max {MAX_GALLERY}). La photo principale se change dans la catégorie.</p>
+      <div className="space-y-4">
+        <select value={catId} onChange={(e) => setCatId(e.target.value)} className={inputClass}>
+          {cats.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+        </select>
+        <div className="flex flex-wrap gap-3">
+          {photos.map((src, i) => (
+            <div key={i} className="relative w-24 h-24 rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] overflow-hidden">
+              <img src={src} alt="" className="w-full h-full object-contain" />
+              <button type="button" onClick={() => setPhotos((p) => p.filter((_, j) => j !== i))}
+                aria-label="Supprimer la photo"
+                className="absolute top-1 right-1 w-5 h-5 rounded-full bg-black/60 text-white text-[12px] leading-5 text-center">×</button>
+            </div>
+          ))}
+          {photos.length < MAX_GALLERY && (
+            <label className="w-24 h-24 rounded-xl border-2 border-dashed border-[#CBD5E1] flex items-center justify-center text-[#8A9BB5] text-[24px] cursor-pointer hover:border-[#4CAF4F] hover:text-[#4CAF4F] transition-colors">
+              +
+              <input type="file" accept="image/*" multiple className="hidden" onChange={(e) => { addFiles(e.target.files); e.target.value = ''; }} />
+            </label>
+          )}
+        </div>
+        <div className="flex justify-end pt-1">
+          <SaveButton onClick={save} saved={saved} loading={busy} />
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function ContentPageInner() {
   const { can: canRole } = useRole();
@@ -202,6 +285,8 @@ function ContentPageInner() {
 
         {/* Colonne droite */}
         <div className="flex flex-col gap-6">
+
+          <CategoryGalleryCard />
 
           {/* Contact */}
           <div className="bg-white rounded-2xl border border-[#E2E8F0] p-6 shadow-sm">
