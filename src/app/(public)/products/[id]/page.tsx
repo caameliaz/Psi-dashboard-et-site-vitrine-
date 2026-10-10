@@ -59,7 +59,7 @@ export default function ProductDetailPage() {
     fetch('/api/categories?withPhoto=true').then(r => r.ok ? r.json() : []).then((data: any[]) =>
       setCats(data.map(c => ({ id: c.id, name: c.name, photo: c.photo ?? null, description: c.description ?? null })))
     ).catch(() => {});
-    fetch('/api/products').then(r => r.ok ? r.json() : []).then(setProducts).catch(() => {});
+    fetch('/api/products?withPhoto=true').then(r => r.ok ? r.json() : []).then(setProducts).catch(() => {});
   }, []);
 
   const category = cats.find(c => c.id === id);
@@ -251,10 +251,12 @@ export default function ProductDetailPage() {
     </div>
   );
 
+  // Photo de la référence sélectionnée si elle en a une, sinon photo de la catégorie.
+  const displayPhoto = current?.photo || category.photo;
   const photoBlock = (heightClass: string) => (
-    <div className={`${category.photo ? '' : 'bg-[#F5F7FA]'} rounded-2xl overflow-hidden ${heightClass} flex items-center justify-center p-3`}>
-      {category.photo ? (
-        <img src={category.photo} alt={category.name} className="w-full h-full object-contain" />
+    <div className={`${displayPhoto ? '' : 'bg-[#F5F7FA]'} rounded-2xl overflow-hidden ${heightClass} flex items-center justify-center p-3`}>
+      {displayPhoto ? (
+        <img src={displayPhoto} alt={category.name} className="w-full h-full object-contain" />
       ) : (
         <div className="relative w-20 h-20">
           <div className="absolute inset-0 rounded-full bg-[#E8F5E9] border-2 border-[#4CAF4F]" />

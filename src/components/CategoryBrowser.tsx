@@ -44,7 +44,7 @@ export function CategoryBrowser({
   const visibleCats = limit ? catsWithProducts.slice(0, limit) : catsWithProducts;
 
   return (
-    <div className="flex flex-col gap-8 -mt-8">
+    <div className="flex flex-col gap-8">
       {/* Rangée horizontale qui passe à la ligne au besoin — se centre naturellement
           quand il y a peu de catégories, au lieu de rester collée à gauche. */}
       <div className="flex flex-wrap justify-center gap-8 md:gap-16">
@@ -161,7 +161,7 @@ function CategoryCard({ category, products }: { category: Cat; products: Prod[] 
           dans le fond de la page (pas de carte blanche/ombre) et reste entière (object-contain). */}
       <Link
         href={`/products/${category.id}`}
-        className={`group relative rounded-2xl transition-shadow w-[95%] mx-auto h-72 md:h-80 flex items-center justify-center overflow-hidden ${
+        className={`group relative rounded-2xl transition-shadow w-[95%] mx-auto h-44 md:h-52 flex items-center justify-center overflow-hidden ${
           category.photo ? 'p-3' : 'bg-[#F5F7FA] shadow-[0_4px_24px_rgba(171,190,209,0.35)] hover:shadow-[0_8px_32px_rgba(171,190,209,0.5)]'
         }`}
       >
@@ -246,8 +246,8 @@ function CategoryCard({ category, products }: { category: Cat; products: Prod[] 
               <p className="text-[12px] text-red-600 font-medium text-center">{errorMessage}</p>
             )}
 
-            {/* Bouton ajouter au panier */}
-            <ArrowButton onClick={addSelectedToCart} variant="green-white" className="w-full !text-[13px] !py-2.5">
+            {/* Bouton ajouter au panier — sur le côté (pas pleine largeur), même couleur qu'avant */}
+            <ArrowButton onClick={addSelectedToCart} variant="green-white" className="self-end !text-[13px] !py-2.5">
               {t('common.add_to_cart')}
             </ArrowButton>
           </div>

@@ -8,6 +8,7 @@ import { createAudit } from '@/lib/audit';
 // GET /api/products?all=true — tous les produits (admin)
 export async function GET(request: NextRequest) {
   const all = request.nextUrl.searchParams.get('all') === 'true';
+  const withPhoto = request.nextUrl.searchParams.get('withPhoto') === 'true';
 
   if (all) {
     const session = await auth();
@@ -20,14 +21,13 @@ export async function GET(request: NextRequest) {
       // Site public : actif ET visible sur le site — deux cases indépendantes
       // (un produit peut être actif/géré au dashboard sans être affiché en vitrine).
       where: all ? undefined : { active: true, visibleOnSite: true },
-      // `photo` (base64, plusieurs dizaines de Ko/produit) n'est affiché nulle part dans
-      // l'app — ni ici ni dans category imbriquée (les photos de catégorie viennent
-      // toujours d'un fetch séparé sur /api/categories) — donc jamais servi ici : c'était
-      // la 1ère cause du dépassement de quota Fast Origin Transfer Vercel (chaque appel
-      // renvoyait la photo de TOUS les produits, sur chaque page admin/publique).
+      // `photo` (base64, plusieurs dizaines de Ko/produit) n'est utile qu'aux pages qui
+      // affichent/gèrent une photo par référence (admin produits, fiche produit publique) —
+      // omis par défaut (?withPhoto=true pour l'inclure) : servir la photo de TOUS les
+      // produits à chaque appel avait causé un dépassement de quota Fast Origin Transfer Vercel.
       // `recipeItems` (coût/recette matière) n'est utile qu'aux 2 pages admin qui gèrent
       // les recettes (?all=true) — jamais exposé publiquement (donnée sensible en plus).
-      omit: { photo: true },
+      omit: withPhoto ? undefined : { photo: true },
       include: {
         category: { omit: { photo: true } },
         customFields: { include: { definition: true } },
@@ -66,9 +66,14 @@ export async function POST(request: NextRequest) {
 
     let reference: string;
     if (category.prefix) {
-      const next = category.refCounter + 1;
+      // Un préfixe peut être partagé par plusieurs catégories (choisi comme "préfixe existant"
+      // à la création) : la numérotation doit continuer après le plus haut compteur de TOUTES
+      // les catégories partageant ce préfixe, pas seulement celui de cette catégorie-ci —
+      // sinon deux catégories avec le même préfixe généreraient les mêmes références.
+      const sharing = await prisma.category.findMany({ where: { prefix: category.prefix }, select: { refCounter: true } });
+      const next = Math.max(category.refCounter, ...sharing.map((c) => c.refCounter)) + 1;
       reference = `${category.prefix}-${String(next).padStart(3, '0')}`;
-      await prisma.category.update({ where: { id: body.categoryId }, data: { refCounter: next } });
+      await prisma.category.updateMany({ where: { prefix: category.prefix }, data: { refCounter: next } });
     } else {
       if (!body.reference) return NextResponse.json({ error: 'Référence requise (catégorie sans préfixe)' }, { status: 400 });
       reference = body.reference;

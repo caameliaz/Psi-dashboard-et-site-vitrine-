@@ -20,6 +20,14 @@ export const metadata: Metadata = {
   alternates: { canonical: '/' },
 };
 
+async function getPartnerLogos() {
+  try {
+    return await prisma.partnerLogo.findMany({ orderBy: { order: 'asc' } });
+  } catch {
+    return [];
+  }
+}
+
 async function getCategories(): Promise<Cat[]> {
   try {
     const cats = await prisma.category.findMany({
@@ -56,17 +64,19 @@ async function getProducts(): Promise<Prod[]> {
 }
 
 export default async function Home() {
-  const [content, categories, products] = await Promise.all([
+  const [content, categories, products, partnerLogos] = await Promise.all([
     getContent(),
     getCategories(),
     getProducts(),
+    getPartnerLogos(),
   ]);
-  
+
   return (
-    <HomeClient 
-      initialContent={content} 
+    <HomeClient
+      initialContent={content}
       initialCategories={categories}
       initialProducts={products}
+      initialPartnerLogos={partnerLogos}
     />
   );
 }

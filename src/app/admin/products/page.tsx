@@ -5,6 +5,7 @@ import { Modal } from '@/components/ui/Modal';
 import { useRole } from '@/lib/role-context';
 import { RequirePerm } from '@/components/RequirePerm';
 import { apiError } from '@/lib/api-error';
+import { resizeImageToDataUrl } from '@/lib/resize-image';
 
 function IconPencil() {
   return (
@@ -55,6 +56,7 @@ interface Ref {
   mode: 'ACHETE' | 'FABRIQUE' | 'LES_DEUX';
   purchasePrice: number | null;
   stockMax: number;
+  photo: string | null;
   recipeItems: { id: string; rawMaterialId: string; quantity: number; rawMaterial: RawMaterial }[];
 }
 
@@ -89,6 +91,7 @@ function dbToRef(p: any): Ref {
     mode: p.mode ?? 'FABRIQUE',
     purchasePrice: p.purchasePrice ?? null,
     stockMax: p.stockMax ?? 140,
+    photo: p.photo ?? null,
     recipeItems: p.recipeItems ?? [],
   };
 }
@@ -253,10 +256,13 @@ function DeleteModal({ label, onDeactivate, onDelete, onClose }: {
 interface NewCatForm { name: string; prefix: string; photo: string; description: string; refs: RefForm[]; }
 const emptyNewCatForm: NewCatForm = { name: '', prefix: '', photo: '', description: '', refs: [{ ...emptyRefForm }] };
 
-function NewCategoryModal({ onClose, onCreated, fieldDefs }: { onClose: () => void; onCreated: (catId: string) => void; fieldDefs: FieldDef[] }) {
-  const [form, setForm] = useState<NewCatForm>(emptyNewCatForm);
+function NewCategoryModal({ onClose, onCreated, fieldDefs, existingPrefixes }: { onClose: () => void; onCreated: (catId: string) => void; fieldDefs: FieldDef[]; existingPrefixes: string[] }) {
+  const [form, setForm] = useState<NewCatForm>({ ...emptyNewCatForm, prefix: existingPrefixes[0] ?? '' });
   const [saving, setSaving] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  // Choisir un préfixe déjà utilisé (la numérotation continue après ce qui existe, cf. API) ou
+  // en taper un nouveau. Par défaut sur "nouveau" s'il n'en existe encore aucun.
+  const [prefixMode, setPrefixMode] = useState<'existing' | 'new'>(existingPrefixes.length > 0 ? 'existing' : 'new');
 
   const handlePhoto = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -357,8 +363,30 @@ function NewCategoryModal({ onClose, onCreated, fieldDefs }: { onClose: () => vo
 
         <div>
           <label className="block text-[12px] font-semibold text-[#374151] mb-1.5">Préfixe des références <span className="text-[#ABBED1] font-normal">(facultatif)</span></label>
-          <input value={form.prefix} onChange={(e) => setForm({ ...form, prefix: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '') })} placeholder="ex: PTT" maxLength={6} className={inputClass} />
-          <p className="text-[11px] text-[#8A9BB5] mt-1">Si défini, chaque référence reçoit un code auto : {form.prefix.trim() ? `${form.prefix.trim()}-001, ${form.prefix.trim()}-002…` : 'PTT-001, PTT-002…'}</p>
+          {existingPrefixes.length > 0 && (
+            <div className="flex gap-2 mb-2">
+              <button type="button" onClick={() => { setPrefixMode('existing'); setForm((f) => ({ ...f, prefix: existingPrefixes[0] })); }}
+                className={`flex-1 py-1.5 rounded-lg border text-[12px] font-bold transition-colors ${prefixMode === 'existing' ? 'border-[#4CAF4F] bg-[#F0FDF4] text-[#166534]' : 'border-[#E2E8F0] text-[#374151]'}`}>
+                Préfixe existant
+              </button>
+              <button type="button" onClick={() => { setPrefixMode('new'); setForm((f) => ({ ...f, prefix: '' })); }}
+                className={`flex-1 py-1.5 rounded-lg border text-[12px] font-bold transition-colors ${prefixMode === 'new' ? 'border-[#4CAF4F] bg-[#F0FDF4] text-[#166534]' : 'border-[#E2E8F0] text-[#374151]'}`}>
+                Nouveau préfixe
+              </button>
+            </div>
+          )}
+          {prefixMode === 'existing' && existingPrefixes.length > 0 ? (
+            <select value={form.prefix} onChange={(e) => setForm({ ...form, prefix: e.target.value })} className={inputClass}>
+              {existingPrefixes.map((p) => <option key={p} value={p}>{p}</option>)}
+            </select>
+          ) : (
+            <input value={form.prefix} onChange={(e) => setForm({ ...form, prefix: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '') })} placeholder="ex: PTT" maxLength={6} className={inputClass} />
+          )}
+          <p className="text-[11px] text-[#8A9BB5] mt-1">
+            {prefixMode === 'existing' && form.prefix.trim()
+              ? `La numérotation continue après les références ${form.prefix.trim()} existantes.`
+              : `Si défini, chaque référence reçoit un code auto : ${form.prefix.trim() ? `${form.prefix.trim()}-001, ${form.prefix.trim()}-002…` : 'PTT-001, PTT-002…'}`}
+          </p>
         </div>
 
         <div>
@@ -481,6 +509,8 @@ function ProductsPageInner() {
   const [materials, setMaterials] = useState<RawMaterial[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedCatId, setSelectedCatId] = useState<string | null>(null);
+  const [selectedRefId, setSelectedRefId] = useState<string | null>(null);
+  const refPhotoRef = useRef<HTMLInputElement>(null);
 
   const [search, setSearch] = useState('');
   const [filterActif, setFilterActif] = useState<'all' | 'actif' | 'inactif'>('all');
@@ -510,7 +540,7 @@ function ProductsPageInner() {
   const fetchProducts = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/products?all=true');
+      const res = await fetch('/api/products?all=true&withPhoto=true');
       if (res.ok) {
         const data = await res.json();
         setRefs(data.map(dbToRef));
@@ -521,6 +551,9 @@ function ProductsPageInner() {
   }, []);
 
   useEffect(() => { fetchProducts(); fetchCategories(); }, [fetchProducts, fetchCategories]);
+  // La référence sélectionnée appartient à la catégorie affichée — on la désélectionne
+  // en changeant de catégorie, sinon son panneau photo resterait affiché à tort.
+  useEffect(() => { setSelectedRefId(null); }, [selectedCatId]);
   useEffect(() => {
     fetch('/api/products/fields').then((r) => r.ok ? r.json() : []).then((data: FieldDef[]) =>
       setFieldDefs(data.sort((a, b) => a.order - b.order))
@@ -529,8 +562,15 @@ function ProductsPageInner() {
   }, []);
 
   const selectedCat = useMemo(() => catList.find((c) => c.id === selectedCatId) ?? null, [catList, selectedCatId]);
+  // Préfixes déjà utilisés par au moins une catégorie — proposés en premier à la création
+  // d'une nouvelle catégorie, pour que sa numérotation continue après ce qui existe (cf. API).
+  const existingPrefixes = useMemo(
+    () => Array.from(new Set(catList.map((c) => c.prefix).filter((p): p is string => !!p))).sort(),
+    [catList]
+  );
 
   const catRefs = useMemo(() => refs.filter((r) => r.categoryId === selectedCatId), [refs, selectedCatId]);
+  const selectedRef = useMemo(() => catRefs.find((r) => r.id === selectedRefId) ?? null, [catRefs, selectedRefId]);
   const filteredRefs = catRefs.filter((r) => {
     const q = search.toLowerCase();
     const matchSearch = !q || r.reference.toLowerCase().includes(q) || r.usage.toLowerCase().includes(q);
@@ -685,12 +725,7 @@ function ProductsPageInner() {
 
   const setCatPhoto = async (file: File | null) => {
     if (!selectedCatId) return;
-    const photo = await new Promise<string>((resolve) => {
-      if (!file) return resolve('');
-      const reader = new FileReader();
-      reader.onload = (ev) => resolve((ev.target?.result as string) ?? '');
-      reader.readAsDataURL(file);
-    });
+    const photo = file ? await resizeImageToDataUrl(file) : '';
     const res = await fetch(`/api/categories/${selectedCatId}`, {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ photo: photo || null }),
@@ -702,6 +737,22 @@ function ProductsPageInner() {
     }
     await fetchCategories();
   };
+
+  const setRefPhotoFor = async (productId: string, file: File | null) => {
+    const photo = file ? await resizeImageToDataUrl(file) : '';
+    const res = await fetch(`/api/products/${productId}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ photo: photo || null }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      alert(err.error ?? 'Impossible d\'enregistrer la photo.');
+      return;
+    }
+    await fetchProducts();
+  };
+  // Panneau photo (à droite) : agit toujours sur la référence actuellement sélectionnée.
+  const setRefPhoto = (file: File | null) => selectedRefId && setRefPhotoFor(selectedRefId, file);
 
   const deleteCategory = async () => {
     if (!selectedCatId) return;
@@ -859,8 +910,37 @@ function ProductsPageInner() {
                 <p className="text-[13px] text-[#8A9BB5] py-6 text-center">Aucune référence.</p>
               ) : (
                 <div className="rounded-xl border-2 border-[#E2E8F0] overflow-hidden bg-white">
-                  {filteredRefs.map((r, i) => (
-                    <div key={r.id} className={`flex flex-col md:flex-row md:items-center gap-2 md:gap-3 px-4 py-3 ${i > 0 ? 'border-t border-[#E2E8F0]' : ''}`} style={{ opacity: r.active ? 1 : 0.55 }}>
+                  {filteredRefs.map((r, i) => {
+                    const isRefSelected = r.id === selectedRefId;
+                    return (
+                    <div key={r.id} onClick={() => setSelectedRefId(isRefSelected ? null : r.id)}
+                      className={`flex flex-col md:flex-row md:items-center gap-2 md:gap-3 px-4 py-3 cursor-pointer transition-colors ${i > 0 ? 'border-t border-[#E2E8F0]' : ''}`}
+                      style={{ opacity: r.active ? 1 : 0.55, background: isRefSelected ? '#F0FDF4' : 'transparent' }}>
+                      {/* Pastille photo : indique d'un coup d'œil si cette référence a sa propre photo.
+                          Sans photo + en mode édition : icône photo cliquable → ajoute directement,
+                          sans passer par la sélection de la ligne + le panneau de droite. */}
+                      {r.photo ? (
+                        <div className="w-8 h-8 rounded-lg overflow-hidden flex-shrink-0 bg-[#F5F7FA] border border-[#E2E8F0] flex items-center justify-center">
+                          <img src={r.photo} alt="" className="w-full h-full object-cover" />
+                        </div>
+                      ) : canEdit && editMode ? (
+                        <label
+                          onClick={(e) => e.stopPropagation()}
+                          title="Ajouter une photo"
+                          className="w-8 h-8 rounded-lg overflow-hidden flex-shrink-0 bg-[#F5F7FA] border border-dashed border-[#CBD5E1] flex items-center justify-center cursor-pointer hover:border-[#4CAF4F] hover:bg-[#F0FDF4] transition-colors"
+                        >
+                          <input type="file" accept="image/*" className="hidden"
+                            onChange={(e) => { const f = e.target.files?.[0] ?? null; if (f) setRefPhotoFor(r.id, f); e.target.value = ''; }} />
+                          <svg width={14} height={14} viewBox="0 0 24 24" fill="none" className="text-[#ABBED1]">
+                            <path d="M4 16l4-4a3 3 0 014 0l4 4M14 14l1-1a3 3 0 014 0l1 1M4 6h16a1 1 0 011 1v10a1 1 0 01-1 1H4a1 1 0 01-1-1V7a1 1 0 011-1z" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+                            <circle cx="8.5" cy="10" r="1.2" fill="currentColor"/>
+                          </svg>
+                        </label>
+                      ) : (
+                        <div className="w-8 h-8 rounded-lg overflow-hidden flex-shrink-0 bg-[#F5F7FA] border border-[#E2E8F0] flex items-center justify-center">
+                          <span className="text-[9px] text-[#ABBED1]">—</span>
+                        </div>
+                      )}
                       <div className="flex-1 min-w-0">
                         {/* Ligne 1 : la référence seule (badge + nom) */}
                         <div className="flex items-center gap-2 min-w-0">
@@ -880,7 +960,7 @@ function ProductsPageInner() {
                         )}
                       </div>
                       {/* Prix + actions : à droite sur ordi, sur leur propre ligne sur mobile */}
-                      <div className="flex items-center gap-2 md:gap-3 flex-shrink-0 justify-end">
+                      <div className="flex items-center gap-2 md:gap-3 flex-shrink-0 justify-end" onClick={(e) => e.stopPropagation()}>
                       <p className="text-[13px] font-semibold text-[#374151] flex-shrink-0 tabular-nums">{r.price.toLocaleString('fr-FR')} DA</p>
                       {canEdit && editMode && <Toggle active={r.active} onToggle={() => toggleRef(r)} />}
                       {canEdit && editMode && (
@@ -895,7 +975,7 @@ function ProductsPageInner() {
                       )}
                       </div>
                     </div>
-                  ))}
+                  );})}
                 </div>
               )}
             </div>
@@ -929,6 +1009,51 @@ function ProductsPageInner() {
               <input ref={catPhotoRef} type="file" accept="image/*" className="hidden"
                 onChange={(e) => { const f = e.target.files?.[0] ?? null; setCatPhoto(f); e.target.value = ''; }} />
             </div>
+
+            {/* Photo de la référence sélectionnée (clic sur une ligne dans la liste) — distincte
+                de la photo de catégorie ci-dessus, affichée sur le site public à la place de
+                celle-ci quand cette référence précise est choisie. */}
+            {selectedRef && (
+              <div className="rounded-2xl border border-[#E2E8F0] p-3">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-[12px] font-bold text-[#0F172A]">Photo de « {selectedRef.name || selectedRef.reference} »</p>
+                  <button onClick={() => setSelectedRefId(null)} className="text-[11px] text-[#8A9BB5] hover:text-[#374151]">Fermer</button>
+                </div>
+                {/* Container à la même taille que celui de la photo de catégorie (ci-dessus) ;
+                    l'image elle-même est plafonnée un peu plus petit (300/380 vs 340/420). */}
+                <div className={`relative rounded-xl overflow-hidden flex items-center justify-center w-[70%] mx-auto h-[340px] md:h-[420px] ${selectedRef.photo ? '' : canEdit && editMode ? '' : 'bg-[#F5F7FA]'}`}>
+                  {selectedRef.photo ? (
+                    <img src={selectedRef.photo} alt={selectedRef.reference} className="w-auto h-auto max-w-full max-h-[300px] md:max-h-[380px] mx-auto rounded-xl" />
+                  ) : canEdit && editMode ? (
+                    <button type="button" onClick={() => refPhotoRef.current?.click()}
+                      className="w-full h-full rounded-xl border-2 border-dashed border-[#CBD5E1] bg-[#F8FAFC] flex flex-col items-center justify-center gap-2 hover:border-[#4CAF4F] hover:bg-[#F0FDF4] transition-colors">
+                      <span className="text-[28px] text-[#ABBED1] leading-none">+</span>
+                      <span className="text-[13px] font-semibold text-[#8A9BB5]">Ajouter une photo à la référence</span>
+                    </button>
+                  ) : (
+                    <span className="text-[12px] text-[#ABBED1]">Aucune photo pour cette référence</span>
+                  )}
+                  {/* Quand il n'y a pas de photo, le gros bouton pointillé ci-dessus suffit déjà
+                      à en ajouter une — ces contrôles ne sont donc utiles qu'une fois une photo
+                      présente ("Changer"/"Retirer"). */}
+                  {canEdit && editMode && selectedRef.photo && (
+                    <div className="absolute bottom-2 right-2 flex items-center gap-2">
+                      <button onClick={() => setRefPhoto(null)}
+                        className="px-2.5 py-1 rounded-lg text-[11px] font-bold text-white bg-[#EF4444]/80 hover:bg-[#DC2626] transition-colors">
+                        Retirer
+                      </button>
+                      <button onClick={() => refPhotoRef.current?.click()}
+                        className="px-2.5 py-1 rounded-lg text-[11px] font-bold text-white bg-black/50 hover:bg-black/70 transition-colors">
+                        Changer
+                      </button>
+                    </div>
+                  )}
+                  <input ref={refPhotoRef} type="file" accept="image/*" className="hidden"
+                    onChange={(e) => { const f = e.target.files?.[0] ?? null; setRefPhoto(f); e.target.value = ''; }} />
+                </div>
+              </div>
+            )}
+
             {canEdit && editMode && catRefs.length > 0 && (
               <button onClick={toggleCategory} className="self-end text-[12px] font-semibold text-[#B45309] hover:text-[#92400E] transition-colors">
                 {catRefs.some((r) => r.active) ? 'Désactiver toute la catégorie' : 'Réactiver toute la catégorie'}
@@ -961,6 +1086,7 @@ function ProductsPageInner() {
             setShowNewCategory(false);
           }}
           fieldDefs={fieldDefs}
+          existingPrefixes={existingPrefixes}
         />
       )}
 

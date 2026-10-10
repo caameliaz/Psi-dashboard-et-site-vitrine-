@@ -1,11 +1,14 @@
 import type { Metadata, Viewport } from "next";
-import { Open_Sans, Noto_Serif, Playfair_Display } from "next/font/google";
+import { Open_Sans, Noto_Serif, Playfair_Display, Inter } from "next/font/google";
 import "./globals.css";
 import { SessionWrapper } from "@/components/SessionWrapper";
 
 const openSans = Open_Sans({ subsets: ["latin"], variable: "--font-open-sans" });
 const notoSerif = Noto_Serif({ subsets: ["latin"], variable: "--font-noto-serif" });
 const playfairDisplay = Playfair_Display({ subsets: ["latin"], variable: "--font-playfair" });
+// « Google Sans » n'est pas distribuée publiquement (police interne Google, absente de Google
+// Fonts) — Inter est l'alternative la plus proche visuellement et librement utilisable.
+const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 
 // Domaine canonique (cf. sitemap.ts / robots.ts) : sert à fabriquer les URL absolues des métadonnées.
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.psi.dz';
@@ -38,7 +41,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="fr" className={`h-full antialiased ${openSans.variable} ${notoSerif.variable} ${playfairDisplay.variable}`} suppressHydrationWarning>
+    <html lang="fr" className={`h-full antialiased ${openSans.variable} ${notoSerif.variable} ${playfairDisplay.variable} ${inter.variable}`} suppressHydrationWarning>
       <body className="min-h-full flex flex-col">
         <SessionWrapper>{children}</SessionWrapper>
       </body>
