@@ -83,6 +83,15 @@ export default function ProductDetailPage() {
     [products, id]
   );
   const current = items[index] ?? items[0];
+  // Usage commun à la catégorie : la valeur la plus fréquente parmi ses références (une saisie isolée ou
+  // fautive sur une seule référence n'impose donc pas son texte à toute la page).
+  const categoryUsage = useMemo(() => {
+    const counts = new Map<string, number>();
+    items.forEach((p) => { const u = p.usage?.trim(); if (u) counts.set(u, (counts.get(u) ?? 0) + 1); });
+    let best = ''; let bestN = 0;
+    counts.forEach((n, u) => { if (n > bestN) { best = u; bestN = n; } });
+    return best;
+  }, [items]);
 
   useEffect(() => { setIndex(0); setQty(1); }, [id]);
   // Changer de référence → on revient sur sa photo (première de la liste)
@@ -180,9 +189,10 @@ export default function ProductDetailPage() {
         </button>
       </div>
 
-      {/* Usage de la référence sélectionnée (à quoi ça sert) */}
-      {current?.usage && (
-        <SlideInList key={current.id} items={current.usage.split(/\s+[-–—]\s+|\s*[;,]\s*/).filter(Boolean)} />
+      {/* Usages de la catégorie (à quoi ça sert) : mêmes pour toutes les références — ils ne changent pas
+          (ni ne rejouent l'animation) quand on clique sur une autre référence. */}
+      {categoryUsage && (
+        <SlideInList key={id} items={categoryUsage.split(/\s+[-–—]\s+|\s*[;,]\s*/).filter(Boolean).slice(0, 3)} />
       )}
     </div>
   );
