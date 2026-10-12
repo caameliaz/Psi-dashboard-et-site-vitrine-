@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { usePolling } from '@/lib/use-polling';
 import { useRouter } from 'next/navigation';
-import { useSession } from 'next-auth/react';
+import { useRole } from '@/lib/role-context';
 import { AdminSelect } from '@/components/ui/AdminSelect';
 import { notifBell } from '@/lib/notif-bell-store';
 
@@ -147,11 +147,6 @@ function IconBell() {
   );
 }
 
-function extractActor(msg: string): string | null {
-  const m = msg.match(/^(.+?) a /);
-  return m ? m[1] : null;
-}
-
 /* ── Carte notification ── */
 function NotifCard({ n, onRead, onOpen }: { n: Notif; onRead: (id: string) => void; onOpen: (n: Notif) => void }) {
   const cat = getCategory(n);
@@ -187,10 +182,11 @@ function NotifCard({ n, onRead, onOpen }: { n: Notif; onRead: (id: string) => vo
 }
 
 export function TopBar() {
-  const { data: session } = useSession();
-  const isAdmin = (session?.user as any)?.role === 'ADMIN';
+  // Admin OU rôle perso avec « voir tout » (ex. Admin 2, qui reste EMPLOYEE en base) : sans ça, les filtres
+  // « Clients » / « Utilisateurs » du tri des notifications n'apparaissaient que pour le vrai rôle ADMIN.
+  const { seesAll: isAdmin } = useRole();
 
-  const [notifs, setNotifs]         = useState<Notif[]>([]);
+  const [notifs, setNotifs]        = useState<Notif[]>([]);
   const [open, setOpen]             = useState(false);
   const [toasts, setToasts]         = useState<Toast[]>([]);
   const [filterType, setFilterType] = useState('all');
@@ -206,13 +202,17 @@ export function TopBar() {
     if (target) { setOpen(false); router.push(target); }
   };
 
-  const actors = useMemo(() => {
-    const set = new Set<string>();
-    notifs
-      .filter((n) => n.type !== 'SITE_COMMANDE' && n.type !== 'SITE_DEVIS')
-      .forEach((n) => { const a = extractActor(n.message); if (a) set.add(a); });
-    return [...set].sort();
-  }, [notifs]);
+  // Liste déroulante « Utilisateurs » : les VRAIS comptes (actifs), pas un nom deviné dans le texte des
+  // notifications (le découpage « X a … » donnait des fragments de phrase). Une notif appartient à un
+  // utilisateur quand son message commence par son nom (« Amira a créé le devis… »).
+  const [userNames, setUserNames] = useState<string[]>([]);
+  useEffect(() => {
+    fetch('/api/users?assignable=true')
+      .then((r) => (r.ok ? r.json() : []))
+      .then((all: { name: string }[]) => setUserNames(all.map((u) => u.name).filter(Boolean).sort((a, b) => a.localeCompare(b))))
+      .catch(() => {});
+  }, []);
+  const actors = userNames;
 
   const typeOptions = useMemo(() => {
     const base = [
@@ -239,8 +239,7 @@ export function TopBar() {
       if (new Date(n.createdAt).getTime() < limite) return false;
       if (filterType !== 'all' && getCategory(n) !== filterType) return false;
       if (filterUser !== 'all') {
-        const actor = extractActor(n.message);
-        if (actor !== filterUser) return false;
+        if (!n.message.startsWith(`${filterUser} `)) return false;
       }
       return true;
     });
