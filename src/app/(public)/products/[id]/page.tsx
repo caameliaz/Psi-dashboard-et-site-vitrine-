@@ -63,7 +63,7 @@ export default function ProductDetailPage() {
   }, []);
 
   // Photos supplémentaires de la catégorie (gérées depuis Dashboard > Contenu du site)
-  const [gallery, setGallery] = useState<string[]>([]);
+  const [gallery, setGallery] = useState<{ src: string; productId: string | null }[]>([]);
   const [photoIdx, setPhotoIdx] = useState(0);
   useEffect(() => {
     setGallery([]); setPhotoIdx(0);
@@ -85,6 +85,8 @@ export default function ProductDetailPage() {
   const current = items[index] ?? items[0];
 
   useEffect(() => { setIndex(0); setQty(1); }, [id]);
+  // Changer de référence → on revient sur sa photo (première de la liste)
+  useEffect(() => { setPhotoIdx(0); }, [current?.id]);
 
   // Mettre à jour le titre de la page dynamiquement
   useEffect(() => {
@@ -159,7 +161,7 @@ export default function ProductDetailPage() {
                 }`}
               >
                 {/* Format « 57/50 mm » — le métrage a sa propre ligne plus bas */}
-                {p.width}/{p.length} mm
+                {p.width}/{p.length} m
               </button>
             );
           })}
@@ -218,7 +220,7 @@ export default function ProductDetailPage() {
     <div className="bg-white border border-[#E0E0E0] rounded-2xl shadow-[0_4px_24px_rgba(171,190,209,0.35)] p-6 flex flex-col gap-4">
       <div className="flex items-center justify-between text-[14px]">
         <span className="text-[#717171]">{t('product_detail.ref_label')}</span>
-        <span className="font-semibold text-[#263238]">{current.width}/{current.length} mm</span>
+        <span className="font-semibold text-[#263238]">{current.width}/{current.length} m</span>
       </div>
       {current.metrage != null && (
         <div className="flex items-center justify-between text-[14px]">
@@ -260,9 +262,15 @@ export default function ProductDetailPage() {
     </div>
   );
 
-  // Photo de la référence sélectionnée (sinon celle de la catégorie) + photos supplémentaires, sélectionnables via les miniatures
-  const firstPhoto = current?.photo || category.photo;
-  const allPhotos = [...(firstPhoto ? [firstPhoto] : []), ...gallery];
+  // Photos de la référence sélectionnée (sa photo + celles de la galerie liées à elle). Si elle n'en
+  // a aucune : photo de la catégorie + photos de la galerie non liées à une référence.
+  const refPhotos = [
+    ...(current?.photo ? [current.photo] : []),
+    ...gallery.filter(g => current && g.productId === current.id).map(g => g.src),
+  ];
+  const allPhotos = refPhotos.length > 0
+    ? refPhotos
+    : [...(category.photo ? [category.photo] : []), ...gallery.filter(g => !g.productId).map(g => g.src)];
   const mainPhoto = allPhotos[photoIdx] ?? allPhotos[0];
 
   const photoBlock = (heightClass: string) => (

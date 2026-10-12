@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { revalidatePublicSite } from '@/lib/revalidate-site';
 import { prisma } from '@/lib/prisma';
 import { requirePermission } from '@/lib/permissions';
 
@@ -16,7 +17,12 @@ export async function GET(request: NextRequest) {
       omit: withPhoto ? undefined : { photo: true },
       include: { _count: { select: { products: true } } },
     });
-    return NextResponse.json(categories, admin ? undefined : { headers: { 'Cache-Control': 'public, max-age=300, s-maxage=3600, stale-while-revalidate=86400' } });
+    // Public : l'URL de l'image (mise en cache par le navigateur) au lieu du base64 dans le JSON.
+    // Admin : base64 conservé (aperçu / modification de la photo dans la gestion des catégories).
+    const payload = withPhoto && !admin
+      ? categories.map((c) => { const photo = (c as { photo?: string | null }).photo; return { ...c, photo: photo ? `/api/categories/${c.id}/image?v=${photo.length}` : null }; })
+      : categories;
+    return NextResponse.json(payload, admin ? undefined : { headers: { 'Cache-Control': 'public, max-age=60, s-maxage=60, stale-while-revalidate=300' } });
   } catch (e) {
     console.error(e);
     return NextResponse.json({ error: 'Failed to fetch categories' }, { status: 500 });
@@ -48,6 +54,7 @@ export async function POST(request: NextRequest) {
       },
     });
 
+    revalidatePublicSite();
     return NextResponse.json(category, { status: 201 });
   } catch (e) {
     console.error(e);

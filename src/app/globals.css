@@ -49,8 +49,12 @@
 .hover-lift {
   transition: transform 0.25s ease, box-shadow 0.25s ease;
 }
-.hover-lift:hover {
-  transform: translateY(-4px);
+/* Seulement sur les appareils avec une vraie souris : sur téléphone, le "survol" simulé par un tap
+   laissait la carte soulevée jusqu'au prochain tap ailleurs. */
+@media (hover: hover) {
+  .hover-lift:hover {
+    transform: translateY(-4px);
+  }
 }
 @media (prefers-reduced-motion: reduce) {
   .hover-lift { transition: none; }
@@ -82,17 +86,27 @@
   .marquee-track { animation: none !important; }
 }
 
-/* Cartes "Pourquoi nous choisir" qui se retournent au survol (WhyChoose.tsx) */
-.flip-card { perspective: 1400px; }
+/* Cartes "Pourquoi nous choisir" qui se retournent (WhyChoose.tsx) — au survol (souris) ou via la
+   classe .is-flipped (tap / retournement automatique sur mobile). Rotation lente et douce (départ et
+   arrivée amortis) + léger soulèvement de la carte pendant le tour, pour l'effet "vraie carte". */
+.flip-card { perspective: 1800px; }
 .flip-card-inner {
   position: relative;
   width: 100%;
   height: 100%;
-  transition: transform 0.6s cubic-bezier(0.4, 0.2, 0.2, 1);
+  transition: transform 1.1s cubic-bezier(0.45, 0.05, 0.25, 1);
   transform-style: preserve-3d;
+  will-change: transform;
 }
-.flip-card:hover .flip-card-inner,
-.flip-card:focus-within .flip-card-inner { transform: rotateY(180deg); }
+@media (hover: hover) {
+  .flip-card:hover .flip-card-inner { transform: rotateY(180deg); animation: flip-lift 1.1s cubic-bezier(0.45, 0.05, 0.25, 1); }
+}
+.flip-card.is-flipped .flip-card-inner { transform: rotateY(180deg); animation: flip-lift 1.1s cubic-bezier(0.45, 0.05, 0.25, 1); }
+/* Soulèvement pendant le tour : la carte "décolle" vers le spectateur puis se repose */
+@keyframes flip-lift {
+  0%, 100% { translate: 0 0 0; }
+  50%      { translate: 0 -6px 60px; }
+}
 .flip-card-face {
   position: absolute;
   inset: 0;
@@ -101,5 +115,5 @@
 }
 .flip-card-back { transform: rotateY(180deg); }
 @media (prefers-reduced-motion: reduce) {
-  .flip-card-inner { transition: none; }
+  .flip-card-inner { transition: none; animation: none !important; }
 }

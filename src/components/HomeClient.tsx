@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { CategoryBrowser } from '@/components/CategoryBrowser';
 import { WhyChoose } from '@/components/WhyChoose';
+import { AboutPhotoSlider } from '@/components/AboutPhotoSlider';
 import { PartnerLogosMarquee, type PartnerLogo } from '@/components/PartnerLogosMarquee';
 import { HomeQuoteForm } from '@/components/HomeQuoteForm';
 import { ArrowButton } from '@/components/ArrowButton';
@@ -189,7 +190,13 @@ export function HomeClient({ initialContent, initialCategories, initialProducts,
           {/* Hauteur fixe (pas h-auto) : pour ne pas grandir automatiquement si la colonne de
               droite devient plus haute — seules les photos de droite doivent bouger. Plus de
               marge au-dessus (supprimée : elle créait un vide visible en haut de la cellule). */}
-          <Reveal className="h-[220px] md:h-[380px] md:mt-16 md:col-start-1 md:row-start-2">
+          {/* Mobile seulement : une photo à la fois, qui change toute seule (fondu). Sur ordinateur
+              (md+) ce bloc est masqué et la mise en page d'origine (photo gauche + colonne droite) reste. */}
+          <div className="md:hidden">
+            <AboutPhotoSlider photos={['/photo%202.avif', '/images/about-tpe.jpg', '/images/about-livraison.jpg']} />
+          </div>
+
+          <Reveal className="hidden md:block h-[220px] md:h-[380px] md:mt-16 md:col-start-1 md:row-start-2">
             <img src="/photo%202.avif" alt="" loading="lazy" className="w-[85%] mx-auto h-full object-cover rounded-3xl shadow-[0_16px_48px_rgba(38,50,56,0.18)]" />
           </Reveal>
 
@@ -198,7 +205,7 @@ export function HomeClient({ initialContent, initialCategories, initialProducts,
                 bas au niveau de la photo) en creusant l'espace juste en dessous de lui.
                 `-mx-3` : élargit juste le texte (pas la colonne) pour le rapprocher des photos
                 de chaque côté, sans changer la largeur des colonnes de la grille. */}
-            <p className="text-[16px] text-[#263238]/70 leading-relaxed mb-24 -mx-3 md:-mx-4">
+            <p className="text-[16px] text-[#263238]/70 leading-relaxed mb-4 md:mb-24 -mx-3 md:-mx-4">
               {(lang === 'fr' && content['about_texte_2']) || t('about.p4')}
             </p>
             <div className="flex gap-10">
@@ -225,14 +232,14 @@ export function HomeClient({ initialContent, initialCategories, initialProducts,
           {/* `translate-y` ici aussi : décale seulement ces 2 photos, sans agrandir la rangée
               du haut (un `margin-top` sur cet élément row-span-2 gonflait la rangée "auto" et
               poussait photo de gauche + chiffres vers le bas avec lui). */}
-          <div className="md:col-start-3 md:row-start-1 md:row-span-2 md:translate-y-[47px]">
-            <Reveal delayMs={150} className="flex flex-col gap-5 md:gap-6 h-[280px] md:h-auto">
+          <div className="hidden md:block md:col-start-3 md:row-start-1 md:row-span-2 md:translate-y-[47px]">
+            <Reveal delayMs={150} className="flex flex-col gap-5 md:gap-6 h-auto">
               {/* Les 2 photos ont maintenant des hauteurs FIXES (plus de `flex-1` qui remplissait tout
                   l'espace disponible) : celle du haut est rétrécie en hauteur ET largeur, celle du
                   bas seulement en largeur (hauteur inchangée) — colonne en `h-auto` du coup, pour
                   ne pas laisser de vide en dessous. */}
-              <img src="/images/about-tpe.jpg" alt="" loading="lazy" className="md:h-[340px] md:shrink-0 w-[85%] mx-auto object-cover rounded-3xl shadow-[0_16px_48px_rgba(38,50,56,0.18)]" />
-              <img src="/images/about-livraison.jpg" alt="" loading="lazy" className="md:h-[170px] md:shrink-0 md:mt-6 w-[85%] mx-auto object-cover rounded-3xl shadow-[0_16px_48px_rgba(38,50,56,0.18)]" />
+              <img src="/images/about-tpe.jpg" alt="" loading="lazy" className="h-[220px] md:h-[340px] shrink-0 w-[85%] mx-auto object-cover rounded-3xl shadow-[0_16px_48px_rgba(38,50,56,0.18)]" />
+              <img src="/images/about-livraison.jpg" alt="" loading="lazy" className="h-[180px] md:h-[170px] shrink-0 md:mt-6 w-[85%] mx-auto object-cover rounded-3xl shadow-[0_16px_48px_rgba(38,50,56,0.18)]" />
             </Reveal>
           </div>
         </div>

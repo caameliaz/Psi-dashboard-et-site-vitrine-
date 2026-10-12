@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { revalidatePublicSite } from '@/lib/revalidate-site';
 import { prisma } from '@/lib/prisma';
 import { fixerReferenceProduit } from '@/lib/stock-reference';
 import { requirePermission } from '@/lib/permissions';
@@ -70,6 +71,7 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
       }
     }
 
+    revalidatePublicSite();
     return NextResponse.json(product);
   } catch (e) {
     console.error(e);
@@ -104,6 +106,7 @@ export async function DELETE(_request: NextRequest, { params }: Ctx) {
     await prisma.product.delete({ where: { id } });
     const prodLabel = product.name ? `${product.name} (${product.reference})` : product.reference;
     createAudit({ userId: session?.user?.id, action: 'Produit supprimé', entity: 'PRODUIT', entityId: id, detail: prodLabel });
+    revalidatePublicSite();
     return NextResponse.json({ success: true });
   } catch (e) {
     console.error(e);

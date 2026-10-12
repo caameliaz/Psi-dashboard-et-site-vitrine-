@@ -700,6 +700,7 @@ function EditOrderModal({ item, onClose, onSaved }: {
     paymentMethod: item.paymentMethod ?? '',
     paymentDate: item.raw?.paymentDate ?? '',
     vatEnabled: item.vatEnabled === true,
+    priceIncludesVat: item.priceIncludesVat === true,
     source: item.raw?.source || item.source || 'AUTRE',
     notes: item.raw?.notes ?? '',
     createdAt: item.raw?.createdAt ?? '',
@@ -769,7 +770,11 @@ function EditOrderModal({ item, onClose, onSaved }: {
   const linesDirty = linesSig0 !== '' && JSON.stringify(lines.map(({ productId, designation, quantite, prixUnitaire, metrage }) => ({ productId, designation, quantite, prixUnitaire, metrage }))) !== linesSig0;
   const onSaveClick = () => {
     if (livree) {
-      if (!linesDirty && !ficheDirty) { onClose(); return; } // rien n'a changé
+      if (!linesDirty && !ficheDirty) {
+        // Avant : la fenêtre se fermait sans rien dire → impression que l'enregistrement avait échoué.
+        alert("Aucune modification à enregistrer : les valeurs sont identiques à celles déjà enregistrées.\n\nSi les prix sont HT et que le total doit être TTC, ouvre « Fiche » et décoche « Prix saisis déjà TTC ».");
+        return;
+      }
       if (!justification.trim()) { alert(`Une justification est obligatoire pour modifier ${estDevis ? 'un devis livré' : 'une commande livrée'}.`); return; }
       if (linesDirty) { setAskStock(true); return; } // le stock ne concerne que les lignes
       save(false);
@@ -894,7 +899,7 @@ function EditOrderModal({ item, onClose, onSaved }: {
                       <span className="block text-[10px] font-bold text-[#ABBED1] uppercase tracking-wide mb-1">
                         Prix unit. DA{estDevis && <span className="normal-case text-[#C7D2DE]"> (facult.)</span>}
                       </span>
-                      <input type="number" min="0" value={l.prixUnitaire}
+                      <input type="number" min="0" step="any" value={l.prixUnitaire}
                         onChange={e => setLine(i, { prixUnitaire: Number(e.target.value) })}
                         className={inputCls + ' w-full text-right'} />
                     </div>
@@ -957,6 +962,11 @@ function EditOrderModal({ item, onClose, onSaved }: {
                     {!estDevis && (
                       <label className="flex items-center gap-2 text-[13px] font-semibold text-[#374151] self-end pb-2">
                         <input type="checkbox" checked={fiche.vatEnabled} onChange={(e) => setF({ vatEnabled: e.target.checked })} /> TVA appliquée
+                      </label>
+                    )}
+                    {(estDevis ? tva : fiche.vatEnabled) && (
+                      <label className="flex items-center gap-2 text-[13px] font-semibold text-[#374151] self-end pb-2" title="Coché : les prix saisis sont déjà TTC (la TVA n'est pas ajoutée). Décoché : les prix sont HT, la TVA 19 % est ajoutée au total.">
+                        <input type="checkbox" checked={fiche.priceIncludesVat} onChange={(e) => setF({ priceIncludesVat: e.target.checked })} /> Prix saisis déjà TTC
                       </label>
                     )}
                     {livree && (

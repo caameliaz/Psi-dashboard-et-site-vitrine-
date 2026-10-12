@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { revalidatePublicSite } from '@/lib/revalidate-site';
 import { prisma } from '@/lib/prisma';
 import { requirePermission } from '@/lib/permissions';
 
@@ -25,6 +26,7 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
       },
     });
 
+    revalidatePublicSite();
     return NextResponse.json(category);
   } catch (e) {
     console.error(e);
@@ -55,6 +57,7 @@ export async function DELETE(_request: NextRequest, { params }: Ctx) {
       prisma.product.deleteMany({ where: { categoryId: id, active: false } }),
       prisma.category.delete({ where: { id } }),
     ]);
+    revalidatePublicSite();
     return NextResponse.json({ success: true });
   } catch (e) {
     console.error(e);

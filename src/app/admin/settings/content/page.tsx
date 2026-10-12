@@ -33,7 +33,8 @@ const MAX_GALLERY = 6;
 function CategoryGalleryCard() {
   const [cats, setCats] = useState<{ id: string; name: string }[]>([]);
   const [catId, setCatId] = useState('');
-  const [photos, setPhotos] = useState<string[]>([]);
+  const [photos, setPhotos] = useState<{ src: string; productId: string | null }[]>([]);
+  const [refs, setRefs] = useState<{ id: string; reference: string; categoryId: string | null }[]>([]);
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
 
@@ -45,18 +46,24 @@ function CategoryGalleryCard() {
   }, []);
 
   useEffect(() => {
+    fetch('/api/products?all=true').then((r) => r.ok ? r.json() : []).then((data: any[]) => {
+      setRefs(data.map((p) => ({ id: p.id, reference: p.reference, categoryId: p.category?.id ?? null })));
+    }).catch(() => {});
+  }, []);
+
+  useEffect(() => {
     if (!catId) return;
     setPhotos([]);
-    fetch(`/api/content/gallery?categoryId=${catId}`).then((r) => r.ok ? r.json() : { photos: [] })
+    fetch(`/api/content/gallery?categoryId=${catId}&full=true`).then((r) => r.ok ? r.json() : { photos: [] })
       .then((d) => setPhotos(d.photos ?? [])).catch(() => {});
   }, [catId]);
 
   const addFiles = async (files: FileList | null) => {
     if (!files) return;
     const room = MAX_GALLERY - photos.length;
-    const added: string[] = [];
+    const added: { src: string; productId: string | null }[] = [];
     for (const f of Array.from(files).slice(0, room)) {
-      try { added.push(await compressImage(f, 900, 0.8)); } catch { /* image illisible : ignorée */ }
+      try { added.push({ src: await compressImage(f, 900, 0.8), productId: null }); } catch { /* image illisible : ignorée */ }
     }
     setPhotos((p) => [...p, ...added]);
   };
@@ -80,18 +87,26 @@ function CategoryGalleryCard() {
   return (
     <div className="bg-white rounded-2xl border border-[#E2E8F0] p-6 shadow-sm">
       <h2 className="text-[15px] font-bold text-[#0F172A] mb-1">Photos des pages catégorie</h2>
-      <p className="text-[12px] text-[#8A9BB5] mb-5">Photos supplémentaires affichées en miniatures sous la photo principale (max {MAX_GALLERY}). La photo principale se change dans la catégorie.</p>
+      <p className="text-[12px] text-[#8A9BB5] mb-5">Photos affichées en miniatures sous la photo principale (max {MAX_GALLERY}). Lie chaque photo à une référence : elle s'affiche quand on clique sur cette référence. « Catégorie » = photo affichée quand la référence choisie n'a aucune photo. La photo principale se change dans la catégorie.</p>
       <div className="space-y-4">
         <select value={catId} onChange={(e) => setCatId(e.target.value)} className={inputClass}>
           {cats.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
         <div className="flex flex-wrap gap-3">
-          {photos.map((src, i) => (
-            <div key={i} className="relative w-24 h-24 rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] overflow-hidden">
-              <img src={src} alt="" className="w-full h-full object-contain" />
-              <button type="button" onClick={() => setPhotos((p) => p.filter((_, j) => j !== i))}
-                aria-label="Supprimer la photo"
-                className="absolute top-1 right-1 w-5 h-5 rounded-full bg-black/60 text-white text-[12px] leading-5 text-center">×</button>
+          {photos.map((ph, i) => (
+            <div key={i} className="w-24 flex flex-col gap-1">
+              <div className="relative w-24 h-24 rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] overflow-hidden">
+                <img src={ph.src} alt="" className="w-full h-full object-contain" />
+                <button type="button" onClick={() => setPhotos((p) => p.filter((_, j) => j !== i))}
+                  aria-label="Supprimer la photo"
+                  className="absolute top-1 right-1 w-5 h-5 rounded-full bg-black/60 text-white text-[12px] leading-5 text-center">×</button>
+              </div>
+              <select value={ph.productId ?? ''} aria-label="Référence liée à cette photo"
+                onChange={(e) => setPhotos((p) => p.map((x, j) => j === i ? { ...x, productId: e.target.value || null } : x))}
+                className="w-full px-1 py-1 rounded-md border border-[#E2E8F0] text-[11px] text-[#0F172A] bg-[#F8FAFC]">
+                <option value="">Catégorie</option>
+                {refs.filter((r) => r.categoryId === catId).map((r) => <option key={r.id} value={r.id}>{r.reference}</option>)}
+              </select>
             </div>
           ))}
           {photos.length < MAX_GALLERY && (
@@ -194,17 +209,6 @@ function ContentPageInner() {
       setLogos((prev) => [...prev, created]);
       setNewLogoName('');
       setNewLogoPhoto('');
-      // Active et sauvegarde automatiquement la bande défilante dès qu'un logo est ajouté —
-      // sinon le logo est enregistré mais invisible tant que la case "Afficher..." n'est pas
-      // cochée ET sauvegardée séparément, ce qui n'est pas intuitif (« pourquoi ça n'apparaît
-      // pas sur le site »). Reste modifiable/désactivable ensuite via la case à cocher.
-      if (!about.logosEnabled) {
-        setAbout((a) => ({ ...a, logosEnabled: true }));
-        await fetch('/api/content', {
-          method: 'PUT', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ about_logos_enabled: 'true' }),
-        }).catch(() => {});
-      }
     } finally {
       setLogosSaving(false);
     }

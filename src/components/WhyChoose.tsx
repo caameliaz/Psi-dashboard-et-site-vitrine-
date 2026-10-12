@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useRef, useState } from 'react';
 import { Reveal } from '@/components/Reveal';
 import { ScrollUnderline } from '@/components/ScrollUnderline';
 import { ArrowButton } from '@/components/ArrowButton';
@@ -46,6 +47,28 @@ export function WhyChoose({ content = {} }: { content?: Record<string, string> }
   // Textes modifiables depuis le dashboard (français uniquement, comme le reste du contenu éditable).
   const pick = (key: string, fallback: string) => (lang === 'fr' && content[key]) || fallback;
 
+  // Écrans tactiles (pas de survol) : à l'arrivée sur la section, les cartes se retournent l'une après
+  // l'autre, restent quelques secondes sur leur face arrière, puis reviennent — un tap les retourne ensuite.
+  const [flipped, setFlipped] = useState<boolean[]>(() => ITEMS.map(() => false));
+  const gridRef = useRef<HTMLDivElement>(null);
+  const noHover = () => typeof window !== 'undefined' && window.matchMedia('(hover: none)').matches;
+  useEffect(() => {
+    const el = gridRef.current;
+    if (!el || !noHover() || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    const set = (i: number, v: boolean) => setFlipped((f) => f.map((x, j) => (j === i ? v : x)));
+    const observer = new IntersectionObserver(([entry]) => {
+      if (!entry.isIntersecting) return;
+      observer.disconnect();
+      ITEMS.forEach((_, i) => {
+        timers.push(setTimeout(() => set(i, true), 900 + i * 500));
+        timers.push(setTimeout(() => set(i, false), 900 + i * 500 + 3800));
+      });
+    }, { threshold: 0.6 });
+    observer.observe(el);
+    return () => { observer.disconnect(); timers.forEach(clearTimeout); };
+  }, []);
+
   return (
     <section id="why" className="bg-[#F8FAFC] py-20 md:py-32 px-6 md:px-12">
       <div className="max-w-[1440px] mx-auto flex flex-col lg:flex-row gap-12 lg:gap-16 items-center">
@@ -59,13 +82,16 @@ export function WhyChoose({ content = {} }: { content?: Record<string, string> }
             </p>
           </Reveal>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+          <div ref={gridRef} className="grid grid-cols-1 sm:grid-cols-2 gap-6">
             {ITEMS.map((item, i) => {
               const listRaw = pick(`why_${item.n}_liste`, item.defaultListFr.join('\n'));
               const list = listRaw.split('\n').map((s) => s.trim()).filter(Boolean);
               return (
                 <Reveal key={item.n} delayMs={i * 120} className="h-[340px] md:h-[380px]">
-                  <div className="flip-card w-full h-full">
+                  <div
+                    className={`flip-card w-full h-full ${flipped[i] ? 'is-flipped' : ''}`}
+                    onClick={() => { if (noHover()) setFlipped((f) => f.map((x, j) => (j === i ? !x : x))); }}
+                  >
                     <div className="flip-card-inner">
                       {/* Face avant */}
                       <div className="flip-card-face flex flex-col items-start gap-3 rounded-3xl bg-white border border-[#E2E8F0] p-6 shadow-[0_8px_32px_rgba(38,50,56,0.06)]">

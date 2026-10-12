@@ -118,10 +118,9 @@ function CategoryCard({ category, products }: { category: Cat; products: Prod[] 
   };
 
   const selectProduct = (productId: string) => {
+    // Un clic sur la ligne la sélectionne (quantité 1) ; un nouveau clic la désélectionne (quantité 0).
     const currentQty = quantities[productId] || 0;
-    if (currentQty === 0) {
-      updateQuantity(productId, 1);
-    }
+    updateQuantity(productId, currentQty === 0 ? 1 : 0);
   };
 
   const addSelectedToCart = () => {
@@ -206,7 +205,7 @@ function CategoryCard({ category, products }: { category: Cat; products: Prod[] 
                     {/* Info produit */}
                     <div className="flex-1 min-w-0">
                       <p className="text-[12px] md:text-[13px] font-semibold text-[#263238] truncate">
-                        {product.width}/{product.length} mm
+                        {product.width}/{product.length} m
                       </p>
                       <p className="text-[11px] md:text-[12px] font-bold text-[#4CAF4F]">
                         {product.price.toFixed(2)} DA

@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { revalidatePublicSite } from '@/lib/revalidate-site';
 import { prisma } from '@/lib/prisma';
+import { imageVersion } from '@/lib/image-version';
 import { auth } from '@/lib/auth';
 import { requirePermission } from '@/lib/permissions';
 import { createAudit } from '@/lib/audit';
@@ -36,7 +38,12 @@ export async function GET(request: NextRequest) {
       orderBy: { createdAt: 'desc' },
     });
     // Vitrine publique : cache CDN 60 s (les pages admin passent ?all=true → jamais en cache).
-    return NextResponse.json(products, all ? undefined : { headers: { 'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300' } });
+    // Public avec photos : l'URL de l'image (cachée par le navigateur) au lieu du base64 dans le JSON.
+    // Admin (?all=true) : base64 conservé (aperçu / modification de la photo de la référence).
+    const payload = withPhoto && !all
+      ? products.map((p) => { const photo = (p as { photo?: string | null }).photo; return { ...p, photo: photo ? `/api/products/${p.id}/image?v=${imageVersion(photo)}` : null }; })
+      : products;
+    return NextResponse.json(payload, all ? undefined : { headers: { 'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300' } });
   } catch (e) {
     console.error(e);
     return NextResponse.json({ error: 'Failed to fetch products' }, { status: 500 });
@@ -109,6 +116,7 @@ export async function POST(request: NextRequest) {
 
     const prodLabel = product.name ? `${product.name} (${product.reference})` : product.reference;
     createAudit({ userId: session?.user?.id, action: 'Produit créé', entity: 'PRODUIT', entityId: product.id, detail: prodLabel });
+    revalidatePublicSite();
     return NextResponse.json(product, { status: 201 });
   } catch (e) {
     console.error(e);
