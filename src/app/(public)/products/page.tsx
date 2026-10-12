@@ -1,6 +1,7 @@
 'use client';
 
 import { CategoryBrowser } from '@/components/CategoryBrowser';
+import { ArrowButton } from '@/components/ArrowButton';
 import { useTranslation } from '@/lib/i18n';
 
 export default function ProductsPage() {
@@ -15,7 +16,7 @@ export default function ProductsPage() {
           <span className="text-[13px] font-semibold text-[#4CAF4F] uppercase tracking-widest">
             {t('products_page.badge')}
           </span>
-          <h1 className="text-[40px] md:text-[54px] font-bold text-[#388E3C] leading-tight">
+          <h1 className="text-[40px] md:text-[54px] font-medium tracking-tight text-[#263238] leading-[1.1]">
             {t('products_page.title')}
           </h1>
           <p className="text-[18px] md:text-[20px] text-[#717171] max-w-[560px] leading-relaxed">
@@ -38,12 +39,9 @@ export default function ProductsPage() {
               {t('products_page.cta_subtitle')}
             </p>
           </div>
-          <a
-            href="/quote"
-            className="shrink-0 bg-[#4CAF4F] text-white text-[15px] font-semibold px-8 py-3.5 rounded-xl shadow-[0_4px_14px_rgba(76,175,79,0.4)] hover:bg-[#43A047] transition-all whitespace-nowrap"
-          >
-            {t('products_page.cta_btn')}
-          </a>
+          <ArrowButton href="/quote" variant="green-white" className="shrink-0 whitespace-nowrap">
+            {t('products_page.cta_btn').replace(/\s*[→←]\s*/g, '')}
+          </ArrowButton>
         </div>
       </div>
     </div>

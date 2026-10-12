@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { ArrowButton } from '@/components/ArrowButton';
 import { useTranslation } from '@/lib/i18n';
 
 export default function ContactPage() {
@@ -116,12 +117,9 @@ export default function ContactPage() {
             <p className="text-[16px] font-bold text-white">{t('contact.quote_cta_title')}</p>
             <p className="text-[13px] text-[#E8F5E9] mt-1">{t('contact.quote_cta_sub')}</p>
           </div>
-          <Link
-            href="/quote"
-            className="shrink-0 bg-white text-[#4CAF4F] text-[14px] font-bold px-6 py-3 rounded-xl hover:bg-[#F5F7FA] transition-colors whitespace-nowrap"
-          >
-            {t('contact.quote_cta_btn')}
-          </Link>
+          <ArrowButton href="/quote" variant="white-green" className="shrink-0 whitespace-nowrap">
+            {t('contact.quote_cta_btn').replace(/\s*[→←]\s*/g, '')}
+          </ArrowButton>
         </div>
 
       </div>

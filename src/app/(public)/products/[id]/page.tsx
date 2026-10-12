@@ -4,6 +4,8 @@ import { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { useCartStore } from '@/store/cartStore';
+import { ArrowButton } from '@/components/ArrowButton';
+import { SlideInList } from '@/components/SlideInList';
 import { useTranslation } from '@/lib/i18n';
 import { QuoteCTA } from '@/components/QuoteCTA';
 import { FormatPreview } from '@/components/FormatPreview';
@@ -57,8 +59,17 @@ export default function ProductDetailPage() {
     fetch('/api/categories?withPhoto=true').then(r => r.ok ? r.json() : []).then((data: any[]) =>
       setCats(data.map(c => ({ id: c.id, name: c.name, photo: c.photo ?? null, description: c.description ?? null })))
     ).catch(() => {});
-    fetch('/api/products').then(r => r.ok ? r.json() : []).then(setProducts).catch(() => {});
+    fetch('/api/products?withPhoto=true').then(r => r.ok ? r.json() : []).then(setProducts).catch(() => {});
   }, []);
+
+  // Photos supplémentaires de la catégorie (gérées depuis Dashboard > Contenu du site)
+  const [gallery, setGallery] = useState<{ src: string; productId: string | null }[]>([]);
+  const [photoIdx, setPhotoIdx] = useState(0);
+  useEffect(() => {
+    setGallery([]); setPhotoIdx(0);
+    fetch(`/api/content/gallery?categoryId=${id}`).then(r => r.ok ? r.json() : { photos: [] })
+      .then(d => setGallery(d.photos ?? [])).catch(() => {});
+  }, [id]);
 
   const category = cats.find(c => c.id === id);
   // Masque les catégories sans aucun produit visible sur le site (ex: catégorie
@@ -74,6 +85,8 @@ export default function ProductDetailPage() {
   const current = items[index] ?? items[0];
 
   useEffect(() => { setIndex(0); setQty(1); }, [id]);
+  // Changer de référence → on revient sur sa photo (première de la liste)
+  useEffect(() => { setPhotoIdx(0); }, [current?.id]);
 
   // Mettre à jour le titre de la page dynamiquement
   useEffect(() => {
@@ -102,7 +115,7 @@ export default function ProductDetailPage() {
 
   const refsBlock = items.length > 0 && (
     <div className="flex flex-col gap-3 mt-2">
-      <h2 className="text-[17px] font-bold text-[#263238]">{t('product_detail.available_refs')}</h2>
+      <h2 className="text-[17px] font-semibold text-[#263238]">{t('product_detail.available_refs')}</h2>
 
       {/* Étiquettes défilables (dimensions + métrage) — la sélectionnée est verte */}
       <div className="flex items-center gap-2">
@@ -148,7 +161,7 @@ export default function ProductDetailPage() {
                 }`}
               >
                 {/* Format « 57/50 mm » — le métrage a sa propre ligne plus bas */}
-                {p.width}/{p.length} mm
+                {p.width}/{p.length} m
               </button>
             );
           })}
@@ -169,14 +182,14 @@ export default function ProductDetailPage() {
 
       {/* Usage de la référence sélectionnée (à quoi ça sert) */}
       {current?.usage && (
-        <p className="text-[13px] text-[#717171] leading-relaxed">{current.usage}</p>
+        <SlideInList key={current.id} items={current.usage.split(/\s+[-–—]\s+|\s*[;,]\s*/).filter(Boolean)} />
       )}
     </div>
   );
 
   const specsBlock = specRows.length > 0 && (
     <div className="flex flex-col gap-3 mt-2">
-      <h2 className="text-[17px] font-bold text-[#263238]">{t('product_detail.specs_title')}</h2>
+      <h2 className="text-[17px] font-semibold text-[#263238]">{t('product_detail.specs_title')}</h2>
       <div className="grid grid-cols-2 gap-x-6 gap-y-3.5 rounded-xl border border-[#E0E0E0] p-4">
         {specRows.map((row) => (
           <div key={row.key} className="flex items-center gap-2.5 min-w-0">
@@ -194,23 +207,20 @@ export default function ProductDetailPage() {
   );
 
   const addButton = current && (
-    <button
+    <ArrowButton
       onClick={() => addItem({ productId: current.id, quantity: qty, reference: current.reference, unitPrice: current.price })}
-      className="hover-lift w-full flex items-center justify-center gap-2 bg-[#4CAF4F] text-white text-[13px] sm:text-[15px] font-bold py-3.5 rounded-xl hover:bg-[#43A047] shadow-[0_4px_14px_rgba(76,175,79,0.4)] hover:shadow-[0_8px_24px_rgba(76,175,79,0.5)] transition-all"
+      variant="green-white"
+      className="w-full"
     >
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" className="flex-shrink-0">
-        <path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-        <path d="M16 10a4 4 0 01-8 0" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-      </svg>
-      <span className="truncate">{t('common.add_to_cart')}</span>
-    </button>
+      {t('common.add_to_cart')}
+    </ArrowButton>
   );
 
   const summaryBlock = current && (
     <div className="bg-white border border-[#E0E0E0] rounded-2xl shadow-[0_4px_24px_rgba(171,190,209,0.35)] p-6 flex flex-col gap-4">
       <div className="flex items-center justify-between text-[14px]">
         <span className="text-[#717171]">{t('product_detail.ref_label')}</span>
-        <span className="font-semibold text-[#263238]">{current.width}/{current.length} mm</span>
+        <span className="font-semibold text-[#263238]">{current.width}/{current.length} m</span>
       </div>
       {current.metrage != null && (
         <div className="flex items-center justify-between text-[14px]">
@@ -252,14 +262,44 @@ export default function ProductDetailPage() {
     </div>
   );
 
+  // Photos de la référence sélectionnée (sa photo + celles de la galerie liées à elle). Si elle n'en
+  // a aucune : photo de la catégorie + photos de la galerie non liées à une référence.
+  const refPhotos = [
+    ...(current?.photo ? [current.photo] : []),
+    ...gallery.filter(g => current && g.productId === current.id).map(g => g.src),
+  ];
+  const allPhotos = refPhotos.length > 0
+    ? refPhotos
+    : [...(category.photo ? [category.photo] : []), ...gallery.filter(g => !g.productId).map(g => g.src)];
+  const mainPhoto = allPhotos[photoIdx] ?? allPhotos[0];
+
   const photoBlock = (heightClass: string) => (
-    <div className={`${category.photo ? '' : 'bg-[#F5F7FA]'} rounded-2xl overflow-hidden ${heightClass} flex items-center justify-center p-3`}>
-      {category.photo ? (
-        <img src={category.photo} alt={category.name} className="w-full h-full object-contain" />
-      ) : (
-        <div className="relative w-20 h-20">
-          <div className="absolute inset-0 rounded-full bg-[#E8F5E9] border-2 border-[#4CAF4F]" />
-          <div className="absolute inset-[30%] rounded-full bg-[#4CAF4F]" />
+    <div className="flex flex-col gap-3">
+      <div className={`${mainPhoto ? '' : 'bg-[#F5F7FA]'} rounded-2xl overflow-hidden ${heightClass} flex items-center justify-center p-3`}>
+        {mainPhoto ? (
+          <img src={mainPhoto} alt={category.name} className="w-full h-full object-contain" />
+        ) : (
+          <div className="relative w-20 h-20">
+            <div className="absolute inset-0 rounded-full bg-[#E8F5E9] border-2 border-[#4CAF4F]" />
+            <div className="absolute inset-[30%] rounded-full bg-[#4CAF4F]" />
+          </div>
+        )}
+      </div>
+      {allPhotos.length > 1 && (
+        <div className="flex gap-3 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          {allPhotos.map((src, i) => (
+            <button
+              key={i}
+              type="button"
+              onClick={() => setPhotoIdx(i)}
+              aria-label={`${category.name} ${i + 1}`}
+              className={`shrink-0 w-20 h-20 rounded-xl bg-white p-1.5 border-2 transition-all ${
+                i === photoIdx ? 'border-[#4CAF4F] shadow-[0_4px_12px_rgba(76,175,79,0.25)]' : 'border-[#E0E0E0] hover:border-[#4CAF4F]/60'
+              }`}
+            >
+              <img src={src} alt="" className="w-full h-full object-contain" />
+            </button>
+          ))}
         </div>
       )}
     </div>
@@ -280,7 +320,7 @@ export default function ProductDetailPage() {
 
         {/* ── Mobile : titre → description → photo → refs → total/panier → détails ── */}
         <div className="flex lg:hidden flex-col gap-5">
-          <h1 className="text-[27px] font-extrabold text-[#388E3C] leading-tight">
+          <h1 className="text-[27px] font-medium tracking-tight text-[#263238] leading-[1.1]">
             {category.name}
           </h1>
           {description && (
@@ -304,7 +344,7 @@ export default function ProductDetailPage() {
             <span className="text-[13px] font-bold text-[#4CAF4F] uppercase tracking-wide">
               {t('product_detail.fast_delivery')}
             </span>
-            <h1 className="text-[46px] font-extrabold text-[#388E3C] leading-tight">
+            <h1 className="text-[46px] font-medium tracking-tight text-[#263238] leading-[1.1]">
               {category.name}
             </h1>
             {description && (
@@ -327,7 +367,7 @@ export default function ProductDetailPage() {
         {/* Autres catégories */}
         {otherCats.length > 0 && (
           <div className="flex flex-col gap-6 mt-6">
-            <h2 className="text-[27px] md:text-[32px] font-extrabold text-[#388E3C]">
+            <h2 className="text-[27px] md:text-[32px] font-medium tracking-tight text-[#263238]">
               {t('product_detail.also_liked')}
             </h2>
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-5">
@@ -345,12 +385,9 @@ export default function ProductDetailPage() {
                   </Link>
                   <div className="p-4 flex flex-col items-start gap-3">
                     <p className="text-[14px] font-bold text-[#263238]">{c.name}</p>
-                    <Link
-                      href={`/products/${c.id}`}
-                      className="hover-lift border-2 border-[#4CAF4F] text-[#4CAF4F] text-[13px] font-semibold px-5 py-2 rounded-full hover:bg-[#4CAF4F] hover:text-white transition-all"
-                    >
+                    <ArrowButton href={`/products/${c.id}`} variant="green-white" className="!text-[13px] !py-2">
                       {t('product_detail.discover')}
-                    </Link>
+                    </ArrowButton>
                   </div>
                 </div>
               ))}

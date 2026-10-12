@@ -27,6 +27,7 @@ const FIELDS: FieldDef[] = [
   { key: 'paymentMethod', label: 'Mode de paiement', type: 'text' },
   { key: 'paymentDate', label: 'Date de règlement', type: 'date' },
   { key: 'vatEnabled', label: 'TVA', type: 'bool', onlyOrder: true }, // pour un devis, la TVA a son propre réglage
+  { key: 'priceIncludesVat', label: 'Prix déjà TTC', type: 'bool' }, // ventes importées (facture F…) : décocher si les prix saisis sont HT
   { key: 'source', label: 'Source', type: 'source' },
   { key: 'notes', label: 'Notes', type: 'text' },
   { key: 'createdAt', label: 'Date de la demande', type: 'date', onlyDelivered: true },

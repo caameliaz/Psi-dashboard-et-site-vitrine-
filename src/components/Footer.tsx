@@ -24,7 +24,7 @@ export function Footer() {
         {/* Brand */}
         <div className="flex flex-col gap-5">
           <div className="flex items-center gap-3">
-            <img src="/logo-psi.webp" alt="PSI" className="h-[72px] w-[72px] object-contain" style={{ maskImage: 'radial-gradient(ellipse 80% 80% at 50% 50%, black 55%, transparent 100%)', WebkitMaskImage: 'radial-gradient(ellipse 80% 80% at 50% 50%, black 55%, transparent 100%)' }} />
+            <img src="/logo-psi-transparent.png" alt="PSI" className="h-[72px] w-auto object-contain" />
             <div className="flex flex-col">
               <span className="text-white text-[20px] font-bold tracking-tight leading-none">PSI</span>
               <span className="text-[#89939E] text-[12px] mt-0.5">www.psi.dz</span>
@@ -61,7 +61,7 @@ export function Footer() {
               { key: 'footer.link_home',    h: '/#' },
               { key: 'footer.link_products', h: '/#products' },
               { key: 'footer.link_about',   h: '/#about' },
-              { key: 'footer.link_contact', h: '/#contact' },
+              { key: 'footer.link_contact', h: '/#devis' },
             ].map((item) => (
               <li key={item.key}>
                 <Link href={item.h} className="text-[14px] text-[#89939E] hover:text-white transition-colors flex items-center gap-1.5 group">

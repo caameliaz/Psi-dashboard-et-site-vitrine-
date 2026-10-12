@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useCartStore } from '@/store/cartStore';
+import { ArrowButton } from './ArrowButton';
 import { useTranslation } from '@/lib/i18n';
 import { type Cat, type Prod } from '@/lib/hardcodedCatalog';
 
@@ -46,9 +47,9 @@ export function CategoryBrowser({
     <div className="flex flex-col gap-8">
       {/* Rangée horizontale qui passe à la ligne au besoin — se centre naturellement
           quand il y a peu de catégories, au lieu de rester collée à gauche. */}
-      <div className="flex flex-wrap justify-center gap-5 md:gap-6">
+      <div className="flex flex-wrap justify-center gap-8 md:gap-16">
         {visibleCats.map((cat) => (
-          <div key={cat.id} className="w-full sm:w-[calc(50%-12px)] lg:w-[400px]">
+          <div key={cat.id} className="w-full sm:w-[calc(50%-12px)] md:w-[calc(50%-32px)] lg:w-[400px]">
             <CategoryCard
               category={cat}
               products={products.filter(p => p.category?.id === cat.id && p.width > 0 && p.length > 0)}
@@ -58,12 +59,9 @@ export function CategoryBrowser({
       </div>
 
       {limit && cats.length > limit && (
-        <Link
-          href="/products"
-          className="self-center border-2 border-[#4CAF4F] text-[#4CAF4F] text-[14px] font-semibold px-7 py-3 rounded-full hover:bg-[#4CAF4F] hover:text-white transition-all"
-        >
+        <ArrowButton href="/products" variant="green-white" className="self-center">
           {t('products_section.cta')}
-        </Link>
+        </ArrowButton>
       )}
     </div>
   );
@@ -120,10 +118,9 @@ function CategoryCard({ category, products }: { category: Cat; products: Prod[] 
   };
 
   const selectProduct = (productId: string) => {
+    // Un clic sur la ligne la sélectionne (quantité 1) ; un nouveau clic la désélectionne (quantité 0).
     const currentQty = quantities[productId] || 0;
-    if (currentQty === 0) {
-      updateQuantity(productId, 1);
-    }
+    updateQuantity(productId, currentQty === 0 ? 1 : 0);
   };
 
   const addSelectedToCart = () => {
@@ -158,12 +155,12 @@ function CategoryCard({ category, products }: { category: Cat; products: Prod[] 
   return (
     // Carte délimitée : bordure grise + fond blanc, pour que chaque produit
     // se distingue nettement du fond de page (surtout sur mobile).
-    <div className="hover-lift flex flex-col gap-3 rounded-2xl border border-[#E4EBF5] bg-white p-3 pb-4 shadow-[0_2px_12px_rgba(171,190,209,0.18)] hover:shadow-[0_6px_24px_rgba(171,190,209,0.35)]">
+    <div className="flex flex-col gap-3 rounded-3xl border border-white/80 bg-white/55 backdrop-blur-xl p-3 pb-4 shadow-[0_8px_32px_rgba(38,50,56,0.08)] transition-all duration-300 ease-out hover:-translate-y-2 hover:bg-white/75 hover:shadow-[0_20px_48px_rgba(38,50,56,0.16)]">
       {/* Image catégorie — garde son propre container. Avec une vraie photo, elle se fond
           dans le fond de la page (pas de carte blanche/ombre) et reste entière (object-contain). */}
       <Link
         href={`/products/${category.id}`}
-        className={`group relative rounded-2xl transition-shadow w-[95%] mx-auto h-72 md:h-80 flex items-center justify-center overflow-hidden ${
+        className={`group relative rounded-2xl transition-shadow w-[95%] mx-auto h-44 md:h-52 flex items-center justify-center overflow-hidden ${
           category.photo ? 'p-3' : 'bg-[#F5F7FA] shadow-[0_4px_24px_rgba(171,190,209,0.35)] hover:shadow-[0_8px_32px_rgba(171,190,209,0.5)]'
         }`}
       >
@@ -208,7 +205,7 @@ function CategoryCard({ category, products }: { category: Cat; products: Prod[] 
                     {/* Info produit */}
                     <div className="flex-1 min-w-0">
                       <p className="text-[12px] md:text-[13px] font-semibold text-[#263238] truncate">
-                        {product.width}/{product.length} mm
+                        {product.width}/{product.length} m
                       </p>
                       <p className="text-[11px] md:text-[12px] font-bold text-[#4CAF4F]">
                         {product.price.toFixed(2)} DA
@@ -248,16 +245,10 @@ function CategoryCard({ category, products }: { category: Cat; products: Prod[] 
               <p className="text-[12px] text-red-600 font-medium text-center">{errorMessage}</p>
             )}
 
-            {/* Bouton ajouter au panier */}
-            <button
-              onClick={addSelectedToCart}
-              className="w-full flex items-center justify-center gap-2 rounded-lg bg-[#4CAF4F] px-4 py-2.5 text-white hover:bg-[#43A047] transition-all"
-            >
-              <svg width="16" height="16" viewBox="0 0 13 13" fill="none">
-                <path d="M6.5 2.71v7.58M2.71 6.5h7.58" stroke="white" strokeWidth="1.3" strokeLinecap="round"/>
-              </svg>
-              <span className="text-[13px] font-semibold">{t('common.add_to_cart')}</span>
-            </button>
+            {/* Bouton ajouter au panier — sur le côté (pas pleine largeur), même couleur qu'avant */}
+            <ArrowButton onClick={addSelectedToCart} variant="green-white" className="self-end !text-[13px] !py-2.5">
+              {t('common.add_to_cart')}
+            </ArrowButton>
           </div>
         )}
       </div>

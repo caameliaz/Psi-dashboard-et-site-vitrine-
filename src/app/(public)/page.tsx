@@ -20,6 +20,17 @@ export const metadata: Metadata = {
   alternates: { canonical: '/' },
 };
 
+async function getPartnerLogos() {
+  try {
+    const logos = await prisma.partnerLogo.findMany({ orderBy: { order: 'asc' } });
+    // Le base64 n'est PAS mis dans la page (il y serait répété ×16 par la bande défilante) :
+    // chaque logo est servi par /api/partner-logos/[id]/image, mis en cache par le navigateur.
+    return logos.map((l) => ({ id: l.id, name: l.name, photo: l.photo ? `/api/partner-logos/${l.id}/image?v=${l.photo.length}` : null }));
+  } catch {
+    return [];
+  }
+}
+
 async function getCategories(): Promise<Cat[]> {
   try {
     const cats = await prisma.category.findMany({
@@ -28,7 +39,8 @@ async function getCategories(): Promise<Cat[]> {
     return cats.map((c: any) => ({ 
       id: c.id, 
       name: c.name, 
-      photo: c.photo ?? null, 
+      // URL de l'image (cachée par le navigateur) plutôt que le base64 dans le HTML de l'accueil
+      photo: c.photo ? `/api/categories/${c.id}/image?v=${c.photo.length}` : null,
       description: c.description ?? null 
     }));
   } catch {
@@ -56,17 +68,19 @@ async function getProducts(): Promise<Prod[]> {
 }
 
 export default async function Home() {
-  const [content, categories, products] = await Promise.all([
+  const [content, categories, products, partnerLogos] = await Promise.all([
     getContent(),
     getCategories(),
     getProducts(),
+    getPartnerLogos(),
   ]);
-  
+
   return (
-    <HomeClient 
-      initialContent={content} 
+    <HomeClient
+      initialContent={content}
       initialCategories={categories}
       initialProducts={products}
+      initialPartnerLogos={partnerLogos}
     />
   );
 }

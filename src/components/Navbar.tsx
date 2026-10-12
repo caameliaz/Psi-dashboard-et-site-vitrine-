@@ -5,6 +5,7 @@ import { useState, useEffect, useRef } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { useTranslation } from '@/lib/i18n';
 import { CartDropdown } from './CartDropdown';
+import { ArrowButton } from './ArrowButton';
 
 const NAV_LINKS = [
   { key: 'nav.home',         href: '/',        sectionId: 'hero' },
@@ -24,6 +25,19 @@ export function Navbar() {
   const navRef = useRef<HTMLElement>(null);
 
   const isHome = pathname === '/';
+  const [scrolled, setScrolled] = useState(false);
+
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 40);
+    onScroll();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
+
+  // Accueil: header transparent par-dessus le hero plein écran, il devient blanc dès qu'on défile.
+  const transparent = isHome && !scrolled;
+  // Au défilement: seuls les liens suivent, dans une pilule blanche flottante à droite; le logo reste en haut de page.
+  const pill = scrolled || !isHome;
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -120,16 +134,22 @@ export function Navbar() {
   };
 
   return (
-    <nav ref={navRef} className="bg-white shadow-[0_2px_20px_rgba(171,190,209,0.35)] sticky top-0 z-50">
-      <div className="max-w-[1280px] mx-auto px-6 md:px-12 h-[65px] md:h-[90px] flex items-center justify-between gap-8">
-
-        {/* ── Logo ── */}
+    <nav
+      ref={navRef}
+      className={`${isHome ? 'absolute inset-x-0' : 'relative'} top-0 z-50 h-[65px] md:h-[90px]`}
+    >
+      {/* ── Logo (défile avec la page) ── */}
+      <div className="max-w-[1440px] mx-auto px-6 md:px-12 h-full flex items-center">
         <Link href="/" className="flex items-center shrink-0">
-          <img src="/logo-psi.webp" alt="PSI" className="h-10 md:h-16 w-auto object-contain" style={{ maskImage: 'radial-gradient(ellipse 80% 80% at 50% 50%, black 55%, transparent 100%)', WebkitMaskImage: 'radial-gradient(ellipse 80% 80% at 50% 50%, black 55%, transparent 100%)' }} />
+          <img src="/logo-psi-transparent.png" alt="PSI" className="h-10 md:h-14 w-auto object-contain" />
         </Link>
+      </div>
+
+      {/* ── Liens: fixes, deviennent une pilule au défilement ── */}
+      <div className={`fixed z-50 top-[4.5px] md:top-[11px] end-3 md:end-[max(2rem,calc((100vw-1440px)/2))] flex items-center gap-2 h-[56px] md:h-[68px] rounded-full transition-all duration-300 ${pill ? 'bg-white shadow-[0_8px_30px_rgba(38,50,56,0.18)] ps-4 pe-2 md:ps-8 md:pe-3' : 'bg-transparent shadow-none px-0 md:pe-0'}`}>
 
         {/* ── Desktop nav ── */}
-        <div className="hidden md:flex items-center gap-6 flex-1 justify-end">
+        <div className="hidden md:flex items-center gap-6 justify-end">
           <div className="flex items-center gap-8">
             {NAV_LINKS.map((l) => {
               const active = isActive(l);
@@ -137,35 +157,30 @@ export function Navbar() {
                 <button
                   key={l.key}
                   onClick={() => handleNavClick(l)}
-                  className={`text-[15px] font-medium transition-colors relative group ${active ? 'text-[#4CAF4F]' : 'text-[#4D4D4D] hover:text-[#4CAF4F]'}`}
+                  className={`text-[15px] font-medium transition-all duration-300 active:scale-95 relative group ${active ? (transparent ? 'text-white' : 'text-[#4CAF4F]') : (transparent ? 'text-white/85 hover:text-white' : 'text-[#4D4D4D] hover:text-[#4CAF4F]')}`}
                 >
                   {t(l.key)}
-                  <span className={`absolute -bottom-0.5 left-0 h-0.5 bg-[#4CAF4F] transition-all duration-200 ${active ? 'w-full' : 'w-0 group-hover:w-full'}`} />
+                  <span className={`absolute -bottom-0.5 left-0 h-0.5 ${transparent ? 'bg-white' : 'bg-[#4CAF4F]'} transition-all duration-200 ${active ? 'w-full' : 'w-0 group-hover:w-full'}`} />
                 </button>
               );
             })}
           </div>
 
           {/* Panier */}
-          <CartDropdown variant="desktop" />
+          <CartDropdown variant="desktop" light={transparent} />
 
           {/* CTA */}
-          <Link href="/quote" className="hover-lift bg-[#4CAF4F] text-white text-[15px] font-semibold px-7 py-2.5 rounded-lg flex items-center gap-2 hover:bg-[#43A047] shadow-[0_4px_14px_rgba(76,175,79,0.4)] hover:shadow-[0_6px_20px_rgba(76,175,79,0.5)] transition-all shrink-0">
-            {t('hero.cta_quote')}
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-              <path d="M3 8h10M9 4l4 4-4 4" stroke="white" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-          </Link>
+          <ArrowButton href="/products" variant="dark-white" className="shrink-0">{t('hero.cta_catalog')}</ArrowButton>
         </div>
 
         {/* ── Mobile icons ── */}
         <div className="flex md:hidden items-center gap-2">
-          <CartDropdown variant="mobile" />
-          <button onClick={() => setOpen(!open)} className="p-3 hover:bg-[#F5F7FA] rounded-lg transition-colors">
+          <CartDropdown variant="mobile" light={transparent} />
+          <button onClick={() => setOpen(!open)} className={`p-3 rounded-lg transition-colors ${transparent ? 'hover:bg-white/15' : 'hover:bg-[#F5F7FA]'}`}>
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
               {open
-                ? <path d="M18 6L6 18M6 6l12 12" stroke="#263238" strokeWidth="2" strokeLinecap="round"/>
-                : <path d="M4 6h16M4 12h16M4 18h16" stroke="#263238" strokeWidth="2" strokeLinecap="round"/>
+                ? <path d="M18 6L6 18M6 6l12 12" stroke={transparent ? '#FFFFFF' : '#263238'} strokeWidth="2" strokeLinecap="round"/>
+                : <path d="M4 6h16M4 12h16M4 18h16" stroke={transparent ? '#FFFFFF' : '#263238'} strokeWidth="2" strokeLinecap="round"/>
               }
             </svg>
           </button>
@@ -193,17 +208,17 @@ export function Navbar() {
 
       {/* ── Mobile menu ── */}
       {open && (
-        <div className="md:hidden bg-white border-t border-[#F0F4F8] px-6 py-6 flex flex-col gap-5 shadow-lg">
+        <div className="md:hidden fixed top-[72px] inset-x-3 rounded-3xl border border-white/25 bg-[#263238]/55 backdrop-blur-xl px-6 py-6 flex flex-col gap-5 shadow-[0_8px_32px_rgba(0,0,0,0.3)]">
           {NAV_LINKS.map((l) => (
             <button
               key={l.key}
               onClick={() => handleNavClick(l, true)}
-              className={`text-left text-[17px] font-medium transition-colors ${isActive(l) ? 'text-[#4CAF4F]' : 'text-[#4D4D4D] hover:text-[#4CAF4F]'}`}
+              className={`text-start text-[17px] font-medium transition-colors ${isActive(l) ? 'text-[#7CD97F]' : 'text-white/90 hover:text-white'}`}
             >
               {t(l.key)}
             </button>
           ))}
-          <Link href="/quote" onClick={() => setOpen(false)} className="mt-2 w-full bg-[#4CAF4F] text-white text-[16px] font-semibold px-6 py-3.5 rounded-xl text-center shadow-[0_4px_14px_rgba(76,175,79,0.4)]">
+          <Link href="/quote" onClick={() => setOpen(false)} className="mt-2 w-full bg-[#4CAF4F] text-white text-[16px] font-semibold px-6 py-3.5 rounded-full text-center active:scale-[0.98] transition-transform">
             {t('hero.cta_quote')} →
           </Link>
         </div>

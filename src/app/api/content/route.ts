@@ -5,7 +5,10 @@ import { requirePermission } from '@/lib/permissions';
 
 export async function GET() {
   try {
-    const content = await prisma.siteContent.findMany();
+    // Les galeries photo des catégories (lourdes, en base64) ont leur propre endpoint : /api/content/gallery
+    const content = await prisma.siteContent.findMany({
+      where: { key: { not: { startsWith: 'category_gallery_' } } },
+    });
 
     const contentMap = content.reduce(
       (acc: Record<string, string>, item: any) => ({
@@ -43,6 +46,7 @@ export async function PUT(request: NextRequest) {
 
     revalidatePath('/');
     revalidatePath('/contact');
+    revalidatePath('/products/[id]', 'page');
 
     return NextResponse.json({ success: true });
   } catch (error) {

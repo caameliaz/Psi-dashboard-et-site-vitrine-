@@ -49,10 +49,71 @@
 .hover-lift {
   transition: transform 0.25s ease, box-shadow 0.25s ease;
 }
-.hover-lift:hover {
-  transform: translateY(-4px);
+/* Seulement sur les appareils avec une vraie souris : sur téléphone, le "survol" simulé par un tap
+   laissait la carte soulevée jusqu'au prochain tap ailleurs. */
+@media (hover: hover) {
+  .hover-lift:hover {
+    transform: translateY(-4px);
+  }
 }
 @media (prefers-reduced-motion: reduce) {
   .hover-lift { transition: none; }
   .hover-lift:hover { transform: none; }
+}
+
+/* Éléments de liste qui glissent horizontalement l'un après l'autre jusqu'à s'aligner */
+@keyframes slide-in-x {
+  from { opacity: 0; transform: translateX(-48px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+.slide-in-x { animation: slide-in-x 0.7s cubic-bezier(0.22, 1, 0.36, 1) both; }
+[dir="rtl"] .slide-in-x { animation-name: slide-in-x-rtl; }
+@keyframes slide-in-x-rtl {
+  from { opacity: 0; transform: translateX(48px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .slide-in-x { animation: none; }
+}
+
+/* Bande de logos clients défilante (PartnerLogosMarquee) — la liste est dupliquée
+   dans le composant, donc -50% ramène exactement au début, en boucle invisible. */
+@keyframes marquee {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .marquee-track { animation: none !important; }
+}
+
+/* Cartes "Pourquoi nous choisir" qui se retournent (WhyChoose.tsx) — au survol (souris) ou via la
+   classe .is-flipped (tap / retournement automatique sur mobile). Rotation lente et douce (départ et
+   arrivée amortis) + léger soulèvement de la carte pendant le tour, pour l'effet "vraie carte". */
+.flip-card { perspective: 1800px; }
+.flip-card-inner {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transition: transform 1.1s cubic-bezier(0.45, 0.05, 0.25, 1);
+  transform-style: preserve-3d;
+  will-change: transform;
+}
+@media (hover: hover) {
+  .flip-card:hover .flip-card-inner { transform: rotateY(180deg); animation: flip-lift 1.1s cubic-bezier(0.45, 0.05, 0.25, 1); }
+}
+.flip-card.is-flipped .flip-card-inner { transform: rotateY(180deg); animation: flip-lift 1.1s cubic-bezier(0.45, 0.05, 0.25, 1); }
+/* Soulèvement pendant le tour : la carte "décolle" vers le spectateur puis se repose */
+@keyframes flip-lift {
+  0%, 100% { translate: 0 0 0; }
+  50%      { translate: 0 -6px 60px; }
+}
+.flip-card-face {
+  position: absolute;
+  inset: 0;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+.flip-card-back { transform: rotateY(180deg); }
+@media (prefers-reduced-motion: reduce) {
+  .flip-card-inner { transition: none; animation: none !important; }
 }
