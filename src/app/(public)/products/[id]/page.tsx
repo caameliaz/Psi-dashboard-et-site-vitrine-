@@ -65,10 +65,12 @@ export default function ProductDetailPage() {
   // Photos supplémentaires de la catégorie (gérées depuis Dashboard > Contenu du site)
   const [gallery, setGallery] = useState<{ src: string; productId: string | null }[]>([]);
   const [photoIdx, setPhotoIdx] = useState(0);
+  // Usages de la catégorie choisis dans Contenu (3 max), identiques pour toutes les références
+  const [catUsages, setCatUsages] = useState<string[]>([]);
   useEffect(() => {
-    setGallery([]); setPhotoIdx(0);
+    setGallery([]); setPhotoIdx(0); setCatUsages([]);
     fetch(`/api/content/gallery?categoryId=${id}`).then(r => r.ok ? r.json() : { photos: [] })
-      .then(d => setGallery(d.photos ?? [])).catch(() => {});
+      .then(d => { setGallery(d.photos ?? []); setCatUsages(d.usages ?? []); }).catch(() => {});
   }, [id]);
 
   const category = cats.find(c => c.id === id);
@@ -83,15 +85,17 @@ export default function ProductDetailPage() {
     [products, id]
   );
   const current = items[index] ?? items[0];
-  // Usage commun à la catégorie : la valeur la plus fréquente parmi ses références (une saisie isolée ou
-  // fautive sur une seule référence n'impose donc pas son texte à toute la page).
-  const categoryUsage = useMemo(() => {
-    const counts = new Map<string, number>();
-    items.forEach((p) => { const u = p.usage?.trim(); if (u) counts.set(u, (counts.get(u) ?? 0) + 1); });
-    let best = ''; let bestN = 0;
-    counts.forEach((n, u) => { if (n > bestN) { best = u; bestN = n; } });
-    return best;
-  }, [items]);
+  // Usages affichés (3 max), identiques quelle que soit la référence sélectionnée :
+  //  1. ceux choisis pour la catégorie dans Contenu ;
+  //  2. à défaut, l'usage de chaque référence (une pastille par référence, dans l'ordre des références) ;
+  //  3. si une seule référence a un usage, on le découpe en pastilles.
+  const usageItems = (() => {
+    if (catUsages.length > 0) return catUsages;
+    const sorted = [...items].sort((x, y) => x.reference.localeCompare(y.reference, undefined, { numeric: true }));
+    const distinct = [...new Set(sorted.map((p) => p.usage?.trim()).filter((u): u is string => !!u))];
+    if (distinct.length >= 2) return distinct.slice(0, 3);
+    return (distinct[0] ?? '').split(/\s+[-–—]\s+|\s*[;,]\s*/).map((x) => x.trim()).filter(Boolean).slice(0, 3);
+  })();
 
   useEffect(() => { setIndex(0); setQty(1); }, [id]);
   // Changer de référence → on revient sur sa photo (première de la liste)
@@ -191,9 +195,7 @@ export default function ProductDetailPage() {
 
       {/* Usages de la catégorie (à quoi ça sert) : mêmes pour toutes les références — ils ne changent pas
           (ni ne rejouent l'animation) quand on clique sur une autre référence. */}
-      {categoryUsage && (
-        <SlideInList key={id} items={categoryUsage.split(/\s+[-–—]\s+|\s*[;,]\s*/).filter(Boolean).slice(0, 3)} />
-      )}
+      {usageItems.length > 0 && <SlideInList key={id} items={usageItems} />}
     </div>
   );
 

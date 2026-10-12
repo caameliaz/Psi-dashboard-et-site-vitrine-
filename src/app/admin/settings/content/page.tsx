@@ -34,6 +34,7 @@ function CategoryGalleryCard() {
   const [cats, setCats] = useState<{ id: string; name: string }[]>([]);
   const [catId, setCatId] = useState('');
   const [photos, setPhotos] = useState<{ src: string; productId: string | null }[]>([]);
+  const [usages, setUsages] = useState<string[]>(['', '', '']);
   const [refs, setRefs] = useState<{ id: string; reference: string; categoryId: string | null }[]>([]);
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -55,7 +56,7 @@ function CategoryGalleryCard() {
     if (!catId) return;
     setPhotos([]);
     fetch(`/api/content/gallery?categoryId=${catId}&full=true`).then((r) => r.ok ? r.json() : { photos: [] })
-      .then((d) => setPhotos(d.photos ?? [])).catch(() => {});
+      .then((d) => { setPhotos(d.photos ?? []); const u: string[] = d.usages ?? []; setUsages([u[0] ?? '', u[1] ?? '', u[2] ?? '']); }).catch(() => {});
   }, [catId]);
 
   const addFiles = async (files: FileList | null) => {
@@ -74,7 +75,10 @@ function CategoryGalleryCard() {
       const res = await fetch('/api/content', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ [`category_gallery_${catId}`]: JSON.stringify(photos) }),
+        body: JSON.stringify({
+          [`category_gallery_${catId}`]: JSON.stringify(photos),
+          [`category_usages_${catId}`]: JSON.stringify(usages.map((u) => u.trim()).filter(Boolean)),
+        }),
       });
       if (!res.ok) { alert((await res.json().catch(() => null))?.error ?? `L'enregistrement a échoué (erreur ${res.status}).`); return; }
       setSaved(true);
@@ -115,6 +119,15 @@ function CategoryGalleryCard() {
               <input type="file" accept="image/*" multiple className="hidden" onChange={(e) => { addFiles(e.target.files); e.target.value = ''; }} />
             </label>
           )}
+        </div>
+        <div>
+          <label className="block text-[12px] font-semibold text-[#374151] mb-1.5">Usages de la catégorie <span className="text-[#ABBED1] font-normal">(3 max — identiques pour toutes les références, ne changent pas quand on clique sur une référence)</span></label>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            {usages.map((u, i) => (
+              <input key={i} value={u} maxLength={40} placeholder={['Ex : Imprimantes thermiques', 'Ex : Caisses grand format', 'Ex : Commerces'][i]}
+                onChange={(e) => setUsages((p) => p.map((x, j) => (j === i ? e.target.value : x)))} className={inputClass} />
+            ))}
+          </div>
         </div>
         <div className="flex justify-end pt-1">
           <SaveButton onClick={save} saved={saved} loading={busy} />
