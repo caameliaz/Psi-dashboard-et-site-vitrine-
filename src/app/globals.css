@@ -71,3 +71,35 @@
 @media (prefers-reduced-motion: reduce) {
   .slide-in-x { animation: none; }
 }
+
+/* Bande de logos clients défilante (PartnerLogosMarquee) — la liste est dupliquée
+   dans le composant, donc -50% ramène exactement au début, en boucle invisible. */
+@keyframes marquee {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .marquee-track { animation: none !important; }
+}
+
+/* Cartes "Pourquoi nous choisir" qui se retournent au survol (WhyChoose.tsx) */
+.flip-card { perspective: 1400px; }
+.flip-card-inner {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transition: transform 0.6s cubic-bezier(0.4, 0.2, 0.2, 1);
+  transform-style: preserve-3d;
+}
+.flip-card:hover .flip-card-inner,
+.flip-card:focus-within .flip-card-inner { transform: rotateY(180deg); }
+.flip-card-face {
+  position: absolute;
+  inset: 0;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+.flip-card-back { transform: rotateY(180deg); }
+@media (prefers-reduced-motion: reduce) {
+  .flip-card-inner { transition: none; }
+}

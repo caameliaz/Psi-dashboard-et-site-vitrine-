@@ -557,6 +557,17 @@ model SiteContent {
   updatedAt DateTime @updatedAt
 }
 
+// Logos clients affichés en bande défilante sur la section "À propos" du site
+// public (activable/désactivable depuis Contenu > Logos clients — cf. clé
+// SiteContent "about_logos_enabled").
+model PartnerLogo {
+  id        String   @id @default(cuid())
+  name      String
+  photo     String? // base64 (même pattern que Category.photo / Product.photo) — facultatif : un client peut être ajouté sans logo (affiché par un badge avec ses initiales)
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+}
+
 // ─── UTILISATEUR ADMIN ───────────────────────────────────────────────────────
 model CustomRole {
   id          String   @id @default(cuid())

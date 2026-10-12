@@ -59,7 +59,7 @@ export default function ProductDetailPage() {
     fetch('/api/categories?withPhoto=true').then(r => r.ok ? r.json() : []).then((data: any[]) =>
       setCats(data.map(c => ({ id: c.id, name: c.name, photo: c.photo ?? null, description: c.description ?? null })))
     ).catch(() => {});
-    fetch('/api/products').then(r => r.ok ? r.json() : []).then(setProducts).catch(() => {});
+    fetch('/api/products?withPhoto=true').then(r => r.ok ? r.json() : []).then(setProducts).catch(() => {});
   }, []);
 
   // Photos supplémentaires de la catégorie (gérées depuis Dashboard > Contenu du site)
@@ -260,8 +260,9 @@ export default function ProductDetailPage() {
     </div>
   );
 
-  // Photo principale de la catégorie + photos supplémentaires, sélectionnables via les miniatures
-  const allPhotos = [...(category.photo ? [category.photo] : []), ...gallery];
+  // Photo de la référence sélectionnée (sinon celle de la catégorie) + photos supplémentaires, sélectionnables via les miniatures
+  const firstPhoto = current?.photo || category.photo;
+  const allPhotos = [...(firstPhoto ? [firstPhoto] : []), ...gallery];
   const mainPhoto = allPhotos[photoIdx] ?? allPhotos[0];
 
   const photoBlock = (heightClass: string) => (

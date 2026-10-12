@@ -8,11 +8,13 @@ export function Reveal({
   children,
   delayMs = 0,
   y = 24,
+  x = 0,
   className = '',
 }: {
   children: React.ReactNode;
   delayMs?: number;
   y?: number;
+  x?: number;
   className?: string;
 }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -35,7 +37,7 @@ export function Reveal({
       className={`transition-all duration-700 ease-out ${className}`}
       style={{
         opacity: visible ? 1 : 0,
-        transform: visible ? 'translate(0, 0)' : `translate(0, ${y}px)`,
+        transform: visible ? 'translate(0, 0)' : `translate(${x}px, ${y}px)`,
         transitionDelay: visible ? `${delayMs}ms` : '0ms',
       }}
     >
