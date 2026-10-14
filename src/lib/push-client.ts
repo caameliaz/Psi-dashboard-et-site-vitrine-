@@ -11,6 +11,17 @@ export function pushSupported(): boolean {
     && 'Notification' in window;
 }
 
+// iPhone/iPad hors app installée : Safari n'expose pas PushManager tant que le site
+// n'est pas ajouté à l'écran d'accueil (iOS 16.4+ requis).
+export function iosNeedsInstall(): boolean {
+  if (typeof window === 'undefined') return false;
+  const ios = /iphone|ipad|ipod/i.test(navigator.userAgent)
+    || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const standalone = (navigator as any).standalone === true
+    || window.matchMedia('(display-mode: standalone)').matches;
+  return ios && !standalone;
+}
+
 function urlBase64ToUint8Array(base64: string): BufferSource {
   const padding = '='.repeat((4 - (base64.length % 4)) % 4);
   const b64 = (base64 + padding).replace(/-/g, '+').replace(/_/g, '/');

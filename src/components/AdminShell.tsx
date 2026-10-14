@@ -7,6 +7,7 @@ import { TopBar } from '@/components/ui/TopBar';
 import { DesktopOnly } from '@/components/DesktopOnly';
 import { notifBell } from '@/lib/notif-bell-store';
 import { PageViewTracker } from '@/components/PageViewTracker';
+import { pushSupported, iosNeedsInstall, isPushEnabled, enablePush, disablePush } from '@/lib/push-client';
 import Image from 'next/image';
 
 // Cloche mobile — même source de données que la cloche du dashboard PC
@@ -29,6 +30,48 @@ function MobileBellButton() {
           <span className="text-[9px] font-bold text-white leading-none">{unread > 99 ? '99+' : unread}</span>
         </span>
       )}
+    </button>
+  );
+}
+
+// Icône mobile à côté de la cloche : active/désactive les notifications système (push) sur cet appareil.
+function MobilePushButton() {
+  const [enabled, setEnabled] = useState(false);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { isPushEnabled().then(setEnabled); }, []);
+
+  const onClick = async () => {
+    if (busy) return;
+    if (iosNeedsInstall()) {
+      window.alert('Sur iPhone : touchez Partager → « Sur l\'écran d\'accueil », puis ouvrez l\'app depuis l\'icône ajoutée.');
+      return;
+    }
+    if (!pushSupported()) { window.alert('Notifications non supportées sur cet appareil.'); return; }
+    setBusy(true);
+    try {
+      if (enabled) {
+        await disablePush();
+        setEnabled(false);
+      } else {
+        const r = await enablePush();
+        if (r === 'ok') setEnabled(true);
+        else if (r === 'denied') window.alert('Permission refusée. Autorisez les notifications dans les réglages.');
+        else window.alert('Échec de l\'activation. Réessayez.');
+      }
+    } finally { setBusy(false); }
+  };
+
+  return (
+    <button
+      onClick={onClick}
+      aria-label={enabled ? 'Désactiver les notifications système' : 'Activer les notifications système'}
+      className={`relative w-10 h-10 flex items-center justify-center rounded-lg hover:bg-[#F2F4F7] transition-colors ${busy ? 'opacity-60' : ''}`}
+    >
+      <svg width={20} height={20} fill="none" viewBox="0 0 24 24">
+        <rect x="7" y="2" width="10" height="20" rx="2" stroke={enabled ? '#4CAF4F' : '#374151'} strokeWidth="1.6" />
+        <path d="M11 18h2" stroke={enabled ? '#4CAF4F' : '#374151'} strokeWidth="1.6" strokeLinecap="round" />
+      </svg>
+      {!enabled && <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-[#F59E0B]" />}
     </button>
   );
 }
@@ -106,7 +149,10 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
               height={65}
               className="object-contain -mt-1"
             />
-            <MobileBellButton />
+            <div className="flex items-center">
+              <MobilePushButton />
+              <MobileBellButton />
+            </div>
           </header>
 
           {/* Cloche notifications flottante — DESKTOP, visible sur TOUTES les pages (haut à droite) */}

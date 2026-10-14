@@ -8,11 +8,9 @@ function ensureConfigured(): boolean {
   const priv = process.env.VAPID_PRIVATE;
   if (!pub || !priv) return false;
   if (!configured) {
-    const contact = process.env.EMAIL_FROM || 'Contact@psi.dz';
-    webpush.setVapidDetails(
-      contact.includes('@') ? `mailto:${contact}` : 'mailto:Contact@psi.dz',
-      pub, priv,
-    );
+    // Apple refuse un sujet VAPID mal formé ("PSI <a@b>" etc.) → on extrait l'e-mail seul
+    const email = (process.env.EMAIL_FROM || '').match(/[^\s<>"']+@[^\s<>"']+/)?.[0] || 'Contact@psi.dz';
+    webpush.setVapidDetails(`mailto:${email}`, pub.trim(), priv.trim());
     configured = true;
   }
   return true;
@@ -46,6 +44,8 @@ export async function sendPushToUsers(userIds: string[], payload: PushPayload) {
       // 404/410 = abonnement expiré → on le supprime
       if (err?.statusCode === 404 || err?.statusCode === 410) {
         await prisma.pushSubscription.delete({ where: { id: s.id } }).catch(() => {});
+      } else {
+        console.error('[push] échec envoi', s.endpoint.slice(0, 50), err?.statusCode, err?.body || err?.message);
       }
     }
   }));

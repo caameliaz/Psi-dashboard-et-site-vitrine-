@@ -17,8 +17,8 @@ self.addEventListener('push', (event) => {
   const title = data.title || 'PSI';
   const options = {
     body: data.body || '',
-    icon: '/Logo PSI-new.jpeg',
-    badge: '/Logo PSI-new.jpeg',
+    icon: '/icon.png',
+    badge: '/icon.png',
     tag: data.tag || undefined,      // regroupe les notifs du même sujet
     data: { url: data.url || '/admin/dashboard' },
     vibrate: [80, 40, 80],

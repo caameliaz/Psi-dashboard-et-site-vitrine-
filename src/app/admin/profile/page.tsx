@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { pushSupported, isPushEnabled, enablePush, disablePush } from '@/lib/push-client';
+import { pushSupported, iosNeedsInstall, isPushEnabled, enablePush, disablePush } from '@/lib/push-client';
 
 // Section "Notifications système" — activer/désactiver les push sur cet appareil
 function PushSection() {
@@ -12,6 +12,7 @@ function PushSection() {
 
   useEffect(() => {
     setSupported(pushSupported());
+    if (iosNeedsInstall()) setMsg('Sur iPhone : touchez Partager → « Sur l\'écran d\'accueil », puis ouvrez PSI Dashboard depuis l\'icône ajoutée et réactivez ici.');
     isPushEnabled().then(setEnabled);
   }, []);
 
