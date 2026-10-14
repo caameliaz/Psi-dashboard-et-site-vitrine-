@@ -23,7 +23,8 @@ export function WhatsAppFloat() {
       href={`https://wa.me/${digits}?text=${WHATSAPP_MSG}`}
       target="_blank"
       rel="noopener noreferrer"
-      className="group fixed bottom-24 end-4 md:bottom-6 md:end-6 z-50 flex items-center h-12 md:h-14 rounded-full border border-white/30 bg-gradient-to-br from-[#2BD46B] to-[#128C4A] text-white shadow-[0_8px_24px_rgba(18,140,74,0.45)] hover:shadow-[0_12px_32px_rgba(18,140,74,0.6)] active:scale-95 transition-all duration-300"
+      dir="ltr"
+      className="group fixed bottom-24 right-4 md:bottom-6 md:right-6 z-50 flex items-center h-12 md:h-14 rounded-full border border-white/30 bg-gradient-to-br from-[#2BD46B] to-[#128C4A] text-white shadow-[0_8px_24px_rgba(18,140,74,0.45)] hover:shadow-[0_12px_32px_rgba(18,140,74,0.6)] active:scale-95 transition-all duration-300"
       aria-label="Nous contacter sur WhatsApp"
     >
       <span className="max-w-0 overflow-hidden whitespace-nowrap text-[14px] font-semibold opacity-0 transition-all duration-500 ease-out group-hover:max-w-[120px] group-hover:opacity-100 group-hover:ps-5">
