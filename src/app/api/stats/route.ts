@@ -3,7 +3,7 @@ import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { seesAll } from '@/lib/permissions';
 import { WHERE_HORS_ROLLINK } from '@/lib/order-filters';
-import { quoteSalesAmount } from '@/lib/montants';
+import { quoteSalesAmount, orderSalesAmount } from '@/lib/montants';
 
 // GET /api/stats?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD — agrégats pour le dashboard
 export async function GET(request: NextRequest) {
@@ -105,7 +105,7 @@ export async function GET(request: NextRequest) {
       // Commandes LIVRÉES dans l'intervalle (date de livraison) — pour ventes + par commercial + employés
       prisma.order.findMany({
         where: { ...orderUserWhere, deliveredAt: { gte: startOfMonth, lte: endDate } },
-        select: { assignedToId: true, items: { select: { quantity: true, unitPrice: true } } },
+        select: { assignedToId: true, vatEnabled: true, priceIncludesVat: true, items: { select: { quantity: true, unitPrice: true } } },
       }),
       // Devis LIVRÉS dans l'intervalle (date de livraison, proposedPrice + assigné)
       prisma.quote.findMany({
@@ -113,9 +113,9 @@ export async function GET(request: NextRequest) {
         select: { assignedToId: true, proposedPrice: true, vatEnabled: true, priceIncludesVat: true },
       }),
       // Commandes + devis livrés le MOIS PRÉCÉDENT (montant global, pour l'évolution des ventes)
-      prisma.orderItem.findMany({
-        where: { order: { ...orderUserWhere, deliveredAt: { gte: startOfPrevMonth, lt: startOfMonth } } },
-        select: { quantity: true, unitPrice: true },
+      prisma.order.findMany({
+        where: { ...orderUserWhere, deliveredAt: { gte: startOfPrevMonth, lt: startOfMonth } },
+        select: { vatEnabled: true, priceIncludesVat: true, items: { select: { quantity: true, unitPrice: true } } },
       }),
       prisma.quote.findMany({ where: { ...quoteUserWhere, deliveredAt: { gte: startOfPrevMonth, lt: startOfMonth } }, select: { proposedPrice: true, vatEnabled: true, priceIncludesVat: true } }),
       prisma.client.count({ where: { createdAt: { gte: startOfMonth } } }),
@@ -155,7 +155,7 @@ export async function GET(request: NextRequest) {
       // Ventes livrées des 6 derniers mois (pour la courbe des ventes)
       prisma.order.findMany({
         where: { ...orderUserWhere, deliveredAt: { gte: start6MonthsAgo } },
-        select: { deliveredAt: true, assignedToId: true, items: { select: { quantity: true, unitPrice: true } } },
+        select: { deliveredAt: true, assignedToId: true, vatEnabled: true, priceIncludesVat: true, items: { select: { quantity: true, unitPrice: true } } },
       }),
       prisma.quote.findMany({
         where: { ...quoteUserWhere, deliveredAt: { gte: start6MonthsAgo } },
@@ -248,8 +248,7 @@ export async function GET(request: NextRequest) {
       .slice(0, 10);
 
     // Helper pour calculer le montant d'une commande
-    const orderAmount = (items: { quantity: number | null; unitPrice: number | null }[]) =>
-      items.reduce((acc, it) => acc + (it.quantity ?? 0) * (it.unitPrice ?? 0), 0);
+    const orderAmount = orderSalesAmount;
 
     // Série 6 mois : commandes + devis par mois (labels courts)
     const MOIS = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Aoû', 'Sep', 'Oct', 'Nov', 'Déc'];
@@ -288,7 +287,7 @@ export async function GET(request: NextRequest) {
       const idx = serieVentes.length - 1;
       ordersLivresFor6Months.forEach((o) => {
         if (o.deliveredAt && monthKeyAlgeria(o.deliveredAt) === key) {
-          const montant = orderAmount(o.items);
+          const montant = orderAmount(o);
           serieVentes[idx].ventes += montant;
           serieVentes[idx].commandes += montant;
         }
@@ -313,14 +312,14 @@ export async function GET(request: NextRequest) {
     };
 
     let ventesMois = 0;
-    ordersLivrees.forEach((o) => { const a = orderAmount(o.items); ventesMois += a; bump(o.assignedToId, a, 'order'); });
+    ordersLivrees.forEach((o) => { const a = orderAmount(o); ventesMois += a; bump(o.assignedToId, a, 'order'); });
     quotesLivres.forEach((q) => { const a = quoteSalesAmount(q); ventesMois += a; bump(q.assignedToId, a, 'quote'); });
 
     const livreesMois = ordersLivrees.length;
     const devisLivresMois = quotesLivres.length;
 
     // Ventes mois précédent (pour l'évolution %)
-    const ventesPrevMois = orderAmount(prevOrderItems) + prevQuotesAgg.reduce((acc, q) => acc + quoteSalesAmount(q), 0);
+    const ventesPrevMois = prevOrderItems.reduce((acc, o) => acc + orderAmount(o), 0) +prevQuotesAgg.reduce((acc, q) => acc + quoteSalesAmount(q), 0);
     const evolutionVentes = ventesPrevMois === 0
       ? (ventesMois > 0 ? 100 : 0)
       : Math.round(((ventesMois - ventesPrevMois) / ventesPrevMois) * 100);
@@ -350,7 +349,7 @@ export async function GET(request: NextRequest) {
     let ventesTotal: { global: number; byUser: Record<string, number> } | null = null;
     if (seesAll(session.user)) {
       const [allOrdersLivres, allQuotesLivres] = await Promise.all([
-        prisma.order.findMany({ where: { ...WHERE_HORS_ROLLINK, status: 'LIVRE' }, select: { assignedToId: true, items: { select: { quantity: true, unitPrice: true } } } }),
+        prisma.order.findMany({ where: { ...WHERE_HORS_ROLLINK, status: 'LIVRE' }, select: { assignedToId: true, vatEnabled: true, priceIncludesVat: true, items: { select: { quantity: true, unitPrice: true } } } }),
         prisma.quote.findMany({ where: { status: 'LIVRE' }, select: { assignedToId: true, proposedPrice: true, vatEnabled: true, priceIncludesVat: true } }),
       ]);
       const total = { global: 0, byUser: {} as Record<string, number> };
@@ -358,7 +357,7 @@ export async function GET(request: NextRequest) {
         total.global += montant;
         if (uid) total.byUser[uid] = (total.byUser[uid] ?? 0) + montant;
       };
-      allOrdersLivres.forEach((o) => add(o.assignedToId, orderAmount(o.items)));
+      allOrdersLivres.forEach((o) => add(o.assignedToId, orderAmount(o)));
       allQuotesLivres.forEach((q) => add(q.assignedToId, quoteSalesAmount(q)));
       ventesTotal = total;
     }

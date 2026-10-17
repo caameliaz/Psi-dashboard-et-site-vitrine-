@@ -89,7 +89,9 @@ export function orderToDetail(o: any, fallback?: ClientFallback): RequestDetail 
       '');
   const items = toItems(o.items);
   const produits = items.map((i) => `${i.designation} × ${i.quantite}`).join(', ') || '—';
-  const total = items.reduce((acc, i) => acc + i.quantite * i.prixUnitaire, 0);
+  let total = items.reduce((acc, i) => acc + i.quantite * i.prixUnitaire, 0);
+  // Même règle que le détail : TTC = HT × 1,19 si TVA, sauf prix déjà TTC (ventes importées)
+  if (o.vatEnabled && !o.priceIncludesVat) total = Math.round(total * 1.19);
 
   return {
     id: o.id,
@@ -105,7 +107,7 @@ export function orderToDetail(o: any, fallback?: ClientFallback): RequestDetail 
     email: o.client?.email ?? fallback?.email ?? '',
     produits,
     items,
-    montant: total > 0 ? `${total.toLocaleString('fr-FR')} DA` : '—',
+    montant: total > 0 ? `${total.toLocaleString('fr-FR')} DA${o.vatEnabled ? ' TTC' : ''}` : '—',
     statut: DB_TO_UI[o.status] ?? o.status,
     assignedToId: o.assignedTo?.id ?? o.assignedToId ?? null,
     assignedToName: o.assignedTo?.name ?? null,
@@ -169,7 +171,7 @@ export function quoteToDetail(q: any, fallback?: ClientFallback): RequestDetail 
     email: q.client?.email ?? fallback?.email ?? '',
     produits,
     items,
-    montant: totalDevis > 0 ? `${totalDevis.toLocaleString('fr-FR')} DA` : 'Sur devis',
+    montant: totalDevis > 0 ? `${totalDevis.toLocaleString('fr-FR')} DA${q.vatEnabled ? ' TTC' : ''}` : 'Sur devis',
     statut: DB_TO_UI[q.status] ?? q.status,
     assignedToId: q.assignedTo?.id ?? q.assignedToId ?? null,
     assignedToName: q.assignedTo?.name ?? null,
