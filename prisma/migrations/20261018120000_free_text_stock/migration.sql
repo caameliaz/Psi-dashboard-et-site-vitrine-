@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "FreeTextRecipe" ADD COLUMN "available" DOUBLE PRECISION NOT NULL DEFAULT 0;

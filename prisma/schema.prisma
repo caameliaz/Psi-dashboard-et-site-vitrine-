@@ -121,6 +121,7 @@ model RawMaterial {
 model FreeTextRecipe {
   id        String               @id @default(cuid())
   label     String               @unique
+  available Float                @default(0) // stock disponible de cette réf libre (section « Réfs libres » de la page Stock)
   createdAt DateTime             @default(now())
   updatedAt DateTime             @updatedAt
   items     FreeTextRecipeItem[]

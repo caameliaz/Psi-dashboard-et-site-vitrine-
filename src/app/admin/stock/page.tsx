@@ -33,7 +33,40 @@ interface AssignmentLine {
   quantity: number; remainingStock: number; assignedAt: string;
 }
 
-const PRODUCT_FIELD_LABELS = { available: 'Disponible', reserved: 'Réservé', inDelivery: 'En livraison', returned: 'En retour' } as const;
+interface FreeRef { label: string; available: number; }
+
+// ── Overlay : stock d'une réf libre (hors catalogue) — Réapprovisionner (ajoute) / Corriger (fixe) ───
+function FreeRefModal({ item, onClose, onSave }: {
+  item: FreeRef; onClose: () => void; onSave: (label: string, action: 'restock' | 'correction', qty: number) => Promise<boolean>;
+}) {
+  const [action, setAction] = useState<'restock' | 'correction'>('restock');
+  const [qty, setQty] = useState('');
+  const [saving, setSaving] = useState(false);
+  const n = Number(qty);
+  const valid = qty !== '' && !Number.isNaN(n) && n >= 0 && (action === 'correction' || n > 0);
+  return (
+    <Modal title={`Stock — ${item.label}`} onClose={onClose}>
+      <p className="text-[12px] text-[#8A9BB5] mb-3">Actuellement disponible : <span className="font-bold text-[#0F172A]">{item.available}</span></p>
+      <div className="flex gap-1 p-1 rounded-lg bg-[#F1F5F9] mb-3">
+        {([['restock', 'Réapprovisionner'], ['correction', 'Correction']] as const).map(([val, lbl]) => (
+          <button key={val} onClick={() => setAction(val)} className={`flex-1 py-1.5 rounded-md text-[12px] font-bold transition-colors ${action === val ? 'bg-white text-[#0F172A] shadow-sm' : 'text-[#8A9BB5]'}`}>{lbl}</button>
+        ))}
+      </div>
+      <label className="text-[12px] font-semibold text-[#374151] mb-1 block">{action === 'restock' ? 'Quantité à ajouter' : 'Nouvelle quantité disponible'}</label>
+      <input value={qty} onChange={(e) => setQty(e.target.value.replace(/[^\d.]/g, ''))} inputMode="decimal" className={inputClass} autoFocus />
+      <div className="flex gap-3 mt-4">
+        <button onClick={onClose} className="flex-1 px-4 py-2.5 rounded-xl border border-[#E2E8F0] text-[13px] font-semibold text-[#374151]">Annuler</button>
+        <button disabled={!valid || saving}
+          onClick={async () => { setSaving(true); const ok = await onSave(item.label, action, n); setSaving(false); if (ok) onClose(); }}
+          className="flex-1 px-4 py-2.5 rounded-xl text-[13px] font-bold text-white bg-[#4CAF4F] disabled:opacity-50">
+          {saving ? '…' : 'Valider'}
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
+const PRODUCT_FIELD_LABELS ={ available: 'Disponible', reserved: 'Réservé', inDelivery: 'En livraison', returned: 'En retour' } as const;
 const MATERIAL_FIELD_LABELS = { available: 'Disponible', reserved: 'Réservé' } as const;
 
 function statusBadge(available: number, threshold: number | null | undefined) {
@@ -357,7 +390,9 @@ function StockPageInner() {
   const { can } = useRole();
   const canEdit = can('modifier_stock');
 
-  const [tab, setTab] = useState<'produits' | 'matieres' | 'commercial'>('produits');
+  const [tab, setTab] = useState<'produits' | 'matieres' | 'libres' | 'commercial'>('produits');
+  const [freeRefs, setFreeRefs] = useState<FreeRef[]>([]);
+  const [freeTarget, setFreeTarget] = useState<FreeRef | null>(null);
   const [products, setProducts] = useState<StockProduct[]>([]);
   const [materials, setMaterials] = useState<StockMaterial[]>([]);
   const [employees, setEmployees] = useState<EmployeeAssignment[]>([]);
@@ -373,9 +408,10 @@ function StockPageInner() {
   const fetchAll = useCallback(async () => {
     setLoading(true);
     try {
-      const [pRes, mRes, eRes] = await Promise.all([
-        fetch('/api/stock/products'), fetch('/api/stock/materials'), fetch('/api/stock/assignments'),
+      const [pRes, mRes, eRes, fRes] = await Promise.all([
+        fetch('/api/stock/products'), fetch('/api/stock/materials'), fetch('/api/stock/assignments'), fetch('/api/stock/free-refs'),
       ]);
+      if (fRes.ok) setFreeRefs(await fRes.json());
       if (pRes.ok) setProducts(await pRes.json());
       if (mRes.ok) setMaterials(await mRes.json());
       if (eRes.ok) setEmployees(await eRes.json());
@@ -394,6 +430,18 @@ function StockPageInner() {
     const q = search.toLowerCase();
     return !q || m.reference.toLowerCase().includes(q) || m.name.toLowerCase().includes(q);
   }), [materials, search]);
+
+  const filteredFreeRefs = useMemo(() => freeRefs.filter((f) => !search || f.label.toLowerCase().includes(search.toLowerCase())), [freeRefs, search]);
+
+  const saveFreeRef = async (label: string, action: 'restock' | 'correction', quantity: number): Promise<boolean> => {
+    const res = await fetch('/api/stock/free-refs', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ label, action, quantity }),
+    });
+    if (!res.ok) { const err = await res.json().catch(() => ({})); alert(err.error ?? 'Échec de la mise à jour du stock'); return false; }
+    await fetchAll();
+    return true;
+  };
 
   const loadEmployeeDetail = async (id: string) => {
     const res = await fetch(`/api/stock/assignments/${id}`);
@@ -474,14 +522,14 @@ function StockPageInner() {
       </div>
 
       <div className="flex gap-2 p-1 rounded-lg bg-[#F1F5F9] w-fit mb-5">
-        {([['produits', 'Produits finis'], ['matieres', 'Matières premières'], ['commercial', 'Stock par commercial']] as const).map(([val, lbl]) => (
+        {([['produits', 'Produits finis'], ['matieres', 'Matières premières'], ['libres', 'Réfs libres'], ['commercial', 'Stock par commercial']] as const).map(([val, lbl]) => (
           <button key={val} onClick={() => setTab(val)} className={`px-4 py-1.5 rounded-md text-[13px] font-bold transition-colors ${tab === val ? 'bg-white text-[#0F172A] shadow-sm' : 'text-[#8A9BB5]'}`}>
             {lbl}
           </button>
         ))}
       </div>
 
-      {(tab === 'produits' || tab === 'matieres') && (
+      {(tab === 'produits' || tab === 'matieres' || tab === 'libres') && (
         <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
           <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Rechercher par référence ou nom..."
             className="px-3 py-2 rounded-lg border border-[#E2E8F0] text-[13px] text-[#0F172A] focus:outline-none focus:border-[#4CAF4F] w-full max-w-xs" />
@@ -585,6 +633,43 @@ function StockPageInner() {
           </table>
         </div>
       )}
+
+      {tab === 'libres' && (
+        <div className="rounded-xl border-2 border-[#E2E8F0] overflow-hidden bg-white overflow-x-auto">
+          <p className="px-4 py-2.5 text-[12px] text-[#8A9BB5] bg-[#F8FAFC] border-b border-[#E2E8F0]">Références tapées à la main dans les commandes / devis, hors catalogue.</p>
+          <table className="w-full text-left">
+            <thead>
+              <tr className="bg-[#F8FAFC] border-b border-[#E2E8F0]">
+                <th className="px-4 py-3 text-[11px] font-bold text-[#8A9BB5] uppercase">Référence</th>
+                <th className="px-4 py-3 text-[11px] font-bold text-[#8A9BB5] uppercase text-right">Disponible</th>
+                <th className="px-4 py-3 text-[11px] font-bold text-[#8A9BB5] uppercase">Statut</th>
+                {canEdit && <th className="px-4 py-3"></th>}
+              </tr>
+            </thead>
+            <tbody>
+              {filteredFreeRefs.map((f) => (
+                <tr key={f.label} className="border-b border-[#F0F4F8] last:border-0">
+                  <td className="px-4 py-3 text-[13px] font-bold text-[#0F172A]">{f.label}</td>
+                  <td className="px-4 py-3 text-[13px] font-semibold text-[#0F172A] text-right tabular-nums">{f.available}</td>
+                  <td className="px-4 py-3">{statusBadge(f.available, 0)}</td>
+                  {canEdit && (
+                    <td className="px-4 py-3 text-right">
+                      <button onClick={() => setFreeTarget(f)} className="px-3 py-1.5 rounded-lg border border-[#E2E8F0] text-[12px] font-semibold text-[#374151] hover:bg-[#F8FAFC]">
+                        Gérer le stock
+                      </button>
+                    </td>
+                  )}
+                </tr>
+              ))}
+              {filteredFreeRefs.length === 0 && !loading && (
+                <tr><td colSpan={4} className="px-4 py-10 text-center text-[13px] text-[#8A9BB5]">Aucune référence libre.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {freeTarget && <FreeRefModal item={freeTarget} onClose={() => setFreeTarget(null)} onSave={saveFreeRef} />}
 
       {tab === 'commercial' && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
