@@ -675,6 +675,10 @@ function RequestsPageInner() {
   // cherché dans le disponible et chez les commandes déjà Produites/Confirmées) — jamais résolu
   // en silence : propose "Annuler" ou "Mettre disponible malgré le manque" (cf. handleStatusChange).
   const [shortfallChoice, setShortfallChoice] = useState<{ ref: string; newStatut: string; shortfall: { reference: string; name: string | null; missing: number }[] } | null>(null);
+  // Commande/devis avec TVA passant à "Livré" sans numéro de facture déjà enregistré →
+  // propose de le saisir avant d'enregistrer le changement de statut (cf. handleStatusChange).
+  const [invoiceChoice, setInvoiceChoice] = useState<{ ref: string; newStatut: string } | null>(null);
+  const [invoiceNumberDraft, setInvoiceNumberDraft] = useState('');
 
   // silent = refetch en arrière-plan (SSE temps réel) → pas de spinner, pas de clignotement
   const fetchAll = useCallback(async (silent = false) => {
@@ -836,17 +840,30 @@ function RequestsPageInner() {
   const totalMontant = comptees.reduce((acc, r) => acc + montantToNum(r.montant), 0);
   const filtreActif = !!search || filterStatut !== 'all' || filterPeriode !== 'mois' || filterAssigne !== 'all' || filterPaiement.length > 0 || filterFacture !== 'all';
 
-  const handleStatusChange = async (ref: string, newStatut: string, force = false) => {
+  const handleStatusChange = async (ref: string, newStatut: string, force = false, invoiceNumber?: string, skipInvoicePrompt = false) => {
     const item = selected ?? rawItems.find((r) => r.ref === ref || r.id === ref);
     if (!item?.id) return;
     const dbStatus = UI_TO_DB[newStatut] ?? newStatut;
+
+    // TVA activée + pas encore de n° de facture → on le demande avant d'enregistrer "Livré"
+    // (overlay dédié), plutôt que de laisser le champ vide silencieusement.
+    if (dbStatus === 'LIVRE' && item.vatEnabled && !item.invoiceNumber && !skipInvoicePrompt) {
+      setInvoiceChoice({ ref, newStatut });
+      setInvoiceNumberDraft('');
+      return;
+    }
+
     const isItemDevis = item.type === 'Devis';
     const endpoint = isItemDevis ? `/api/quotes/${item.id}` : `/api/orders/${item.id}`;
 
     const res = await fetch(endpoint, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: dbStatus, ...(force && { force: true }) }),
+      body: JSON.stringify({
+        status: dbStatus,
+        ...(force && { force: true }),
+        ...(invoiceNumber !== undefined && { invoiceNumber: invoiceNumber || null }),
+      }),
     });
 
     // Le corps de la réponse ne peut être lu qu'UNE SEULE FOIS (`res.json()`/`res.text()`
@@ -883,6 +900,22 @@ function RequestsPageInner() {
     const { ref, newStatut } = shortfallChoice;
     setShortfallChoice(null);
     await handleStatusChange(ref, newStatut, true);
+  };
+
+  // Overlay "numéro de facture" : enregistre le numéro saisi (ou aucun, si "Passer") puis
+  // reprend le passage à "Livré" (skipInvoicePrompt évite de redemander en boucle).
+  const handleConfirmInvoice = async () => {
+    if (!invoiceChoice) return;
+    const { ref, newStatut } = invoiceChoice;
+    const num = invoiceNumberDraft.trim();
+    setInvoiceChoice(null);
+    await handleStatusChange(ref, newStatut, false, num || undefined, true);
+  };
+  const handleSkipInvoice = async () => {
+    if (!invoiceChoice) return;
+    const { ref, newStatut } = invoiceChoice;
+    setInvoiceChoice(null);
+    await handleStatusChange(ref, newStatut, false, undefined, true);
   };
 
   // Change l'assignation ("pris en charge par") d'une commande/devis
@@ -1370,6 +1403,31 @@ function RequestsPageInner() {
                 className="text-left px-4 py-3 rounded-lg transition-colors" style={{ background: '#4CAF4F' }}>
                 <p className="text-sm font-bold text-white">Mettre disponible malgré le manque</p>
                 <p className="text-[11px] text-white/85 mt-0.5">Le manquant sera marqué résolu sans stock réel derrière (écart assumé, visible en audit).</p>
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+      {invoiceChoice && (
+        <Modal title="Numéro de facture" onClose={handleSkipInvoice}>
+          <div className="space-y-4">
+            <p className="text-[13px] text-[#374151]">
+              {rawItems.find((r) => r.ref === invoiceChoice.ref)?.type === 'Devis' ? 'Ce devis' : 'Cette commande'} a la TVA activée — entre le numéro de la facture associée (facultatif, modifiable plus tard).
+            </p>
+            <input
+              autoFocus
+              value={invoiceNumberDraft}
+              onChange={(e) => setInvoiceNumberDraft(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') handleConfirmInvoice(); }}
+              placeholder="ex: F2026-001"
+              className="w-full px-3 py-2.5 rounded-lg border border-[#E2E8F0] text-sm text-[#0F172A] focus:outline-none focus:border-[#4CAF4F] focus:ring-1 focus:ring-[#4CAF4F] transition-colors bg-[#F8FAFC]"
+            />
+            <div className="flex gap-3 pt-1">
+              <button onClick={handleSkipInvoice} className="flex-1 px-4 py-2.5 rounded-lg border border-[#E2E8F0] text-sm font-semibold text-[#374151] hover:bg-[#F8FAFC] transition-colors">
+                Passer
+              </button>
+              <button onClick={handleConfirmInvoice} className="flex-1 px-4 py-2.5 rounded-lg text-sm font-bold text-white transition-colors" style={{ background: '#4CAF4F' }}>
+                Enregistrer et continuer
               </button>
             </div>
           </div>
