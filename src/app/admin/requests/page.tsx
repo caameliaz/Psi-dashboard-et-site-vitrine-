@@ -218,7 +218,6 @@ export function CreateForm({ defaultType, onClose, onSave, users, currentUserId,
   const [invoiceNumber, setInvoiceNumber] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('');
   const [paymentDate, setPaymentDate] = useState('');
-  const [vatEnabled, setVatEnabled] = useState(false);
   const [products, setProducts] = useState<{ id: string; reference: string; name?: string | null; price: number; categoryId: string; metrage?: number | null }[]>([]);
   const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
 
@@ -318,7 +317,7 @@ export function CreateForm({ defaultType, onClose, onSave, users, currentUserId,
       _invoiceNumber: invoiceNumber.trim() || undefined,
       _paymentMethod: paymentMethod || undefined,
       _paymentDate: paymentDate || undefined,
-      _vatEnabled: vatEnabled,
+      _vatEnabled: tva,
       _saveToProfile: saveToProfile === true,
     } as any);
     setSaving(false);
@@ -437,7 +436,7 @@ export function CreateForm({ defaultType, onClose, onSave, users, currentUserId,
             <div>
               <label className={lc}>N° facture <span className="text-[#ABBED1] font-normal normal-case">(facultatif)</span></label>
               <input value={invoiceNumber}
-                onChange={e => { const v = e.target.value; setInvoiceNumber(v); setVatEnabled(/^f/i.test(v.trim())); }}
+                onChange={e => setInvoiceNumber(e.target.value)}
                 placeholder="ex: F2026-001" className={ic} />
             </div>
             <div>
@@ -457,12 +456,6 @@ export function CreateForm({ defaultType, onClose, onSave, users, currentUserId,
             <div>
               <label className={lc}>Date de règlement <span className="text-[#ABBED1] font-normal normal-case">(facultatif)</span></label>
               <input type="date" value={paymentDate} onChange={e => setPaymentDate(e.target.value)} className={ic} />
-            </div>
-            {/* TVA : déduite du n° de facture (commence par F → facturé avec TVA),
-                comme à l'import Excel. Pas de case séparée à cocher. */}
-            <div className="flex items-center gap-2 px-3 py-2 rounded-xl border text-[12px]"
-              style={{ borderColor: vatEnabled ? '#BBF7D0' : '#E2E8F0', background: vatEnabled ? '#F0FDF4' : '#F8FAFC', color: vatEnabled ? '#166534' : '#8A9BB5' }}>
-              TVA {vatEnabled ? 'appliquée (n° en F)' : 'non appliquée'}
             </div>
           </div>
 
