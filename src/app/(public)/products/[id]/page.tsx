@@ -81,7 +81,11 @@ export default function ProductDetailPage() {
     c.id !== id && products.some(p => p.category?.id === c.id && p.width > 0 && p.length > 0)
   );
   const items = useMemo(
-    () => products.filter(p => p.category?.id === id && p.width > 0 && p.length > 0),
+    () => products
+      .filter(p => p.category?.id === id && p.width > 0 && p.length > 0)
+      // Groupé par largeur (la plus grande d'abord), puis longueur croissante dans chaque
+      // groupe — ex: 80/40, 80/60, 80/80, puis 57/30, 57/40, 57/50.
+      .sort((a, b) => b.width - a.width || a.length - b.length),
     [products, id]
   );
   const current = items[index] ?? items[0];
