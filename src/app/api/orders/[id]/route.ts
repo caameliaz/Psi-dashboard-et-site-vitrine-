@@ -219,6 +219,8 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
         // mais si l'une d'elles avait déjà déclenché sa propre ligne de production (cf.
         // confirmStock), il faut la supprimer explicitement ici, sinon elle reste orpheline
         // (plus aucun article ne pointe vers elle) et traîne indéfiniment dans la liste.
+        // Leur stock réservé (stock existant / pièces produites) est d'abord remis en Disponible.
+        for (const e of existingItems) if (!e.productId) await releaseOrderItemStock('order', e.id);
         const freeTextToRemove = existingItems.filter((e) => !e.productId && e.productionListItemId);
         if (freeTextToRemove.length > 0) {
           await prisma.productionListItem.deleteMany({ where: { id: { in: freeTextToRemove.map((e) => e.productionListItemId!) }, productId: null } });

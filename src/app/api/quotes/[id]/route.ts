@@ -191,6 +191,8 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
         // Lignes "libres" (sans productId) : jamais réutilisées, toujours recréées entièrement —
         // mais si l'une d'elles avait déjà déclenché sa propre ligne de production (cf.
         // confirmStock), il faut la supprimer explicitement ici, sinon elle reste orpheline.
+        // Leur stock réservé (stock existant / pièces produites) est d'abord remis en Disponible.
+        for (const e of existingItems) if (!e.productId) await releaseOrderItemStock('quote', e.id);
         const freeTextToRemove = existingItems.filter((e) => !e.productId && e.productionListItemId);
         if (freeTextToRemove.length > 0) {
           await prisma.productionListItem.deleteMany({ where: { id: { in: freeTextToRemove.map((e) => e.productionListItemId!) }, productId: null } });

@@ -152,16 +152,26 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
       // disponible/réservé produit à toucher (rien n'existe pour elle).
       const orderItem = await prisma.orderItem.findFirst({ where: { productionListItemId: id } });
       const quoteItem = orderItem ? null : await prisma.quoteItem.findFirst({ where: { productionListItemId: id } });
+      // Les pièces produites pour cette commande passent directement en Réservé de la réf libre
+      // (comme un produit : production → réservé), pour que livraison/annulation restent cohérentes.
+      const reserveProduced = async (description: string | null, take: number) => {
+        const freeRefLabel = (description ?? '').trim();
+        if (freeRefLabel && take > 0) {
+          await prisma.freeTextRecipe.upsert({ where: { label: freeRefLabel }, create: { label: freeRefLabel, reserved: take }, update: { reserved: { increment: take } } });
+        }
+      };
       if (orderItem) {
         const take = Math.min(qty, orderItem.quantity - orderItem.resolvedQuantity);
         if (take > 0) {
           await prisma.orderItem.update({ where: { id: orderItem.id }, data: { resolvedQuantity: { increment: take } } });
+          await reserveProduced(orderItem.description, take);
           await checkCompletion('order', orderItem.orderId);
         }
       } else if (quoteItem) {
         const take = Math.min(qty, quoteItem.quantity - quoteItem.resolvedQuantity);
         if (take > 0) {
           await prisma.quoteItem.update({ where: { id: quoteItem.id }, data: { resolvedQuantity: { increment: take } } });
+          await reserveProduced(quoteItem.description, take);
           await checkCompletion('quote', quoteItem.quoteId);
         }
       }

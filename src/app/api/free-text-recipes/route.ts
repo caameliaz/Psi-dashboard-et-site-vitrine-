@@ -9,7 +9,9 @@ export async function GET() {
   if (guard.error) return guard.error;
 
   try {
+    // La table porte aussi le stock des réfs libres : on ne liste que celles qui ont une recette.
     const recipes = await prisma.freeTextRecipe.findMany({
+      where: { items: { some: {} } },
       include: { items: { include: { rawMaterial: true } } },
       orderBy: { label: 'asc' },
     });

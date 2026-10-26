@@ -56,10 +56,13 @@ export async function DELETE(_request: NextRequest, { params }: Ctx) {
   const { id } = await params;
 
   try {
-    const existing = await prisma.freeTextRecipe.findUnique({ where: { id }, select: { label: true } });
+    const existing = await prisma.freeTextRecipe.findUnique({ where: { id }, select: { label: true, available: true, reserved: true, inDelivery: true, returned: true } });
     if (!existing) return NextResponse.json({ error: 'Recette introuvable' }, { status: 404 });
 
-    await prisma.freeTextRecipe.delete({ where: { id } });
+    // La ligne porte aussi le STOCK de la réf libre : si elle en a, on n'efface que la recette.
+    const hasStock = existing.available > 0 || existing.reserved > 0 || existing.inDelivery > 0 || existing.returned > 0;
+    if (hasStock) await prisma.freeTextRecipeItem.deleteMany({ where: { freeTextRecipeId: id } });
+    else await prisma.freeTextRecipe.delete({ where: { id } });
 
     createAudit({ userId: session?.user?.id, action: 'Recette de référence libre supprimée', entity: 'PRODUIT', entityId: id, detail: existing.label });
     return NextResponse.json({ success: true });

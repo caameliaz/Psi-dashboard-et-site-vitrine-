@@ -137,7 +137,63 @@ function itemWhereParent(kind: Kind, parentId: string) {
   return kind === 'order' ? { orderId: parentId } : { quoteId: parentId };
 }
 
-export const OPEN_PURCHASE_STATUSES = ['A_COMMANDER', 'COMMANDE'] as const;
+// ═══════════════════════════════════════════════════════════════════════════
+// Stock des réfs LIBRES (lignes sans fiche produit) — vit sur FreeTextRecipe, une ligne par
+// libellé EXACT (trim), avec les mêmes colonnes que Product (available/reserved/inDelivery/
+// returned). Même logique que les produits, en plus simple : pas de seuil/buffer ni de liste
+// d'achat — ce qui manque part directement en production (cf. confirmStock).
+// ═══════════════════════════════════════════════════════════════════════════
+const freeLabel = (description: string | null | undefined) => (description ?? '').trim();
+
+// Met de côté pour une commande ce qui est dispo (available → reserved), renvoie la quantité prise.
+async function reserveFreeStock(label: string, qty: number): Promise<number> {
+  if (!label || qty <= 0) return 0;
+  const row = await prisma.freeTextRecipe.findUnique({ where: { label }, select: { id: true, available: true } });
+  const take = row ? Math.min(row.available, qty) : 0;
+  if (row && take > 0) await prisma.freeTextRecipe.update({ where: { id: row.id }, data: { available: { decrement: take }, reserved: { increment: take } } });
+  return take;
+}
+
+// Symétrique : reserved → available, jamais plus que ce qui est réellement réservé (une ligne
+// forcée "Mettre disponible malgré le manque" n'a jamais rien réservé — pas de réservé négatif).
+async function releaseFreeReserved(label: string, qty: number): Promise<number> {
+  if (!label || qty <= 0) return 0;
+  const row = await prisma.freeTextRecipe.findUnique({ where: { label }, select: { id: true, reserved: true } });
+  const back = row ? Math.min(row.reserved, qty) : 0;
+  if (row && back > 0) await prisma.freeTextRecipe.update({ where: { id: row.id }, data: { reserved: { decrement: back }, available: { increment: back } } });
+  return back;
+}
+
+// Équivalent de reallocateAvailableStock pour une réf libre : dès que son disponible augmente
+// (annulation, réapprovisionnement, correction...), comble en priorité les commandes/devis déjà
+// en attente de production sur ce même libellé (FIFO).
+export async function reallocateFreeStock(rawLabel: string) {
+  const label = freeLabel(rawLabel);
+  const row = label ? await prisma.freeTextRecipe.findUnique({ where: { label } }) : null;
+  if (!row || row.available <= 0) return;
+
+  const [orderItems, quoteItems] = await Promise.all([
+    prisma.orderItem.findMany({ where: { productId: null, stockPath: 'IN_PRODUCTION' }, include: { order: { select: { createdAt: true, priority: true } } } }),
+    prisma.quoteItem.findMany({ where: { productId: null, stockPath: 'IN_PRODUCTION' }, include: { quote: { select: { createdAt: true, priority: true } } } }),
+  ]);
+  const pending = [
+    ...orderItems.filter((i) => freeLabel(i.description) === label).map((i) => ({ id: i.id, kind: 'order' as Kind, parentId: i.orderId, need: i.quantity - i.resolvedQuantity, lineId: i.productionListItemId, createdAt: i.order.createdAt, priority: i.order.priority })),
+    ...quoteItems.filter((i) => freeLabel(i.description) === label).map((i) => ({ id: i.id, kind: 'quote' as Kind, parentId: i.quoteId, need: i.quantity - i.resolvedQuantity, lineId: i.productionListItemId, createdAt: i.quote.createdAt, priority: i.quote.priority })),
+  ].filter((i) => i.need > 0).sort(fifoCompare);
+
+  let available = row.available;
+  for (const it of pending) {
+    if (available <= 0) break;
+    const take = Math.min(it.need, available);
+    available -= take;
+    await prisma.freeTextRecipe.update({ where: { id: row.id }, data: { available: { decrement: take }, reserved: { increment: take } } });
+    await (itemDelegate(it.kind) as any).update({ where: { id: it.id }, data: { resolvedQuantity: { increment: take } } });
+    if (it.lineId) await resyncFreeTextProductionLine(it.lineId);
+    await checkCompletion(it.kind, it.parentId);
+  }
+}
+
+export const OPEN_PURCHASE_STATUSES =['A_COMMANDER', 'COMMANDE'] as const;
 export const OPEN_PRODUCTION_STATUSES = ['A_PRODUIRE', 'BLOQUE', 'EN_COURS'] as const;
 
 // ── Comparateur FIFO commun (commandes prioritaires) ─────────────────────────────────────────
@@ -568,10 +624,18 @@ export async function confirmStock(kind: Kind, parentId: string) {
   });
   for (const item of freeTextItems) {
     if (!item.description || item.quantity <= 0) continue;
+    // Ce qui est déjà en stock pour cette réf libre est pris d'abord (disponible → réservé),
+    // comme pour un produit ; seul le manquant part en production.
+    const fromStock = await reserveFreeStock(freeLabel(item.description), item.quantity);
+    const remainder = item.quantity - fromStock;
+    if (remainder <= 0) {
+      await (itemDelegate(kind) as any).update({ where: { id: item.id }, data: { stockPath: 'FROM_STOCK', resolvedQuantity: item.quantity } });
+      continue;
+    }
     const line = await prisma.productionListItem.create({
-      data: { productId: null, description: item.description, neededQuantity: item.quantity, status: 'A_PRODUIRE', auto: false },
+      data: { productId: null, description: item.description, neededQuantity: remainder, status: 'A_PRODUIRE', auto: false },
     });
-    await (itemDelegate(kind) as any).update({ where: { id: item.id }, data: { stockPath: 'IN_PRODUCTION', productionListItemId: line.id } });
+    await (itemDelegate(kind) as any).update({ where: { id: item.id }, data: { stockPath: 'IN_PRODUCTION', resolvedQuantity: fromStock, productionListItemId: line.id } });
   }
 
   // Notifie (in-app + push) admins + commercial assigné si du stock manque encore à ce stade
@@ -908,6 +972,13 @@ export async function releaseOrderItemStock(kind: Kind, itemId: string) {
     if (item.productionListItemId) {
       await prisma.productionListItem.delete({ where: { id: item.productionListItemId } }).catch(() => {});
     }
+    // La part réservée (stock existant ou pièces produites pour cette commande) redevient
+    // disponible, puis est proposée en priorité aux autres commandes en attente sur ce libellé.
+    const label = freeLabel(item.description);
+    if (item.resolvedQuantity > 0 && label) {
+      await releaseFreeReserved(label, item.resolvedQuantity);
+      await reallocateFreeStock(label);
+    }
     return;
   }
 
@@ -1193,10 +1264,15 @@ export async function cancelStock(kind: Kind, parentId: string) {
 
 // ── Étape "Retourné" ─────────────────────────────────────────────────────────
 export async function returnStock(kind: Kind, parentId: string) {
-  const items = await (itemDelegate(kind) as any).findMany({ where: { ...itemWhereParent(kind, parentId), productId: { not: null } } });
+  const items = await (itemDelegate(kind) as any).findMany({ where: itemWhereParent(kind, parentId) });
   for (const item of items) {
-    if (!item.productId || !item.quantity) continue;
-    await prisma.product.update({ where: { id: item.productId }, data: { returned: { increment: item.quantity } } });
+    if (!item.quantity) continue;
+    if (item.productId) {
+      await prisma.product.update({ where: { id: item.productId }, data: { returned: { increment: item.quantity } } });
+    } else if (freeLabel(item.description)) {
+      const label = freeLabel(item.description);
+      await prisma.freeTextRecipe.upsert({ where: { label }, create: { label, returned: item.quantity }, update: { returned: { increment: item.quantity } } });
+    }
   }
 }
 
@@ -1209,9 +1285,16 @@ export async function returnStock(kind: Kind, parentId: string) {
 // (available + reserved − attribué) absorbe NATURELLEMENT la différence côté entrepôt — inutile
 // (et faux) de retoucher `available` ici pour ça.
 export async function deliverStock(kind: Kind, parentId: string) {
-  const items = await (itemDelegate(kind) as any).findMany({ where: { ...itemWhereParent(kind, parentId), productId: { not: null } } });
+  const items = await (itemDelegate(kind) as any).findMany({ where: itemWhereParent(kind, parentId) });
   for (const item of items) {
-    if (!item.productId || !item.resolvedQuantity) continue;
+    if (!item.productId) {
+      // Réf libre : le réservé baisse du plein montant (plafonné — une ligne forcée n'a rien réservé).
+      const label = freeLabel(item.description);
+      const row = item.resolvedQuantity > 0 && label ? await prisma.freeTextRecipe.findUnique({ where: { label }, select: { id: true, reserved: true } }) : null;
+      if (row) await prisma.freeTextRecipe.update({ where: { id: row.id }, data: { reserved: { decrement: Math.min(row.reserved, item.resolvedQuantity) } } });
+      continue;
+    }
+    if (!item.resolvedQuantity) continue;
     await prisma.product.update({ where: { id: item.productId }, data: { reserved: { decrement: item.resolvedQuantity } } });
 
     if (item.assignedEmployeeId) {
