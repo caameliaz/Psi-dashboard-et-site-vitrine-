@@ -1,13 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { auth } from '@/lib/auth';
+import { requireAnyPermission } from '@/lib/access';
 import { rateLimit } from '@/lib/rate-limit';
 import { validateEmail, validatePhone, validateText, firstError } from '@/lib/validation';
 
 // GET /api/contact — liste tous les messages de contact (admin + employé)
 export async function GET() {
-  const session = await auth();
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const guard = await requireAnyPermission(['voir_contenu', 'modifier_contenu']);
+  if (guard.error) return guard.error;
+  const session = guard.session;
 
   try {
     const contacts = await prisma.contactRequest.findMany({

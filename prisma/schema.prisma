@@ -599,6 +599,9 @@ model User {
   sessionVersion     Int                @default(0) // incrémenté pour invalider tous les cookies
   resetRequested     Boolean            @default(false) // l'utilisateur a demandé une réinit. de mot de passe
   resetRequestedAt   DateTime?
+  // Limite des réinitialisations publiques : 2 demandes max par compte et par fenêtre de 30 min (cf. /api/password-reset)
+  resetWindowStart   DateTime?
+  resetWindowCount   Int       @default(0)
   twoFactorCode      String? // code 2FA à 6 chiffres en attente de validation (usage unique)
   twoFactorExpires   DateTime? // expiration du code 2FA (5 min)
   twoFactorAttempts  Int                @default(0) // tentatives échouées sur le code courant (invalide après 5)

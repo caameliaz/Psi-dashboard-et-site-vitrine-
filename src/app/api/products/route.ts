@@ -29,7 +29,11 @@ export async function GET(request: NextRequest) {
       // produits à chaque appel avait causé un dépassement de quota Fast Origin Transfer Vercel.
       // `recipeItems` (coût/recette matière) n'est utile qu'aux 2 pages admin qui gèrent
       // les recettes (?all=true) — jamais exposé publiquement (donnée sensible en plus).
-      omit: withPhoto ? undefined : { photo: true },
+      // Vitrine publique (sans ?all=true) : jamais le prix d'achat, le stock ni les seuils (données internes).
+      omit: {
+        ...(withPhoto ? {} : { photo: true }),
+        ...(all ? {} : { purchasePrice: true, stockMax: true, purchaseThreshold: true, productionThreshold: true, available: true, reserved: true, inDelivery: true, returned: true }),
+      },
       include: {
         category: { omit: { photo: true } },
         customFields: { include: { definition: true } },

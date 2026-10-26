@@ -1,13 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { auth } from '@/lib/auth';
+import { requireAnyPermission } from '@/lib/access';
 import { requirePermission } from '@/lib/permissions';
 import { createAudit } from '@/lib/audit';
 
 // GET /api/raw-materials — liste des matières premières (admin)
 export async function GET() {
-  const session = await auth();
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const guard = await requireAnyPermission(['voir_stock', 'voir_listes_stock', 'modifier_stock', 'modifier_produits']);
+  if (guard.error) return guard.error;
+  const session = guard.session;
 
   try {
     const materials = await prisma.rawMaterial.findMany({ orderBy: { name: 'asc' } });

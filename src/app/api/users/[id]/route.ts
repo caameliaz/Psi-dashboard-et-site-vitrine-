@@ -21,6 +21,26 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
   try {
     const body = await request.json();
 
+    // Anti-escalade de privilèges : seul un ADMIN peut toucher à un compte ADMIN, créer/devenir ADMIN,
+    // ou modifier ses PROPRES droits (rôle, permissions, statut). Un non-admin ayant « gerer_utilisateurs »
+    // ne peut accorder que des permissions qu'il possède lui-même.
+    if (session.user.role !== 'ADMIN') {
+      const cible = await prisma.user.findUnique({ where: { id }, select: { role: true } });
+      if (!cible) return NextResponse.json({ error: 'Utilisateur introuvable' }, { status: 404 });
+      if (cible.role === 'ADMIN' || body.role === 'ADMIN') {
+        return NextResponse.json({ error: 'Seul un administrateur peut modifier un compte administrateur.' }, { status: 403 });
+      }
+      if (id === session.user.id && (body.role !== undefined || body.permissions !== undefined || body.active !== undefined || body.customRoleId !== undefined)) {
+        return NextResponse.json({ error: 'Vous ne pouvez pas modifier vos propres droits.' }, { status: 403 });
+      }
+      if (Array.isArray(body.permissions)) {
+        const miennes = new Set(session.user.permissions ?? []);
+        if (body.permissions.some((p: string) => !miennes.has(p))) {
+          return NextResponse.json({ error: 'Vous ne pouvez accorder que des permissions que vous possédez.' }, { status: 403 });
+        }
+      }
+    }
+
     // Désactivation (ex. licenciement) avec reprise des clients :
     //  • reassignClientsTo : commercial par défaut (clients non répartis, congés, autres commandes) ;
     //  • reassignClients   : { clientId: userId | null } pour répartir client par client.

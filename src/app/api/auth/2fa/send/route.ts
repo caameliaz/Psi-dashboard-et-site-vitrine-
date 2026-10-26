@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
+import { randomInt } from 'crypto';
 import { prisma } from '@/lib/prisma';
 import { rateLimit } from '@/lib/rate-limit';
 import { isBlocked, recordFail } from '@/lib/login-guard';
@@ -46,7 +47,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Identifiants valides → génère un code à 6 chiffres, valable 5 min, usage unique
-    const code = String(Math.floor(100000 + Math.random() * 900000));
+    const code = String(randomInt(100000, 1000000));
     await prisma.user.update({
       where: { id: user.id },
       data: {

@@ -245,7 +245,7 @@ export default function DashboardPage() {
   const [devisEnAttente, setDevisEnAttente] = useState({ count: 0, montant: 0 });
   const [moisTab, setMoisTab]   = useState<'commandes' | 'devis'>('commandes');
   // isAdmin = « voit tout » (admin ou compte lecture seule) ; realAdmin = vrai admin (objectifs modifiables).
-  const { isAdmin: realAdmin, seesAll: isAdmin } = useRole();
+  const { isAdmin: realAdmin, seesAll: isAdmin, can } = useRole();
   const { data: session } = useSession();
   const myId = (session?.user as { id?: string } | undefined)?.id ?? null;
   const myName = (session?.user as { name?: string } | undefined)?.name ?? 'Moi';
@@ -1082,7 +1082,8 @@ export default function DashboardPage() {
         
         {/* Colonne droite : Liste d'achat / Liste de production */}
         <div>
-          <StockListsWidget />
+          {/* Sans permission stock, le serveur refuse ces listes : on ne les affiche pas du tout. */}
+          {(can('voir_stock') || can('voir_listes_stock')) && <StockListsWidget />}
         </div>
       </div>
 

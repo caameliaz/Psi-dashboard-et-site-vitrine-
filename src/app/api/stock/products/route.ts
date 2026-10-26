@@ -1,11 +1,13 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { auth } from '@/lib/auth';
+import { requireAnyPermission } from '@/lib/access';
 
 // GET /api/stock/products — vue stock des produits finis
 export async function GET() {
-  const session = await auth();
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const guard = await requireAnyPermission(['voir_stock', 'voir_listes_stock', 'voir_stock_commercial', 'modifier_stock']);
+  if (guard.error) return guard.error;
+  const session = guard.session;
 
   try {
     const [products, assignedGroups] = await Promise.all([

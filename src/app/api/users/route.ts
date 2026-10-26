@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import bcrypt from 'bcryptjs';
+import { hasPermission } from '@/lib/permissions';
 
 // GET /api/users — liste de tous les users (id + name) pour les dropdowns
 export async function GET(req: Request) {
@@ -22,7 +23,11 @@ export async function GET(req: Request) {
       return NextResponse.json(users);
     }
 
-    // Sinon, retourner tous les users avec toutes les infos
+    // Sinon, retourner tous les users avec toutes les infos (emails, rôles, permissions) :
+    // réservé à la gestion des utilisateurs.
+    if (!hasPermission(session.user as never, 'gerer_utilisateurs')) {
+      return NextResponse.json({ error: "Vous n'avez pas la permission pour cette action" }, { status: 403 });
+    }
     const users = await prisma.user.findMany({
       select: { id: true, name: true, email: true, role: true, customRoleId: true, active: true, permissions: true, resetRequested: true, twoFactorDisabled: true, canHardDelete: true },
       orderBy: { name: 'asc' },
@@ -38,6 +43,12 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   const session = await auth();
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  // Créer un compte = permission « gerer_utilisateurs » (avant : n'importe quel connecté pouvait
+  // se créer un compte ADMIN). Seul un ADMIN crée un ADMIN, et un non-admin n'accorde que les
+  // permissions qu'il possède lui-même.
+  if (!hasPermission(session.user as never, 'gerer_utilisateurs')) {
+    return NextResponse.json({ error: "Vous n'avez pas la permission pour cette action" }, { status: 403 });
+  }
 
   try {
     const body = await req.json();
@@ -67,6 +78,13 @@ export async function POST(req: Request) {
 
     if (!role || !['ADMIN', 'EMPLOYEE'].includes(role)) {
       return NextResponse.json({ error: 'Invalid role' }, { status: 400 });
+    }
+    if (session.user.role !== 'ADMIN') {
+      if (role === 'ADMIN') return NextResponse.json({ error: 'Seul un administrateur peut créer un administrateur.' }, { status: 403 });
+      const miennes = new Set(session.user.permissions ?? []);
+      if (Array.isArray(permissions) && permissions.some((p: string) => !miennes.has(p))) {
+        return NextResponse.json({ error: 'Vous ne pouvez accorder que des permissions que vous possédez.' }, { status: 403 });
+      }
     }
 
     // Verifier si email deja utilise (seulement si fourni)

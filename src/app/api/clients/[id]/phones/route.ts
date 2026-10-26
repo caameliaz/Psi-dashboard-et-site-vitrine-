@@ -1,15 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requirePermission } from '@/lib/permissions';
+import { guardClientAccess } from '@/lib/access';
 import { prisma } from '@/lib/prisma';
 
 type Ctx = { params: Promise<{ id: string }> };
 
 // POST /api/clients/[id]/phones — ajouter un numéro (permission modifier_clients)
 export async function POST(request: NextRequest, { params }: Ctx) {
-  const guard = await requirePermission('modifier_clients');
-  if (guard.error) return guard.error;
-
   const { id: clientId } = await params;
+  const guard = await guardClientAccess('modifier_clients', clientId);
+  if (guard.error) return guard.error;
 
   try {
     const body = await request.json();

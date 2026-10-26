@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { auth } from '@/lib/auth';
+import { requireAnyPermission } from '@/lib/access';
 import { requirePermission } from '@/lib/permissions';
 import { createAudit } from '@/lib/audit';
 import { OPEN_PURCHASE_STATUSES } from '@/lib/order-stock';
@@ -16,8 +17,9 @@ const INCLUDE = {
 // correction de stock, changement de seuil...) — cf. order-stock.ts. Cette route ne fait
 // plus de recalcul global de tous les produits/matières à chaque lecture, seulement lire.
 export async function GET() {
-  const session = await auth();
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const guard = await requireAnyPermission(['voir_stock', 'voir_listes_stock', 'modifier_stock']);
+  if (guard.error) return guard.error;
+  const session = guard.session;
 
   try {
     // Les lignes "Reçu" sont soldées → elles disparaissent de la liste (l'historique

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { guardRequestAccess } from '@/lib/access';
 import { requirePermission, hasPermission } from '@/lib/permissions';
 import { createAudit, statusLabel } from '@/lib/audit';
 import { createNotif } from '@/lib/notifications';
@@ -18,10 +19,10 @@ type Ctx = { params: Promise<{ id: string }> };
 
 // GET /api/quotes/[id] — détail devis (permission voir_commandes)
 export async function GET(_request: NextRequest, { params }: Ctx) {
-  const guard = await requirePermission('voir_commandes');
-  if (guard.error) return guard.error;
-
   const { id } = await params;
+  const guard = await guardRequestAccess('voir_commandes', 'quote', id);
+  if (guard.error) return guard.error;
+  const session = guard.session;
 
   try {
     const quote = await prisma.quote.findUnique({
@@ -51,11 +52,10 @@ export async function GET(_request: NextRequest, { params }: Ctx) {
 
 // PATCH /api/quotes/[id] — modifier statut / champs admin / notes (permission modifier_statuts)
 export async function PATCH(request: NextRequest, { params }: Ctx) {
-  const guard = await requirePermission('modifier_statuts');
+  const { id } = await params;
+  const guard = await guardRequestAccess('modifier_statuts', 'quote', id);
   if (guard.error) return guard.error;
   const session = guard.session;
-
-  const { id } = await params;
 
   try {
     const body = await request.json();

@@ -17,6 +17,9 @@ import { isOwnerEmail } from '@/lib/owner';
 // AUTOMATIQUE : un nouveau mot de passe est généré et envoyé DIRECTEMENT à l'utilisateur.
 // Aucun admin n'a besoin d'agir — ils sont seulement informés (notif + email).
 // Réponse volontairement neutre (ne révèle pas si l'email existe).
+const MAX_PAR_FENETRE = 2;
+const FENETRE_MS = 30 * 60_000;
+
 export async function POST(request: NextRequest) {
   const limited = rateLimit(request, 'password-reset', 5, 300_000); // 5 / 5 min / IP
   if (limited) return limited;
@@ -28,12 +31,20 @@ export async function POST(request: NextRequest) {
     const user = await prisma.user.findFirst({ where: { email: { equals: clean, mode: 'insensitive' }, active: true } });
 
     // On répond toujours "ok" pour ne pas révéler l'existence du compte
-    if (user) {
+    // Limite PAR COMPTE (en base, donc valable sur Vercel) : 2 réinitialisations max par fenêtre de
+    // 30 min — empêche de bloquer quelqu'un dehors en boucle. Au-delà : réponse neutre, rien ne change.
+    const maintenant = Date.now();
+    const fenetreOuverte = !!user?.resetWindowStart && maintenant - user.resetWindowStart.getTime() < FENETRE_MS;
+    const limiteAtteinte = fenetreOuverte && (user?.resetWindowCount ?? 0) >= MAX_PAR_FENETRE;
+
+    if (user && !limiteAtteinte) {
       // 1. Génère et applique le nouveau mot de passe
       const newPassword = genPassword();
       await prisma.user.update({
         where: { id: user.id },
         data: {
+          resetWindowStart: fenetreOuverte ? user.resetWindowStart : new Date(),
+          resetWindowCount: fenetreOuverte ? { increment: 1 } : 1,
           password: await bcrypt.hash(newPassword, 10),
           resetRequested: false,
           resetRequestedAt: new Date(),

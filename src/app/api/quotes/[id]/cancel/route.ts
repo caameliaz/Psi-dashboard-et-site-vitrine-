@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { guardRequestAccess } from '@/lib/access';
 import { requirePermission } from '@/lib/permissions';
 import { createAudit } from '@/lib/audit';
 import { cancelStock } from '@/lib/order-stock';
@@ -8,11 +9,10 @@ type Ctx = { params: Promise<{ id: string }> };
 
 // PATCH /api/quotes/[id]/cancel — annuler un devis (permission modifier_statuts)
 export async function PATCH(request: NextRequest, { params }: Ctx) {
-  const guard = await requirePermission('modifier_statuts');
+  const { id } = await params;
+  const guard = await guardRequestAccess('modifier_statuts', 'quote', id);
   if (guard.error) return guard.error;
   const session = guard.session;
-
-  const { id } = await params;
 
   try {
     const body = await request.json();
