@@ -145,6 +145,17 @@ function itemWhereParent(kind: Kind, parentId: string) {
 // ═══════════════════════════════════════════════════════════════════════════
 const freeLabel = (description: string | null | undefined) => (description ?? '').trim();
 
+// Produit : reserved → available, jamais plus que ce qui est réellement réservé (une ligne
+// forcée "Mettre disponible malgré le manque" a un resolvedQuantity sans réservé derrière —
+// sans plafond, `reserved` passait en négatif). Renvoie la quantité réellement relâchée.
+async function releaseProductReserved(productId: string, qty: number): Promise<number> {
+  if (qty <= 0) return 0;
+  const row = await prisma.product.findUnique({ where: { id: productId }, select: { reserved: true } });
+  const back = row ? Math.min(Math.max(0, row.reserved), qty) : 0;
+  if (back > 0) await prisma.product.update({ where: { id: productId }, data: { reserved: { decrement: back }, available: { increment: back } } });
+  return back;
+}
+
 // Met de côté pour une commande ce qui est dispo (available → reserved), renvoie la quantité prise.
 async function reserveFreeStock(label: string, qty: number): Promise<number> {
   if (!label || qty <= 0) return 0;
@@ -984,7 +995,7 @@ export async function releaseOrderItemStock(kind: Kind, itemId: string) {
 
   if (item.resolvedQuantity > 0) {
     // Portion déjà résolue (stock/production/achat) → repasse en Disponible, peu importe le chemin.
-    await prisma.product.update({ where: { id: item.productId! }, data: { reserved: { decrement: item.resolvedQuantity }, available: { increment: item.resolvedQuantity } } });
+    await releaseProductReserved(item.productId!, item.resolvedQuantity);
   }
 
   const stillNeeded = item.quantity - item.resolvedQuantity;
@@ -1196,7 +1207,7 @@ export async function adjustOrderItemQuantity(kind: Kind, itemId: string, newQua
   const newResolved = Math.min(item.resolvedQuantity, newQuantity);
   const excessResolved = item.resolvedQuantity - newResolved;
   if (excessResolved > 0) {
-    await prisma.product.update({ where: { id: item.productId }, data: { reserved: { decrement: excessResolved }, available: { increment: excessResolved } } });
+    await releaseProductReserved(item.productId, excessResolved);
   }
   await (itemDelegate(kind) as any).update({ where: { id: item.id }, data: { quantity: newQuantity, resolvedQuantity: newResolved } });
   await syncCommercialAssignment(kind, item.id);
@@ -1295,7 +1306,10 @@ export async function deliverStock(kind: Kind, parentId: string) {
       continue;
     }
     if (!item.resolvedQuantity) continue;
-    await prisma.product.update({ where: { id: item.productId }, data: { reserved: { decrement: item.resolvedQuantity } } });
+    // Plafonné au réservé réel (une ligne forcée n'a rien réservé) — jamais de réservé négatif.
+    const prod = await prisma.product.findUnique({ where: { id: item.productId }, select: { reserved: true } });
+    const out = prod ? Math.min(Math.max(0, prod.reserved), item.resolvedQuantity) : 0;
+    if (out > 0) await prisma.product.update({ where: { id: item.productId }, data: { reserved: { decrement: out } } });
 
     if (item.assignedEmployeeId) {
       const assignment = await prisma.stockAssignment.findFirst({ where: { employeeId: item.assignedEmployeeId, productId: item.productId } });
