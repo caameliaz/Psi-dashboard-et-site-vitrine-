@@ -11,6 +11,7 @@ import { pushSupported, iosNeedsInstall, isPushEnabled, enablePush, disablePush 
 import Image from 'next/image';
 import Link from 'next/link';
 import { InstallPrompt } from '@/components/InstallPrompt';
+import { PasswordResetReminder } from '@/components/PasswordResetReminder';
 
 // Cloche mobile — même source de données que la cloche du dashboard PC
 // (store partagé notifBell, alimenté par TopBar).
@@ -148,6 +149,8 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
       <PageViewTracker />
       {/* Pop-up « Installer l'app » (mobile, tant qu'elle n'est pas installée) */}
       <InstallPrompt />
+      {/* Rappel « choisissez votre propre mot de passe » après plusieurs réinitialisations */}
+      <PasswordResetReminder />
       <div className="flex min-h-screen" style={{ background: isQuickOrder ? '#FFFFFF' : '#F5F8FC' }}>
         {/* Sidebar : fixe sur desktop, drawer sur mobile */}
         <Sidebar mobileOpen={mobileOpen} onCloseMobile={() => setMobileOpen(false)} />

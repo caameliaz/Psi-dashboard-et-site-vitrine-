@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import bcrypt from 'bcryptjs';
+import { PASSWORD_RESET_NOTIF_TITLE, PASSWORD_CHANGED_ACTION, RESET_REMINDER_THRESHOLD } from '@/lib/audit';
 
 // GET /api/profile — infos de l'utilisateur connecté
 export async function GET() {
@@ -13,7 +14,24 @@ export async function GET() {
     select: { id: true, name: true, email: true, phone: true, role: true, customRole: { select: { name: true } }, createdAt: true, recapDaily: true, recapWeekly: true },
   });
   if (!user) return NextResponse.json({ error: 'Introuvable' }, { status: 404 });
-  return NextResponse.json(user);
+
+  // Réinitialisations « Mot de passe oublié » depuis son dernier changement de mot de passe à lui.
+  // Au-delà du seuil, l'app lui rappelle qu'il peut choisir son propre mot de passe (cf. PasswordResetReminder).
+  const dernierChangement = await prisma.auditLog.findFirst({
+    where: { userId: user.id, action: PASSWORD_CHANGED_ACTION },
+    orderBy: { createdAt: 'desc' },
+    select: { createdAt: true },
+  });
+  // Comptées via les notifications « Mot de passe réinitialisé » (une par demande, message « Nom (email) a demandé… »),
+  // ce qui inclut aussi les demandes faites avant que ce rappel existe.
+  const resetCount = await prisma.notification.count({
+    where: {
+      title: PASSWORD_RESET_NOTIF_TITLE,
+      message: { contains: `(${user.email})`, mode: 'insensitive' },
+      ...(dernierChangement ? { createdAt: { gt: dernierChangement.createdAt } } : {}),
+    },
+  });
+  return NextResponse.json({ ...user, resetCount, suggestOwnPassword: resetCount >= RESET_REMINDER_THRESHOLD });
 }
 
 // PATCH /api/profile — met à jour ses propres infos OU son mot de passe
@@ -39,6 +57,10 @@ export async function PATCH(request: NextRequest) {
       if (!ok) return NextResponse.json({ error: 'Mot de passe actuel incorrect' }, { status: 400 });
 
       await prisma.user.update({ where: { id: userId }, data: { password: await bcrypt.hash(body.newPassword, 10) } });
+      // Remet à zéro le compte des réinitialisations « Mot de passe oublié » (cf. GET ci-dessus)
+      await prisma.auditLog
+        .create({ data: { userId, action: PASSWORD_CHANGED_ACTION, entity: 'UTILISATEUR', entityId: userId } })
+        .catch(console.error);
       return NextResponse.json({ success: true, passwordChanged: true });
     }
 

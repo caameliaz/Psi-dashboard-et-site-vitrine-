@@ -10,6 +10,7 @@ import { genPassword } from '@/lib/gen-password';
 import bcrypt from 'bcryptjs';
 import { validateEmail } from '@/lib/validation';
 import { isOwnerEmail } from '@/lib/owner';
+import { PASSWORD_RESET_NOTIF_TITLE } from '@/lib/audit';
 
 // POST /api/password-reset — un utilisateur demande la réinitialisation de son mot de passe (PUBLIC).
 // Body : { email }.
@@ -62,7 +63,7 @@ export async function POST(request: NextRequest) {
         // 3. Informe les admins (traçabilité) — SANS le mot de passe
         createNotif({
           type: 'ACTION_AUTRE',
-          title: 'Mot de passe réinitialisé',
+          title: PASSWORD_RESET_NOTIF_TITLE, // sert aussi à compter les réinitialisations (cf. api/profile)
           message: `${user.name} (${user.email}) a demandé un nouveau mot de passe — envoyé automatiquement par email.`,
           adminOnly: true,
           link: '/admin/settings/users',
