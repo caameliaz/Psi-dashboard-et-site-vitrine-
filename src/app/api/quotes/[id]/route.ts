@@ -60,6 +60,15 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
   try {
     const body = await request.json();
 
+    // Statut AVANT cette requête : les effets sur le stock ne se rejouent que si le statut CHANGE vraiment
+    // (sinon un double clic / une requête répétée « Livré » retirait deux fois le réservé du produit).
+    const statusBefore = body.status !== undefined ? (await prisma.quote.findUnique({ where: { id }, select: { status: true } }))?.status : undefined;
+    const statusChanged = body.status !== undefined && body.status !== statusBefore;
+    // Un devis livré ou retourné ne s'annule pas : la marchandise est déjà sortie (cf. commandes).
+    if (body.status === 'ANNULE' && (statusBefore === 'LIVRE' || statusBefore === 'RETOURNE')) {
+      return NextResponse.json({ error: 'Un devis livré ou retourné ne peut pas être annulé (utilisez « Retourné »)' }, { status: 409 });
+    }
+
     // Changement d'assignation ("pris en charge par") → nécessite la permission assign_commandes
     if (body.assignedToId !== undefined && !hasPermission(session.user as any, 'assign_commandes')) {
       return NextResponse.json({ error: "Vous n'avez pas la permission d'assigner" }, { status: 403 });
@@ -326,9 +335,9 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
         await syncCommercialAssignmentForParent('quote', id);
       }
 
-      if (body.status === 'VALIDE') {
+      if (statusChanged && body.status === 'VALIDE') {
         await confirmStock('quote', id);
-      } else if (body.status === 'PRODUITE') {
+      } else if (statusChanged && body.status === 'PRODUITE') {
         // "Marquer Produit" — résout la part manquante de chaque article (réallocation de stock
         // produit existant SEULEMENT, jamais de fabrication), la confirmation d'un éventuel
         // manquant a déjà eu lieu plus haut (cf. previewForceCompleteShortfall). `force: true`
@@ -341,11 +350,11 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
           });
         }
         await resolveFreeTextItems('quote', id, { force: !!body.force });
-      } else if (body.status === 'ANNULE') {
+      } else if (statusChanged && body.status === 'ANNULE') {
         await cancelStock('quote', id);
-      } else if (body.status === 'LIVRE') {
+      } else if (statusChanged && body.status === 'LIVRE') {
         await deliverStock('quote', id);
-      } else if (body.status === 'RETOURNE') {
+      } else if (statusChanged && body.status === 'RETOURNE') {
         await returnStock('quote', id);
       } else if (body.items !== undefined && (current?.status === 'VALIDE' || current?.status === 'PRODUITE')) {
         await confirmStock('quote', id);

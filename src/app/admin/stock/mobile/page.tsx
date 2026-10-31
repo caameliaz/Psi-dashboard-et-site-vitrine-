@@ -15,6 +15,7 @@ interface StockProduct {
   id: string; reference: string; name: string | null;
   mode: 'ACHETE' | 'FABRIQUE' | 'LES_DEUX';
   available: number; reserved: number; inDelivery: number; returned: number; assignedToCommercials: number;
+  reservedRollink?: number; // part du Réservé venant de commandes RollLink actives (interrupteur ci-dessous)
   purchaseThreshold: number; productionThreshold: number;
 }
 
@@ -77,9 +78,16 @@ function ProductCard({ p }: { p: StockProduct }) {
 // minuscule — on repasse alors la PAGE en scroll normal (cf. `open`/`onToggle` remontés
 // au parent, qui bascule le conteneur racine entre hauteur fixe et hauteur libre).
 function CurrentStockCard({ open, onToggle }: { open: boolean; onToggle: () => void }) {
-  const [products, setProducts] = useState<StockProduct[]>([]);
+  const [rawProducts, setProducts] = useState<StockProduct[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  // Interrupteur RollLink — désactivé par défaut (même règle que la page Stock sur ordinateur) : les rouleaux
+  // réservés par des commandes RollLink actives sont alors comptés comme disponibles. Affichage seulement.
+  const [withRollink, setWithRollink] = useState(false);
+  const products = withRollink ? rawProducts : rawProducts.map((p) => {
+    const rl = p.reservedRollink ?? 0;
+    return rl > 0 ? { ...p, available: p.available + rl, reserved: p.reserved - rl } : p;
+  });
 
   const fetchProducts = useCallback(async () => {
     setLoading(true);
@@ -108,6 +116,13 @@ function CurrentStockCard({ open, onToggle }: { open: boolean; onToggle: () => v
       </button>
       {open && (
         <div className="px-4 pb-4 flex-1 min-h-0">
+          <div className="flex items-center gap-2 mb-3">
+            <button type="button" role="switch" aria-checked={withRollink} onClick={() => setWithRollink((v) => !v)}
+              className="relative flex-shrink-0 rounded-full transition-colors duration-200" style={{ width: 40, height: 24, background: withRollink ? '#4CAF4F' : '#D0D5DD' }}>
+              <span className="absolute top-[3px] left-[3px] w-[18px] h-[18px] rounded-full bg-white shadow-sm transition-all duration-200" style={{ transform: withRollink ? 'translateX(16px)' : 'translateX(0px)' }} />
+            </button>
+            <span className="text-[13px] font-semibold text-[#374151]">RollLink {withRollink ? 'activé' : 'désactivé'}</span>
+          </div>
           <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Rechercher une référence..."
             className="w-full mb-3 px-3 py-2 rounded-lg border border-[#E2E8F0] text-[13px] text-[#0F172A] focus:outline-none focus:border-[#4CAF4F] sticky top-0 bg-white" />
           {loading ? (

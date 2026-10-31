@@ -236,6 +236,26 @@ export async function POST(request: NextRequest) {
       include: { items: true, client: { omit: { photo: true }, include: { phones: true } } },
     });
 
+    // Vente créée directement Livrée : le pop-up du formulaire demande si on retire les produits du stock.
+    // `adjustStock: true` → Disponible baisse de la quantité (plafonné à ce qui existe) ; sinon rien n'est touché.
+    let stockDetail = '';
+    if (paidInPast) {
+      if (body.adjustStock === true) {
+        const retraits: string[] = [];
+        for (const it of order.items) {
+          if (!it.productId) continue;
+          const p = await prisma.product.findUnique({ where: { id: it.productId }, select: { reference: true, name: true, available: true } });
+          if (!p) continue;
+          const take = Math.min(Math.max(0, p.available), it.quantity);
+          if (take > 0) await prisma.product.update({ where: { id: it.productId }, data: { available: { decrement: take } } });
+          retraits.push(`${p.name || p.reference} −${take}${take < it.quantity ? ` (manque ${it.quantity - take})` : ''}`);
+        }
+        stockDetail = retraits.length ? ` — stock retiré : ${retraits.join(', ')}` : '';
+      } else {
+        stockDetail = ' — stock non modifié';
+      }
+    }
+
     const isAdmin = body.source !== 'SITE';
     const actorName = session?.user?.name ?? session?.user?.email ?? 'Agent';
     const clientLabel = client.company ?? client.name;
@@ -263,7 +283,7 @@ export async function POST(request: NextRequest) {
       action: 'Commande créée',
       entity: 'COMMANDE',
       entityId: order.id,
-      detail: `${client.company ?? client.name} — ${validItems.length} article(s)${paidInPast ? ' — créée directement Livrée (date de règlement passée)' : ''}`,
+      detail: `${client.company ?? client.name} — ${validItems.length} article(s)${paidInPast ? ' — créée directement Livrée (date de règlement passée)' : ''}${stockDetail}`,
       orderId: order.id,
     });
     return NextResponse.json(order, { status: 201 });

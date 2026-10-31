@@ -60,6 +60,16 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
   try {
     const body = await request.json();
 
+    // Statut AVANT cette requête : les effets sur le stock ne se rejouent que si le statut CHANGE vraiment
+    // (sinon un double clic / une requête répétée « Livré » retirait deux fois le réservé du produit).
+    const statusBefore = body.status !== undefined ? (await prisma.order.findUnique({ where: { id }, select: { status: true } }))?.status : undefined;
+    const statusChanged = body.status !== undefined && body.status !== statusBefore;
+    // Une commande livrée ou retournée ne s'annule pas : la marchandise est déjà sortie (le réservé est consommé),
+    // l'annuler remettrait du stock « fantôme » en disponible. Pour un retour colis : statut « Retourné ».
+    if (body.status === 'ANNULE' && (statusBefore === 'LIVRE' || statusBefore === 'RETOURNE')) {
+      return NextResponse.json({ error: 'Une commande livrée ou retournée ne peut pas être annulée (utilisez « Retourné »)' }, { status: 409 });
+    }
+
     // Commandes RollLink : jamais livrées dans PSI Dash (facturées et livrées côté RollLink) —
     // on peut les marquer Disponible, pas Livré (sinon elles entreraient dans les ventes livrées).
     if (body.status === 'LIVRE') {
@@ -335,9 +345,9 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
         await syncCommercialAssignmentForParent('order', id);
       }
 
-      if (body.status === 'VALIDE') {
+      if (statusChanged && body.status === 'VALIDE') {
         await confirmStock('order', id);
-      } else if (body.status === 'PRODUITE') {
+      } else if (statusChanged && body.status === 'PRODUITE') {
         // "Marquer Produit" — résout la part manquante de chaque article (réallocation de stock
         // produit existant SEULEMENT, jamais de fabrication), la confirmation d'un éventuel
         // manquant a déjà eu lieu plus haut (cf. previewForceCompleteShortfall). `force: true`
@@ -352,11 +362,11 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
         // Résout les lignes LIBRES (sans fiche produit) de la même façon — cf. previewFreeTextResolution
         // ci-dessus, déjà revérifié juste avant sauf en mode `force` (mêmes garanties).
         await resolveFreeTextItems('order', id, { force: !!body.force });
-      } else if (body.status === 'ANNULE') {
+      } else if (statusChanged && body.status === 'ANNULE') {
         await cancelStock('order', id);
-      } else if (body.status === 'LIVRE') {
+      } else if (statusChanged && body.status === 'LIVRE') {
         await deliverStock('order', id);
-      } else if (body.status === 'RETOURNE') {
+      } else if (statusChanged && body.status === 'RETOURNE') {
         await returnStock('order', id);
       } else if (body.items !== undefined && (current?.status === 'VALIDE' || current?.status === 'PRODUITE')) {
         // Lignes modifiées sans changement de statut, commande déjà confirmée

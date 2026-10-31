@@ -1297,6 +1297,11 @@ export async function returnStock(kind: Kind, parentId: string) {
 // (et faux) de retoucher `available` ici pour ça.
 export async function deliverStock(kind: Kind, parentId: string) {
   const items = await (itemDelegate(kind) as any).findMany({ where: itemWhereParent(kind, parentId) });
+  // Le commercial qui vend (« Pris en charge par ») voit SON stock baisser de ce qui est livré, même si la
+  // case d'auto-attribution n'était pas cochée — c'est ce qui rend le suivi du stock commercial fiable.
+  const parent = await (parentDelegate(kind) as any).findUnique({ where: { id: parentId }, select: { ref: true, assignedToId: true, clientName: true, clientCompany: true } });
+  // Lignes de vente suivies (le commercial détenait ce produit) → alimentent la notif aux admins plus bas
+  const sold: { employeeId: string; productId: string; delivered: number; taken: number; left: number }[] = [];
   for (const item of items) {
     if (!item.productId) {
       // Réf libre : le réservé baisse du plein montant (plafonné — une ligne forcée n'a rien réservé).
@@ -1311,8 +1316,10 @@ export async function deliverStock(kind: Kind, parentId: string) {
     const out = prod ? Math.min(Math.max(0, prod.reserved), item.resolvedQuantity) : 0;
     if (out > 0) await prisma.product.update({ where: { id: item.productId }, data: { reserved: { decrement: out } } });
 
-    if (item.assignedEmployeeId) {
-      const assignment = await prisma.stockAssignment.findFirst({ where: { employeeId: item.assignedEmployeeId, productId: item.productId } });
+    // Commercial verrouillé sur l'article (auto-attribution), sinon celui « Pris en charge par »
+    const employeeId: string | null = item.assignedEmployeeId ?? parent?.assignedToId ?? null;
+    if (employeeId) {
+      const assignment = await prisma.stockAssignment.findFirst({ where: { employeeId, productId: item.productId } });
       if (assignment) {
         const take = Math.min(item.resolvedQuantity, assignment.quantity);
         if (take > 0) {
@@ -1321,10 +1328,34 @@ export async function deliverStock(kind: Kind, parentId: string) {
             ? prisma.stockAssignment.delete({ where: { id: assignment.id } })
             : prisma.stockAssignment.update({ where: { id: assignment.id }, data: { quantity: remaining } }));
         }
+        sold.push({ employeeId, productId: item.productId, delivered: item.resolvedQuantity, taken: take, left: assignment.quantity - take });
       }
+    }
+    if (item.assignedEmployeeId) {
       // Le crédit vient d'être consommé par la livraison — rien à "reprendre" en le décochant.
       await (itemDelegate(kind) as any).update({ where: { id: item.id }, data: { assignedQuantity: 0, assignedEmployeeId: null } });
     }
+  }
+
+  // Notification AUX ADMINS : un commercial a vendu du stock qu'il détenait (une notif par commercial)
+  const parEmploye = new Map<string, typeof sold>();
+  for (const s of sold) parEmploye.set(s.employeeId, [...(parEmploye.get(s.employeeId) ?? []), s]);
+  for (const [employeeId, lignes] of parEmploye) {
+    const [emp, produits] = await Promise.all([
+      prisma.user.findUnique({ where: { id: employeeId }, select: { name: true } }),
+      prisma.product.findMany({ where: { id: { in: lignes.map((l) => l.productId) } }, select: { id: true, reference: true, name: true } }),
+    ]);
+    const nomProduit = (id: string) => { const p = produits.find((x) => x.id === id); return p ? (p.name || p.reference) : '—'; };
+    const detail = lignes.map((l) =>
+      `${nomProduit(l.productId)} : −${l.taken} (reste ${l.left})${l.delivered > l.taken ? ` ⚠️ ${l.delivered - l.taken} livré(s) en plus de son stock` : ''}`).join(' · ');
+    const client = parent?.clientCompany ?? parent?.clientName ?? '—';
+    await createNotif({
+      type: 'ACTION_AUTRE',
+      title: 'Stock commercial mis à jour',
+      message: `${emp?.name ?? 'Un commercial'} a vendu — ${kind === 'order' ? 'commande' : 'devis'} ${parent?.ref ?? parentId.slice(0, 8).toUpperCase()} (${client}). ${detail}`,
+      adminOnly: true,
+      link: '/admin/stock',
+    }).catch(() => {});
   }
 }
 

@@ -27,6 +27,10 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
     if (existing.status === 'ANNULE') {
       return NextResponse.json({ error: 'Devis déjà annulé' }, { status: 409 });
     }
+    // Livré/retourné : la marchandise est déjà sortie, annuler remettrait du stock « fantôme » en disponible
+    if (existing.status === 'LIVRE' || existing.status === 'RETOURNE') {
+      return NextResponse.json({ error: 'Un devis livré ou retourné ne peut pas être annulé (utilisez « Retourné »)' }, { status: 409 });
+    }
 
     const quote = await prisma.quote.update({
       where: { id },

@@ -19,6 +19,8 @@ interface StockProduct {
   // tout ce qui est physiquement en entrepôt OU engagé sur une commande, moins ce qui est
   // chez un commercial.
   available: number; reserved: number; inDelivery: number; returned: number; assignedToCommercials: number;
+  // Part du Réservé qui vient de commandes RollLink actives (interrupteur « RollLink » : voir avec / sans)
+  reservedRollink?: number;
   purchaseThreshold: number; productionThreshold: number;
   category: { name: string } | null;
   recipeItems: { id: string }[];
@@ -279,9 +281,9 @@ function AssignModal({ employees, products, onClose, onSave }: {
                   <select value={l.productId} onChange={(e) => setLine(i, { productId: e.target.value })} className={inputClass}>
                     <option value="">Choisir une référence</option>
                     {/* Toutes les références : celles sans stock libre restent visibles mais grisées */}
-                    {availableProducts.map((p) => <option key={p.id} value={p.id}>{p.name || p.reference} ({p.reference}) — {horsCommerciaux(p)} disponible(s)</option>)}
+                    {availableProducts.map((p) => <option key={p.id} value={p.id}>{p.name || p.reference} ({p.reference}) — {horsCommerciaux(p)} attribuable(s){p.reserved > 0 ? ` (dont ${Math.min(p.reserved, horsCommerciaux(p))} réservé(s) pour des commandes)` : ''}</option>)}
                     {products.filter((p) => horsCommerciaux(p) <= 0).map((p) => (
-                      <option key={p.id} value={p.id} disabled>{p.name || p.reference} ({p.reference}) — 0 disponible, réapprovisionner d&apos;abord</option>
+                      <option key={p.id} value={p.id} disabled>{p.name || p.reference} ({p.reference}) — rien d&apos;attribuable, réapprovisionner d&apos;abord</option>
                     ))}
                   </select>
                   <input value={l.quantity} onChange={(e) => setLine(i, { quantity: e.target.value.replace(/[^\d.]/g, '') })} inputMode="decimal"
@@ -403,7 +405,15 @@ function StockPageInner() {
   const [tab, setTab] = useState<'produits' | 'matieres' | 'libres' | 'commercial'>('produits');
   const [freeRefs, setFreeRefs] = useState<FreeRef[]>([]);
   const [freeTarget, setFreeTarget] = useState<FreeRef | null>(null);
-  const [products, setProducts] = useState<StockProduct[]>([]);
+  const [rawProducts, setProducts] = useState<StockProduct[]>([]);
+  // Interrupteur RollLink — DÉSACTIVÉ par défaut : les rouleaux réservés par des commandes RollLink actives
+  // sont alors comptés comme disponibles (comme si ces commandes n'existaient pas). Affichage seulement.
+  const [withRollink, setWithRollink] = useState(false);
+  const rollinkTotal = useMemo(() => rawProducts.reduce((n, p) => n + (p.reservedRollink ?? 0), 0), [rawProducts]);
+  const products = useMemo(() => withRollink ? rawProducts : rawProducts.map((p) => {
+    const rl = p.reservedRollink ?? 0;
+    return rl > 0 ? { ...p, available: p.available + rl, reserved: p.reserved - rl } : p;
+  }), [rawProducts, withRollink]);
   const [materials, setMaterials] = useState<StockMaterial[]>([]);
   const [employees, setEmployees] = useState<EmployeeAssignment[]>([]);
   const [search, setSearch] = useState('');
@@ -509,20 +519,37 @@ function StockPageInner() {
           <h1 className="text-[22px] font-bold text-[#0F172A]">Stock</h1>
           <p className="text-[13px] text-[#8A9BB5] mt-0.5">{loading ? 'Chargement…' : `${products.length} produit(s) · ${materials.length} matière(s) première(s)`}</p>
         </div>
-        {canEdit && (
-          <div className="flex items-center gap-2">
-            <Link href="/admin/stock/thresholds" className="px-4 py-2 rounded-lg text-sm font-semibold border border-[#E2E8F0] text-[#374151] hover:bg-[#F8FAFC] transition-colors">
-              Seuils
-            </Link>
-            <button onClick={() => setShowRestock(true)} className="px-4 py-2 rounded-lg text-sm font-semibold border border-[#4CAF4F] text-[#4CAF4F] hover:bg-[#F0FDF4] transition-colors">
-              Restocker
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="flex items-center gap-2" title="Interrupteur d'affichage : montre le stock avec ou sans les rouleaux réservés par des commandes RollLink. N'écrit rien en base.">
+            <button type="button" role="switch" aria-checked={withRollink} onClick={() => setWithRollink((v) => !v)}
+              className="relative flex-shrink-0 rounded-full transition-colors duration-200" style={{ width: 40, height: 24, background: withRollink ? '#4CAF4F' : '#D0D5DD' }}>
+              <span className="absolute top-[3px] left-[3px] w-[18px] h-[18px] rounded-full bg-white shadow-sm transition-all duration-200" style={{ transform: withRollink ? 'translateX(16px)' : 'translateX(0px)' }} />
             </button>
-            <button onClick={() => setShowAssign(true)} className="px-4 py-2 rounded-lg text-sm font-semibold text-white transition-colors" style={{ background: '#4CAF4F' }}>
-              + Attribuer du stock
-            </button>
+            <span className="text-[13px] font-semibold text-[#374151]">RollLink {withRollink ? 'activé' : 'désactivé'}</span>
           </div>
-        )}
+          {canEdit && (
+            <div className="flex items-center gap-2">
+              <Link href="/admin/stock/thresholds" className="px-4 py-2 rounded-lg text-sm font-semibold border border-[#E2E8F0] text-[#374151] hover:bg-[#F8FAFC] transition-colors">
+                Seuils
+              </Link>
+              <button onClick={() => setShowRestock(true)} className="px-4 py-2 rounded-lg text-sm font-semibold border border-[#4CAF4F] text-[#4CAF4F] hover:bg-[#F0FDF4] transition-colors">
+                Restocker
+              </button>
+              <button onClick={() => setShowAssign(true)} className="px-4 py-2 rounded-lg text-sm font-semibold text-white transition-colors" style={{ background: '#4CAF4F' }}>
+                + Attribuer du stock
+              </button>
+            </div>
+          )}
+        </div>
       </div>
+
+      {rollinkTotal > 0 && (
+        <p className="text-[12px] text-[#64748B] mb-4 -mt-3">
+          {withRollink
+            ? `RollLink activé : les chiffres incluent ${rollinkTotal} rouleau(x) réservé(s) par des commandes RollLink.`
+            : `RollLink désactivé : ${rollinkTotal} rouleau(x) réservé(s) par des commandes RollLink sont comptés comme disponibles. Activez pour voir le stock réel.`}
+        </p>
+      )}
 
       <div className="flex items-start gap-2.5 px-4 py-3 mb-5 rounded-xl border border-[#FED7AA] bg-[#FFF7ED] text-[#9A3412]">
         <svg width={16} height={16} viewBox="0 0 24 24" fill="none" className="flex-shrink-0 mt-0.5"><path d="M12 9v4M12 17h.01M10.29 3.86l-8.18 14a1 1 0 00.87 1.5h16.02a1 1 0 00.87-1.5l-8.18-14a1 1 0 00-1.74 0z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
@@ -556,11 +583,12 @@ function StockPageInner() {
               <tr className="bg-[#F8FAFC] border-b border-[#E2E8F0]">
                 <th className="px-4 py-3 text-[11px] font-bold text-[#8A9BB5] uppercase">Référence</th>
                 <th className="px-4 py-3 text-[11px] font-bold text-[#8A9BB5] uppercase">Mode</th>
-                <th className="px-4 py-3 text-[11px] font-bold text-[#8A9BB5] uppercase text-right">Disponible</th>
-                <th className="px-4 py-3 text-[11px] font-bold text-[#8A9BB5] uppercase text-right">Réservé</th>
-                <th className="px-4 py-3 text-[11px] font-bold text-[#8A9BB5] uppercase text-right">Total</th>
-                <th className="px-4 py-3 text-[11px] font-bold text-[#8A9BB5] uppercase text-right">Hors commerciaux</th>
-                <th className="px-4 py-3 text-[11px] font-bold text-[#8A9BB5] uppercase text-right">En retour</th>
+                <th title="Prêt à vendre, pas encore rattaché à une commande. Inclut ce qui est chez les commerciaux." className="px-4 py-3 text-[11px] font-bold text-[#8A9BB5] uppercase text-right cursor-help">Disponible</th>
+                <th title="Mis de côté pour des commandes/devis confirmés, pas encore livrés (les rouleaux existent déjà ou sont en cours de fabrication)." className="px-4 py-3 text-[11px] font-bold text-[#8A9BB5] uppercase text-right cursor-help">Réservé</th>
+                <th title="Disponible + Réservé : tout le stock physique." className="px-4 py-3 text-[11px] font-bold text-[#8A9BB5] uppercase text-right cursor-help">Total</th>
+                <th title="Stock confié aux commerciaux (onglet « Stock par commercial »). Baisse quand ils livrent." className="px-4 py-3 text-[11px] font-bold text-[#8A9BB5] uppercase text-right cursor-help">Attribué</th>
+                <th title="Total − Attribué : ce qui est à l'entrepôt ou engagé sur une commande. C'est le maximum qu'on peut encore attribuer." className="px-4 py-3 text-[11px] font-bold text-[#8A9BB5] uppercase text-right cursor-help">Hors commerciaux</th>
+                <th title="Colis revenus après livraison (remise en stock à faire à la main via Correction)." className="px-4 py-3 text-[11px] font-bold text-[#8A9BB5] uppercase text-right cursor-help">En retour</th>
                 <th className="px-4 py-3 text-[11px] font-bold text-[#8A9BB5] uppercase">Statut</th>
                 {canEdit && <th className="px-4 py-3"></th>}
               </tr>
@@ -580,12 +608,13 @@ function StockPageInner() {
                       moins ce qui est actuellement chez un commercial (StockAssignment) —
                       jamais négatif à l'affichage (une incohérence de données ne doit jamais
                       remonter un total halluciné). */}
+                  <td className="px-4 py-3 text-[13px] text-[#374151] text-right tabular-nums">{p.assignedToCommercials}</td>
                   <td className="px-4 py-3 text-[13px] text-[#374151] text-right tabular-nums">{Math.max(0, p.available + p.reserved - p.assignedToCommercials)}</td>
                   <td className="px-4 py-3 text-[13px] text-[#374151] text-right tabular-nums">{p.returned}</td>
                   <td className="px-4 py-3">{statusBadge(p.available, p.mode === 'ACHETE' ? p.purchaseThreshold : p.productionThreshold)}</td>
                   {canEdit && (
                     <td className="px-4 py-3 text-right">
-                      <button onClick={() => setActionTarget({ type: 'product', item: p, label: p.reference, unit: '', needsMode: p.mode === 'LES_DEUX' })}
+                      <button onClick={() => setActionTarget({ type: 'product', item: rawProducts.find((x) => x.id === p.id) ?? p, label: p.reference, unit: '', needsMode: p.mode === 'LES_DEUX' })}
                         className="px-3 py-1.5 rounded-lg border border-[#E2E8F0] text-[12px] font-semibold text-[#374151] hover:bg-[#F8FAFC]">
                         Gérer le stock
                       </button>
@@ -594,7 +623,7 @@ function StockPageInner() {
                 </tr>
               ))}
               {filteredProducts.length === 0 && !loading && (
-                <tr><td colSpan={9} className="px-4 py-10 text-center text-[13px] text-[#8A9BB5]">Aucun produit.</td></tr>
+                <tr><td colSpan={10} className="px-4 py-10 text-center text-[13px] text-[#8A9BB5]">Aucun produit.</td></tr>
               )}
             </tbody>
           </table>

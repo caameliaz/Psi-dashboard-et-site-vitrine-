@@ -137,6 +137,8 @@ export async function submitNewRequest(
         assignedToId: item._assignedToId ?? undefined, source: 'AUTRE',
         invoiceNumber: item._invoiceNumber, paymentMethod: item._paymentMethod,
         paymentDate: item._paymentDate, vatEnabled: item._vatEnabled,
+        // Vente créée directement livrée : choix du pop-up « retirer du stock ? » (true / false / absent)
+        adjustStock: item._adjustStock,
       }
     : {
         // id transmis quand le devis est créé depuis une fiche client → pas de doublon
@@ -250,11 +252,17 @@ export function CreateForm({ defaultType, onClose, onSave, users, currentUserId,
   // Pop-up "enregistrer sur la fiche client ?" — infos saisies que la fiche existante n'a pas.
   const [profilePrompt, setProfilePrompt] = useState<{ clientLabel: string; gaps: string[] } | null>(null);
 
+  // Pop-up « vente livrée directement : retirer du stock ? » (date de règlement passée → créée Livrée).
+  // `current` = stock disponible actuel (absent si le compte n'a pas le droit de voir le stock).
+  const [stockPrompt, setStockPrompt] = useState<{ saveToProfile?: boolean; lines: { label: string; qty: number; current?: number }[] } | null>(null);
+
   // `saveToProfile` : undefined = pas encore demandé (on vérifie la fiche), true/false = choix fait.
-  const handleSave = async (saveToProfile?: boolean) => {
+  // `adjustStock`   : undefined = pas encore demandé (vente livrée directement), true = retirer du stock, false = ne pas y toucher.
+  const handleSave = async (saveToProfile?: boolean, adjustStock?: boolean) => {
     setFormError('');
     setFieldErrors({});
     setProfilePrompt(null);
+    setStockPrompt(null);
     // Champs obligatoires : entreprise, téléphone, wilaya, commune, ≥ 1 ligne.
     if (!entreprise.trim()) { setFieldErrors({ entreprise: "Nom de l'entreprise requis" }); setTimeout(() => document.querySelector('[placeholder="Nom entreprise"]')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100); return; }
     if (!telephone.trim()) { setFieldErrors({ telephone: 'Numéro de téléphone requis' }); setTimeout(() => document.querySelector('[placeholder="+213 5XX XXX XXX"]')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100); return; }
@@ -284,6 +292,23 @@ export function CreateForm({ defaultType, onClose, onSave, users, currentUserId,
           }
         }
       } catch { /* vérification facultative : en cas d'échec on crée quand même la commande */ }
+    }
+    // Commande avec date de règlement passée = créée directement « Livrée » : on demande si le stock doit baisser.
+    const aujourdhui = new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Algiers' });
+    if (type === 'Commande' && paymentDate && paymentDate < aujourdhui && adjustStock === undefined) {
+      const lignesStock = lignes.filter((l) => l.ref && l.productId && l.qte > 0);
+      if (lignesStock.length > 0) {
+        let stocks = new Map<string, number>();
+        try {
+          const r = await fetch('/api/stock/products');
+          if (r.ok) stocks = new Map((await r.json() as { id: string; available: number }[]).map((p) => [p.id, p.available]));
+        } catch { /* sans droit « voir le stock » : on affiche juste les quantités à retirer */ }
+        setStockPrompt({
+          saveToProfile,
+          lines: lignesStock.map((l) => ({ label: l.ref, qty: l.qte, current: stocks.get(l.productId as string) })),
+        });
+        return;
+      }
     }
     setSaving(true);
     const now = new Date();
@@ -319,6 +344,7 @@ export function CreateForm({ defaultType, onClose, onSave, users, currentUserId,
       _paymentDate: paymentDate || undefined,
       _vatEnabled: tva,
       _saveToProfile: saveToProfile === true,
+      _adjustStock: adjustStock,
     } as any);
     setSaving(false);
     // Échec (ex. erreur serveur, validation API) → on GARDE le formulaire ouvert
@@ -619,9 +645,31 @@ export function CreateForm({ defaultType, onClose, onSave, users, currentUserId,
             </div>
           </div>
         )}
+        {stockPrompt && (
+          <div className="mx-6 mb-3 rounded-xl border-2 border-[#BFDBFE] bg-[#EFF6FF] p-3.5">
+            <p className="text-[13px] font-bold text-[#1E3A8A] mb-1">Vente livrée directement : toucher au stock ?</p>
+            <p className="text-[12px] text-[#1E3A8A] mb-2">Cette commande est créée directement « Livrée » (date de règlement passée). Faut-il retirer ces produits du stock disponible ?</p>
+            <ul className="mb-3 rounded-lg bg-white border border-[#DBEAFE] divide-y divide-[#EFF6FF]">
+              {stockPrompt.lines.map((l, i) => (
+                <li key={i} className="flex items-center justify-between gap-3 px-3 py-2 text-[12px] text-[#0F172A]">
+                  <span className="font-semibold">{l.label}</span>
+                  <span className="tabular-nums text-[#374151]">
+                    j&apos;enlève <b>{l.qty}</b> du stock
+                    {l.current !== undefined && <> · {l.current} → <b>{Math.max(0, l.current - l.qty)}</b>{l.current < l.qty && <span className="text-[#B91C1C]"> (il n&apos;y en a que {l.current})</span>}</>}
+                  </span>
+                </li>
+              ))}
+            </ul>
+            <div className="flex gap-2 flex-wrap">
+              <button onClick={() => setStockPrompt(null)} className="px-3 py-2 rounded-xl border border-[#E2E8F0] bg-white text-[12px] font-semibold text-[#374151]">Retour</button>
+              <button onClick={() => handleSave(stockPrompt.saveToProfile, false)} className="flex-1 px-3 py-2 rounded-xl border border-[#E2E8F0] bg-white text-[12px] font-bold text-[#374151]">Non, ne pas toucher au stock</button>
+              <button onClick={() => handleSave(stockPrompt.saveToProfile, true)} className="flex-1 px-3 py-2 rounded-xl text-[12px] font-bold text-white" style={{ background: '#4CAF4F' }}>Oui, retirer du stock</button>
+            </div>
+          </div>
+        )}
         <div className="flex gap-3 px-6 py-4 border-t border-[#F2F4F7]">
           <button onClick={onClose} className="flex-1 px-4 py-2.5 rounded-xl border border-[#E2E8F0] text-[13px] font-semibold text-[#374151] hover:bg-[#F8FAFC] transition-colors">Annuler</button>
-          <button onClick={() => handleSave()} disabled={saving || !!profilePrompt}
+          <button onClick={() => handleSave()} disabled={saving || !!profilePrompt || !!stockPrompt}
             className="flex-1 px-4 py-2.5 rounded-xl text-[13px] font-bold text-white disabled:opacity-40 transition-opacity"
             style={{ background: '#4CAF4F' }}>
             {saving ? 'Création…' : `Créer ${type === 'Commande' ? 'la commande' : 'le devis'}`}
