@@ -20,7 +20,8 @@ interface StockProduct {
   // chez un commercial.
   available: number; reserved: number; inDelivery: number; returned: number; assignedToCommercials: number;
   // Part du Réservé qui vient de commandes RollLink actives (interrupteur « RollLink » : voir avec / sans)
-  reservedRollink?: number;
+  reservedRollink?: number; rollinkFromStock?: number; // dont : ce que RollLink a pris au stock libre
+  rollinkPending?: number; // quantités de commandes RollLink en test (rien réservé) — sert à la simulation
   purchaseThreshold: number; productionThreshold: number;
   category: { name: string } | null;
   recipeItems: { id: string }[];
@@ -406,13 +407,21 @@ function StockPageInner() {
   const [freeRefs, setFreeRefs] = useState<FreeRef[]>([]);
   const [freeTarget, setFreeTarget] = useState<FreeRef | null>(null);
   const [rawProducts, setProducts] = useState<StockProduct[]>([]);
-  // Interrupteur RollLink — DÉSACTIVÉ par défaut : les rouleaux réservés par des commandes RollLink actives
-  // sont alors comptés comme disponibles (comme si ces commandes n'existaient pas). Affichage seulement.
+  // Interrupteur RollLink — DÉSACTIVÉ par défaut (RollLink est encore en test) :
+  //  - désactivé : tout ce qui vient de RollLink est ignoré (ce qu'il a pris au stock libre retourne en Disponible ;
+  //    ce qui a été fabriqué pour ses commandes disparaît du Réservé ET du Total) ;
+  //  - activé = SIMULATION : les commandes RollLink reçues en mode test sont comptées comme si elles étaient
+  //    confirmées (le disponible passe en Réservé). Calcul à l'écran SEULEMENT : rien n'est écrit en base.
   const [withRollink, setWithRollink] = useState(false);
   const rollinkTotal = useMemo(() => rawProducts.reduce((n, p) => n + (p.reservedRollink ?? 0), 0), [rawProducts]);
-  const products = useMemo(() => withRollink ? rawProducts : rawProducts.map((p) => {
+  const simulated = (p: StockProduct) => Math.min(Math.max(0, p.available), p.rollinkPending ?? 0);
+  const simTotal = useMemo(() => rawProducts.reduce((n, p) => n + simulated(p), 0), [rawProducts]);
+  const products = useMemo(() => withRollink ? rawProducts.map((p) => {
+    const sim = simulated(p);
+    return sim > 0 ? { ...p, available: p.available - sim, reserved: p.reserved + sim } : p;
+  }) : rawProducts.map((p) => {
     const rl = p.reservedRollink ?? 0;
-    return rl > 0 ? { ...p, available: p.available + rl, reserved: p.reserved - rl } : p;
+    return rl > 0 ? { ...p, available: p.available + (p.rollinkFromStock ?? 0), reserved: p.reserved - rl } : p;
   }), [rawProducts, withRollink]);
   const [materials, setMaterials] = useState<StockMaterial[]>([]);
   const [employees, setEmployees] = useState<EmployeeAssignment[]>([]);
@@ -520,12 +529,12 @@ function StockPageInner() {
           <p className="text-[13px] text-[#8A9BB5] mt-0.5">{loading ? 'Chargement…' : `${products.length} produit(s) · ${materials.length} matière(s) première(s)`}</p>
         </div>
         <div className="flex items-center gap-3 flex-wrap">
-          <div className="flex items-center gap-2" title="Interrupteur d'affichage : montre le stock avec ou sans les rouleaux réservés par des commandes RollLink. N'écrit rien en base.">
+          <div className="flex items-center gap-2" title="Interrupteur d'affichage : désactivé = stock sans RollLink ; activé = SIMULATION de ce que donneraient les commandes RollLink en test. N'écrit rien en base.">
             <button type="button" role="switch" aria-checked={withRollink} onClick={() => setWithRollink((v) => !v)}
               className="relative flex-shrink-0 rounded-full transition-colors duration-200" style={{ width: 40, height: 24, background: withRollink ? '#4CAF4F' : '#D0D5DD' }}>
               <span className="absolute top-[3px] left-[3px] w-[18px] h-[18px] rounded-full bg-white shadow-sm transition-all duration-200" style={{ transform: withRollink ? 'translateX(16px)' : 'translateX(0px)' }} />
             </button>
-            <span className="text-[13px] font-semibold text-[#374151]">RollLink {withRollink ? 'activé' : 'désactivé'}</span>
+            <span className="text-[13px] font-semibold text-[#374151]">RollLink {withRollink ? 'activé (simulation)' : 'désactivé'}</span>
           </div>
           {canEdit && (
             <div className="flex items-center gap-2">
@@ -543,11 +552,11 @@ function StockPageInner() {
         </div>
       </div>
 
-      {rollinkTotal > 0 && (
+      {(rollinkTotal > 0 || simTotal > 0) && (
         <p className="text-[12px] text-[#64748B] mb-4 -mt-3">
           {withRollink
-            ? `RollLink activé : les chiffres incluent ${rollinkTotal} rouleau(x) réservé(s) par des commandes RollLink.`
-            : `RollLink désactivé : ${rollinkTotal} rouleau(x) réservé(s) par des commandes RollLink sont comptés comme disponibles. Activez pour voir le stock réel.`}
+            ? `Simulation RollLink : ${simTotal > 0 ? `${simTotal} rouleau(x) de commandes RollLink en test sont comptés comme réservés. ` : ''}Rien n'est enregistré ; les vraies valeurs sont inchangées.`
+            : `RollLink désactivé : tout ce qui vient de RollLink est ignoré${rollinkTotal > 0 ? ` (${rollinkTotal} rouleau(x) déjà réservé(s) par ses commandes)` : ''}, Total compris.`}
         </p>
       )}
 
@@ -786,7 +795,7 @@ function StockPageInner() {
               <button onClick={() => setShowLists(false)} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-[#E2E8F0] text-[#8A9BB5] transition-colors text-lg">&#x2715;</button>
             </div>
             <div className="p-5 overflow-y-auto">
-              <StockListsWidget />
+              <StockListsWidget withRollink={withRollink} />
             </div>
           </div>
         </div>

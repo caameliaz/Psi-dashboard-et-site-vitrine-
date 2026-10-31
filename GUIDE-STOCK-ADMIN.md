@@ -37,10 +37,10 @@ La liste de l'équipe avec le nombre de rouleaux confiés à chacun. Un clic sur
 
 ## L'interrupteur « RollLink » (en haut à droite)
 
-RollLink est la plateforme sœur : ses commandes réservent aussi du stock ici.
-- **Désactivé (par défaut)** : on montre le stock **comme si les commandes RollLink n'existaient pas**. Les rouleaux qu'elles réservent sont comptés en Disponible.
-- **Activé** : chiffres réels, avec les commandes RollLink.
-- Ça ne change que l'affichage. Rien n'est modifié dans les données.
+RollLink est la plateforme sœur. Il est **encore en test** : une commande RollLink reçue est enregistrée « En attente » et **ne touche pas au vrai stock**.
+- **Désactivé (par défaut)** : le stock est affiché **sans RollLink**, Total compris.
+- **Activé = simulation** : on voit ce que deviendrait le stock **si les commandes RollLink en test étaient confirmées** (le Disponible passe en Réservé).
+- Dans les deux cas, **rien n'est enregistré** : c'est un calcul à l'écran. Quand RollLink sera lancé pour de bon, ses commandes agiront sur le vrai stock.
 
 ## Ce qui se passe quand une commande change de statut
 

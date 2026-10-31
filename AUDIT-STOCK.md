@@ -46,7 +46,8 @@ Pour que ça marche pour Younes : (1) lui attribuer du stock (onglet Stock par c
 
 ## 4bis. Ajouts du 31 octobre (soir)
 
-- **Interrupteur « RollLink »** en haut de la page Stock (ordinateur et mobile), **désactivé par défaut**. Désactivé : les rouleaux réservés par des commandes RollLink encore actives (Confirmées ou Disponibles) sont comptés comme **disponibles**, comme si ces commandes n'existaient pas. Activé : chiffres réels. Le Total ne change jamais. C'est de l'**affichage seulement** : rien n'est écrit en base, et la fenêtre « Gérer le stock » montre toujours les valeurs réelles. Exemple avec les données du jour pour `80/80 (PT-05)` : RollLink activé = Disponible 168 / Réservé 2306 ; désactivé = Disponible 2469 / Réservé 5.
+- **Interrupteur « RollLink »** en haut de la page Stock (ordinateur et mobile), **désactivé par défaut** (RollLink est encore en test). **Désactivé** : tout ce qui vient de RollLink est ignoré, Total compris (ce que RollLink a pris au stock libre retourne en Disponible ; ce qui a été fabriqué pour ses commandes sort du Réservé et du Total). **Activé = simulation** : les commandes RollLink reçues en mode test sont comptées comme si elles étaient confirmées (le Disponible passe en Réservé, dans la limite de ce qui existe). Le calcul se fait **à l'écran seulement** : rien n'est écrit en base, et « Gérer le stock » montre toujours les vraies valeurs. Quand RollLink sera lancé pour de bon (variable `ROLLLINK_AFFECTE_STOCK=oui`), ses commandes agiront sur le vrai stock.
+- **Mode test RollLink** : par défaut, une commande reçue de RollLink est enregistrée « En attente » et **ne touche pas au stock** (aucune réservation, aucune liste d'achat/production, aucune matière réservée).
 - **Vente créée directement « Livrée »** (date de règlement passée) : une fenêtre demande maintenant « toucher au stock ? » avec le détail ligne par ligne (« j'enlève 150 du stock · 168 → 18 »). « Oui » retire la quantité du Disponible (plafonné à ce qui existe, l'écart est signalé), « Non » n'y touche pas. Le choix est écrit dans l'historique de la commande. Les références libres (hors catalogue) ne sont pas concernées.
 - Colonne renommée **Attribué** (avant « Chez commerciaux »).
 
@@ -58,3 +59,26 @@ Pour que ça marche pour Younes : (1) lui attribuer du stock (onglet Stock par c
 - **Auto-attribution** : quand la case est cochée, elle crédite le commercial aussi avec du stock **réservé** (pas seulement du libre). C'est voulu par le design actuel, mais ça explique que « Attribué » puisse dépasser le Disponible.
 - **« Contacté »** existe en base mais aucun bouton ne le propose et il n'a aucun effet sur le stock.
 - **Aucune validation côté serveur des enchaînements de statuts** : l'écran n'offre que les passages logiques, mais l'API accepte n'importe lequel (ex. En attente → Livré directement, qui ne touche pas au stock). Je n'ai verrouillé que l'annulation d'une commande livrée.
+
+## 6. Reconstitution du stock à partir de l'historique (31 octobre, lecture seule)
+
+Méthode : départ à 0 (valeur par défaut des colonnes), + entrées du journal (productions, réapprovisionnements), + corrections manuelles du journal, − quantités livrées. Comparé au stock enregistré (Disponible + Réservé).
+
+| Produit | Attendu d'après l'historique | Enregistré | Écart |
+|---|---|---|---|
+| ET-03 (20/40) | 86 | 86 | 0 |
+| ET-04 (35/45) | 75 | 75 | 0 |
+| PT-02 (57/40) | 920 (906 + 14 « forcés » jamais réservés) | 920 | 0 |
+| PT-04 (80/60) | 530 | 530 | 0 |
+| **PT-05 (80/80)** | **168** (3237 produits − 48 correction − 720 livrés − 2301 « fantôme ») | 2474 | **+2306** |
+| **PT-03 (57/50)** | **0** d'après le journal | 20 (en Réservé) | **+20** |
+
+- **PT-05** : le 6 octobre, « Production réalisée (+2301) 80/80 » a été enregistrée **sans recette** (la recette de 80/80 est vide ; les matières premières ne sont d'ailleurs pas touchées : leurs valeurs sont celles des entrées du 14 octobre). Elle correspond exactement aux commandes RollLink de test (150 + 150 + 2001). Le reste, 5, vient de la même production (la ligne de production indique 2306 produits). Stock réel probable : **Disponible 168**.
+- **PT-03** : 20 en Réservé sans commande ni entrée dans le journal. Origine inconnue (test ou saisie ancienne) : **à confirmer physiquement**.
+- Les matières premières ne sont pas faussées par cette production.
+
+## 7. Listes d'achat et de production et RollLink
+
+Les deux listes suivent l'interrupteur RollLink de la page Stock : **désactivé (par défaut)**, les besoins venant de commandes RollLink (en test) sont retirés des lignes, et une ligne qui n'existait que pour RollLink disparaît ; **activé**, ils sont montrés. Le tableau de bord, qui n'a pas d'interrupteur, ne les montre pas. Affichage seulement (paramètre `?rollink=1` des routes `/api/production-list` et `/api/purchase-list`).
+
+PT-03 (57/50) a été corrigé en base le 31 octobre : Réservé 20 → 0, Disponible 0 → 20 (voir DEBRIEF-STOCK-ADMIN.md §10).

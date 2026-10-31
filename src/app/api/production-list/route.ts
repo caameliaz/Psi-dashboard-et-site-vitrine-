@@ -6,6 +6,7 @@ import { requirePermission } from '@/lib/permissions';
 import { createAudit } from '@/lib/audit';
 import { OPEN_PRODUCTION_STATUSES } from '@/lib/order-stock';
 import { createLinkResolver } from '@/lib/stock-traceability';
+import { withoutRollink } from '@/lib/rollink-lists';
 
 const INCLUDE = {
   product: { select: { id: true, reference: true, name: true, mode: true, available: true, productionThreshold: true } },
@@ -15,7 +16,7 @@ const INCLUDE = {
 // sont désormais tenus à jour EN CONTINU par les actions elles-mêmes (commande, annulation,
 // correction de stock, changement de seuil...) — cf. order-stock.ts. Cette route ne fait
 // plus de recalcul global de tous les produits à chaque lecture, seulement lire.
-export async function GET() {
+export async function GET(request: NextRequest) {
   const guard = await requireAnyPermission(['voir_stock', 'voir_listes_stock', 'modifier_stock']);
   if (guard.error) return guard.error;
   const session = guard.session;
@@ -33,7 +34,8 @@ export async function GET() {
       ...(i.productId ? await resolver.productionLineLinks(i.productId, i.id) : await resolver.freeTextLineLinks(i.id)),
     })));
 
-    return NextResponse.json(withLinks);
+    // Par défaut, sans les besoins venant de commandes RollLink (en test) ; `?rollink=1` = avec (interrupteur activé)
+    return NextResponse.json(request.nextUrl.searchParams.get('rollink') === '1' ? withLinks : await withoutRollink(withLinks));
   } catch (e) {
     console.error(e);
     return NextResponse.json({ error: 'Failed to fetch production list' }, { status: 500 });

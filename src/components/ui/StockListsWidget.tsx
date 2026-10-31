@@ -270,7 +270,9 @@ function BulkActionModal({ title, candidates, onClose, onConfirm }: {
   );
 }
 
-export function StockListsWidget() {
+// `withRollink` : interrupteur RollLink de la page Stock (désactivé par défaut) — activé, les besoins venant de
+// commandes RollLink (en test) apparaissent aussi dans les listes ; désactivé, ils sont masqués.
+export function StockListsWidget({ withRollink = false }: { withRollink?: boolean } = {}) {
   const [mode, setMode] = useState<'achat' | 'production'>('achat');
   // Plein écran (mobile surtout — la carte est normalement contrainte en hauteur sur
   // la page Stock mobile, cf. src/app/admin/stock/mobile/page.tsx) : un bouton expand
@@ -317,7 +319,7 @@ export function StockListsWidget() {
     if (!silent) setLoading(true);
     try {
       const [purRes, prodListRes, urgentRes, prodRes, matRes] = await Promise.all([
-        fetch('/api/purchase-list'), fetch('/api/production-list'), fetch('/api/production-list/urgent'), fetch('/api/stock/products'), fetch('/api/raw-materials'),
+        fetch(`/api/purchase-list${withRollink ? '?rollink=1' : ''}`), fetch(`/api/production-list${withRollink ? '?rollink=1' : ''}`), fetch('/api/production-list/urgent'), fetch('/api/stock/products'), fetch('/api/raw-materials'),
       ]);
       if (purRes.ok) setPurchaseItems(await purRes.json());
       if (prodListRes.ok) setProductionItems(await prodListRes.json());
@@ -325,7 +327,7 @@ export function StockListsWidget() {
       if (prodRes.ok) setProducts(await prodRes.json());
       if (matRes.ok) setMaterials(await matRes.json());
     } finally { if (!silent) setLoading(false); }
-  }, []);
+  }, [withRollink]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
