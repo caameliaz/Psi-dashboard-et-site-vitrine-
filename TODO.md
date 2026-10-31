@@ -134,3 +134,11 @@ puis trancher manuellement les cas ambigus comme Aquarium.
 **Reste à faire une fois la vraie base de prod migrée** : rejouer le même
 rattrapage ponctuel sur les commandes/devis de prod qui auraient été importés
 sans `ref` avant ce correctif (si applicable).
+
+---
+
+## Fait le 31 octobre 2026 : notifications de stock faible pour les admins
+
+Les admins reçoivent (dans l'app + push) « Stock faible » quand une référence passe sous son seuil et « Rupture de stock » quand elle tombe à 0, **une seule fois par passage**. Elle se réarme quand le stock remonte. Produits finis et matières premières. Une référence vue pour la première fois est enregistrée sans alerte (pas de rafale pour les produits jamais approvisionnés). Contrôle après chaque action de stock, plus un contrôle quotidien à 6 h (UTC) : `/api/cron/stock-alerts`. Code : `src/lib/low-stock.ts`. **Nécessite la migration `20261031190000_stock_alert_state`** (appliquée au déploiement).
+
+Reste possible plus tard : ajouter les références sous le seuil au récap quotidien par email.

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { scanLowStock } from '@/lib/low-stock';
 import { prisma } from '@/lib/prisma';
 import { guardRequestAccess } from '@/lib/access';
 import { requirePermission, hasPermission } from '@/lib/permissions';
@@ -404,6 +405,7 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
       }).catch(() => {});
     }
 
+    await scanLowStock();
     return NextResponse.json(stockWarning ? { ...quote, stockWarning } : quote);
   } catch (e) {
     console.error(e);

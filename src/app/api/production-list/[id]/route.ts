@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { scanLowStock } from '@/lib/low-stock';
 import { prisma } from '@/lib/prisma';
 import { fixerReferenceProduit } from '@/lib/stock-reference';
 import { requirePermission } from '@/lib/permissions';
@@ -187,6 +188,7 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
 
     const updated = await prisma.productionListItem.findUnique({ where: { id } });
     createAudit({ userId: session?.user?.id, action: `Production réalisée (+${qty})`, entity: 'STOCK', entityId: id, detail: label });
+    await scanLowStock();
     return NextResponse.json({ ...updated, warning: noRecipeWarning });
   } catch (e) {
     console.error(e);

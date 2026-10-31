@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { scanLowStock } from '@/lib/low-stock';
 import { prisma } from '@/lib/prisma';
 import { fixerReferenceProduit, fixerReferenceMatiere } from '@/lib/stock-reference';
 import { requirePermission } from '@/lib/permissions';
@@ -57,6 +58,7 @@ export async function POST(request: NextRequest) {
           await reassessProductReserved(product.id);
         }
       }
+      await scanLowStock();
       return NextResponse.json({ ok: true });
     }
 
@@ -90,6 +92,7 @@ export async function POST(request: NextRequest) {
           await resyncMaterialPurchaseNeed(material.id);
         }
       }
+      await scanLowStock();
       return NextResponse.json({ ok: true });
     }
 

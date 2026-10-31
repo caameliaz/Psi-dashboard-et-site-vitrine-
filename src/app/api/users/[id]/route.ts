@@ -226,14 +226,15 @@ export async function DELETE(_request: NextRequest, { params }: Ctx) {
     }
 
     // Blocage si l'utilisateur a de l'activité (préserve l'historique) — proposer la désactivation
-    const [orders, quotes, notes, logs] = await Promise.all([
+    const [orders, quotes, notes, stockNotes, logs] = await Promise.all([
       prisma.order.count({ where: { createdById: id } }),
       prisma.quote.count({ where: { createdById: id } }),
       prisma.clientNote.count({ where: { authorId: id } }),
+      prisma.stockNote.count({ where: { authorId: id } }).catch(() => 0), // table absente avant la migration
       // les simples lignes « Connexion » ne comptent pas comme de l'activité (cf. LOGIN_ACTION)
       prisma.auditLog.count({ where: { userId: id, NOT: { action: { in: OWNER_ONLY_ACTIONS } } } }),
     ]);
-    if (orders + quotes + notes + logs > 0) {
+    if (orders + quotes + notes + stockNotes + logs > 0) {
       return NextResponse.json(
         { error: "Impossible de supprimer : cet utilisateur a de l'activité (commandes, devis, notes ou journal). Désactivez-le plutôt." },
         { status: 409 }

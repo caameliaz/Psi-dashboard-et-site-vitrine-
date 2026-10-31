@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { scanLowStock } from '@/lib/low-stock';
 import { auth } from '@/lib/auth';
 import { requirePermission, seesAll } from '@/lib/permissions';
 import { prisma } from '@/lib/prisma';
@@ -286,6 +287,7 @@ export async function POST(request: NextRequest) {
       detail: `${client.company ?? client.name} — ${validItems.length} article(s)${paidInPast ? ' — créée directement Livrée (date de règlement passée)' : ''}${stockDetail}`,
       orderId: order.id,
     });
+    if (paidInPast && body.adjustStock === true) await scanLowStock(); // vente livrée directement : le stock a baissé
     return NextResponse.json(order, { status: 201 });
   } catch (error: any) {
     console.error('[POST /api/orders] ERROR:', error);

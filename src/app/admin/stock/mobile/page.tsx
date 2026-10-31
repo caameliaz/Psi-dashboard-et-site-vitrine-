@@ -10,6 +10,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useRole } from '@/lib/role-context';
 import { StockListsWidget } from '@/components/ui/StockListsWidget';
 import { MobileNavbar } from '@/components/MobileNavbar';
+import { NotesPencil, NotesModal, useStockNoteCounts, noteKey } from '@/components/ui/StockNotes';
 
 interface StockProduct {
   id: string; reference: string; name: string | null;
@@ -27,8 +28,9 @@ function statusBadge(available: number, threshold: number) {
 
 // Carte produit repliée par défaut — un tap révèle En livraison/En retour, moins
 // utiles au quotidien terrain (cf. décision actée dans STOCK-MOBILE.md).
-function ProductCard({ p }: { p: StockProduct }) {
+function ProductCard({ p, isAdmin, noteCount, onNotesChange }: { p: StockProduct; isAdmin: boolean; noteCount: number; onNotesChange: () => void }) {
   const [expanded, setExpanded] = useState(false);
+  const [showNotes, setShowNotes] = useState(false);
   const threshold = p.mode === 'ACHETE' ? p.purchaseThreshold : p.productionThreshold;
   const horsCommerciaux = Math.max(0, p.available + p.reserved - p.assignedToCommercials);
 
@@ -40,8 +42,12 @@ function ProductCard({ p }: { p: StockProduct }) {
           <p className="text-[13px] font-bold text-[#0F172A]">{p.reference}</p>
           {p.name && <p className="text-[11px] text-[#8A9BB5] truncate">{p.name}</p>}
         </div>
-        {statusBadge(p.available, threshold)}
+        <div className="flex items-center gap-2 flex-shrink-0">
+          {isAdmin && <NotesPencil count={noteCount} onClick={() => setShowNotes(true)} />}
+          {statusBadge(p.available, threshold)}
+        </div>
       </div>
+      {showNotes && <div onClick={(e) => e.stopPropagation()}><NotesModal title={p.reference} kind="PRODUCT" keyId={p.id} onClose={() => setShowNotes(false)} onChange={onNotesChange} /></div>}
       <div className="grid grid-cols-3 gap-2 mt-3">
         <div>
           <p className="text-[10px] font-bold text-[#ABBED1] uppercase">Disponible</p>
@@ -78,6 +84,8 @@ function ProductCard({ p }: { p: StockProduct }) {
 // minuscule — on repasse alors la PAGE en scroll normal (cf. `open`/`onToggle` remontés
 // au parent, qui bascule le conteneur racine entre hauteur fixe et hauteur libre).
 function CurrentStockCard({ open, onToggle, withRollink, setWithRollink }: { open: boolean; onToggle: () => void; withRollink: boolean; setWithRollink: (v: boolean | ((x: boolean) => boolean)) => void }) {
+  const { isAdmin } = useRole();
+  const { counts: noteCounts, refresh: refreshNotes } = useStockNoteCounts(isAdmin);
   const [rawProducts, setProducts] = useState<StockProduct[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -133,7 +141,7 @@ function CurrentStockCard({ open, onToggle, withRollink, setWithRollink }: { ope
             <p className="text-[13px] text-[#8A9BB5] text-center py-6">Aucun produit.</p>
           ) : (
             <div className="flex flex-col gap-2 pb-2">
-              {filtered.map((p) => <ProductCard key={p.id} p={p} />)}
+              {filtered.map((p) => <ProductCard key={p.id} p={p} isAdmin={isAdmin} noteCount={noteCounts[noteKey('PRODUCT', p.id)] ?? 0} onNotesChange={refreshNotes} />)}
             </div>
           )}
         </div>

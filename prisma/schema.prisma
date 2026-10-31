@@ -343,6 +343,33 @@ model RequestNote {
   createdAt DateTime @default(now())
 }
 
+// ─── NOTES SUR LES RÉFÉRENCES DU STOCK (admins uniquement) ───────────────────
+// Une note libre sur un produit fini, une matière première ou une référence libre.
+// `kind` = PRODUCT | MATERIAL | FREE ; `refKey` = id du produit / de la matière, ou libellé de la réf libre
+// (pas de clé étrangère : une réf libre n'a pas de fiche). Lecture et écriture réservées aux comptes ADMIN.
+model StockNote {
+  id        String   @id @default(cuid())
+  kind      String
+  refKey    String
+  content   String
+  author    User     @relation("StockNoteAuthor", fields: [authorId], references: [id])
+  authorId  String
+  createdAt DateTime @default(now())
+
+  @@index([kind, refKey])
+}
+
+// Dernier niveau d'alerte connu d'une référence du stock (OK | LOW | OUT) — évite d'envoyer deux fois la même
+// alerte « stock faible / rupture » aux admins (cf. src/lib/low-stock.ts). `refKey` = id du produit / de la matière.
+model StockAlertState {
+  kind      String
+  refKey    String
+  level     String
+  updatedAt DateTime @updatedAt
+
+  @@id([kind, refKey])
+}
+
 // ─── COMMANDE ────────────────────────────────────────────────────────────────
 model Order {
   id              String         @id @default(cuid())
@@ -616,6 +643,7 @@ model User {
   clientNotes        ClientNote[]       @relation("ClientNoteAuthor")
   clientsDeactivated Client[]           @relation("ClientDeactivatedBy")
   requestNotes       RequestNote[]      @relation("RequestNoteAuthor")
+  stockNotes         StockNote[]        @relation("StockNoteAuthor")
   notifications      NotificationRead[]
   auditLogs          AuditLog[]
   pushSubscriptions  PushSubscription[]

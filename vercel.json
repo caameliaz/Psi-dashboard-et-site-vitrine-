@@ -7,6 +7,10 @@
     {
       "path": "/api/cron/recap/weekly",
       "schedule": "59 22 * * 4"
+    },
+    {
+      "path": "/api/cron/stock-alerts",
+      "schedule": "0 6 * * *"
     }
   ]
 }

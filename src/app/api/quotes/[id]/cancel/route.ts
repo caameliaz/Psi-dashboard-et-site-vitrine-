@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { scanLowStock } from '@/lib/low-stock';
 import { prisma } from '@/lib/prisma';
 import { guardRequestAccess } from '@/lib/access';
 import { requirePermission } from '@/lib/permissions';
@@ -49,6 +50,7 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
 
     try { await cancelStock('quote', id); } catch (stockError) { console.error('[quotes/cancel] Erreur de mise à jour du stock :', stockError); }
 
+    await scanLowStock();
     return NextResponse.json(quote);
   } catch (e) {
     console.error(e);

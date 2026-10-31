@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { scanLowStock } from '@/lib/low-stock';
 import { prisma } from '@/lib/prisma';
 import { fixerReferenceProduit, fixerReferenceMatiere } from '@/lib/stock-reference';
 import { requirePermission } from '@/lib/permissions';
@@ -136,6 +137,7 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
       const updated = await prisma.purchaseListItem.findUnique({ where: { id } });
       const label = item.product?.reference ?? item.rawMaterial?.reference;
       createAudit({ userId: session?.user?.id, action: `Réception validée (+${qty})`, entity: 'STOCK', entityId: id, detail: `${label}` });
+      await scanLowStock();
       return NextResponse.json(updated);
     }
 

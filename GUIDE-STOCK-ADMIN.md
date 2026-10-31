@@ -57,3 +57,15 @@ RollLink est la plateforme sœur. Il est **encore en test** : une commande RollL
 ## Règle simple pour se souvenir
 
 **Disponible** = libre. **Réservé** = promis à un client. **Attribué** = chez un commercial. **Total** = Disponible + Réservé.
+
+## Les notes sur les références (admins seulement)
+
+- Sur la page Stock, un **crayon** apparaît à côté de « Gérer le stock » pour chaque référence (produits finis, matières premières, références libres). **Grisé** : aucune note. **Coloré avec un chiffre** : la référence a des notes.
+- Un clic sur le crayon ouvre les notes de la référence : on les lit et on **en ajoute**. Chaque note garde son auteur et sa date. Les notes sont aussi visibles dans la fenêtre « Gérer le stock ».
+- **Seuls les comptes Admin** les voient et en écrivent. Les comptes employés, même en lecture seule ou avec un libellé « Admin » (comme Sid Stiti), n'y ont pas accès.
+
+## Les alertes de stock faible (admins)
+
+- Quand une référence **passe sous son seuil**, tous les admins reçoivent une notification « Stock faible » ; quand elle **tombe à 0**, « Rupture de stock ». Ça marche pour les produits finis et les matières premières.
+- L'alerte n'est envoyée **qu'une fois** par passage. Elle se réarme quand le stock remonte au-dessus du seuil.
+- Les références jamais approvisionnées (à 0 depuis toujours) ne déclenchent aucune alerte.

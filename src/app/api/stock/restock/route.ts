@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { scanLowStock } from '@/lib/low-stock';
 import { prisma } from '@/lib/prisma';
 import { fixerReferenceProduit, fixerReferenceMatiere } from '@/lib/stock-reference';
 import { requirePermission } from '@/lib/permissions';
@@ -105,6 +106,7 @@ export async function POST(request: NextRequest) {
         await resyncMaterialBufferOnly(matiereId);
       }
 
+      await scanLowStock();
       return NextResponse.json({ ok: true, mode: effectiveMode });
     }
 
@@ -121,6 +123,7 @@ export async function POST(request: NextRequest) {
       // d'achat), avant de recalculer son propre buffer sur ce qui reste.
       await unblockProductionForMaterial(material.id);
       await resyncMaterialBufferOnly(material.id);
+      await scanLowStock();
       return NextResponse.json({ ok: true });
     }
 
