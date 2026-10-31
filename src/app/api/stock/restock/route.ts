@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { ratioAfterReception } from '@/lib/dual-unit';
 import { scanLowStock } from '@/lib/low-stock';
 import { prisma } from '@/lib/prisma';
 import { fixerReferenceProduit, fixerReferenceMatiere } from '@/lib/stock-reference';
@@ -114,7 +115,10 @@ export async function POST(request: NextRequest) {
       const material = await prisma.rawMaterial.findUnique({ where: { id: body.id } });
       if (!material) return NextResponse.json({ error: 'Matière première introuvable' }, { status: 404 });
 
-      await prisma.rawMaterial.update({ where: { id: material.id }, data: { available: { increment: qty } } });
+      // 2e unité (ex. bobines) : le nombre de bobines reçues recale le rapport kg/bobine (moyenne pondérée)
+      const secQty = Number(body.secondaryQuantity);
+      const ratioData = material.secondaryUnit && secQty > 0 ? { primaryPerSecondary: ratioAfterReception(material.available, material.primaryPerSecondary, qty, secQty) } : {};
+      await prisma.rawMaterial.update({ where: { id: material.id }, data: { available: { increment: qty }, ...ratioData } });
       createAudit({ userId: session?.user?.id, action: `Stock matière approvisionné (+${qty})`, entity: 'MATIERE', entityId: material.id, detail: `${material.name} (${material.reference})` });
       // Entrée de stock → le disponible obtenu devient la référence (100 %), seuil à 30 %
       await fixerReferenceMatiere(material.id, material.available);

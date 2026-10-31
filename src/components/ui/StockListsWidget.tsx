@@ -6,6 +6,7 @@ import { Modal } from './Modal';
 import { RecipeEntryModal, NoRecipeChoiceModal } from './NoRecipeModal';
 import { ManqueMatiereModal, type ManqueMatiere } from './ManqueMatiereModal';
 import { useRole } from '@/lib/role-context';
+import { parseFraction, formatSecondary } from '@/lib/dual-unit';
 
 const inputClass = "w-full px-3 py-2.5 rounded-lg border border-[#E2E8F0] text-sm text-[#0F172A] focus:outline-none focus:border-[#4CAF4F] focus:ring-1 focus:ring-[#4CAF4F] transition-colors bg-[#F8FAFC]";
 
@@ -23,7 +24,7 @@ interface PurchaseItem {
   id: string; neededQuantity: number; bufferQuantity: number; manualQuantity: number; orderedQuantity: number | null; receivedQuantity: number | null;
   status: 'A_COMMANDER' | 'COMMANDE' | 'RECU'; auto: boolean;
   product: { id: string; reference: string; name: string | null; available: number; purchaseThreshold: number } | null;
-  rawMaterial: { id: string; reference: string; name: string; unit: string; available: number; purchaseThreshold: number } | null;
+  rawMaterial: { id: string; reference: string; name: string; unit: string; available: number; purchaseThreshold: number; secondaryUnit?: string | null; primaryPerSecondary?: number | null } | null;
   orderItems: LinkedRef[]; quoteItems: LinkedRef[]; bufferSources?: BufferSource[];
 }
 interface ProductionItem {
@@ -217,10 +218,12 @@ function AddLineModal({ mode, products, materials, onClose, onSave }: {
 
 // ── Overlay : action groupée (Commander / Valider réception / Produire) ────
 function BulkActionModal({ title, candidates, onClose, onConfirm }: {
-  title: string; candidates: { id: string; label: string; suggested: number; unit: string; max?: number }[];
-  onClose: () => void; onConfirm: (selections: { id: string; quantity: number }[]) => Promise<void>;
+  title: string; candidates: { id: string; label: string; suggested: number; unit: string; max?: number; secondaryUnit?: string | null }[];
+  onClose: () => void; onConfirm: (selections: { id: string; quantity: number; secondary?: number }[]) => Promise<void>;
 }) {
   const [selected, setSelected] = useState<Record<string, string>>({});
+  // Matière à 2 unités (ex. kg + bobines) : nombre de bobines reçues, saisi à côté du poids
+  const [secondary, setSecondary] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const maxById = new Map(candidates.map((c) => [c.id, c.max]));
 
@@ -236,7 +239,7 @@ function BulkActionModal({ title, candidates, onClose, onConfirm }: {
   };
 
   const submit = async () => {
-    const selections = Object.entries(selected).filter(([, v]) => Number(v) > 0).map(([id, v]) => ({ id, quantity: Number(v) }));
+    const selections = Object.entries(selected).filter(([, v]) => Number(v) > 0).map(([id, v]) => ({ id, quantity: Number(v), secondary: parseFraction(secondary[id]) ?? undefined }));
     if (selections.length === 0 || saving) return;
     setSaving(true);
     try { await onConfirm(selections); onClose(); } finally { setSaving(false); }
@@ -256,6 +259,12 @@ function BulkActionModal({ title, candidates, onClose, onConfirm }: {
                 <input value={selected[c.id]} onChange={(e) => setQty(c.id, e.target.value.replace(/[^\d.]/g, ''))} inputMode="decimal" style={{ width: 80 }} className={inputClass} />
               )}
               <span className="text-[11px] text-[#8A9BB5] w-10 flex-shrink-0">{c.unit}</span>
+              {isSelected && c.secondaryUnit && (
+                <>
+                  <input value={secondary[c.id] ?? ''} onChange={(e) => setSecondary((s) => ({ ...s, [c.id]: e.target.value.replace(/[^\d.,/ ]/g, '') }))} inputMode="decimal" placeholder="nb" style={{ width: 56 }} className={inputClass} />
+                  <span className="text-[11px] text-[#8A9BB5] w-12 flex-shrink-0">{c.secondaryUnit}</span>
+                </>
+              )}
             </div>
           );
         })}
@@ -494,7 +503,7 @@ export function StockListsWidget({ withRollink = false }: { withRollink?: boolea
     processProduceQueue(queueRest, accumFailures, accumWarnings, accumSuccesses);
   };
 
-  const runBulk = async (selections: { id: string; quantity: number }[]) => {
+  const runBulk = async (selections: { id: string; quantity: number; secondary?: number }[]) => {
     // On garde une trace de chaque échec (ex: matière première insuffisante — disponible +
     // réservé ne suffisent pas — cf. PATCH /api/production-list/[id]) pour l'afficher : sans
     // ça, une ligne qui échoue silencieusement donne l'impression que rien ne s'est passé,
@@ -513,13 +522,14 @@ export function StockListsWidget({ withRollink = false }: { withRollink?: boolea
       await Promise.all(selections.map(async (s) => {
         const res = await fetch(`/api/purchase-list/${s.id}`, {
           method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: bulkAction, quantity: s.quantity }),
+          body: JSON.stringify({ action: bulkAction, quantity: s.quantity, ...(s.secondary !== undefined && { secondaryQuantity: s.secondary }) }),
         });
         if (!res.ok) {
           const err = await res.json().catch(() => ({}));
           failures.push(`${labelFor(s.id)} : ${err.error ?? 'échec'}`);
         } else {
-          successes.push(`${labelFor(s.id)} — ${s.quantity} ${unitFor(s.id) || 'unité(s)'} ${verbFor(bulkAction)} avec succès`);
+          const secUnit = purchaseItems.find((i) => i.id === s.id)?.rawMaterial?.secondaryUnit;
+          successes.push(`${labelFor(s.id)} — ${s.quantity} ${unitFor(s.id) || 'unité(s)'}${s.secondary && secUnit ? ` (${formatSecondary(s.secondary)} ${secUnit})` : ''} ${verbFor(bulkAction)} avec succès`);
         }
       }));
       await finishBulk(bulkTitle, failures, warnings, successes);
@@ -541,7 +551,7 @@ export function StockListsWidget({ withRollink = false }: { withRollink?: boolea
         .map((i) => {
           const l = itemLabel(i);
           const remaining = (i.orderedQuantity ?? 0) - (i.receivedQuantity ?? 0);
-          return { id: i.id, label: `${refAndName(l)} (${remaining} restant sur ${i.orderedQuantity} commandé)`, suggested: remaining, max: remaining, unit: l.unit };
+          return { id: i.id, label: `${refAndName(l)} (${remaining} restant sur ${i.orderedQuantity} commandé)`, suggested: remaining, max: remaining, unit: l.unit, secondaryUnit: i.rawMaterial?.secondaryUnit ?? null };
         })
     : bulkAction === 'produce'
     ? productionItems.filter((i) => i.status !== 'PRODUIT').map((i) => { const l = itemLabel(i); return { id: i.id, label: `${refAndName(l)} (${totalQty(i)} à produire)`, suggested: totalQty(i), unit: '' }; })

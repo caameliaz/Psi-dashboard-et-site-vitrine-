@@ -25,6 +25,8 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
         ...(body.reference !== undefined && { reference: body.reference }),
         ...(body.name !== undefined && { name: body.name }),
         ...(body.unit !== undefined && { unit: body.unit }),
+        // 2e unité facultative (ex. « bobine ») ; la retirer efface aussi le rapport kg/bobine
+        ...(body.secondaryUnit !== undefined && { secondaryUnit: String(body.secondaryUnit ?? '').trim() || null, ...(!String(body.secondaryUnit ?? '').trim() && { primaryPerSecondary: null }) }),
         ...(body.price !== undefined && { price: Number(body.price) }),
         ...(body.stockMax !== undefined && { stockMax: Number(body.stockMax) }),
         ...(body.purchaseThreshold !== undefined && { purchaseThreshold: Number(body.purchaseThreshold) }),

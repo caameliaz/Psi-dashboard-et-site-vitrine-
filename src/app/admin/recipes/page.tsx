@@ -4,16 +4,18 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Modal } from '@/components/ui/Modal';
 import { useRole } from '@/lib/role-context';
 import { RequirePerm } from '@/components/RequirePerm';
+import { FreeRefEditModal } from '@/components/ui/FreeRefEditModal';
 
 const inputClass = "w-full px-3 py-2.5 rounded-lg border border-[#E2E8F0] text-sm text-[#0F172A] focus:outline-none focus:border-[#4CAF4F] focus:ring-1 focus:ring-[#4CAF4F] transition-colors bg-[#F8FAFC]";
 
-interface RawMaterial { id: string; reference: string; name: string; unit: string; price: number; stockMax: number; purchaseThreshold: number; available: number; reserved: number; }
+interface RawMaterial { id: string; reference: string; name: string; unit: string; secondaryUnit?: string | null; price: number; stockMax: number; purchaseThreshold: number; available: number; reserved: number; }
 interface RecipeItem { id: string; rawMaterialId: string; quantity: number; rawMaterial: RawMaterial; }
 interface Prod { id: string; reference: string; name: string | null; mode: 'ACHETE' | 'FABRIQUE' | 'LES_DEUX'; recipeItems: RecipeItem[]; }
 // Recette enregistrée pour une ligne LIBRE (texte tapé à la main, sans fiche produit) — cf.
 // saveFreeTextRecipe/getFreeTextRecipe (order-stock.ts), appliquée automatiquement au clic
 // "Produire"/"Marquer Disponible" pour toute ligne portant exactement ce texte.
-interface FreeTextRecipe { id: string; label: string; items: RecipeItem[]; }
+// `id` null = référence libre vue dans des commandes/devis mais sans ligne en base (pas encore de recette ni de stock)
+interface FreeTextRecipe { id: string | null; label: string; items: RecipeItem[]; }
 
 // ── Overlay : éditer une recette (produit du catalogue OU référence libre) ──────────────────
 function RecipeEditModal({ title, initialItems, materials, onClose, onSave }: {
@@ -74,12 +76,12 @@ function RecipeEditModal({ title, initialItems, materials, onClose, onSave }: {
 }
 
 // ── Overlay : Nouvelle / Modifier matière première ──────────────────────────
-interface MaterialForm { reference: string; name: string; unit: string; price: string; stockMax: string; purchaseThreshold: string; available: string; }
-const emptyMaterialForm: MaterialForm = { reference: '', name: '', unit: '', price: '', stockMax: '', purchaseThreshold: '', available: '' };
+interface MaterialForm { reference: string; name: string; unit: string; secondaryUnit: string; price: string; stockMax: string; purchaseThreshold: string; available: string; }
+const emptyMaterialForm: MaterialForm = { reference: '', name: '', unit: '', secondaryUnit: '', price: '', stockMax: '', purchaseThreshold: '', available: '' };
 
 function MaterialModal({ initial, onClose, onSave }: { initial?: RawMaterial; onClose: () => void; onSave: (form: MaterialForm) => Promise<void> }) {
   const [form, setForm] = useState<MaterialForm>(initial ? {
-    reference: initial.reference, name: initial.name, unit: initial.unit,
+    reference: initial.reference, name: initial.name, unit: initial.unit, secondaryUnit: initial.secondaryUnit ?? '',
     price: String(initial.price), stockMax: String(initial.stockMax), purchaseThreshold: String(initial.purchaseThreshold), available: String(initial.available),
   } : emptyMaterialForm);
   const [saving, setSaving] = useState(false);
@@ -102,6 +104,11 @@ function MaterialModal({ initial, onClose, onSave }: { initial?: RawMaterial; on
             <label className="block text-[12px] font-semibold text-[#374151] mb-1.5">Unité de mesure</label>
             <input value={form.unit} onChange={(e) => setForm({ ...form, unit: e.target.value })} placeholder="ex: g, kg, m, bobine, unité" className={inputClass} />
           </div>
+        </div>
+        <div>
+          <label className="block text-[12px] font-semibold text-[#374151] mb-1.5">2ᵉ unité <span className="font-normal text-[#8A9BB5]">(facultatif)</span></label>
+          <input value={form.secondaryUnit} onChange={(e) => setForm({ ...form, secondaryUnit: e.target.value })} placeholder="ex: bobine (en plus du poids)" className={inputClass} />
+          <p className="text-[11px] text-[#8A9BB5] mt-1">Avec une 2ᵉ unité, la réception et la correction du stock demandent aussi le nombre de bobines, et la page Stock affiche les deux.</p>
         </div>
         <div>
           <label className="block text-[12px] font-semibold text-[#374151] mb-1.5">Nom</label>
@@ -153,6 +160,7 @@ function RecipesPageInner() {
   const [search, setSearch] = useState('');
   const [editingProduct, setEditingProduct] = useState<Prod | null>(null);
   const [editingFreeText, setEditingFreeText] = useState<FreeTextRecipe | null>(null);
+  const [renamingFree, setRenamingFree] = useState<string | null>(null); // libellé de la réf libre dont on modifie le texte / le métrage
   const [materialModal, setMaterialModal] = useState<'new' | RawMaterial | null>(null);
 
   const fetchAll = useCallback(async () => {
@@ -194,6 +202,14 @@ function RecipesPageInner() {
     await fetchAll();
   };
 
+  // Ouvre l'éditeur ; une réf libre sans ligne en base est d'abord créée pour pouvoir recevoir une recette
+  const openFreeTextEditor = async (r: FreeTextRecipe) => {
+    if (r.id) { setEditingFreeText(r); return; }
+    const res = await fetch('/api/free-text-recipes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ label: r.label }) });
+    if (!res.ok) { const err = await res.json().catch(() => ({})); alert(err.error ?? "Impossible d'ouvrir cette référence"); return; }
+    setEditingFreeText(await res.json());
+  };
+
   const saveFreeTextRecipeItems = async (id: string, items: { rawMaterialId: string; quantity: number }[]) => {
     const res = await fetch(`/api/free-text-recipes/${id}`, {
       method: 'PUT', headers: { 'Content-Type': 'application/json' },
@@ -204,6 +220,7 @@ function RecipesPageInner() {
   };
 
   const deleteFreeTextRecipe = async (r: FreeTextRecipe) => {
+    if (!r.id) return;
     if (!confirm(`Supprimer la recette enregistrée pour "${r.label}" ? La prochaine ligne libre portant ce texte redemandera quoi faire.`)) return;
     const res = await fetch(`/api/free-text-recipes/${r.id}`, { method: 'DELETE' });
     if (!res.ok) { const err = await res.json().catch(() => ({})); alert(err.error ?? 'Échec de la suppression'); return; }
@@ -216,7 +233,7 @@ function RecipesPageInner() {
     const res = await fetch(url, {
       method: isEdit ? 'PATCH' : 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        reference: form.reference.trim(), name: form.name.trim(), unit: form.unit.trim(),
+        reference: form.reference.trim(), name: form.name.trim(), unit: form.unit.trim(), secondaryUnit: form.secondaryUnit.trim(),
         price: Number(form.price) || 0,
         ...(form.purchaseThreshold.trim() !== '' && { purchaseThreshold: Number(form.purchaseThreshold) }),
         ...(form.stockMax.trim() !== '' && { stockMax: Number(form.stockMax) }),
@@ -324,26 +341,32 @@ function RecipesPageInner() {
               <div className="mb-3">
                 <h2 className="text-[16px] font-bold text-[#0F172A]">Références libres</h2>
                 <p className="text-[12px] text-[#8A9BB5] mt-0.5">
-                  Recettes enregistrées pour des lignes tapées à la main (hors catalogue) — appliquées automatiquement dès qu&apos;une commande/devis porte exactement le même texte.
+                  Toutes les références tapées à la main (hors catalogue). Leur recette est appliquée automatiquement dès qu&apos;une commande/devis porte exactement le même texte — cliquez sur « Ajouter une recette » pour en définir une.
                 </p>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
                 {filteredFreeTextRecipes.map((r) => (
-                  <div key={r.id} className="rounded-2xl border border-[#E2E8F0] bg-white overflow-hidden flex flex-col">
+                  <div key={r.id ?? r.label} className="rounded-2xl border border-[#E2E8F0] bg-white overflow-hidden flex flex-col">
                     <div className="px-5 py-4 bg-[#F8FAFC] border-b border-[#E2E8F0] flex items-center justify-between">
                       <p className="text-[14px] font-bold text-[#0F172A] truncate">{r.label}</p>
                       {canEdit && (
                         <div className="flex gap-2 flex-shrink-0">
-                          <button onClick={() => setEditingFreeText(r)} className="px-3 py-1.5 rounded-lg border border-[#E2E8F0] text-[12px] font-semibold text-[#374151] hover:bg-white bg-white/60">
-                            Modifier
+                          <button onClick={() => setRenamingFree(r.label)} className="px-3 py-1.5 rounded-lg border border-[#E2E8F0] text-[12px] font-semibold text-[#374151] hover:bg-white bg-white/60" title="Modifier le texte et le métrage de cette référence">
+                            Modifier la réf.
                           </button>
-                          <button onClick={() => deleteFreeTextRecipe(r)} className="px-3 py-1.5 rounded-lg border border-[#FCA5A5] text-[12px] font-semibold text-[#EF4444] hover:bg-[#FEF2F2]">
-                            Supprimer
+                          <button onClick={() => openFreeTextEditor(r)} className="px-3 py-1.5 rounded-lg border border-[#E2E8F0] text-[12px] font-semibold text-[#374151] hover:bg-white bg-white/60">
+                            {r.items.length > 0 ? 'Modifier' : 'Ajouter une recette'}
                           </button>
+                          {r.items.length > 0 && (
+                            <button onClick={() => deleteFreeTextRecipe(r)} className="px-3 py-1.5 rounded-lg border border-[#FCA5A5] text-[12px] font-semibold text-[#EF4444] hover:bg-[#FEF2F2]">
+                              Supprimer
+                            </button>
+                          )}
                         </div>
                       )}
                     </div>
-                    <table className="w-full text-left">
+                    {r.items.length === 0 && <p className="px-5 py-5 text-[12px] text-[#8A9BB5]">Aucune recette enregistrée pour cette référence.</p>}
+                    {r.items.length > 0 && <table className="w-full text-left">
                       <thead>
                         <tr>
                           <th className="px-5 pt-4 pb-2 text-[10px] font-bold text-[#8A9BB5] uppercase tracking-wide">Ingrédient</th>
@@ -363,7 +386,7 @@ function RecipesPageInner() {
                           </tr>
                         ))}
                       </tbody>
-                    </table>
+                    </table>}
                   </div>
                 ))}
               </div>
@@ -393,7 +416,7 @@ function RecipesPageInner() {
                     <span className="text-[11px] font-bold px-2 py-0.5 rounded-md bg-[#EEF2FF] text-[#4F46E5] tabular-nums">{m.reference}</span>
                   </td>
                   <td className="px-4 py-3 text-[13px] font-semibold text-[#0F172A]">{m.name}</td>
-                  <td className="px-4 py-3 text-[12px] text-[#8A9BB5]">{m.unit}</td>
+                  <td className="px-4 py-3 text-[12px] text-[#8A9BB5]">{m.unit}{m.secondaryUnit ? ` + ${m.secondaryUnit}` : ''}</td>
                   <td className="px-4 py-3 text-[13px] text-[#374151] text-right tabular-nums">{m.price.toLocaleString('fr-FR')} DA</td>
                   <td className="px-4 py-3 text-[13px] text-[#374151] text-right tabular-nums">{m.stockMax}</td>
                   <td className="px-4 py-3 text-[13px] text-[#374151] text-right tabular-nums">{m.purchaseThreshold}</td>
@@ -430,9 +453,10 @@ function RecipesPageInner() {
           initialItems={editingFreeText.items.map((r) => ({ rawMaterialId: r.rawMaterialId, quantity: r.quantity }))}
           materials={materials}
           onClose={() => setEditingFreeText(null)}
-          onSave={(items) => saveFreeTextRecipeItems(editingFreeText.id, items)}
+          onSave={(items) => saveFreeTextRecipeItems(editingFreeText.id as string, items)}
         />
       )}
+      {renamingFree && <FreeRefEditModal label={renamingFree} onClose={() => setRenamingFree(null)} onSaved={fetchAll} />}
       {materialModal && (
         <MaterialModal initial={materialModal === 'new' ? undefined : materialModal} onClose={() => setMaterialModal(null)} onSave={saveMaterial} />
       )}

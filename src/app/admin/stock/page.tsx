@@ -7,6 +7,8 @@ import { StockListsWidget } from '@/components/ui/StockListsWidget';
 import { ManqueMatiereModal, type ManqueMatiere } from '@/components/ui/ManqueMatiereModal';
 import { useRole } from '@/lib/role-context';
 import { RequirePerm } from '@/components/RequirePerm';
+import { FreeRefEditModal } from '@/components/ui/FreeRefEditModal';
+import { parseFraction, formatSecondary } from '@/lib/dual-unit';
 import { NotesPencil, NotesModal, NotesPanel, useStockNoteCounts, noteKey, type NoteKind } from '@/components/ui/StockNotes';
 
 const inputClass = "w-full px-3 py-2.5 rounded-lg border border-[#E2E8F0] text-sm text-[#0F172A] focus:outline-none focus:border-[#4CAF4F] focus:ring-1 focus:ring-[#4CAF4F] transition-colors bg-[#F8FAFC]";
@@ -30,7 +32,13 @@ interface StockProduct {
 interface StockMaterial {
   id: string; reference: string; name: string; unit: string; price: number;
   purchaseThreshold: number; available: number; reserved: number;
+  // 2e unité facultative (ex. « bobine ») : le nombre est déduit du poids via ce rapport (cf. src/lib/dual-unit.ts)
+  secondaryUnit?: string | null; primaryPerSecondary?: number | null;
 }
+
+// « · 2 ½ bobines » pour une quantité de l'unité principale (vide si la matière n'a pas de 2e unité ou de rapport connu)
+const secText = (m: StockMaterial | null | undefined, valeur: number) =>
+  m?.secondaryUnit && m.primaryPerSecondary ? ` · ${formatSecondary(valeur / m.primaryPerSecondary)} ${m.secondaryUnit}` : '';
 interface EmployeeAssignment { id: string; name: string; totalAssigned: number; }
 interface AssignmentLine {
   assignmentId: string; productId: string; productReference: string; productName: string | null;
@@ -121,8 +129,8 @@ function StockActionModal({ label, unit, item, isProduct, needsMode, materials, 
   label: string; unit: string; item: StockProduct | StockMaterial; isProduct: boolean; needsMode: boolean; onNotesChange?: () => void;
   materials: StockMaterial[];
   onClose: () => void;
-  onRestock: (qty: number, mode?: 'produire' | 'acheter', matieresRestantes?: Record<string, number>, forcer?: boolean) => Promise<ManqueMatiere[] | null>;
-  onCorrection: (field: string, qty: number) => Promise<void>;
+  onRestock: (qty: number, mode?: 'produire' | 'acheter', matieresRestantes?: Record<string, number>, forcer?: boolean, secondaryQuantity?: number) => Promise<ManqueMatiere[] | null>;
+  onCorrection: (field: string, qty: number, secondaryQuantity?: number) => Promise<void>;
 }) {
   const [tab, setTab] = useState<'restock' | 'correction'>('restock');
   const [qty, setQty] = useState('');
@@ -138,6 +146,10 @@ function StockActionModal({ label, unit, item, isProduct, needsMode, materials, 
   const produit = isProduct && (needsMode ? mode === 'produire' : (item as StockProduct).mode === 'FABRIQUE');
 
   const currentFieldValue = (item as any)[field] as number;
+  // Matière à 2 unités (ex. kg + bobines)
+  const mat = isProduct ? null : (item as StockMaterial);
+  const hasSec = !!mat?.secondaryUnit;
+  const [secQty, setSecQty] = useState('');   // bobines reçues (réapprovisionnement) ou restantes (correction)
 
   const reapprovisionner = async (forcer = false) => {
     const matieresRestantes: Record<string, number> = {};
@@ -147,7 +159,7 @@ function StockActionModal({ label, unit, item, isProduct, needsMode, materials, 
         if (v.trim() && !Number.isNaN(r) && r >= 0) matieresRestantes[id] = r;
       }
     }
-    const manquants = await onRestock(Number(qty), needsMode ? mode : undefined, Object.keys(matieresRestantes).length ? matieresRestantes : undefined, forcer);
+    const manquants = await onRestock(Number(qty), needsMode ? mode : undefined, Object.keys(matieresRestantes).length ? matieresRestantes : undefined, forcer, hasSec ? (parseFraction(secQty) ?? undefined) : undefined);
     if (manquants) setManques(manquants);
     else onClose();
   };
@@ -158,7 +170,7 @@ function StockActionModal({ label, unit, item, isProduct, needsMode, materials, 
     setSaving(true);
     try {
       if (tab === 'restock') await reapprovisionner();
-      else { await onCorrection(field, n); onClose(); }
+      else { await onCorrection(field, n, hasSec && field === 'available' ? (parseFraction(secQty) ?? undefined) : undefined); onClose(); }
     } finally {
       setSaving(false);
     }
@@ -178,7 +190,7 @@ function StockActionModal({ label, unit, item, isProduct, needsMode, materials, 
           {Object.entries(fieldLabels).map(([key, lbl]) => (
             <div key={key} className="px-3 py-2 rounded-lg bg-[#F8FAFC] border border-[#F0F4F8]">
               <p className="text-[10px] font-bold text-[#8A9BB5] uppercase">{lbl}</p>
-              <p className="text-[14px] font-bold text-[#0F172A] tabular-nums">{(item as any)[key]} {unit}</p>
+              <p className="text-[14px] font-bold text-[#0F172A] tabular-nums">{(item as any)[key]} {unit}{secText(mat, (item as any)[key])}</p>
             </div>
           ))}
         </div>
@@ -206,6 +218,12 @@ function StockActionModal({ label, unit, item, isProduct, needsMode, materials, 
               <label className="block text-[12px] font-semibold text-[#374151] mb-1.5">Quantité à ajouter ({unit})</label>
               <input value={qty} onChange={(e) => setQty(e.target.value.replace(/[^\d.]/g, ''))} inputMode="decimal" placeholder="ex: 50" className={inputClass} autoFocus />
             </div>
+            {hasSec && (
+              <div>
+                <label className="block text-[12px] font-semibold text-[#374151] mb-1.5">Nombre de {mat?.secondaryUnit} reçu(es) <span className="font-normal text-[#8A9BB5]">— entier (ex: 3), pour mémoriser le poids d'une {mat?.secondaryUnit}</span></label>
+                <input value={secQty} onChange={(e) => setSecQty(e.target.value.replace(/[^\d.,/ ]/g, ''))} inputMode="decimal" placeholder="ex: 3" className={inputClass} />
+              </div>
+            )}
             {produit && materials.length > 0 && (
               <MatiereRestanteChamps materials={materials} restes={restes} setRestes={setRestes} />
             )}
@@ -223,6 +241,20 @@ function StockActionModal({ label, unit, item, isProduct, needsMode, materials, 
               <label className="block text-[12px] font-semibold text-[#374151] mb-1.5">Nouvelle valeur ({unit}) — actuel : {currentFieldValue}</label>
               <input value={qty} onChange={(e) => setQty(e.target.value.replace(/[^\d.]/g, ''))} inputMode="decimal" placeholder="ex: 50" className={inputClass} autoFocus />
             </div>
+            {hasSec && field === 'available' && (
+              <div>
+                <label className="block text-[12px] font-semibold text-[#374151] mb-1.5">Il reste combien de {mat?.secondaryUnit} ? <span className="font-normal text-[#8A9BB5]">— ex: 2 1/2, 1/3, 2/3, 0.5</span></label>
+                <input value={secQty} onChange={(e) => {
+                    const v = e.target.value.replace(/[^\d.,/ ]/g, ''); setSecQty(v);
+                    // Seul le nombre de bobines est donné → le poids est calculé avec le poids moyen d'une bobine (modifiable)
+                    const n = parseFraction(v);
+                    if (n !== null && mat?.primaryPerSecondary) setQty(String(Math.round(n * mat.primaryPerSecondary * 100) / 100));
+                  }} placeholder="ex: 1/2" className={inputClass} />
+                {mat?.primaryPerSecondary
+                  ? <p className="text-[11px] text-[#8A9BB5] mt-1">Poids moyen d'une {mat.secondaryUnit} : {Math.round(mat.primaryPerSecondary * 100) / 100} {mat.unit}. Le poids ci-dessus se recalcule tout seul, vous pouvez le modifier.</p>
+                  : <p className="text-[11px] text-[#B45309] mt-1">Poids d'une {mat?.secondaryUnit} encore inconnu : indiquez le poids ET le nombre de {mat?.secondaryUnit}, il sera mémorisé.</p>}
+              </div>
+            )}
           </>
         )}
 
@@ -317,8 +349,9 @@ function AssignModal({ employees, products, onClose, onSave }: {
 function RestockOnlyModal({ products, materials, onClose, onRestock }: {
   products: StockProduct[]; materials: StockMaterial[];
   onClose: () => void;
-  onRestock: (type: 'product' | 'material', id: string, qty: number, mode?: 'produire' | 'acheter', matieresRestantes?: Record<string, number>, forcer?: boolean) => Promise<ManqueMatiere[] | null>;
+  onRestock: (type: 'product' | 'material', id: string, qty: number, mode?: 'produire' | 'acheter', matieresRestantes?: Record<string, number>, forcer?: boolean, secondaryQuantity?: number) => Promise<ManqueMatiere[] | null>;
 }) {
+  const [secQty, setSecQty] = useState('');
   const [type, setType] = useState<'product' | 'material'>('product');
   const [id, setId] = useState('');
   const [qty, setQty] = useState('');
@@ -342,7 +375,8 @@ function RestockOnlyModal({ products, materials, onClose, onRestock }: {
         if (v.trim() && !Number.isNaN(r) && r >= 0) matieresRestantes[mid] = r;
       }
     }
-    const manquants = await onRestock(type, id, Number(qty), needsMode ? mode : undefined, Object.keys(matieresRestantes).length ? matieresRestantes : undefined, forcer);
+    const secMat = type === 'material' ? materials.find((m) => m.id === id) : undefined;
+    const manquants = await onRestock(type, id, Number(qty), needsMode ? mode : undefined, Object.keys(matieresRestantes).length ? matieresRestantes : undefined, forcer, secMat?.secondaryUnit ? (parseFraction(secQty) ?? undefined) : undefined);
     if (manquants) setManques(manquants);
     else onClose();
   };
@@ -390,6 +424,12 @@ function RestockOnlyModal({ products, materials, onClose, onRestock }: {
           <label className="block text-[12px] font-semibold text-[#374151] mb-1.5">Quantité à ajouter</label>
           <input value={qty} onChange={(e) => setQty(e.target.value.replace(/[^\d.]/g, ''))} inputMode="decimal" placeholder="ex: 50" className={inputClass} autoFocus />
         </div>
+        {type === 'material' && materials.find((m) => m.id === id)?.secondaryUnit && (
+          <div>
+            <label className="block text-[12px] font-semibold text-[#374151] mb-1.5">Nombre de {materials.find((m) => m.id === id)?.secondaryUnit} reçu(es) <span className="font-normal text-[#8A9BB5]">— entier (ex: 3)</span></label>
+            <input value={secQty} onChange={(e) => setSecQty(e.target.value.replace(/[^\d.,/ ]/g, ''))} inputMode="decimal" placeholder="ex: 3" className={inputClass} />
+          </div>
+        )}
         {produit && materials.length > 0 && (
           <MatiereRestanteChamps materials={materials} restes={restes} setRestes={setRestes} />
         )}
@@ -414,6 +454,7 @@ function StockPageInner() {
   const [tab, setTab] = useState<'produits' | 'matieres' | 'libres' | 'commercial'>('produits');
   const [freeRefs, setFreeRefs] = useState<FreeRef[]>([]);
   const [freeTarget, setFreeTarget] = useState<FreeRef | null>(null);
+  const [freeEdit, setFreeEdit] = useState<string | null>(null); // libellé de la réf libre à modifier (texte + métrage)
   const [rawProducts, setProducts] = useState<StockProduct[]>([]);
   // Interrupteur RollLink — DÉSACTIVÉ par défaut (RollLink est encore en test) :
   //  - désactivé : tout ce qui vient de RollLink est ignoré (ce qu'il a pris au stock libre retourne en Disponible ;
@@ -486,10 +527,10 @@ function StockPageInner() {
   };
 
   // Renvoie la matière manquante si la production est refusée (l'overlay prend le relais), sinon null
-  const doRestock = async (type: 'product' | 'material', id: string, quantity: number, mode?: 'produire' | 'acheter', matieresRestantes?: Record<string, number>, forcer?: boolean): Promise<ManqueMatiere[] | null> => {
+  const doRestock = async (type: 'product' | 'material', id: string, quantity: number, mode?: 'produire' | 'acheter', matieresRestantes?: Record<string, number>, forcer?: boolean, secondaryQuantity?: number): Promise<ManqueMatiere[] | null> => {
     const res = await fetch('/api/stock/restock', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type, id, quantity, mode, matieresRestantes, forcer }),
+      body: JSON.stringify({ type, id, quantity, mode, matieresRestantes, forcer, secondaryQuantity }),
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
@@ -501,10 +542,10 @@ function StockPageInner() {
     await fetchAll();
     return null;
   };
-  const doCorrection = async (type: 'product' | 'material', id: string, field: string, quantity: number) => {
+  const doCorrection = async (type: 'product' | 'material', id: string, field: string, quantity: number, secondaryQuantity?: number) => {
     const res = await fetch('/api/stock/correction', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type, id, field, quantity }),
+      body: JSON.stringify({ type, id, field, quantity, secondaryQuantity }),
     });
     if (!res.ok) { const err = await res.json().catch(() => ({})); alert(err.error ?? 'Échec de la correction'); return; }
     await fetchAll();
@@ -669,9 +710,9 @@ function StockPageInner() {
                     <span className="text-[11px] font-bold px-2 py-0.5 rounded-md bg-[#EEF2FF] text-[#4F46E5] tabular-nums">{m.reference}</span>
                   </td>
                   <td className="px-4 py-3 text-[13px] font-semibold text-[#0F172A]">{m.name}</td>
-                  <td className="px-4 py-3 text-[13px] font-semibold text-[#0F172A] text-right tabular-nums">{m.available} {m.unit}</td>
-                  <td className="px-4 py-3 text-[13px] text-[#374151] text-right tabular-nums">{m.reserved} {m.unit}</td>
-                  <td className="px-4 py-3 text-[13px] font-semibold text-[#0F172A] text-right tabular-nums">{m.available + m.reserved} {m.unit}</td>
+                  <td className="px-4 py-3 text-[13px] font-semibold text-[#0F172A] text-right tabular-nums">{m.available} {m.unit}{secText(m, m.available) && <span className="block text-[11px] font-normal text-[#8A9BB5]">{secText(m, m.available).slice(3)}</span>}</td>
+                  <td className="px-4 py-3 text-[13px] text-[#374151] text-right tabular-nums">{m.reserved} {m.unit}{secText(m, m.reserved) && <span className="block text-[11px] text-[#8A9BB5]">{secText(m, m.reserved).slice(3)}</span>}</td>
+                  <td className="px-4 py-3 text-[13px] font-semibold text-[#0F172A] text-right tabular-nums">{m.available + m.reserved} {m.unit}{secText(m, m.available + m.reserved) && <span className="block text-[11px] font-normal text-[#8A9BB5]">{secText(m, m.available + m.reserved).slice(3)}</span>}</td>
                   <td className="px-4 py-3">{statusBadge(m.available, m.purchaseThreshold)}</td>
                   {canEdit && (
                     <td className="px-4 py-3 text-right">
@@ -721,6 +762,9 @@ function StockPageInner() {
                   {canEdit && (
                     <td className="px-4 py-3 text-right">
                       {isAdmin && <NotesPencil className="mr-2" count={noteCounts[noteKey('FREE', f.label)] ?? 0} onClick={() => setNotesTarget({ kind: 'FREE', keyId: f.label, title: f.label })} />}
+                      <button onClick={() => setFreeEdit(f.label)} title="Modifier le texte et le métrage de cette référence" className="mr-2 px-3 py-1.5 rounded-lg border border-[#E2E8F0] text-[12px] font-semibold text-[#374151] hover:bg-[#F8FAFC]">
+                        Modifier
+                      </button>
                       <button onClick={() => setFreeTarget(f)} className="px-3 py-1.5 rounded-lg border border-[#E2E8F0] text-[12px] font-semibold text-[#374151] hover:bg-[#F8FAFC]">
                         Gérer le stock
                       </button>
@@ -737,6 +781,7 @@ function StockPageInner() {
       )}
 
       {freeTarget && <FreeRefModal item={freeTarget} onClose={() => setFreeTarget(null)} onSave={saveFreeRef} onNotesChange={refreshNotes} />}
+      {freeEdit && <FreeRefEditModal label={freeEdit} onClose={() => setFreeEdit(null)} onSaved={fetchAll} />}
       {notesTarget && <NotesModal title={notesTarget.title} kind={notesTarget.kind} keyId={notesTarget.keyId} onClose={() => setNotesTarget(null)} onChange={refreshNotes} />}
 
       {tab === 'commercial' && (
@@ -787,8 +832,8 @@ function StockPageInner() {
           label={actionTarget.label} unit={actionTarget.unit} item={actionTarget.item} isProduct={actionTarget.type === 'product'} needsMode={actionTarget.needsMode}
           materials={materials} onNotesChange={refreshNotes}
           onClose={() => setActionTarget(null)}
-          onRestock={(qty, mode, restes, forcer) => doRestock(actionTarget.type, actionTarget.item.id, qty, mode, restes, forcer)}
-          onCorrection={(field, qty) => doCorrection(actionTarget.type, actionTarget.item.id, field, qty)}
+          onRestock={(qty, mode, restes, forcer, sec) => doRestock(actionTarget.type, actionTarget.item.id, qty, mode, restes, forcer, sec)}
+          onCorrection={(field, qty, sec) => doCorrection(actionTarget.type, actionTarget.item.id, field, qty, sec)}
         />
       )}
       {showAssign && (
@@ -796,7 +841,7 @@ function StockPageInner() {
       )}
       {showRestock && (
         <RestockOnlyModal products={products} materials={materials} onClose={() => setShowRestock(false)}
-          onRestock={(type, id, qty, mode, restes, forcer) => doRestock(type, id, qty, mode, restes, forcer)} />
+          onRestock={(type, id, qty, mode, restes, forcer, sec) => doRestock(type, id, qty, mode, restes, forcer, sec)} />
       )}
       {showLists && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">

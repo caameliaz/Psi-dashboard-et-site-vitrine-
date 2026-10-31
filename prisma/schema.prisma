@@ -105,6 +105,10 @@ model RawMaterial {
   purchaseThreshold Int                @default(70) // seuil sur `available` déclenchant le réassort préventif en liste d'achat
   available         Float              @default(0) // Disponible
   reserved          Float              @default(0) // Réservé (rattaché à une recette/commande en cours, aucun mouvement réel encore)
+  // Deuxième unité facultative (ex. « bobine » en plus de `unit` = kg) : le nombre de bobines n'est pas stocké, il est
+  // DÉDUIT du poids via `primaryPerSecondary` (kg par bobine) — cf. src/lib/dual-unit.ts
+  secondaryUnit       String?
+  primaryPerSecondary Float?
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
   recipeItems       RecipeItem[]

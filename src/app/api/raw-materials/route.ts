@@ -40,6 +40,7 @@ export async function POST(request: NextRequest) {
         reference: body.reference,
         name: body.name,
         unit: body.unit,
+        secondaryUnit: String(body.secondaryUnit ?? '').trim() || null,
         price: Number(body.price),
         stockMax,
         purchaseThreshold: body.purchaseThreshold != null ? Number(body.purchaseThreshold) : Math.round(stockMax * 0.5),

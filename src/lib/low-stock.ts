@@ -22,12 +22,14 @@ type Item = { kind: 'PRODUCT' | 'MATERIAL'; id: string; label: string; unit: str
 
 // À appeler après toute action qui change un stock (lecture seule de l'état + écriture de l'état d'alerte).
 // Ne lève JAMAIS : une alerte ratée ne doit pas faire échouer l'action de stock qui l'a déclenchée.
-export async function scanLowStock(): Promise<void> {
+// `deps` : base et envoi de notification, injectables pour les tests (par défaut : les vrais).
+export async function scanLowStock(deps: { db: typeof prisma; notify: typeof createNotif } = { db: prisma, notify: createNotif }): Promise<void> {
+  const { db, notify } = deps;
   try {
     const [products, materials, states] = await Promise.all([
-      prisma.product.findMany({ where: { active: true }, select: { id: true, reference: true, name: true, mode: true, available: true, purchaseThreshold: true, productionThreshold: true } }),
-      prisma.rawMaterial.findMany({ select: { id: true, reference: true, name: true, unit: true, available: true, purchaseThreshold: true } }),
-      prisma.stockAlertState.findMany(),
+      db.product.findMany({ where: { active: true }, select: { id: true, reference: true, name: true, mode: true, available: true, purchaseThreshold: true, productionThreshold: true } }),
+      db.rawMaterial.findMany({ select: { id: true, reference: true, name: true, unit: true, available: true, purchaseThreshold: true } }),
+      db.stockAlertState.findMany(),
     ]);
     const known = new Map(states.map((s) => [`${s.kind}:${s.refKey}`, s.level as Level]));
 
@@ -41,16 +43,16 @@ export async function scanLowStock(): Promise<void> {
       const prev = known.get(`${it.kind}:${it.id}`);
       if (prev === undefined) {
         // Première fois qu'on voit cette référence : on mémorise son niveau, sans alerte
-        await prisma.stockAlertState.create({ data: { kind: it.kind, refKey: it.id, level } }).catch(() => {});
+        await db.stockAlertState.create({ data: { kind: it.kind, refKey: it.id, level } }).catch(() => {});
         continue;
       }
       if (prev === level) continue;
       // Verrou : un seul appel « gagne » le changement de niveau (évite une double notification)
-      const claimed = await prisma.stockAlertState.updateMany({ where: { kind: it.kind, refKey: it.id, level: prev }, data: { level } });
+      const claimed = await db.stockAlertState.updateMany({ where: { kind: it.kind, refKey: it.id, level: prev }, data: { level } });
       if (claimed.count !== 1 || RANK[level] <= RANK[prev]) continue;
 
       const out = level === 'OUT';
-      await createNotif({
+      await notify({
         type: 'ACTION_AUTRE',
         title: out ? 'Rupture de stock' : 'Stock faible',
         message: out

@@ -69,3 +69,12 @@ RollLink est la plateforme sœur. Il est **encore en test** : une commande RollL
 - Quand une référence **passe sous son seuil**, tous les admins reçoivent une notification « Stock faible » ; quand elle **tombe à 0**, « Rupture de stock ». Ça marche pour les produits finis et les matières premières.
 - L'alerte n'est envoyée **qu'une fois** par passage. Elle se réarme quand le stock remonte au-dessus du seuil.
 - Les références jamais approvisionnées (à 0 depuis toujours) ne déclenchent aucune alerte.
+
+## Matières premières à deux unités (ex. papier : kg + bobines)
+
+- Dans **Recettes → Matières premières → Modifier**, le champ **2ᵉ unité** (ex. « bobine ») s'ajoute à l'unité principale (kg). Sans 2ᵉ unité, rien ne change.
+- **Réception / réapprovisionnement** : on saisit le poids **et** le nombre de bobines reçues (ex. 594 kg et 3 bobines).
+- **Production** : les recettes consomment des kg ; le nombre de bobines baisse tout seul (poids ÷ poids moyen d'une bobine). C'est une estimation.
+- **Correction** : dans « Gérer le stock → Correction », le champ « Il reste combien de bobines ? » accepte `1/2`, `2/3`, `2 1/2`, `2,5` ou `0.5`. Le poids est recalculé avec le poids moyen d'une bobine (modifiable), et ce poids moyen est recalé.
+- **Page Stock** : le tableau des matières affiche les deux unités (ex. `528 kg` puis `2 ⅔ bobines`).
+- Pour une matière déjà en stock, la première correction avec poids **et** bobines mémorise le poids d'une bobine ; avant, seul le poids est affiché.

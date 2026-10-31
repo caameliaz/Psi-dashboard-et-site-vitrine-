@@ -10,7 +10,7 @@ import { withoutRollink } from '@/lib/rollink-lists';
 
 const INCLUDE = {
   product: { select: { id: true, reference: true, name: true, available: true, purchaseThreshold: true } },
-  rawMaterial: { select: { id: true, reference: true, name: true, unit: true, available: true, purchaseThreshold: true } },
+  rawMaterial: { select: { id: true, reference: true, name: true, unit: true, available: true, purchaseThreshold: true, secondaryUnit: true, primaryPerSecondary: true } },
 } as const;
 
 // GET /api/purchase-list — liste d'achat. Le rattrapage (buffer) et le besoin réel matière

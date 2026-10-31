@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { ratioAfterReception } from '@/lib/dual-unit';
 import { scanLowStock } from '@/lib/low-stock';
 import { prisma } from '@/lib/prisma';
 import { fixerReferenceProduit, fixerReferenceMatiere } from '@/lib/stock-reference';
@@ -108,10 +109,14 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
         await resyncPurchaseLineForProduct(item.productId);
       } else {
         // Matière première → toujours en Disponible ; débloque les productions en attente.
-        const avantMatiere = (await prisma.rawMaterial.findUnique({ where: { id: item.rawMaterialId! }, select: { available: true } }))?.available ?? 0;
+        const matAvant = await prisma.rawMaterial.findUnique({ where: { id: item.rawMaterialId! }, select: { available: true, secondaryUnit: true, primaryPerSecondary: true } });
+        const avantMatiere = matAvant?.available ?? 0;
+        // 2e unité (ex. bobines) : poids ET nombre de bobines reçus → recale le rapport kg/bobine
+        const secQty = Number(body.secondaryQuantity);
+        const ratioData = matAvant?.secondaryUnit && secQty > 0 ? { primaryPerSecondary: ratioAfterReception(avantMatiere, matAvant.primaryPerSecondary, qty, secQty) } : {};
         await prisma.$transaction([
           prisma.purchaseListItem.update({ where: { id }, data: { receivedQuantity: { increment: qty } } }),
-          prisma.rawMaterial.update({ where: { id: item.rawMaterialId! }, data: { available: { increment: qty } } }),
+          prisma.rawMaterial.update({ where: { id: item.rawMaterialId! }, data: { available: { increment: qty }, ...ratioData } }),
         ]);
         // Rachat de matière reçu → le disponible obtenu devient la référence (100 %), seuil à 30 %
         await fixerReferenceMatiere(item.rawMaterialId!, avantMatiere);
