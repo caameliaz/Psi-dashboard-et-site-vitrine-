@@ -9,6 +9,8 @@ import { notifBell } from '@/lib/notif-bell-store';
 import { PageViewTracker } from '@/components/PageViewTracker';
 import { pushSupported, iosNeedsInstall, isPushEnabled, enablePush, disablePush } from '@/lib/push-client';
 import Image from 'next/image';
+import Link from 'next/link';
+import { InstallPrompt } from '@/components/InstallPrompt';
 
 // Cloche mobile — même source de données que la cloche du dashboard PC
 // (store partagé notifBell, alimenté par TopBar).
@@ -76,6 +78,24 @@ function MobilePushButton() {
   );
 }
 
+// Icône profil mobile, à côté de la cloche : ouvre « Mon profil » (infos, mot de passe, déconnexion).
+function MobileProfileButton() {
+  const pathname = usePathname();
+  const active = pathname === '/admin/profile';
+  return (
+    <Link
+      href="/admin/profile"
+      aria-label="Mon profil"
+      className="relative w-10 h-10 flex items-center justify-center rounded-lg hover:bg-[#F2F4F7] transition-colors"
+    >
+      <svg width={20} height={20} fill="none" viewBox="0 0 24 24">
+        <circle cx="12" cy="8" r="4" stroke={active ? '#4CAF4F' : '#374151'} strokeWidth="1.6" />
+        <path d="M4 21c0-4 3.6-7 8-7s8 3 8 7" stroke={active ? '#4CAF4F' : '#374151'} strokeWidth="1.6" strokeLinecap="round" />
+      </svg>
+    </Link>
+  );
+}
+
 // Cloche flottante en haut à droite, sur TOUTES les pages admin (desktop uniquement).
 function DesktopBellButton() {
   const [unread, setUnread] = useState(() => notifBell.getCount());
@@ -101,7 +121,7 @@ function DesktopBellButton() {
 
 // Pages réservées au desktop (lourdes / peu utiles sur le terrain).
 // Sur mobile, elles affichent un message + retour au menu.
-const DESKTOP_ONLY = ['/admin/products', '/admin/settings', '/admin/profile'];
+const DESKTOP_ONLY = ['/admin/products', '/admin/settings'];
 
 // Enveloppe les pages admin : sidebar + contenu, SAUF sur la page de login.
 // Responsive : sur mobile la sidebar devient un drawer ouvert par un hamburger.
@@ -126,6 +146,8 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
       <TopBar />
       {/* Journal des pages consultées par les comptes en LECTURE SEULE (visible de la propriétaire uniquement) */}
       <PageViewTracker />
+      {/* Pop-up « Installer l'app » (mobile, tant qu'elle n'est pas installée) */}
+      <InstallPrompt />
       <div className="flex min-h-screen" style={{ background: isQuickOrder ? '#FFFFFF' : '#F5F8FC' }}>
         {/* Sidebar : fixe sur desktop, drawer sur mobile */}
         <Sidebar mobileOpen={mobileOpen} onCloseMobile={() => setMobileOpen(false)} />
@@ -152,6 +174,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
             <div className="flex items-center">
               <MobilePushButton />
               <MobileBellButton />
+              <MobileProfileButton />
             </div>
           </header>
 

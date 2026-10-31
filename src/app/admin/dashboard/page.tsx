@@ -246,6 +246,9 @@ export default function DashboardPage() {
   const [moisTab, setMoisTab]   = useState<'commandes' | 'devis'>('commandes');
   // isAdmin = « voit tout » (admin ou compte lecture seule) ; realAdmin = vrai admin (objectifs modifiables).
   const { isAdmin: realAdmin, seesAll: isAdmin, can } = useRole();
+  // Visites du site (Google Analytics) : réservées à qui peut consulter/modifier le contenu du site
+  // (même règle que /api/analytics). Un commercial n'en voit ni la carte ni le détail.
+  const canSeeSite = can('voir_contenu') || can('modifier_contenu');
   const { data: session } = useSession();
   const myId = (session?.user as { id?: string } | undefined)?.id ?? null;
   const myName = (session?.user as { name?: string } | undefined)?.name ?? 'Moi';
@@ -447,7 +450,7 @@ export default function DashboardPage() {
       // rafraîchissements silencieux) — ses chiffres ont de toute façon plusieurs heures de retard
       const [statsRes, analyticsRes] = await Promise.all([
         fetch(statsUrl, { credentials: 'include' }),
-        silent ? Promise.resolve(null) : fetch(analyticsUrl, { credentials: 'include' }),
+        silent || !canSeeSite ? Promise.resolve(null) : fetch(analyticsUrl, { credentials: 'include' }),
       ]);
       
       if (statsRes.ok) {
@@ -726,7 +729,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Source — Visites du site */}
-        <div className="bg-white rounded-2xl border border-[#E2E8F0] p-3.5 shadow-sm flex flex-col">
+        {canSeeSite && <div className="bg-white rounded-2xl border border-[#E2E8F0] p-3.5 shadow-sm flex flex-col">
           <div className="flex items-center justify-between mb-1">
             <p className="text-[10px] font-bold text-[#ABBED1] uppercase tracking-widest">Site public</p>
             <DateRangePicker onDateChange={(start, end) => {
@@ -740,11 +743,11 @@ export default function DashboardPage() {
             <button onClick={() => setSiteModalOpen(true)} className="ml-auto text-[11px] font-semibold text-[#4CAF4F] hover:text-[#388E3C] pb-0.5">Voir le détail ↗</button>
           </div>
           {loading ? <p className="text-[11px] text-[#8A9BB5]">Chargement…</p> : <CategoryPageViewsChart data={(filteredAnalyticsData || analyticsData).weekly} />}
-        </div>
+        </div>}
       </div>
 
       {/* 3 colonnes sur desktop : Post-it + Top produits + Origine */}
-      <div className="hidden md:grid md:grid-cols-3 gap-6" style={{ alignItems: 'stretch' }}>
+      <div className={`hidden md:grid ${canSeeSite ? 'md:grid-cols-3' : 'md:grid-cols-2'} gap-6`} style={{ alignItems: 'stretch' }}>
         {/* Post-it — stats mois + aujourd'hui */}
         <div className="relative pt-8 px-5 pb-5 flex flex-col"
           style={{
@@ -813,7 +816,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Site public — Visites */}
-        <div className="bg-white rounded-2xl border border-[#E2E8F0] p-5 shadow-sm flex flex-col">
+        {canSeeSite && <div className="bg-white rounded-2xl border border-[#E2E8F0] p-5 shadow-sm flex flex-col">
           <div className="flex items-center justify-between mb-1">
             <p className="text-[11px] font-bold text-[#ABBED1] uppercase tracking-widest">Site public</p>
             <DateRangePicker onDateChange={(start, end) => {
@@ -829,7 +832,7 @@ export default function DashboardPage() {
             <button onClick={() => setSiteModalOpen(true)} className="ml-auto text-[12px] font-semibold text-[#4CAF4F] hover:text-[#388E3C] transition-colors pb-1">Voir le détail ↗</button>
           </div>
           {loading ? <p className="text-[12px] text-[#8A9BB5]">Chargement…</p> : <CategoryPageViewsChart data={(filteredAnalyticsData || analyticsData).weekly} />}
-        </div>
+        </div>}
       </div>
 
       {/* ── Cartes du mois : 2 colonnes sur mobile et desktop ─────────────── */}

@@ -1,7 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { signOut } from 'next-auth/react';
 import { pushSupported, iosNeedsInstall, isPushEnabled, enablePush, disablePush } from '@/lib/push-client';
+import { InstallCard } from '@/components/InstallPrompt';
 
 // Section "Notifications système" — activer/désactiver les push sur cet appareil
 function PushSection() {
@@ -34,11 +36,11 @@ function PushSection() {
   };
 
   return (
-    <div className="bg-white rounded-2xl border border-[#E2E8F0] overflow-hidden shadow-sm col-span-2">
-      <div className="px-6 py-4 border-b border-[#F2F4F7] bg-[#F8FAFC]">
+    <div className="bg-white rounded-2xl border border-[#E2E8F0] overflow-hidden shadow-sm md:col-span-2">
+      <div className="px-4 md:px-6 py-4 border-b border-[#F2F4F7] bg-[#F8FAFC]">
         <h2 className="text-[15px] font-bold text-[#0F172A]">Notifications système</h2>
       </div>
-      <div className="px-6 py-5">
+      <div className="px-4 md:px-6 py-5">
         <div className="flex items-center justify-between gap-4 flex-wrap">
           <div className="min-w-0">
             <p className="text-[13px] text-[#374151]">Recevez une notification sur cet appareil (même l&apos;app fermée) pour chaque nouvelle commande, devis ou assignation.</p>
@@ -73,10 +75,10 @@ function PushSection() {
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="bg-white rounded-2xl border border-[#E2E8F0] overflow-hidden shadow-sm">
-      <div className="px-6 py-4 border-b border-[#F2F4F7] bg-[#F8FAFC]">
+      <div className="px-4 md:px-6 py-4 border-b border-[#F2F4F7] bg-[#F8FAFC]">
         <h2 className="text-[15px] font-bold text-[#0F172A]">{title}</h2>
       </div>
-      <div className="px-6 py-5">{children}</div>
+      <div className="px-4 md:px-6 py-5">{children}</div>
     </div>
   );
 }
@@ -175,26 +177,26 @@ export default function ProfilePage() {
       </div>
 
       {/* Avatar + infos rapides */}
-      <div className="bg-white rounded-2xl border border-[#E2E8F0] shadow-sm p-6 mb-5 flex items-center gap-6 col-span-2">
-        <div className="w-20 h-20 rounded-2xl flex items-center justify-center text-[28px] font-extrabold flex-shrink-0" style={{ background: '#D1FAE5', color: '#166534' }}>
+      <div className="bg-white rounded-2xl border border-[#E2E8F0] shadow-sm p-4 md:p-6 mb-5 flex items-center gap-4 md:gap-6">
+        <div className="w-16 h-16 md:w-20 md:h-20 rounded-2xl flex items-center justify-center text-[22px] md:text-[28px] font-extrabold flex-shrink-0" style={{ background: '#D1FAE5', color: '#166534' }}>
           {(nom || '?').split(' ').map((w) => w[0]).slice(0, 2).join('').toUpperCase()}
         </div>
-        <div>
-          <p className="text-[20px] font-bold text-[#0F172A]">{nom || '…'}</p>
-          <p className="text-[13px] text-[#8A9BB5] mt-0.5">{email}</p>
-          <div className="flex items-center gap-2 mt-2">
+        <div className="min-w-0">
+          <p className="text-[18px] md:text-[20px] font-bold text-[#0F172A] truncate">{nom || '…'}</p>
+          <p className="text-[13px] text-[#8A9BB5] mt-0.5 truncate">{email}</p>
+          <div className="flex items-center gap-2 mt-2 flex-wrap">
             <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-[#F3E8FF] text-[#6B21A8]">{roleLabel || role}</span>
             {depuis && <span className="text-[11px] text-[#ABBED1]">Membre depuis {depuis}</span>}
           </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-5">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-5 pb-24 md:pb-0">
 
         {/* Infos personnelles */}
         <Section title="Informations personnelles">
           <div className="flex flex-col gap-4">
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className={labelClass}>Nom complet</label>
                 <input value={nom} onChange={(e) => setNom(e.target.value)} className={inputClass} />
@@ -259,6 +261,14 @@ export default function ProfilePage() {
         </Section>
 
         <PushSection />
+
+        {/* Mobile uniquement : installer l'app + se déconnecter (la barre latérale n'existe pas sur mobile) */}
+        <InstallCard />
+        <button
+          onClick={() => signOut({ callbackUrl: '/admin/login' })}
+          className="md:hidden w-full px-4 py-3 rounded-xl border border-[#FECACA] bg-white text-[14px] font-semibold text-[#DC2626] hover:bg-[#FEF2F2] transition-colors">
+          Se déconnecter
+        </button>
 
         {/* Emails récapitulatifs — admins uniquement (eux seuls les reçoivent) */}
         {/* Récaps : réglage réservé aux ADMINS. Pour un employé, c'est l'admin

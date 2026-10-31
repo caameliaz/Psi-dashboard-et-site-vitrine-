@@ -9,6 +9,10 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(self.clients.claim());
 });
 
+// Requis par Chrome/Android pour proposer « Installer l'application » : le navigateur exige un
+// gestionnaire `fetch`. Il ne fait rien (pas de cache hors-ligne) : les requêtes passent normalement.
+self.addEventListener('fetch', () => {});
+
 // Réception d'un push → affiche une notification système
 self.addEventListener('push', (event) => {
   let data = {};

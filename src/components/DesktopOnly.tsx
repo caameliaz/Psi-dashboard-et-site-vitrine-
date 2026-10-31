@@ -22,7 +22,7 @@ export function DesktopOnly({ children, title = 'Cette page' }: { children: Reac
         <p className="text-[14px] text-[#8A9BB5] max-w-[280px] mb-6">
           Cette vue est optimisée pour grand écran. Ouvrez-la depuis un ordinateur.
         </p>
-        <Link href="/admin/mobile" className="px-5 py-2.5 rounded-xl text-[14px] font-bold text-white" style={{ background: '#4CAF4F' }}>
+        <Link href="/admin/dashboard" className="px-5 py-2.5 rounded-xl text-[14px] font-bold text-white" style={{ background: '#4CAF4F' }}>
           Retour au menu
         </Link>
       </div>

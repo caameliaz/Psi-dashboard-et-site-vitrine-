@@ -420,13 +420,14 @@ interface LeaveInfo {
   allowFullHistory: boolean;
 }
 
-function UserSlideIn({ user, onClose, onDelete, onPermChange, onPermSetAll, customRoles, onSaveProfile, onResetPassword, onSendFixMail, onReactivate, onToggleTwoFactor, initialEditing = false }: {
+function UserSlideIn({ user, onClose, onDelete, onPermChange, onPermSetAll, customRoles, onSaveProfile, onResetPassword, onSendWelcome, onSendFixMail, onReactivate, onToggleTwoFactor, initialEditing = false }: {
   user: User; onClose: () => void; onDelete: () => void;
   onPermChange: (userId: number, perm: PermKey, value: boolean) => void;
   onPermSetAll: (userId: number, perms: PermKey[]) => void;
   customRoles: CustomRole[];
   onSaveProfile: (user: User, data: { name: string; email: string; role: string; customRoleId: string | null; password?: string; permissions: PermKey[] }) => Promise<void>;
   onResetPassword: (user: User) => Promise<void>;
+  onSendWelcome: (user: User) => Promise<void>;
   onSendFixMail?: (user: User) => Promise<void>; // fourni UNIQUEMENT à la propriétaire du compte
   onReactivate: (user: User) => Promise<void>;
   onToggleTwoFactor: (user: User, disabled: boolean) => Promise<void>;
@@ -440,6 +441,7 @@ function UserSlideIn({ user, onClose, onDelete, onPermChange, onPermSetAll, cust
   const [saving, setSaving] = useState(false);
   const [resetting, setResetting] = useState(false);
   const [sendingFix, setSendingFix] = useState(false);
+  const [sendingWelcome, setSendingWelcome] = useState(false);
   const [reactivating, setReactivating] = useState(false);
   const [togglingTwoFactor, setTogglingTwoFactor] = useState(false);
   const [fNom, setFNom] = useState(user.nom);
@@ -661,6 +663,17 @@ function UserSlideIn({ user, onClose, onDelete, onPermChange, onPermSetAll, cust
               {resetting ? 'Génération…' : '🔑 Réinitialiser le mot de passe'}
             </button>
             <p className="text-[11px] text-[#ABBED1] mt-2">Un nouveau mot de passe sera généré et affiché (à transmettre à l&apos;utilisateur).</p>
+            <button
+              onClick={async () => {
+                if (!user.email) { alert('Ce compte n\'a pas d\'adresse e-mail.'); return; }
+                if (!window.confirm(`Renvoyer le mail de bienvenue à ${user.nom} (${user.email}) ? Un NOUVEAU mot de passe sera généré et écrit dans le mail ; l'ancien ne fonctionnera plus.`)) return;
+                setSendingWelcome(true); try { await onSendWelcome(user); } finally { setSendingWelcome(false); }
+              }}
+              disabled={sendingWelcome}
+              className="w-full mt-3 px-4 py-2.5 rounded-xl border border-[#BBF7D0] bg-[#F0FDF4] text-[13px] font-semibold text-[#166534] hover:bg-[#DCFCE7] transition-colors disabled:opacity-60">
+              {sendingWelcome ? 'Envoi…' : '✉️ Renvoyer le mail de bienvenue'}
+            </button>
+            <p className="text-[11px] text-[#ABBED1] mt-2">Génère un nouveau mot de passe et l&apos;envoie à l&apos;utilisateur par e-mail (il s&apos;affiche aussi ici, à transmettre par WhatsApp si le mail ne part pas).</p>
             {onSendFixMail && (
               <>
                 <button
@@ -999,6 +1012,18 @@ function UsersPageInner() {
     }
   };
 
+  // Renvoie le mail de bienvenue (nouveau mot de passe dans le mail) — tout compte qui gère les utilisateurs
+  const handleSendWelcome = async (u: User) => {
+    const res = await fetch(`/api/users/${u.id}/send-welcome`, { method: 'POST' });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) { alert(data.error ?? 'Envoi impossible.'); return; }
+    await fetchUsers();
+    setProfilUser((prev) => prev && prev.id === u.id ? { ...prev, resetRequested: false } : prev);
+    // Le mot de passe s'affiche TOUJOURS (à transmettre par WhatsApp si l'e-mail n'est pas parti)
+    setNewCreds({ nom: u.nom, email: u.email, password: data.password });
+    alert(data.emailSent ? `Mail de bienvenue envoyé à ${u.email}.` : `⚠️ Le mail n'a PAS pu partir (${data.emailError ?? 'erreur'}). Transmettez le mot de passe affiché par WhatsApp.`);
+  };
+
   // Mail « erreur résolue » (réservé à la propriétaire) : nouveau mot de passe + e-mail d'excuse à l'utilisateur
   const handleSendFixMail = async (u: User) => {
     const res = await fetch(`/api/users/${u.id}/send-fix-mail`, { method: 'POST' });
@@ -1216,6 +1241,7 @@ function UsersPageInner() {
           initialEditing={profilEditing}
           onSaveProfile={handleSaveProfile}
           onResetPassword={handleResetPassword}
+          onSendWelcome={handleSendWelcome}
           onSendFixMail={isOwnerAccount ? handleSendFixMail : undefined}
           onReactivate={handleReactivateUser}
           onToggleTwoFactor={handleToggleTwoFactor} />
