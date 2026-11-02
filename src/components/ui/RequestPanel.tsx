@@ -262,6 +262,11 @@ async function printDoc(item: RequestDetail) {
   const dejaTtc = hasTva && item.priceIncludesVat === true;
   const ht = dejaTtc ? Math.round(sommeLignes / 1.19) : sommeLignes;
   const ttc = dejaTtc ? sommeLignes : hasTva ? Math.round(sommeLignes * 1.19) : sommeLignes;
+  // TVA + numéro de facture renseigné → le PDF affiche ce numéro à la place de la référence
+  // interne (CMD.../DEV...), qui n'a de sens que pour le dashboard.
+  const hasInvoice = hasTva && !!item.invoiceNumber;
+  const docRef = hasInvoice ? item.invoiceNumber : item.ref;
+  const docType = hasInvoice ? 'Facture' : item.type;
 
   const rows = lignesData.map(l => {
     const totalLigne = l.quantite * l.pu;
@@ -325,8 +330,8 @@ async function printDoc(item: RequestDetail) {
     <div class="brand-addr">Centre El Qods, Niveau M1 — Chéraga, Alger<br/>Contact@psi.dz</div>
   </div>
   <div class="doc-meta">
-    <div class="doc-type">${item.type}</div>
-    <div class="doc-ref">${item.ref}</div>
+    <div class="doc-type">${docType}</div>
+    <div class="doc-ref">${docRef}</div>
     <div class="doc-date">${item.date}${item.heure ? ` · ${item.heure}` : ''}</div>
   </div>
 </div>

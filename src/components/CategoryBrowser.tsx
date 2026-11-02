@@ -52,7 +52,11 @@ export function CategoryBrowser({
           <div key={cat.id} className="w-full sm:w-[calc(50%-12px)] md:w-[calc(50%-32px)] lg:w-[400px]">
             <CategoryCard
               category={cat}
-              products={products.filter(p => p.category?.id === cat.id && p.width > 0 && p.length > 0)}
+              // Groupé par largeur (la plus grande d'abord), puis longueur croissante dans
+              // chaque groupe — ex: 80/40, 80/60, 80/80, puis 57/30, 57/40, 57/50.
+              products={products
+                .filter(p => p.category?.id === cat.id && p.width > 0 && p.length > 0)
+                .sort((a, b) => b.width - a.width || a.length - b.length)}
             />
           </div>
         ))}
