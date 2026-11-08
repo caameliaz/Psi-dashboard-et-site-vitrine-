@@ -128,6 +128,13 @@ function CategoryCard({ category, products }: { category: Cat; products: Prod[] 
     updateQuantity(productId, currentQty === 0 ? 1 : 0);
   };
 
+  // Catégorie sur devis : lien vers /quote avec les références choisies (id:quantité), SANS prix ni panier.
+  // Rien de sélectionné → le formulaire s'ouvre quand même, catégorie préchoisie.
+  const quoteHref = (() => {
+    const chosen = products.filter((p) => (quantities[p.id] || 0) > 0);
+    return `/quote?cat=${category.id}` + (chosen.length ? `&items=${chosen.map((p) => `${p.id}:${quantities[p.id]}`).join(',')}` : '');
+  })();
+
   const addSelectedToCart = () => {
     const hasSelection = Object.values(quantities).some(qty => qty > 0);
     
@@ -202,8 +209,8 @@ function CategoryCard({ category, products }: { category: Cat; products: Prod[] 
                 return (
                   <div 
                     key={product.id} 
-                    onClick={quoteOnly ? undefined : () => selectProduct(product.id)}
-                    className={`flex items-center justify-between gap-3 p-2 rounded-lg border ${quoteOnly ? '' : 'cursor-pointer'} transition-all ${
+                    onClick={() => selectProduct(product.id)}
+                    className={`flex items-center justify-between gap-3 p-2 rounded-lg border cursor-pointer transition-all ${
                       isSelected 
                         ? 'border-[#4CAF4F] border-2 bg-[#F0FDF4]' 
                         : 'border-[#F0F4F8] bg-[#FAFCFF] hover:border-[#4CAF4F]/50'
@@ -221,8 +228,7 @@ function CategoryCard({ category, products }: { category: Cat; products: Prod[] 
                       )}
                     </div>
 
-                    {/* Contrôles quantité (absents pour une catégorie sur devis) */}
-                    {!quoteOnly && (
+                    {/* Contrôles quantité (conservés pour une catégorie sur devis : sert à préremplir le devis) */}
                     <div className="flex items-center gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
                       <button
                         onClick={() => updateQuantity(product.id, qty === 1 ? 0 : qty - 1)}
@@ -245,7 +251,6 @@ function CategoryCard({ category, products }: { category: Cat; products: Prod[] 
                         className="w-6 h-6 md:w-7 md:h-7 rounded-lg border border-[#ABBED1] flex items-center justify-center text-[#4D4D4D] hover:border-[#4CAF4F] hover:text-[#4CAF4F] transition-colors text-[14px] leading-none"
                       >+</button>
                     </div>
-                    )}
                   </div>
                 );
               })}
@@ -258,7 +263,12 @@ function CategoryCard({ category, products }: { category: Cat; products: Prod[] 
 
             {/* Bouton ajouter au panier — sur le côté (pas pleine largeur), même couleur qu'avant */}
             {quoteOnly ? (
-              <ArrowButton href={`/quote?cat=${category.id}`} variant="green-white" className="self-end !text-[13px] !py-2.5">
+              <ArrowButton
+                href={quoteHref}
+                onClick={() => setQuantities(Object.fromEntries(products.map((p) => [p.id, 0])))}
+                variant="green-white"
+                className="self-end !text-[13px] !py-2.5"
+              >
                 {t('common.request_quote')}
               </ArrowButton>
             ) : (

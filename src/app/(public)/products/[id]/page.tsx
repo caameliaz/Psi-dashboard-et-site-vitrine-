@@ -221,7 +221,7 @@ export default function ProductDetailPage() {
   );
 
   const addButton = current && (quoteOnly ? (
-    <ArrowButton href={`/quote?cat=${category.id}&prod=${current.id}`} variant="green-white" className="w-full">
+    <ArrowButton href={`/quote?cat=${category.id}&items=${current.id}:${qty}`} variant="green-white" className="w-full">
       {t('common.request_quote')}
     </ArrowButton>
   ) : (
@@ -252,7 +252,6 @@ export default function ProductDetailPage() {
         <span className="font-semibold text-[#263238]">{current.price.toFixed(2)} DA</span>
       </div>
       )}
-      {!quoteOnly && (
       <div className="flex items-center justify-between text-[14px]">
         <span className="text-[#717171]">{t('quote.qty_label')}</span>
         <div className="flex items-center gap-2 bg-[#F5F7FA] border border-[#E0E0E0] rounded-lg">
@@ -273,7 +272,6 @@ export default function ProductDetailPage() {
           </button>
         </div>
       </div>
-      )}
 
       {!quoteOnly && (
       <div className="border-t border-[#E0E0E0] pt-4 flex items-center justify-between">

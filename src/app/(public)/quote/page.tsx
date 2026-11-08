@@ -50,20 +50,29 @@ export default function QuotePage() {
     ).catch(() => {});
     fetch('/api/products').then(r => r.json()).then((data: ProdOption[]) => {
       setProducts(data);
-      // Arrivée depuis « Demander un devis » d'une catégorie sur devis : ?cat=<id>&prod=<id> → 1re ligne préremplie.
+      // Arrivée depuis « Demander un devis » d'une catégorie sur devis : ?cat=<id>&items=<id>:<qté>,<id>:<qté>
+      // → une ligne par référence choisie (le lien ne contient jamais de prix). Sans références : la catégorie seule.
       const qs = new URLSearchParams(window.location.search);
       const preCat = qs.get('cat');
-      const preProd = qs.get('prod');
-      if (preCat && cartItems.length === 0) {
-        const prod = preProd ? data.find((p) => p.id === preProd) : undefined;
-        setLines([{ ...emptyLine(), categoryId: prod?.category?.id ?? preCat, dimChoice: prod?.id ?? '' }]);
-      } else if (cartItems.length > 0) {
-        const fromCart = cartItems.map((ci) => {
-          const prod = data.find(p => p.reference === ci.reference);
-          return { categoryId: prod?.category?.id ?? '', dimChoice: prod?.id ?? '', customDim: '', quantity: String(ci.quantity), metrage: '' };
-        });
-        setLines(fromCart.length > 0 ? fromCart : [emptyLine()]);
+      const fromUrl: QuoteLine[] = [];
+      for (const part of (qs.get('items') ?? '').split(',').slice(0, 20)) {
+        const [id, rawQty] = part.split(':');
+        const qty = Math.floor(Number(rawQty));
+        const prod = data.find((p) => p.id === id);
+        if (prod && Number.isFinite(qty) && qty >= 1 && qty <= 100000) {
+          fromUrl.push({ ...emptyLine(), categoryId: prod.category?.id ?? '', dimChoice: prod.id, quantity: String(qty) });
+        }
       }
+      if (fromUrl.length === 0 && preCat && data.some((p) => p.category?.id === preCat)) {
+        fromUrl.push({ ...emptyLine(), categoryId: preCat });
+      }
+      // Panier existant (autres catégories) : conservé, ajouté après les références venant du lien.
+      const fromCart: QuoteLine[] = cartItems.map((ci) => {
+        const prod = data.find(p => p.reference === ci.reference);
+        return { categoryId: prod?.category?.id ?? '', dimChoice: prod?.id ?? '', customDim: '', quantity: String(ci.quantity), metrage: '' };
+      });
+      const prefilled = [...fromUrl, ...fromCart];
+      if (prefilled.length > 0) setLines(prefilled);
     }).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
