@@ -185,8 +185,15 @@ export async function POST(request: NextRequest) {
     // recalculé depuis la base pour empêcher une manipulation du prix côté client.
     const productIds = [...new Set(validItems.filter((i) => i.productId).map((i) => i.productId as string))];
     const dbProducts = productIds.length
-      ? await prisma.product.findMany({ where: { id: { in: productIds } }, select: { id: true, price: true } })
+      ? await prisma.product.findMany({ where: { id: { in: productIds } }, select: { id: true, price: true, reference: true, category: { select: { quoteOnly: true } } } })
       : [];
+    // Catégorie « sur devis » (ex: papier médical) : pas de commande directe depuis le site public.
+    if (!session?.user?.id) {
+      const quoteOnlyRef = dbProducts.find((p) => p.category?.quoteOnly);
+      if (quoteOnlyRef) {
+        return NextResponse.json({ error: `Le produit ${quoteOnlyRef.reference} est disponible sur devis uniquement. Merci de faire une demande de devis.` }, { status: 400 });
+      }
+    }
     const priceById = new Map(dbProducts.map((p) => [p.id, p.price]));
     // Utilisateur connecté (admin/commercial) : son prix saisi prime sur le catalogue (remise,
     // prix négocié…). Commande du site public (pas de session) : prix catalogue imposé.

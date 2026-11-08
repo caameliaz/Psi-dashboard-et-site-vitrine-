@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useCartStore } from '@/store/cartStore';
 import { ArrowButton } from './ArrowButton';
+import { PhotoSlider } from './PhotoSlider';
 import { useTranslation } from '@/lib/i18n';
 import { type Cat, type Prod } from '@/lib/hardcodedCatalog';
 
@@ -32,7 +33,7 @@ export function CategoryBrowser({
     
     // Sinon comportement actuel : fetch côté client (rétrocompatible)
     fetch('/api/categories?withPhoto=true').then(r => r.ok ? r.json() : []).then((data: any[]) =>
-      setCats(data.map(c => ({ id: c.id, name: c.name, photo: c.photo ?? null, description: c.description ?? null })))
+      setCats(data.map(c => ({ id: c.id, name: c.name, photo: c.photo ?? null, description: c.description ?? null, quoteOnly: !!c.quoteOnly })))
     ).catch(() => {});
     fetch('/api/products').then(r => r.ok ? r.json() : []).then(setProducts).catch(() => {});
   }, [initialCategories, initialProducts]);
@@ -70,6 +71,10 @@ export function CategoryBrowser({
 function CategoryCard({ category, products }: { category: Cat; products: Prod[] }) {
   const { t } = useTranslation();
   const addItem = useCartStore((s) => s.addItem);
+  // Catégorie « sur devis » (ex: papier médical) : ni prix, ni quantités, ni panier — « Demander un devis ».
+  const quoteOnly = !!category.quoteOnly;
+  // Photos du diaporama (principale + galerie) ; à défaut, la seule photo principale.
+  const photos = category.photos?.length ? category.photos : category.photo ? [category.photo] : [];
   
   // Clé pour localStorage spécifique à cette catégorie
   const storageKey = `product-selections-${category.id}`;
@@ -161,11 +166,13 @@ function CategoryCard({ category, products }: { category: Cat; products: Prod[] 
       <Link
         href={`/products/${category.id}`}
         className={`group relative rounded-2xl transition-shadow w-[95%] mx-auto h-44 md:h-52 flex items-center justify-center overflow-hidden ${
-          category.photo ? 'p-3' : 'bg-[#F5F7FA] shadow-[0_4px_24px_rgba(171,190,209,0.35)] hover:shadow-[0_8px_32px_rgba(171,190,209,0.5)]'
+          photos.length > 0 ? 'p-3' : 'bg-[#F5F7FA] shadow-[0_4px_24px_rgba(171,190,209,0.35)] hover:shadow-[0_8px_32px_rgba(171,190,209,0.5)]'
         }`}
       >
-        {category.photo ? (
-          <img src={category.photo} alt={category.name} className="w-full h-full object-contain transition-transform duration-300 group-hover:-translate-y-1.5" />
+        {photos.length > 1 ? (
+          <PhotoSlider photos={photos} alt={category.name} imgClassName="transition-transform duration-300 group-hover:-translate-y-1.5" />
+        ) : photos.length === 1 ? (
+          <img src={photos[0]} alt={category.name} className="w-full h-full object-contain transition-transform duration-300 group-hover:-translate-y-1.5" />
         ) : (
           <div className="relative w-16 h-16">
             <div className="absolute inset-0 rounded-full bg-[#E8F5E9] border-2 border-[#4CAF4F]" />
@@ -195,8 +202,8 @@ function CategoryCard({ category, products }: { category: Cat; products: Prod[] 
                 return (
                   <div 
                     key={product.id} 
-                    onClick={() => selectProduct(product.id)}
-                    className={`flex items-center justify-between gap-3 p-2 rounded-lg border cursor-pointer transition-all ${
+                    onClick={quoteOnly ? undefined : () => selectProduct(product.id)}
+                    className={`flex items-center justify-between gap-3 p-2 rounded-lg border ${quoteOnly ? '' : 'cursor-pointer'} transition-all ${
                       isSelected 
                         ? 'border-[#4CAF4F] border-2 bg-[#F0FDF4]' 
                         : 'border-[#F0F4F8] bg-[#FAFCFF] hover:border-[#4CAF4F]/50'
@@ -207,12 +214,15 @@ function CategoryCard({ category, products }: { category: Cat; products: Prod[] 
                       <p className="text-[12px] md:text-[13px] font-semibold text-[#263238] truncate">
                         {product.width}/{product.length} m
                       </p>
-                      <p className="text-[11px] md:text-[12px] font-bold text-[#4CAF4F]">
-                        {product.price.toFixed(2)} DA
-                      </p>
+                      {!quoteOnly && (
+                        <p className="text-[11px] md:text-[12px] font-bold text-[#4CAF4F]">
+                          {product.price.toFixed(2)} DA
+                        </p>
+                      )}
                     </div>
 
-                    {/* Contrôles quantité */}
+                    {/* Contrôles quantité (absents pour une catégorie sur devis) */}
+                    {!quoteOnly && (
                     <div className="flex items-center gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
                       <button
                         onClick={() => updateQuantity(product.id, qty === 1 ? 0 : qty - 1)}
@@ -235,6 +245,7 @@ function CategoryCard({ category, products }: { category: Cat; products: Prod[] 
                         className="w-6 h-6 md:w-7 md:h-7 rounded-lg border border-[#ABBED1] flex items-center justify-center text-[#4D4D4D] hover:border-[#4CAF4F] hover:text-[#4CAF4F] transition-colors text-[14px] leading-none"
                       >+</button>
                     </div>
+                    )}
                   </div>
                 );
               })}
@@ -246,9 +257,15 @@ function CategoryCard({ category, products }: { category: Cat; products: Prod[] 
             )}
 
             {/* Bouton ajouter au panier — sur le côté (pas pleine largeur), même couleur qu'avant */}
-            <ArrowButton onClick={addSelectedToCart} variant="green-white" className="self-end !text-[13px] !py-2.5">
-              {t('common.add_to_cart')}
-            </ArrowButton>
+            {quoteOnly ? (
+              <ArrowButton href={`/quote?cat=${category.id}`} variant="green-white" className="self-end !text-[13px] !py-2.5">
+                {t('common.request_quote')}
+              </ArrowButton>
+            ) : (
+              <ArrowButton onClick={addSelectedToCart} variant="green-white" className="self-end !text-[13px] !py-2.5">
+                {t('common.add_to_cart')}
+              </ArrowButton>
+            )}
           </div>
         )}
       </div>

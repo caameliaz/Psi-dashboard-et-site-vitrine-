@@ -24,6 +24,9 @@ model Category {
   prefix      String? // préfixe des références produit auto (ex: PTT, IMP)
   refCounter  Int       @default(0) // dernier numéro utilisé pour l'auto-incrément
   order       Int       @default(0)
+  // Catégorie « sur devis » (ex: papier médical) : sur le site public, prix masqués et « Ajouter au
+  // panier » remplacé par « Demander un devis ». Les prix ne sont même pas envoyés au navigateur.
+  quoteOnly   Boolean   @default(false)
   products    Product[]
   createdAt   DateTime  @default(now())
 }

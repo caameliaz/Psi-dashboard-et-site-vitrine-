@@ -22,6 +22,7 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
         ...(body.order !== undefined && { order: body.order }),
         ...(body.photo !== undefined && { photo: body.photo }),
         ...(body.description !== undefined && { description: body.description }),
+        ...(body.quoteOnly !== undefined && { quoteOnly: Boolean(body.quoteOnly) }),
         ...(body.prefix !== undefined && { prefix: body.prefix ? String(body.prefix).toUpperCase().trim() : null }),
       },
     });

@@ -212,6 +212,7 @@ export const fr = {
     no_products: 'Aucun produit dans cette catégorie.',
     view_cart: 'Voir le panier →',
     add_to_cart: 'Ajouter au panier',
+    request_quote: 'Demander un devis',
     whatsapp_msg: 'Bonjour, je souhaite obtenir des informations sur vos produits PSI.',
     whatsapp_aria: 'Nous contacter sur WhatsApp',
     custom_dim: 'Dimension personnalisée',

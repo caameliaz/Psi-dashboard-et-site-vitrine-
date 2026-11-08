@@ -50,7 +50,14 @@ export default function QuotePage() {
     ).catch(() => {});
     fetch('/api/products').then(r => r.json()).then((data: ProdOption[]) => {
       setProducts(data);
-      if (cartItems.length > 0) {
+      // Arrivée depuis « Demander un devis » d'une catégorie sur devis : ?cat=<id>&prod=<id> → 1re ligne préremplie.
+      const qs = new URLSearchParams(window.location.search);
+      const preCat = qs.get('cat');
+      const preProd = qs.get('prod');
+      if (preCat && cartItems.length === 0) {
+        const prod = preProd ? data.find((p) => p.id === preProd) : undefined;
+        setLines([{ ...emptyLine(), categoryId: prod?.category?.id ?? preCat, dimChoice: prod?.id ?? '' }]);
+      } else if (cartItems.length > 0) {
         const fromCart = cartItems.map((ci) => {
           const prod = data.find(p => p.reference === ci.reference);
           return { categoryId: prod?.category?.id ?? '', dimChoice: prod?.id ?? '', customDim: '', quantity: String(ci.quantity), metrage: '' };

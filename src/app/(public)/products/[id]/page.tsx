@@ -57,7 +57,7 @@ export default function ProductDetailPage() {
 
   useEffect(() => {
     fetch('/api/categories?withPhoto=true').then(r => r.ok ? r.json() : []).then((data: any[]) =>
-      setCats(data.map(c => ({ id: c.id, name: c.name, photo: c.photo ?? null, description: c.description ?? null })))
+      setCats(data.map(c => ({ id: c.id, name: c.name, photo: c.photo ?? null, description: c.description ?? null, quoteOnly: !!c.quoteOnly })))
     ).catch(() => {});
     fetch('/api/products?withPhoto=true').then(r => r.ok ? r.json() : []).then(setProducts).catch(() => {});
   }, []);
@@ -125,6 +125,8 @@ export default function ProductDetailPage() {
       ]
     : [];
   const total = current ? current.price * qty : 0;
+  // Catégorie « sur devis » : pas de prix, de quantité ni de panier — bouton « Demander un devis ».
+  const quoteOnly = !!category.quoteOnly;
 
   const refsBlock = items.length > 0 && (
     <div className="flex flex-col gap-3 mt-2">
@@ -218,7 +220,11 @@ export default function ProductDetailPage() {
     </div>
   );
 
-  const addButton = current && (
+  const addButton = current && (quoteOnly ? (
+    <ArrowButton href={`/quote?cat=${category.id}&prod=${current.id}`} variant="green-white" className="w-full">
+      {t('common.request_quote')}
+    </ArrowButton>
+  ) : (
     <ArrowButton
       onClick={() => addItem({ productId: current.id, quantity: qty, reference: current.reference, unitPrice: current.price })}
       variant="green-white"
@@ -226,7 +232,7 @@ export default function ProductDetailPage() {
     >
       {t('common.add_to_cart')}
     </ArrowButton>
-  );
+  ));
 
   const summaryBlock = current && (
     <div className="bg-white border border-[#E0E0E0] rounded-2xl shadow-[0_4px_24px_rgba(171,190,209,0.35)] p-6 flex flex-col gap-4">
@@ -240,10 +246,13 @@ export default function ProductDetailPage() {
           <span className="font-semibold text-[#263238]">{current.metrage} m</span>
         </div>
       )}
+      {!quoteOnly && (
       <div className="flex items-center justify-between text-[14px]">
         <span className="text-[#717171]">{t('product_detail.unit_price_label')}</span>
         <span className="font-semibold text-[#263238]">{current.price.toFixed(2)} DA</span>
       </div>
+      )}
+      {!quoteOnly && (
       <div className="flex items-center justify-between text-[14px]">
         <span className="text-[#717171]">{t('quote.qty_label')}</span>
         <div className="flex items-center gap-2 bg-[#F5F7FA] border border-[#E0E0E0] rounded-lg">
@@ -264,11 +273,14 @@ export default function ProductDetailPage() {
           </button>
         </div>
       </div>
+      )}
 
+      {!quoteOnly && (
       <div className="border-t border-[#E0E0E0] pt-4 flex items-center justify-between">
         <span className="text-[15px] font-bold text-[#4CAF4F]">{t('cart.total')}</span>
         <span className="text-[20px] font-extrabold text-[#4CAF4F]">{total.toFixed(2)} DA</span>
       </div>
+      )}
 
       {addButton}
     </div>
@@ -287,7 +299,7 @@ export default function ProductDetailPage() {
 
   const photoBlock = (heightClass: string) => (
     <div className="flex flex-col gap-3">
-      <div className={`${mainPhoto ? '' : 'bg-[#F5F7FA]'} rounded-2xl overflow-hidden ${heightClass} flex items-center justify-center p-3`}>
+      <div className={`${mainPhoto ? '' : 'bg-[#F5F7FA]'} relative rounded-2xl overflow-hidden ${heightClass} flex items-center justify-center p-3`}>
         {mainPhoto ? (
           <img src={mainPhoto} alt={category.name} className="w-full h-full object-contain" />
         ) : (
@@ -296,6 +308,19 @@ export default function ProductDetailPage() {
             <div className="absolute inset-[30%] rounded-full bg-[#4CAF4F]" />
           </div>
         )}
+        {allPhotos.length > 1 && (['prev', 'next'] as const).map((dir) => (
+          <button
+            key={dir}
+            type="button"
+            aria-label={dir === 'prev' ? 'Photo précédente' : 'Photo suivante'}
+            onClick={() => setPhotoIdx(((photoIdx < allPhotos.length ? photoIdx : 0) + (dir === 'prev' ? -1 : 1) + allPhotos.length) % allPhotos.length)}
+            className={`absolute top-1/2 -translate-y-1/2 ${dir === 'prev' ? 'left-2' : 'right-2'} w-9 h-9 rounded-full bg-white/90 border border-[#E0E0E0] shadow-[0_2px_8px_rgba(171,190,209,0.5)] flex items-center justify-center text-[#263238] hover:text-[#4CAF4F] hover:border-[#4CAF4F] transition-colors`}
+          >
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+              <path d={dir === 'prev' ? 'M10 3L5 8l5 5' : 'M6 3l5 5-5 5'} stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </button>
+        ))}
       </div>
       {allPhotos.length > 1 && (
         <div className="flex gap-3 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">

@@ -69,6 +69,7 @@ interface Cat {
   prefix: string | null;
   photo: string | null;
   description: string | null;
+  quoteOnly: boolean;
   count: number;
 }
 
@@ -525,13 +526,14 @@ function ProductsPageInner() {
   const [editingDesc, setEditingDesc] = useState(false);
   const [descDraft, setDescDraft] = useState('');
   const [prefixDraft, setPrefixDraft] = useState('');
+  const [quoteOnlyDraft, setQuoteOnlyDraft] = useState(false);
   const catPhotoRef = useRef<HTMLInputElement>(null);
 
   const fetchCategories = useCallback(async () => {
     const res = await fetch('/api/categories?withPhoto=true&admin=true');
     if (res.ok) {
       const data = await res.json();
-      const list: Cat[] = data.map((c: any) => ({ id: c.id, name: c.name, prefix: c.prefix ?? null, photo: c.photo ?? null, description: c.description ?? null, count: c._count?.products ?? 0 }));
+      const list: Cat[] = data.map((c: any) => ({ id: c.id, name: c.name, prefix: c.prefix ?? null, photo: c.photo ?? null, description: c.description ?? null, quoteOnly: Boolean(c.quoteOnly), count: c._count?.products ?? 0 }));
       setCatList(list);
       setSelectedCatId((cur) => cur && list.some((c) => c.id === cur) ? cur : (list[0]?.id ?? null));
     }
@@ -707,12 +709,12 @@ function ProductsPageInner() {
     setDeleteRef(null);
   };
 
-  const startEditDesc = () => { setDescDraft(selectedCat?.description ?? ''); setPrefixDraft(selectedCat?.prefix ?? ''); setEditingDesc(true); };
+  const startEditDesc = () => { setDescDraft(selectedCat?.description ?? ''); setPrefixDraft(selectedCat?.prefix ?? ''); setQuoteOnlyDraft(Boolean(selectedCat?.quoteOnly)); setEditingDesc(true); };
   const saveDesc = async () => {
     if (!selectedCatId) return;
     const res = await fetch(`/api/categories/${selectedCatId}`, {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ description: descDraft.trim() || null, prefix: prefixDraft.trim() || null }),
+      body: JSON.stringify({ description: descDraft.trim() || null, prefix: prefixDraft.trim() || null, quoteOnly: quoteOnlyDraft }),
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
@@ -881,13 +883,22 @@ function ProductsPageInner() {
                     <input value={prefixDraft} onChange={(e) => setPrefixDraft(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))} maxLength={6} placeholder="ex: PTT" className={inputClass} />
                   </div>
                   <textarea value={descDraft} onChange={(e) => setDescDraft(e.target.value)} rows={4} className={inputClass + ' resize-none'} />
+                  <label className="flex items-start gap-2 cursor-pointer rounded-lg border border-[#E2E8F0] p-2.5">
+                    <input type="checkbox" checked={quoteOnlyDraft} onChange={(e) => setQuoteOnlyDraft(e.target.checked)} className="mt-0.5 accent-[#4CAF4F]" />
+                    <span className="text-[12px] text-[#374151]"><b>Sur devis uniquement</b> — sur le site public : prix masqués et « Demander un devis » à la place de « Ajouter au panier » (ex : papier médical).</span>
+                  </label>
                   <div className="flex gap-2">
                     <button onClick={() => setEditingDesc(false)} className="flex-1 px-3 py-2 rounded-lg border border-[#E2E8F0] text-[12px] font-semibold text-[#374151] hover:bg-[#F8FAFC]">Annuler</button>
                     <button onClick={saveDesc} className="flex-1 px-3 py-2 rounded-lg text-[12px] font-bold text-white" style={{ background: '#4CAF4F' }}>Enregistrer</button>
                   </div>
                 </div>
               ) : (
-                <p className="text-[14px] text-[#4D4D4D] leading-relaxed">{selectedCat.description || 'Aucune description.'}</p>
+                <>
+                  <p className="text-[14px] text-[#4D4D4D] leading-relaxed">{selectedCat.description || 'Aucune description.'}</p>
+                  {selectedCat.quoteOnly && (
+                    <span className="self-start mt-1 inline-block text-[11px] font-bold text-[#166534] bg-[#F0FDF4] border border-[#BBF7D0] rounded-full px-2.5 py-0.5">Sur devis — prix masqués sur le site</span>
+                  )}
+                </>
               )}
             </div>
 

@@ -214,6 +214,7 @@ export const ar: Translations = {
     no_products: 'لا توجد منتجات في هذا التصنيف.',
     view_cart: '← عرض السلة',
     add_to_cart: 'أضف إلى السلة',
+    request_quote: 'طلب عرض سعر',
     whatsapp_msg: 'مرحباً، أرغب في الحصول على معلومات حول منتجات PSI.',
     whatsapp_aria: 'تواصل معنا على واتساب',
     custom_dim: 'بُعد مخصص',
