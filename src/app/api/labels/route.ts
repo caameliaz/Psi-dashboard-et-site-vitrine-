@@ -23,6 +23,8 @@ export async function POST(request: NextRequest) {
       const data = await labelDataFor(e.kind, e.id);
       if (!data) continue;
       labels.push({ ...data, count: e.count, url: `${SITE_URL}/r/${data.token}` });
+      // Aperçu des données (pour savoir s'il manque un grammage/mandrin) : on ne touche pas au compteur de colis.
+      if (body.dryRun === true) continue;
       const upd = { where: { id: e.id }, data: { labelCount: e.count } };
       if (e.kind === 'order') await prisma.order.update(upd); else await prisma.quote.update(upd);
     }

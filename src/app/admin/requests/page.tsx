@@ -552,8 +552,9 @@ export function CreateForm({ defaultType, onClose, onSave, users, currentUserId,
                   <div className="flex items-end justify-end gap-2 mt-2">
                     <div className="w-[72px]">
                       <span className="block text-[10px] font-bold text-[#ABBED1] uppercase tracking-wide mb-1">Qté</span>
-                      <input type="number" inputMode="numeric" min={1} value={ligne.qte}
-                        onChange={e => setLigne(i, { qte: Math.max(1, Number(e.target.value)) })}
+                      <input type="number" inputMode="numeric" min={1} value={ligne.qte || ''}
+                        onChange={e => setLigne(i, { qte: Math.max(0, Math.floor(Number(e.target.value)) || 0) })}
+                        onBlur={() => { if (!ligne.qte) setLigne(i, { qte: 1 }); }}
                         className={ic + ' text-center'} />
                     </div>
                     <div className="w-[110px]">

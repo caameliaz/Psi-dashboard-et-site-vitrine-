@@ -49,8 +49,8 @@ export default async function ReceiptPage({ params }: { params: Promise<{ token:
               <p className="text-[15px] font-bold text-[#263238] leading-snug">{l.designation}</p>
               <span className="shrink-0 rounded-lg bg-[#F0FDF4] border border-[#BBF7D0] px-2.5 py-1 text-[13px] font-bold text-[#166534] whitespace-nowrap">× {l.quantite}</span>
             </div>
-            <dl className="mt-3 grid grid-cols-4 gap-2 text-center">
-              {[['Laize (mm)', l.laize], ['Grammage', l.grammage], ['Mandrin Ø', l.mandrin], ['Mètres', l.metres]].map(([k, v]) => (
+            <dl className="mt-3 grid gap-2 text-center" style={{ gridTemplateColumns: `repeat(${[l.laize, l.grammage, l.mandrin, l.metres].filter((v) => v !== '—').length || 1}, minmax(0, 1fr))` }}>
+              {[['Laize (mm)', l.laize], ['Grammage', l.grammage], ['Mandrin Ø', l.mandrin], ['Mètres', l.metres]].filter(([, v]) => v !== '—').map(([k, v]) => (
                 <div key={k} className="rounded-lg bg-[#F8FAFC] px-1 py-2">
                   <dt className="text-[10px] font-semibold text-[#8A9BB5] uppercase leading-tight">{k}</dt>
                   <dd className="text-[14px] font-bold text-[#263238] mt-0.5">{v}</dd>

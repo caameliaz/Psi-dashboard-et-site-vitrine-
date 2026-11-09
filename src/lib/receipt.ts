@@ -26,12 +26,19 @@ export interface LabelLine {
   mandrin: string;
   metres: string;
   quantite: number;
+  /** Produit du catalogue (null = ligne libre) — sert à enregistrer un grammage/mandrin saisi à l'impression. */
+  productId: string | null;
+  /** Peut-on proposer de renseigner grammage/mandrin ? (rouleaux de papier oui, étiquettes et lignes libres non) */
+  askable: boolean;
 }
 
 /** Valeur d'un champ personnalisé du produit dont le libellé contient `needle` (ex: « gramm », « mandrin »). */
 function customValue(product: any, needle: string): string {
   const cf = (product?.customFields ?? []).find((c: any) => String(c.definition?.label ?? '').toLowerCase().includes(needle));
-  return cf?.value ? String(cf.value) : '—';
+  if (!cf?.value) return '—';
+  // Les unités sont déjà dans l'en-tête de colonne (« g/m² », « mm ») : « 55 g/m² » → « 55 », comme sur le modèle.
+  const num = String(cf.value).match(/^\s*(\d+(?:[.,]\d+)?)/);
+  return num ? num[1] : String(cf.value);
 }
 
 const fmt = (n: number | null | undefined) => (n == null ? '—' : String(Number.isInteger(n) ? n : Number(n.toFixed(2))));
@@ -41,7 +48,7 @@ export function buildLines(items: any[]): LabelLine[] {
   return (items ?? []).map((i: any) => {
     const p = i.product;
     if (!p) {
-      return { designation: i.description || 'Produit', laize: '—', grammage: '—', mandrin: '—', metres: i.metrage != null ? fmt(i.metrage) : '—', quantite: i.quantity ?? 0 };
+      return { designation: i.description || 'Produit', laize: '—', grammage: '—', mandrin: '—', metres: i.metrage != null ? fmt(i.metrage) : '—', quantite: i.quantity ?? 0, productId: null, askable: false };
     }
     return {
       designation: p.name && p.name !== `${p.width}/${p.length}` ? `${p.reference} — ${p.name}` : p.reference,
@@ -50,6 +57,8 @@ export function buildLines(items: any[]): LabelLine[] {
       mandrin: customValue(p, 'mandrin'),
       metres: fmt(i.metrage ?? p.metrage ?? p.length),
       quantite: i.quantity ?? 0,
+      productId: p.id ?? null,
+      askable: !/tiquette/i.test(String(p.category?.name ?? '')),
     };
   });
 }
@@ -60,7 +69,7 @@ export function buildTitles(items: any[], lines: LabelLine[]): { titleFr: string
   const thermal = cats.length > 0 && cats.every((n) => /thermique/i.test(n) && !/tiquette/i.test(n));
   // « (55g/m²) » seulement si toutes les lignes ont le même grammage numérique.
   const gr = [...new Set(lines.map((l) => l.grammage.replace(/[^\d.,]/g, '')).filter(Boolean))];
-  const grTxt = gr.length === 1 ? ` (${gr[0]}g/m²)` : '';
+  const grTxt = gr.length === 1 ? ` - (${gr[0]}g/m²)` : '';
   if (thermal) {
     return { titleFr: 'Rouleaux de Papier Thermique- Premium Quality', titleAr: `لفة ورق حراري- جودة عالية${grTxt}` };
   }

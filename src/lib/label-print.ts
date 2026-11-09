@@ -20,7 +20,7 @@ export interface LabelData {
   count: number;
   titleFr: string;
   titleAr: string;
-  lines: { designation: string; laize: string; grammage: string; mandrin: string; metres: string; quantite: number }[];
+  lines: { designation: string; laize: string; grammage: string; mandrin: string; metres: string; quantite: number; productId?: string | null; askable?: boolean }[];
 }
 
 const esc = (s: unknown) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string));
@@ -42,8 +42,13 @@ function labelHtml(d: LabelData, index: number, qr: string, origin: string): str
   const shown = d.lines.slice(0, MAX_ROWS);
   const extra = d.lines.length - shown.length;
   const density = d.lines.length <= 3 ? '' : d.lines.length <= 5 ? 'c1' : 'c2';
-  const rows = shown.map((l) => `<tr><td>${esc(l.laize)}</td><td>${esc(l.grammage)}</td><td>${esc(l.mandrin)}</td><td>${esc(l.metres)}</td><td>${esc(l.quantite)}</td></tr>`).join('');
-  const more = extra > 0 ? `<tr><td colspan="5" class="more">+ ${extra} autre${extra > 1 ? 's' : ''} ligne${extra > 1 ? 's' : ''} — détail via le QR code</td></tr>` : '';
+  // Une colonne sans AUCUNE valeur (grammage, mandrin) est masquée au lieu d'afficher des « — ».
+  const hasVal = (v: string) => v.trim() !== '' && v.trim() !== '—';
+  const showGr = d.lines.some((l) => hasVal(l.grammage));
+  const showMa = d.lines.some((l) => hasVal(l.mandrin));
+  const nbCols = 3 + (showGr ? 1 : 0) + (showMa ? 1 : 0);
+  const rows = shown.map((l) => `<tr><td>${esc(l.laize)}</td>${showGr ? `<td>${esc(l.grammage)}</td>` : ''}${showMa ? `<td>${esc(l.mandrin)}</td>` : ''}<td>${esc(l.metres)}</td><td>${esc(l.quantite)}</td></tr>`).join('');
+  const more = extra > 0 ? `<tr><td colspan="${nbCols}" class="more">+ ${extra} autre${extra > 1 ? 's' : ''} ligne${extra > 1 ? 's' : ''} — détail via le QR code</td></tr>` : '';
   return `
   <div class="label ${density}">
     <div class="t1">${esc(d.titleFr)}</div>
@@ -53,11 +58,10 @@ function labelHtml(d: LabelData, index: number, qr: string, origin: string): str
       <div class="right">
         <div class="qr">${qr}</div>
         <div class="qrtxt">Scannez à la réception<br>pour confirmer la livraison</div>
-        <img class="roll" src="${origin}/label/schema-rouleau.png" alt="">
       </div>
     </div>
     <table>
-      <thead><tr><th>Laize<br>(mm)</th><th>Grammage<br>(g/m²)</th><th>Mandrin Ø<br>(mm)</th><th>Mètres<br>(m)</th><th>Nbre<br>Rouleaux</th></tr></thead>
+      <thead><tr><th>Laize<br>(mm)</th>${showGr ? '<th>Grammage<br>(g/m²)</th>' : ''}${showMa ? '<th>Mandrin Ø<br>(mm)</th>' : ''}<th>Mètres<br>(m)</th><th>Nbre<br>Rouleaux</th></tr></thead>
       <tbody>${rows}${more}</tbody>
     </table>
     <div class="addr">Centre des affaires El Qods - Cheraga- ALGER<br>Tél: 0770169060 &nbsp; email: contact@psi.dz</div>
@@ -72,20 +76,19 @@ body{font-family:'Open Sans','Segoe UI',Tahoma,Arial,sans-serif;color:#000}
 .label{width:100mm;height:100mm;padding:3.5mm 4mm 3mm;display:flex;flex-direction:column;overflow:hidden;background:#fff}
 .t1{font-weight:800;font-size:3.7mm;text-align:center;line-height:1.15}
 .t2{font-weight:800;font-size:4mm;text-align:center;line-height:1.2;margin-top:.4mm;unicode-bidi:plaintext}
-.mid{flex:1;min-height:0;display:flex;align-items:center;justify-content:space-between;margin:.8mm 0}
-.logo{height:34mm;width:34mm;object-fit:contain}
-.right{display:flex;flex-direction:column;align-items:center;gap:.8mm}
-.qr svg{width:25mm;height:25mm;display:block}
-.qrtxt{font-size:1.9mm;font-weight:700;text-align:center;line-height:1.2}
-.roll{width:23mm;height:auto}
+.mid{flex:1;min-height:0;position:relative;display:flex;align-items:center;justify-content:center;margin:.8mm 0}
+.logo{height:40mm;width:48mm;object-fit:contain}
+.right{position:absolute;right:0;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;align-items:center;gap:.6mm;width:21mm}
+.qr svg{width:19mm;height:19mm;display:block}
+.qrtxt{font-size:1.6mm;font-weight:700;text-align:center;line-height:1.2}
 table{width:100%;border-collapse:collapse;font-size:2.9mm;text-align:center}
 th,td{border:.35mm solid #000;padding:.7mm .4mm;line-height:1.15}
 th{font-weight:700;font-size:2.55mm}
 td.more{font-size:2.3mm;font-style:italic}
 .addr{font-size:2.5mm;text-align:center;text-decoration:underline;color:#444;margin-top:1.2mm;line-height:1.3}
 .refline{font-size:2.4mm;text-align:center;font-weight:700;margin-top:.6mm}
-.c1 .logo{height:25mm;width:25mm}.c1 .qr svg{width:22mm;height:22mm}.c1 .roll{width:19mm}.c1 table{font-size:2.6mm}
-.c2 .logo{height:17mm;width:17mm}.c2 .qr svg{width:20mm;height:20mm}.c2 .roll{display:none}.c2 .qrtxt{display:none}.c2 table{font-size:2.3mm}.c2 th{font-size:2.2mm}.c2 td{padding:.4mm .3mm}
+.c1 .logo{height:29mm;width:38mm}.c1 .qr svg{width:17mm;height:17mm}.c1 .right{width:19mm}.c1 table{font-size:2.6mm}
+.c2 .logo{height:20mm;width:28mm}.c2 .qr svg{width:15mm;height:15mm}.c2 .right{width:17mm}.c2 .qrtxt{display:none}.c2 table{font-size:2.3mm}.c2 th{font-size:2.2mm}.c2 td{padding:.4mm .3mm}
 `;
 
 const FORMAT_CSS: Record<LabelFormat, string> = {
