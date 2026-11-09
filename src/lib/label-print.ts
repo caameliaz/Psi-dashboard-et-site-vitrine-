@@ -41,13 +41,15 @@ const MAX_ROWS = 8;
 function labelHtml(d: LabelData, index: number, qr: string, origin: string): string {
   const shown = d.lines.slice(0, MAX_ROWS);
   const extra = d.lines.length - shown.length;
-  const density = d.lines.length <= 3 ? '' : d.lines.length <= 5 ? 'c1' : 'c2';
+  const density = d.lines.length <= 1 ? '' : d.lines.length <= 3 ? 'c0' : d.lines.length <= 5 ? 'c1' : 'c2';
   // Une colonne sans AUCUNE valeur (grammage, mandrin) est masquée au lieu d'afficher des « — ».
   const hasVal = (v: string) => v.trim() !== '' && v.trim() !== '—';
+  const showLa = d.lines.some((l) => hasVal(l.laize));
+  const showMe = d.lines.some((l) => hasVal(l.metres));
   const showGr = d.lines.some((l) => hasVal(l.grammage));
   const showMa = d.lines.some((l) => hasVal(l.mandrin));
-  const nbCols = 3 + (showGr ? 1 : 0) + (showMa ? 1 : 0);
-  const rows = shown.map((l) => `<tr><td>${esc(l.laize)}</td>${showGr ? `<td>${esc(l.grammage)}</td>` : ''}${showMa ? `<td>${esc(l.mandrin)}</td>` : ''}<td>${esc(l.metres)}</td><td>${esc(l.quantite)}</td></tr>`).join('');
+  const nbCols = 1 + (showLa ? 1 : 0) + (showMe ? 1 : 0) + (showGr ? 1 : 0) + (showMa ? 1 : 0);
+  const rows = shown.map((l) => `<tr>${showLa ? `<td>${esc(l.laize)}</td>` : ''}${showGr ? `<td>${esc(l.grammage)}</td>` : ''}${showMa ? `<td>${esc(l.mandrin)}</td>` : ''}${showMe ? `<td>${esc(l.metres)}</td>` : ''}<td>${esc(l.quantite)}</td></tr>`).join('');
   const more = extra > 0 ? `<tr><td colspan="${nbCols}" class="more">+ ${extra} autre${extra > 1 ? 's' : ''} ligne${extra > 1 ? 's' : ''} — détail via le QR code</td></tr>` : '';
   return `
   <div class="label ${density}">
@@ -61,11 +63,11 @@ function labelHtml(d: LabelData, index: number, qr: string, origin: string): str
       </div>
     </div>
     <table>
-      <thead><tr><th>Laize<br>(mm)</th>${showGr ? '<th>Grammage<br>(g/m²)</th>' : ''}${showMa ? '<th>Mandrin Ø<br>(mm)</th>' : ''}<th>Mètres<br>(m)</th><th>Nbre<br>Rouleaux</th></tr></thead>
+      <thead><tr>${showLa ? '<th>Laize<br>(mm)</th>' : ''}${showGr ? '<th>Grammage<br>(g/m²)</th>' : ''}${showMa ? '<th>Mandrin Ø<br>(mm)</th>' : ''}${showMe ? '<th>Mètres<br>(m)</th>' : ''}<th>Nbre<br>Rouleaux</th></tr></thead>
       <tbody>${rows}${more}</tbody>
     </table>
     <div class="addr">Centre des affaires El Qods - Cheraga- ALGER<br>Tél: 0770169060 &nbsp; email: contact@psi.dz</div>
-    <div class="refline">N° ${esc(d.ref)}${d.count > 1 ? ` · Colis ${index}/${d.count}` : ''}</div>
+    ${d.count > 1 ? `<div class="refline">Colis ${index}/${d.count}</div>` : ''}
   </div>`;
 }
 
@@ -77,9 +79,9 @@ body{font-family:'Open Sans','Segoe UI',Tahoma,Arial,sans-serif;color:#000}
 .t1{font-weight:800;font-size:3.7mm;text-align:center;line-height:1.15}
 .t2{font-weight:800;font-size:4mm;text-align:center;line-height:1.2;margin-top:.4mm;unicode-bidi:plaintext}
 .mid{flex:1;min-height:0;position:relative;display:flex;align-items:center;justify-content:center;margin:.8mm 0}
-.logo{height:40mm;width:48mm;object-fit:contain}
-.right{position:absolute;right:0;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;align-items:center;gap:.6mm;width:21mm}
-.qr svg{width:19mm;height:19mm;display:block}
+.logo{height:52mm;width:52mm;object-fit:contain}
+.right{position:absolute;right:0;bottom:1mm;display:flex;flex-direction:column;align-items:center;gap:.6mm;width:19mm}
+.qr svg{width:16mm;height:16mm;display:block}
 .qrtxt{font-size:1.6mm;font-weight:700;text-align:center;line-height:1.2}
 table{width:100%;border-collapse:collapse;font-size:2.9mm;text-align:center}
 th,td{border:.35mm solid #000;padding:.7mm .4mm;line-height:1.15}
@@ -87,8 +89,9 @@ th{font-weight:700;font-size:2.55mm}
 td.more{font-size:2.3mm;font-style:italic}
 .addr{font-size:2.5mm;text-align:center;text-decoration:underline;color:#444;margin-top:1.2mm;line-height:1.3}
 .refline{font-size:2.4mm;text-align:center;font-weight:700;margin-top:.6mm}
-.c1 .logo{height:29mm;width:38mm}.c1 .qr svg{width:17mm;height:17mm}.c1 .right{width:19mm}.c1 table{font-size:2.6mm}
-.c2 .logo{height:20mm;width:28mm}.c2 .qr svg{width:15mm;height:15mm}.c2 .right{width:17mm}.c2 .qrtxt{display:none}.c2 table{font-size:2.3mm}.c2 th{font-size:2.2mm}.c2 td{padding:.4mm .3mm}
+.c0 .logo{height:42mm;width:42mm}
+.c1 .logo{height:32mm;width:32mm}.c1 .qr svg{width:15mm;height:15mm}.c1 .right{width:17mm}.c1 table{font-size:2.6mm}
+.c2 .logo{height:22mm;width:22mm}.c2 .qr svg{width:13mm;height:13mm}.c2 .right{width:15mm}.c2 .qrtxt{display:none}.c2 table{font-size:2.3mm}.c2 th{font-size:2.2mm}.c2 td{padding:.4mm .3mm}
 `;
 
 const FORMAT_CSS: Record<LabelFormat, string> = {

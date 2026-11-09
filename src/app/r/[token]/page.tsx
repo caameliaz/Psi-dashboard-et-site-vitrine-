@@ -27,6 +27,14 @@ export default async function ReceiptPage({ params }: { params: Promise<{ token:
   await markScanned(kind, row.id).catch(() => {});
 
   const lines = buildLines(row.items);
+  const hasVal = (v: string) => v !== '—' && v.trim() !== '';
+  const cols = ([
+    { key: 'format', title: 'Référence', show: true, left: true },
+    { key: 'grammage', title: 'Grammage', show: lines.some((l) => hasVal(l.grammage)), left: false },
+    { key: 'mandrin', title: 'Mandrin Ø', show: lines.some((l) => hasVal(l.mandrin)), left: false },
+    { key: 'metres', title: 'Mètres', show: lines.some((l) => hasVal(l.metres)), left: false },
+    { key: 'quantite', title: 'Nbre rouleaux', show: true, left: false },
+  ] as const).filter((c) => c.show);
   const confirmedAt = row.receiptConfirmedAt ?? (row.status === 'LIVRE' ? row.deliveredAt : null);
   const state =
     confirmedAt ? 'confirmed'
@@ -38,16 +46,29 @@ export default async function ReceiptPage({ params }: { params: Promise<{ token:
   return (
     <Shell>
       {/* Même style que le récapitulatif du panier du site public, sans les prix */}
-      <div className="bg-white rounded-2xl shadow-[0_4px_24px_rgba(171,190,209,0.35)] p-6">
+      <div className="bg-white rounded-2xl shadow-[0_4px_24px_rgba(171,190,209,0.35)] p-5">
         <h1 className="text-[17px] font-bold text-[#263238] mb-5">Récapitulatif</h1>
 
-        <div className="flex flex-col gap-4">
-          {lines.map((l, i) => (
-            <div key={i} className="flex items-baseline gap-2 text-[15px] text-[#4D4D4D]">
-              <span className="font-bold text-[#263238] tabular-nums">{l.quantite}×</span>
-              <span>{l.productId ? 'Réf. ' : ''}{l.designation}</span>
-            </div>
-          ))}
+        {/* Tableau dans le style du détail de commande : en-tête grise, lignes séparées */}
+        <div className="rounded-xl border border-[#E2E8F0] overflow-hidden">
+          <table className="w-full border-collapse">
+            <thead>
+              <tr className="bg-[#F8FAFC] border-b border-[#E2E8F0]">
+                {cols.map((c) => (
+                  <th key={c.key} className={`px-3 py-2.5 text-[10px] font-bold uppercase tracking-wide text-[#8A9BB5] leading-tight ${c.left ? 'text-left' : 'text-right'}`}>{c.title}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {lines.map((l, i) => (
+                <tr key={i} className="border-b border-[#F0F4F8] last:border-b-0">
+                  {cols.map((c) => (
+                    <td key={c.key} className={`px-3 py-3.5 text-[14px] ${c.left ? 'text-left font-semibold text-[#263238]' : c.key === 'quantite' ? 'text-right font-bold text-[#263238] tabular-nums' : 'text-right text-[#4D4D4D] tabular-nums'}`}>{l[c.key]}</td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
 
         <div className="mt-5 pt-5 border-t border-[#F0F4F8]">

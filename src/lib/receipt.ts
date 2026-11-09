@@ -26,6 +26,8 @@ export interface LabelLine {
   mandrin: string;
   metres: string;
   quantite: number;
+  /** « 80/80 » (laize/longueur, comme sur le site public) ; texte libre pour une ligne sans produit. */
+  format: string;
   /** Produit du catalogue (null = ligne libre) — sert à enregistrer un grammage/mandrin saisi à l'impression. */
   productId: string | null;
   /** Peut-on proposer de renseigner grammage/mandrin ? (rouleaux de papier oui, étiquettes et lignes libres non) */
@@ -48,7 +50,11 @@ export function buildLines(items: any[]): LabelLine[] {
   return (items ?? []).map((i: any) => {
     const p = i.product;
     if (!p) {
-      return { designation: i.description || 'Produit', laize: '—', grammage: '—', mandrin: '—', metres: i.metrage != null ? fmt(i.metrage) : '—', quantite: i.quantity ?? 0, productId: null, askable: false };
+      // Référence libre (ex. « 57/69 ») : la laize est le 1er nombre ; le métrage vient de la ligne, sinon du 2e nombre.
+      const m = String(i.description ?? '').match(/^\s*(\d+(?:[.,]\d+)?)\s*[/x×]\s*(\d+(?:[.,]\d+)?)/i);
+      const laize = m ? fmt(Number(m[1].replace(',', '.'))) : '—';
+      const metres = i.metrage != null ? fmt(i.metrage) : m ? fmt(Number(m[2].replace(',', '.'))) : '—';
+      return { designation: i.description || 'Produit', laize, grammage: '—', mandrin: '—', metres, quantite: i.quantity ?? 0, format: i.description || 'Produit', productId: null, askable: false };
     }
     return {
       designation: p.name && p.name !== `${p.width}/${p.length}` ? `${p.reference} — ${p.name}` : p.reference,
@@ -57,6 +63,7 @@ export function buildLines(items: any[]): LabelLine[] {
       mandrin: customValue(p, 'mandrin'),
       metres: fmt(i.metrage ?? p.metrage ?? p.length),
       quantite: i.quantity ?? 0,
+      format: `${fmt(p.width)}/${fmt(p.length)}`,
       productId: p.id ?? null,
       askable: !/tiquette/i.test(String(p.category?.name ?? '')),
     };
@@ -66,7 +73,8 @@ export function buildLines(items: any[]): LabelLine[] {
 /** Titres de l'étiquette : « Rouleaux de Papier Thermique » pour le thermique, sinon le nom de la catégorie. */
 export function buildTitles(items: any[], lines: LabelLine[]): { titleFr: string; titleAr: string } {
   const cats = [...new Set((items ?? []).map((i: any) => i.product?.category?.name).filter(Boolean))] as string[];
-  const thermal = cats.length > 0 && cats.every((n) => /thermique/i.test(n) && !/tiquette/i.test(n));
+  // Sans catégorie connue (lignes libres, ventes importées) : titre du papier thermique, le produit principal de PSI.
+  const thermal = cats.length === 0 || cats.every((n) => /thermique/i.test(n) && !/tiquette/i.test(n));
   // « (55g/m²) » seulement si toutes les lignes ont le même grammage numérique.
   const gr = [...new Set(lines.map((l) => l.grammage.replace(/[^\d.,]/g, '')).filter(Boolean))];
   const grTxt = gr.length === 1 ? ` - (${gr[0]}g/m²)` : '';
