@@ -221,6 +221,11 @@ function CategoryCard({ category, products }: { category: Cat; products: Prod[] 
                       <p className="text-[12px] md:text-[13px] font-semibold text-[#263238] truncate">
                         {product.width}/{product.length} m
                       </p>
+                      {quoteOnly && product.reference && (
+                        <p className="text-[11px] md:text-[12px] font-bold text-[#4CAF4F] truncate">
+                          {product.reference.replace(/-\d+$/, '')}
+                        </p>
+                      )}
                       {!quoteOnly && (
                         <p className="text-[11px] md:text-[12px] font-bold text-[#4CAF4F]">
                           {product.price.toFixed(2)} DA

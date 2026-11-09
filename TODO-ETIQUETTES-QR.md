@@ -1,6 +1,7 @@
 # TODO — Étiquettes colis + QR code « Valider la réception »
 
-Statut : **plan validé, rien n'est encore codé.**
+Statut (9 nov. 2026) : **code écrit (QR, étiquette 100×100 mm, impression simple et en lot, page publique `/r/[token]`, sections « Colis & documents » et « Preuve de livraison », coche « Reçu client » dans le tableau). Migration `20261109120000_receipt_qr` à appliquer ; à tester dans le navigateur ; à rejouer en production.**
+Décision : le passage en Livré par le client n'est PAS bloqué par l'équipe ; la coche « Reçu client » reste orange (« à vérifier ») jusqu'au clic « Marquer comme vu », puis verte.
 Les modifs supplémentaires (demandes du responsable) sont à ajouter en section 9.
 
 ---

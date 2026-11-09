@@ -19,6 +19,7 @@ import { useSession } from 'next-auth/react';
 import { useRole } from '@/lib/role-context';
 import { RequirePerm } from '@/components/RequirePerm';
 import { ImportVentesModal } from '@/components/ui/ImportVentesModal';
+import { LabelPrintModal, type LabelEntry } from '@/components/ui/LabelPrintModal';
 import { orderToDetail, quoteToDetail, DB_TO_UI, UI_TO_DB } from '@/lib/request-detail';
 import { validateEmail, validatePhone, validateQuantity, validatePositiveNumber, normalizeEmail, normalizePhone, firstError, messageErreur } from '@/lib/validation';
 
@@ -717,6 +718,9 @@ function RequestsPageInner() {
   const [users, setUsers] = useState<{ id: string; name: string }[]>([]);
   const [selected, setSelected]   = useState<RequestDetail | null>(null);
   const [showCreate, setShowCreate] = useState(false);
+  // Sélection multiple (impression groupée des étiquettes) : clés « Type:id »
+  const [checked, setChecked] = useState<Set<string>>(new Set());
+  const [showLabels, setShowLabels] = useState(false);
   const [showImportVentes, setShowImportVentes] = useState(false);
   const [createPrefill, setCreatePrefill] = useState<{ client?: string; entreprise?: string; telephone?: string; email?: string; wilaya?: string; commune?: string } | undefined>(undefined);
   // "Marquer Produit" tombe sur un manquant réel (rien pour le couvrir, même après avoir
@@ -875,6 +879,16 @@ function RequestsPageInner() {
     return matchSearch && matchAssigne && matchPeriode && matchPaiement && matchFacture;
   };
   const filtered = sorted.filter((r) => matchHorsStatut(r) && (filterStatut === 'all' || r.statut === filterStatut));
+
+  // ── Étiquettes colis : sélection multiple ──
+  const rowKey = (r: RequestDetail) => `${r.type}:${r.id}`;
+  const selectableRows = filtered.filter((r) => r.id);
+  const allChecked = selectableRows.length > 0 && selectableRows.every((r) => checked.has(rowKey(r)));
+  const toggleRow = (r: RequestDetail) => setChecked((prev) => { const n = new Set(prev); if (n.has(rowKey(r))) n.delete(rowKey(r)); else n.add(rowKey(r)); return n; });
+  const toggleAll = () => setChecked(allChecked ? new Set() : new Set(selectableRows.map(rowKey)));
+  const labelEntries: LabelEntry[] = [...orders, ...quotes]
+    .filter((r) => r.id && checked.has(rowKey(r)))
+    .map((r) => ({ kind: r.type === 'Devis' ? 'quote' : 'order', id: r.id as string, ref: r.ref, sub: r.entreprise && r.entreprise !== '—' ? r.entreprise : r.client, count: r.labelCount && r.labelCount > 0 ? r.labelCount : 1 }));
 
   // Montant total des demandes affichées (selon TOUS les filtres). Annulé / Retourné exclus,
   // comme dans l'export Excel ; « Sur devis » / « — » (pas de prix) comptent 0.
@@ -1311,10 +1325,23 @@ function RequestsPageInner() {
         )}
       </div>
 
+      {checked.size > 0 && (
+        <div className="flex items-center justify-between gap-3 flex-wrap rounded-xl border-2 border-[#4CAF4F] bg-[#F0FDF4] px-4 py-2.5">
+          <span className="text-[13px] font-bold text-[#166534]">{checked.size} sélectionnée{checked.size > 1 ? 's' : ''}</span>
+          <div className="flex items-center gap-2">
+            <button onClick={() => setChecked(new Set())} className="px-3 py-1.5 rounded-lg border border-[#BBF7D0] bg-white text-[12px] font-semibold text-[#374151] hover:bg-[#F8FAFC]">Tout désélectionner</button>
+            <button onClick={() => setShowLabels(true)} className="px-3 py-1.5 rounded-lg text-[12px] font-bold text-white" style={{ background: '#4CAF4F' }}>Imprimer les étiquettes</button>
+          </div>
+        </div>
+      )}
+
       <div className="rounded-2xl border-2 border-[#E2E8F0] overflow-x-auto shadow-sm bg-white [scrollbar-width:none] [&::-webkit-scrollbar]:hidden min-h-[50vh]">
         <table className="w-full min-w-[980px]" style={{ borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ background: '#F8FAFC' }}>
+              <th className="pl-5 pr-1 py-3.5 w-8">
+                <input type="checkbox" checked={allChecked} onChange={toggleAll} aria-label="Tout sélectionner" className="w-4 h-4 accent-[#4CAF4F] cursor-pointer" />
+              </th>
               {['N°', 'Type', 'Source', 'Entreprise', 'Client', 'Responsable', 'Date', 'Total', 'Paiement', 'Facture', 'Statut'].map((h) => (
                 <th key={h} className="px-5 py-3.5 text-left font-semibold text-[#8A9BB5] uppercase tracking-wider" style={{ fontSize: 11 }}>{h}</th>
               ))}
@@ -1322,9 +1349,9 @@ function RequestsPageInner() {
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={11} className="px-6 py-14 text-center text-[13px] text-[#8A9BB5]">Chargement…</td></tr>
+              <tr><td colSpan={12} className="px-6 py-14 text-center text-[13px] text-[#8A9BB5]">Chargement…</td></tr>
             ) : filtered.length === 0 ? (
-              <tr><td colSpan={11} className="px-6 py-14 text-center text-[13px] text-[#8A9BB5]">Aucune demande trouvée</td></tr>
+              <tr><td colSpan={12} className="px-6 py-14 text-center text-[13px] text-[#8A9BB5]">Aucune demande trouvée</td></tr>
             ) : filtered.map((row, i) => {
               const isEnAttente = row.statut === 'En attente';
               const isArchived  = ARCHIVED.includes(row.statut);
@@ -1338,6 +1365,9 @@ function RequestsPageInner() {
                   style={{ background: rowBg, borderTop: '1px solid #F2F4F7' }}
                   onMouseEnter={(e) => (e.currentTarget.style.background = rowBgHover)}
                   onMouseLeave={(e) => (e.currentTarget.style.background = rowBg)}>
+                  <td className="pl-5 pr-1 py-3.5 w-8" onClick={(e) => e.stopPropagation()}>
+                    {row.id && <input type="checkbox" checked={checked.has(rowKey(row))} onChange={() => toggleRow(row)} aria-label={`Sélectionner ${row.ref}`} className="w-4 h-4 accent-[#4CAF4F] cursor-pointer" />}
+                  </td>
                   <td className="px-5 py-3.5 text-[12px] font-mono font-bold" style={{ color: isCommande ? '#4CAF4F' : '#8B5CF6' }}>{row.ref}</td>
                   <td className="px-5 py-3.5">
                     <span className="whitespace-nowrap" style={{ display: 'inline-flex', alignItems: 'center', padding: '3px 10px', borderRadius: 8, fontSize: 12, fontWeight: 700, border: `2px solid ${isCommande ? '#4CAF4F' : '#8B5CF6'}`, background: isCommande ? '#F0FDF4' : '#F5F3FF', color: isCommande ? '#166534' : '#5B21B6' }}>
@@ -1361,7 +1391,19 @@ function RequestsPageInner() {
                   <td className="px-5 py-3.5 text-[13px] font-semibold text-[#0F172A] tabular-nums whitespace-nowrap">{row.montant}</td>
                   <td className="px-5 py-3.5 text-[13px] text-[#374151] whitespace-nowrap">{paiementDe(row) ?? <span className="text-[#CBD5E1]">—</span>}</td>
                   <td className="px-5 py-3.5 text-[13px] whitespace-nowrap">{aUneFacture(row.invoiceNumber) ? <span className="font-semibold text-[#166534]">Avec</span> : <span className="text-[#8A9BB5]">Sans</span>}</td>
-                  <td className="px-5 py-3.5"><StatusPill status={row.statut} /></td>
+                  <td className="px-5 py-3.5">
+                    <StatusPill status={row.statut} />
+                    {row.receiptConfirmedAt && (
+                      <span
+                        title={row.receiptSeenAt ? 'Réception confirmée par le client (QR) — vue par l\'équipe' : 'Réception confirmée par le client (QR) — pas encore vue par l\'équipe'}
+                        className="mt-1 flex items-center gap-1 text-[10px] font-bold whitespace-nowrap"
+                        style={{ color: row.receiptSeenAt ? '#166534' : '#B45309' }}
+                      >
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none"><path d="M4 12.5l4.5 4.5L14 11.5M10 16.5l1 1L20 8.5" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                        Reçu client{row.receiptSeenAt ? '' : ' · à vérifier'}
+                      </span>
+                    )}
+                  </td>
                 </tr>
               );
             })}
@@ -1379,6 +1421,13 @@ function RequestsPageInner() {
           onAssign={handleAssign}
           onReassigned={() => { fetchAll(true); }}
           onToggleAutoAssign={handleToggleAutoAssign}
+        />
+      )}
+      {showLabels && labelEntries.length > 0 && (
+        <LabelPrintModal
+          entries={labelEntries}
+          onClose={() => setShowLabels(false)}
+          onDone={() => { setChecked(new Set()); fetchAll(true); }}
         />
       )}
       {showImportVentes && (

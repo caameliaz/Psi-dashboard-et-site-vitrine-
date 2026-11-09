@@ -177,6 +177,9 @@ export default function ProductDetailPage() {
               >
                 {/* Format « 57/50 mm » — le métrage a sa propre ligne plus bas */}
                 {p.width}/{p.length} m
+                {quoteOnly && p.reference && (
+                  <span className="block text-[11px] font-bold text-[#4CAF4F] leading-tight">{p.reference.replace(/-\d+$/, '')}</span>
+                )}
               </button>
             );
           })}
@@ -238,7 +241,10 @@ export default function ProductDetailPage() {
     <div className="bg-white border border-[#E0E0E0] rounded-2xl shadow-[0_4px_24px_rgba(171,190,209,0.35)] p-6 flex flex-col gap-4">
       <div className="flex items-center justify-between text-[14px]">
         <span className="text-[#717171]">{t('product_detail.ref_label')}</span>
-        <span className="font-semibold text-[#263238]">{current.width}/{current.length} m</span>
+        <span className="font-semibold text-[#263238]">
+          {current.width}/{current.length} m
+          {quoteOnly && current.reference ? ` · ${current.reference.replace(/-\d+$/, '')}` : ''}
+        </span>
       </div>
       {current.metrage != null && (
         <div className="flex items-center justify-between text-[14px]">

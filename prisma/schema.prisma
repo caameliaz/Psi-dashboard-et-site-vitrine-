@@ -414,6 +414,13 @@ model Order {
   // quantité est automatiquement créditée dans StockAssignment pour `assignedToId` (cf.
   // syncCommercialAssignment, order-stock.ts). Statuts EN_ATTENTE et VALIDE uniquement.
   autoAssignStock Boolean        @default(false)
+  // ── Réception par le client (QR code collé sur le colis — cf. src/lib/receipt.ts) ──
+  // Jeton aléatoire (64 hex) dans le QR : jamais la référence ni l'id (non devinable). Généré par la base.
+  receiptToken       String    @unique @default(dbgenerated("(replace((gen_random_uuid())::text, '-'::text, ''::text) || replace((gen_random_uuid())::text, '-'::text, ''::text))"))
+  labelCount         Int       @default(0) // nombre de colis / étiquettes générés à la dernière impression
+  receiptScannedAt   DateTime? // 1re ouverture de la page du QR par le client
+  receiptConfirmedAt DateTime? // « Valider la réception » cliqué par le client → statut Livré
+  receiptSeenAt      DateTime? // « Vu » coché par un membre de l'équipe (double confirmation, non bloquante)
   notifications   Notification[]
   auditLogs       AuditLog[]     @relation("AuditOrder")
   requestNotes    RequestNote[]
@@ -500,6 +507,13 @@ model Quote {
   assignedTo      User?          @relation("QuoteAssignedTo", fields: [assignedToId], references: [id])
   assignedToId    String? // "pris en charge par"
   autoAssignStock Boolean        @default(false) // cf. Order.autoAssignStock
+  // ── Réception par le client (QR code collé sur le colis — cf. src/lib/receipt.ts) ──
+  // Jeton aléatoire (64 hex) dans le QR : jamais la référence ni l'id (non devinable). Généré par la base.
+  receiptToken       String    @unique @default(dbgenerated("(replace((gen_random_uuid())::text, '-'::text, ''::text) || replace((gen_random_uuid())::text, '-'::text, ''::text))"))
+  labelCount         Int       @default(0) // nombre de colis / étiquettes générés à la dernière impression
+  receiptScannedAt   DateTime? // 1re ouverture de la page du QR par le client
+  receiptConfirmedAt DateTime? // « Valider la réception » cliqué par le client → statut Livré
+  receiptSeenAt      DateTime? // « Vu » coché par un membre de l'équipe (double confirmation, non bloquante)
   notifications   Notification[]
   auditLogs       AuditLog[]     @relation("AuditQuote")
   requestNotes    RequestNote[]

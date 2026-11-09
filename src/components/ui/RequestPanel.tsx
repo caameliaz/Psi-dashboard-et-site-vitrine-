@@ -1,4 +1,5 @@
 'use client';
+import { ReceiptSection } from '@/components/ui/ReceiptSection';
 
 import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
@@ -122,6 +123,12 @@ export interface RequestDetail {
   raw?: { createdAt: string; deliveredAt: string; paymentDate: string; notes: string; source: string; clientName: string; clientCompany: string; clientPhone: string; clientCommune: string };
   salesRepName?: string | null;   // commercial importé, avant rattachement à un compte
   priority?: boolean;             // commande/devis prioritaire (passe en tête des FIFO du stock)
+  // Réception par le client (QR code sur le colis) — cf. src/lib/receipt.ts
+  receiptToken?: string;
+  labelCount?: number;
+  receiptScannedAt?: string | null;
+  receiptConfirmedAt?: string | null;
+  receiptSeenAt?: string | null;
 }
 
 function getSourceLabel(src: string) { return src === 'SITE' ? 'Site web' : src === 'ROLLINK' ? 'RollLink' : 'Manuel'; }
@@ -1561,6 +1568,23 @@ export function RequestPanel({ item, onClose, onStatusChange, onConfirmQuoteWith
                   })}
                 </div>
               </div>
+
+              {/* Colis & documents (QR + étiquette) puis Preuve de livraison (QR scanné / réception confirmée) */}
+              {item.id && (
+                <ReceiptSection
+                  kind={item.type === 'Devis' ? 'quote' : 'order'}
+                  id={item.id}
+                  refLabel={item.ref}
+                  sub={item.entreprise && item.entreprise !== '—' ? item.entreprise : item.client}
+                  token={item.receiptToken}
+                  labelCount={item.labelCount}
+                  scannedAt={item.receiptScannedAt}
+                  confirmedAt={item.receiptConfirmedAt}
+                  seenAt={item.receiptSeenAt}
+                  rolllink={item.source === 'ROLLINK'}
+                  onChanged={onReassigned}
+                />
+              )}
 
               {/* Facturation & règlement — affiché seulement si au moins une info existe */}
               {(item.invoiceNumber || item.paymentMethod || item.paymentDate || item.vatEnabled || item.salesRepName) && (
