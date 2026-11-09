@@ -86,13 +86,14 @@ export function ReceiptSection({
       {!rolllink && (
         <div>
           <p className={sectionTitle}>Preuve de livraison</p>
-          <div className="rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] px-3 py-3 flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-[#F2F4F7] flex items-center justify-center text-[#6B7A90] shrink-0">
+          {/* Réception confirmée par le client : la carte passe au vert (doux) */}
+          <div className={`rounded-xl border px-3 py-3 flex items-center gap-3 transition-colors ${confirmedAt ? 'border-[#BBF7D0] bg-[#F0FDF4]' : 'border-[#E2E8F0] bg-[#F8FAFC]'}`}>
+            <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${confirmedAt ? 'bg-[#DCFCE7] text-[#16A34A]' : 'bg-[#F2F4F7] text-[#6B7A90]'}`}>
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="7" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.7" /><rect x="14" y="3" width="7" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.7" /><rect x="3" y="14" width="7" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.7" /><path d="M14 14h3v3h-3zM20 14v2M14 20h2M20 20h1" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" /></svg>
             </div>
             <div className="min-w-0 flex-1">
-              <p className="text-[13px] font-bold text-[#0F172A]">{proof.title}</p>
-              <p className="text-[12px] text-[#6B7A90] leading-snug">{proof.desc}</p>
+              <p className={`text-[13px] font-bold ${confirmedAt ? 'text-[#166534]' : 'text-[#0F172A]'}`}>{proof.title}</p>
+              <p className={`text-[12px] leading-snug ${confirmedAt ? 'text-[#166534]/75' : 'text-[#6B7A90]'}`}>{proof.desc}</p>
               {confirmedAt && (
                 seenAt ? (
                   <p className="text-[11px] text-[#166534] font-semibold mt-1">✓ Vu par l&apos;équipe le {fmt(seenAt)}</p>
