@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { ArrowButton } from '@/components/ArrowButton';
 
 type State = 'ready' | 'confirmed' | 'not_ready' | 'unavailable' | 'rolllink';
 
@@ -55,23 +56,19 @@ export function ConfirmReceipt({ token, state, confirmedAt }: { token: string; s
     <div className="flex flex-col gap-3">
       {error && <p className="text-[13px] text-red-600 font-medium text-center">{error}</p>}
       {!asking ? (
-        <button
-          type="button"
-          onClick={() => setAsking(true)}
-          className="w-full h-14 rounded-2xl bg-[#4CAF4F] text-white text-[16px] font-bold shadow-[0_8px_24px_rgba(76,175,79,0.35)] hover:bg-[#43A047] transition-colors"
-        >
+        <ArrowButton variant="green-white" onClick={() => setAsking(true)} className="w-full justify-center !text-[16px] !py-4">
           Valider la réception
-        </button>
+        </ArrowButton>
       ) : (
         <div className="rounded-2xl border border-[#E0E0E0] bg-white p-4 flex flex-col gap-3">
           <p className="text-[14px] text-[#263238] text-center font-medium">Confirmez-vous avoir bien reçu votre colis, produits et quantités conformes ?</p>
           <div className="flex gap-2">
-            <button type="button" disabled={busy} onClick={() => setAsking(false)} className="flex-1 h-12 rounded-xl border border-[#E0E0E0] text-[14px] font-semibold text-[#374151] hover:bg-[#F8FAFC] disabled:opacity-60">
+            <ArrowButton variant="white-dark" disabled={busy} onClick={() => setAsking(false)} className="flex-1 justify-center border border-[#E0E0E0]">
               Annuler
-            </button>
-            <button type="button" disabled={busy} onClick={confirm} className="flex-1 h-12 rounded-xl bg-[#4CAF4F] text-[14px] font-bold text-white hover:bg-[#43A047] disabled:opacity-60">
+            </ArrowButton>
+            <ArrowButton variant="green-white" disabled={busy} onClick={confirm} className="flex-1 justify-center">
               {busy ? 'Envoi…' : 'Oui, confirmer'}
-            </button>
+            </ArrowButton>
           </div>
         </div>
       )}

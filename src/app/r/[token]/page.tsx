@@ -27,6 +27,14 @@ export default async function ReceiptPage({ params }: { params: Promise<{ token:
   await markScanned(kind, row.id).catch(() => {});
 
   const lines = buildLines(row.items);
+  const hasVal = (v: string) => v !== '—' && v.trim() !== '';
+  const cols = ([
+    { key: 'laize', title: 'Laize', unit: '(mm)', show: true },
+    { key: 'grammage', title: 'Grammage', unit: '(g/m²)', show: lines.some((l) => hasVal(l.grammage)) },
+    { key: 'mandrin', title: 'Mandrin Ø', unit: '(mm)', show: lines.some((l) => hasVal(l.mandrin)) },
+    { key: 'metres', title: 'Mètres', unit: '(m)', show: true },
+    { key: 'quantite', title: 'Nbre', unit: 'Rouleaux', show: true },
+  ] as const).filter((c) => c.show);
   const confirmedAt = row.receiptConfirmedAt ?? (row.status === 'LIVRE' ? row.deliveredAt : null);
   const state =
     confirmedAt ? 'confirmed'
@@ -42,23 +50,28 @@ export default async function ReceiptPage({ params }: { params: Promise<{ token:
         <h1 className="text-[24px] font-semibold text-[#263238] mt-1">{row.ref}</h1>
       </div>
 
-      <div className="flex flex-col gap-3">
-        {lines.map((l, i) => (
-          <div key={i} className="rounded-2xl border border-[#E0E0E0] bg-white p-4 shadow-[0_2px_10px_rgba(171,190,209,0.25)]">
-            <div className="flex items-start justify-between gap-3">
-              <p className="text-[15px] font-bold text-[#263238] leading-snug">{l.designation}</p>
-              <span className="shrink-0 rounded-lg bg-[#F0FDF4] border border-[#BBF7D0] px-2.5 py-1 text-[13px] font-bold text-[#166534] whitespace-nowrap">× {l.quantite}</span>
-            </div>
-            <dl className="mt-3 grid gap-2 text-center" style={{ gridTemplateColumns: `repeat(${[l.laize, l.grammage, l.mandrin, l.metres].filter((v) => v !== '—').length || 1}, minmax(0, 1fr))` }}>
-              {[['Laize (mm)', l.laize], ['Grammage', l.grammage], ['Mandrin Ø', l.mandrin], ['Mètres', l.metres]].filter(([, v]) => v !== '—').map(([k, v]) => (
-                <div key={k} className="rounded-lg bg-[#F8FAFC] px-1 py-2">
-                  <dt className="text-[10px] font-semibold text-[#8A9BB5] uppercase leading-tight">{k}</dt>
-                  <dd className="text-[14px] font-bold text-[#263238] mt-0.5">{v}</dd>
-                </div>
+      {/* Même tableau que l'étiquette du colis (colonne sans aucune valeur masquée) */}
+      <div className="rounded-2xl border border-[#E0E0E0] bg-white p-3 shadow-[0_2px_10px_rgba(171,190,209,0.25)]">
+        <table className="w-full border-collapse text-center">
+          <thead>
+            <tr>
+              {cols.map((c) => (
+                <th key={c.key} className="border border-[#263238] px-1.5 py-2 text-[12px] font-bold text-[#263238] leading-tight">
+                  {c.title}<br />{c.unit}
+                </th>
               ))}
-            </dl>
-          </div>
-        ))}
+            </tr>
+          </thead>
+          <tbody>
+            {lines.map((l, i) => (
+              <tr key={i}>
+                {cols.map((c) => (
+                  <td key={c.key} className="border border-[#263238] px-1.5 py-2.5 text-[15px] font-semibold text-[#263238]">{l[c.key]}</td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
 
       <ConfirmReceipt token={token} state={state} confirmedAt={confirmedAt ? confirmedAt.toISOString() : null} />
