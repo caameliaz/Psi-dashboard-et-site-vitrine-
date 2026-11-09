@@ -22,16 +22,21 @@ type Vals = Record<string, { grammage: string; mandrin: string }>;
 /** « 55 g/m² » → « 55 » : l'unité est déjà dans l'en-tête de la colonne. */
 const numOnly = (s: string) => (s.trim().match(/^(\d+(?:[.,]\d+)?)/)?.[1] ?? s.trim()).replace(',', '.');
 
-/** Produits (rouleaux de papier du catalogue) auxquels il manque le grammage et/ou le mandrin, sans doublon. */
+/** Clé d'une ligne : l'id du produit, ou « free:texte » pour une référence libre (pas de produit où enregistrer). */
+const keyOf = (line: { productId?: string | null; designation: string }) => line.productId ?? `free:${line.designation}`;
+const isFree = (key: string) => key.startsWith('free:');
+
+/** Lignes (produits du catalogue ou références libres) auxquelles il manque le grammage et/ou le mandrin, sans doublon. */
 function findMissing(labels: LabelData[]): Missing[] {
   const map = new Map<string, Missing>();
   for (const l of labels) for (const line of l.lines) {
-    if (!line.productId || !line.askable) continue;
+    if (!line.askable) continue;
     const needGr = line.grammage === '—';
     const needMa = line.mandrin === '—';
     if (!needGr && !needMa) continue;
-    const prev = map.get(line.productId);
-    map.set(line.productId, { productId: line.productId, label: line.designation, needGr: needGr || !!prev?.needGr, needMa: needMa || !!prev?.needMa });
+    const key = keyOf(line);
+    const prev = map.get(key);
+    map.set(key, { productId: key, label: line.designation, needGr: needGr || !!prev?.needGr, needMa: needMa || !!prev?.needMa });
   }
   return [...map.values()];
 }
@@ -41,7 +46,7 @@ function applyValues(labels: LabelData[], vals: Vals): LabelData[] {
   return labels.map((l) => ({
     ...l,
     lines: l.lines.map((line) => {
-      const v = line.productId ? vals[line.productId] : undefined;
+      const v = vals[keyOf(line)];
       if (!v) return line;
       return {
         ...line,
@@ -97,9 +102,11 @@ export function LabelPrintModal({ entries, onClose, onDone }: { entries: LabelEn
       let saveFailed = false;
       const clean: Vals = {};
       for (const [id, v] of Object.entries(values)) if (v.grammage.trim() || v.mandrin.trim()) clean[id] = v;
-      if (save && Object.keys(clean).length > 0) {
+      // Les références libres n'ont pas de produit : utilisées pour cette impression seulement.
+      const productEntries = Object.entries(clean).filter(([k]) => !isFree(k));
+      if (save && productEntries.length > 0) {
         try {
-          await post('/api/labels/product-fields', JSON.stringify({ items: Object.entries(clean).map(([productId, v]) => ({ productId, ...v })) }));
+          await post('/api/labels/product-fields', JSON.stringify({ items: productEntries.map(([productId, v]) => ({ productId, ...v })) }));
         } catch (e) {
           // L'impression continue : seule l'écriture sur le produit a échoué.
           saveFailed = true;
@@ -143,6 +150,8 @@ export function LabelPrintModal({ entries, onClose, onDone }: { entries: LabelEn
     }
   };
 
+  const filled = (m: Missing) => !!((m.needGr && vals[m.productId]?.grammage.trim()) || (m.needMa && vals[m.productId]?.mandrin.trim()));
+  const anyProductFilled = missing.some((m) => !isFree(m.productId) && filled(m));
   const anyFilled = missing.some((m) => (m.needGr && vals[m.productId]?.grammage.trim()) || (m.needMa && vals[m.productId]?.mandrin.trim()));
   const inputCls = 'w-full px-2 py-1.5 rounded-lg border border-[#E2E8F0] bg-white text-center text-[13px] font-semibold text-[#0F172A] focus:outline-none focus:border-[#4CAF4F]';
   const ghostBtn = 'flex-1 px-3 py-2.5 rounded-lg border border-[#E2E8F0] text-[13px] font-semibold text-[#374151] hover:bg-[#F8FAFC] disabled:opacity-60';
@@ -157,7 +166,7 @@ export function LabelPrintModal({ entries, onClose, onDone }: { entries: LabelEn
           <div className="flex flex-col gap-2 max-h-[40vh] overflow-y-auto pr-1">
             {missing.map((m) => (
               <div key={m.productId} className="rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] px-3 py-2.5">
-                <p className="text-[13px] font-bold text-[#0F172A] truncate mb-2">{m.label}</p>
+                <p className="text-[13px] font-bold text-[#0F172A] truncate mb-2">{m.label}{isFree(m.productId) && <span className="ml-1.5 text-[10px] font-semibold text-[#8A9BB5]">(référence libre · cette impression seulement)</span>}</p>
                 <div className="grid grid-cols-2 gap-2">
                   {m.needGr && (
                     <label className="block">
@@ -185,7 +194,7 @@ export function LabelPrintModal({ entries, onClose, onDone }: { entries: LabelEn
             <button type="button" disabled={busy} onClick={() => run({}, false)} className={ghostBtn}>Imprimer sans</button>
             <button
               type="button" disabled={busy}
-              onClick={() => { if (anyFilled && isAdmin) setStep('choice'); else run(vals, false); }}
+              onClick={() => { if (anyProductFilled && isAdmin) setStep('choice'); else run(vals, false); }}
               className="flex-1 px-3 py-2.5 rounded-lg text-[13px] font-bold text-white disabled:opacity-60" style={{ background: '#4CAF4F' }}>
               {anyFilled ? 'Continuer' : 'Imprimer'}
             </button>
@@ -199,7 +208,7 @@ export function LabelPrintModal({ entries, onClose, onDone }: { entries: LabelEn
     return (
       <Modal title="Enregistrer ces valeurs ?" onClose={onClose}>
         <div className="flex flex-col gap-3">
-          <p className="text-[12px] text-[#4D4D4D]">Garder le grammage et le mandrin saisis sur les produits, ou seulement pour cette impression ?</p>
+          <p className="text-[12px] text-[#4D4D4D]">Garder le grammage et le mandrin saisis sur les produits, ou seulement pour cette impression ? (Les références libres, sans produit, servent pour cette impression seulement.)</p>
           <button type="button" disabled={busy} onClick={() => run(vals, true)}
             className="text-left rounded-lg border-2 border-[#4CAF4F] bg-[#F0FDF4] px-3 py-2.5 disabled:opacity-60">
             <span className="block text-[13px] font-bold text-[#166534]">Enregistrer sur le produit</span>

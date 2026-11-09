@@ -54,7 +54,7 @@ export function buildLines(items: any[]): LabelLine[] {
       const m = String(i.description ?? '').match(/^\s*(\d+(?:[.,]\d+)?)\s*[/x×]\s*(\d+(?:[.,]\d+)?)/i);
       const laize = m ? fmt(Number(m[1].replace(',', '.'))) : '—';
       const metres = i.metrage != null ? fmt(i.metrage) : m ? fmt(Number(m[2].replace(',', '.'))) : '—';
-      return { designation: i.description || 'Produit', laize, grammage: '—', mandrin: '—', metres, quantite: i.quantity ?? 0, format: i.description || 'Produit', productId: null, askable: false };
+      return { designation: i.description || 'Produit', laize, grammage: '—', mandrin: '—', metres, quantite: i.quantity ?? 0, format: i.description || 'Produit', productId: null, askable: true };
     }
     return {
       designation: p.name && p.name !== `${p.width}/${p.length}` ? `${p.reference} — ${p.name}` : p.reference,

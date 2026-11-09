@@ -56,20 +56,18 @@ export function ConfirmReceipt({ token, state, confirmedAt }: { token: string; s
     <div className="flex flex-col gap-3">
       {error && <p className="text-[13px] text-red-600 font-medium text-center">{error}</p>}
       {!asking ? (
-        <ArrowButton variant="green-white" onClick={() => setAsking(true)} className="w-full justify-center !text-[16px] !py-4">
+        <ArrowButton variant="green-white" onClick={() => setAsking(true)} className="w-full whitespace-nowrap !text-[16px] !py-4">
           Valider la réception
         </ArrowButton>
       ) : (
-        <div className="rounded-2xl border border-[#E0E0E0] bg-white p-4 flex flex-col gap-3">
+        <div className="flex flex-col gap-3">
           <p className="text-[14px] text-[#263238] text-center font-medium">Confirmez-vous avoir bien reçu votre colis, produits et quantités conformes ?</p>
-          <div className="flex gap-2">
-            <ArrowButton variant="white-dark" disabled={busy} onClick={() => setAsking(false)} className="flex-1 justify-center border border-[#E0E0E0]">
-              Annuler
-            </ArrowButton>
-            <ArrowButton variant="green-white" disabled={busy} onClick={confirm} className="flex-1 justify-center">
-              {busy ? 'Envoi…' : 'Oui, confirmer'}
-            </ArrowButton>
-          </div>
+          <ArrowButton variant="green-white" disabled={busy} onClick={confirm} className="w-full whitespace-nowrap !text-[16px] !py-4">
+            {busy ? 'Envoi…' : 'Oui, confirmer'}
+          </ArrowButton>
+          <button type="button" disabled={busy} onClick={() => setAsking(false)} className="w-full py-2 text-[14px] font-semibold text-[#717171] hover:text-[#263238] disabled:opacity-60">
+            Annuler
+          </button>
         </div>
       )}
     </div>
