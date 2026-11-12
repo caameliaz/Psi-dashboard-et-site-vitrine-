@@ -15,6 +15,8 @@ interface ClientRecord {
   sectorName?: string;
   adresse: string;
   email: string;
+  // Identifiants fiscaux (factures) — saisis par les admins
+  rc?: string; nif?: string; nis?: string; ai?: string;
   photo?: string;
   commandes: number;
   devis: number;
@@ -62,6 +64,7 @@ function avatarColor(id: number | string) {
 
 const emptyClient: Omit<ClientRecord, 'id' | 'commandes' | 'devis' | 'derniere' | 'historique'> = {
   entreprise: '', contact: '', telephone: '', wilaya: '', sectorId: '', adresse: '', email: '',
+  rc: '', nif: '', nis: '', ai: '',
 };
 
 function ClientForm({ form, setForm, onSubmit, onClose, submitLabel, sectors }: {
@@ -72,6 +75,7 @@ function ClientForm({ form, setForm, onSubmit, onClose, submitLabel, sectors }: 
   onClose: () => void;
   submitLabel: string;
 }) {
+  const { isAdmin } = useRole();
   const inputClass = "w-full px-3 py-2.5 rounded-xl border border-[#E2E8F0] text-[14px] text-[#263238] focus:outline-none focus:border-[#4CAF4F] focus:ring-[3px] focus:ring-[#4CAF4F]/15 transition-all bg-white";
   const labelClass = "block text-[12px] font-semibold text-[#374151] mb-1.5";
   return (
@@ -122,6 +126,17 @@ function ClientForm({ form, setForm, onSubmit, onClose, submitLabel, sectors }: 
         <label className={labelClass}>Adresse</label>
         <input value={form.adresse} onChange={(e) => setForm({ ...form, adresse: e.target.value })} placeholder="Rue, quartier, ville" className={inputClass} />
       </div>
+      {isAdmin && (
+        <div>
+          <p className="text-[12px] font-semibold text-[#374151] mb-1.5">Infos fiscales <span className="font-normal text-[#8A9BB5]">(pour les factures — le client les envoie)</span></p>
+          <div className="grid grid-cols-2 gap-3">
+            <input value={form.rc ?? ''} onChange={(e) => setForm({ ...form, rc: e.target.value })} placeholder="RC (registre du commerce)" className={inputClass} />
+            <input value={form.nif ?? ''} onChange={(e) => setForm({ ...form, nif: e.target.value })} placeholder="NIF" className={inputClass} />
+            <input value={form.nis ?? ''} onChange={(e) => setForm({ ...form, nis: e.target.value })} placeholder="NIS" className={inputClass} />
+            <input value={form.ai ?? ''} onChange={(e) => setForm({ ...form, ai: e.target.value })} placeholder="AI (article d'imposition)" className={inputClass} />
+          </div>
+        </div>
+      )}
       <div className="flex gap-3 pt-2">
         <button onClick={onClose} className="flex-1 px-4 py-2.5 rounded-xl border border-[#E2E8F0] text-[13px] font-semibold text-[#374151] hover:bg-[#F8FAFC] transition-colors">Annuler</button>
         <button onClick={onSubmit} className="flex-1 px-4 py-2.5 rounded-xl text-[13px] font-bold text-white transition-colors" style={{ background: '#4CAF4F' }}>{submitLabel}</button>
@@ -730,6 +745,7 @@ function dbClientToRecord(c: any): ClientRecord {
     sectorName: c.sector?.name ?? '',
     adresse: c.address ?? '',
     email: c.email ?? '',
+    rc: c.rc ?? '', nif: c.nif ?? '', nis: c.nis ?? '', ai: c.ai ?? '',
     commandes: ordersCount,
     devis: quotesCount,
     derniere: lastDate,
@@ -924,6 +940,7 @@ function ClientsPageInner() {
         sectorId: addForm.sectorId || null,
         commune: addForm.commune?.trim() || null,
         address: addForm.adresse.trim() || null,
+        rc: addForm.rc?.trim() || null, nif: addForm.nif?.trim() || null, nis: addForm.nis?.trim() || null, ai: addForm.ai?.trim() || null,
         phone: tel || null,
       }),
     });
@@ -935,7 +952,7 @@ function ClientsPageInner() {
   };
 
   const openEdit = (c: ClientRecord) => {
-    setEditForm({ entreprise: c.entreprise, contact: c.contact, telephone: c.telephone, wilaya: c.wilaya, sectorId: c.sectorId ?? '', adresse: c.adresse, email: c.email });
+    setEditForm({ entreprise: c.entreprise, contact: c.contact, telephone: c.telephone, wilaya: c.wilaya, sectorId: c.sectorId ?? '', adresse: c.adresse, email: c.email, commune: c.commune ?? '', rc: c.rc ?? '', nif: c.nif ?? '', nis: c.nis ?? '', ai: c.ai ?? '' });
     setEditClient(c);
   };
 
@@ -960,6 +977,7 @@ function ClientsPageInner() {
         sectorId: editForm.sectorId || null,
         commune: editForm.commune?.trim() || null,
         address: editForm.adresse.trim() || null,
+        rc: editForm.rc?.trim() || null, nif: editForm.nif?.trim() || null, nis: editForm.nis?.trim() || null, ai: editForm.ai?.trim() || null,
         phone: normalizePhone(editForm.telephone) || null,
       }),
     });

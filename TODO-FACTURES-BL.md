@@ -1,6 +1,6 @@
 # TODO — Factures, bons de livraison (BL) et proformas automatiques
 
-Statut (12 nov. 2026) : **étape 0 faite** (base de données + calculs, migration `20261112120000_documents_bl_facture` appliquée sur la base du `.env`, **à rejouer en production**). Prochaine : étape 1 (page Réglages → Documents). Points à confirmer en section 6.
+Statut (12 nov. 2026) : **étapes 0 à 4 codées** (base, réglages, BL, facture, proforma, page Documents, lien public, e-mail). Deux migrations appliquées sur la base du `.env` : `20261112120000_documents_bl_facture` et `20261113090000_document_share_token` — **à rejouer en production**. Reste : vérifier à l'écran (voir « Vérifications ») et les points de la section 6.
 Documents de référence (à la racine) : `F021-2026 Moon Mobil.pdf` / `.xlsx` (facture + classeur Excel actuel), `BL 016-2026 Assiloucom.pdf` (bon de livraison).
 
 ---
@@ -103,34 +103,34 @@ Même principe que les étiquettes : un modèle fidèle, rempli avec les donnée
 - [x] Compteurs par type et par année (`src/lib/documents/numbering.ts`) ; compteur facture 2026 initialisé à **22** (prochaine : F 023/2026).
 - [x] Montant en toutes lettres (`amount-in-words.ts`), testé contre la F 021 ; timbre par paliers (`stamp-duty.ts`, valeurs à confirmer).
 - [x] Modèles et réglages par défaut repris des PDF (`defaults.ts`, `types.ts`).
-- [ ] Moteur de rendu unique (modèle + données → impression / Excel) : à faire avec l'étape 2 (BL).
-- [ ] PDF : fenêtre d'impression existante (aucune librairie). Excel : `xlsx-js-style` déjà présent.
-- [ ] **Migration à rejouer en production** et à ajouter à la liste de `TODO.md` §0 (`npx prisma migrate deploy`, puis initialiser le compteur facture à 22).
+- [x] Moteur de rendu unique (modèle + données → HTML A4 / Excel) : `render.ts`, `excel.ts`.
+- [x] PDF : fenêtre d'impression existante (aucune librairie). Excel : `xlsx-js-style` déjà présent.
+- [x] Migrations ajoutées à la liste de `TODO.md` §0. [ ] **À rejouer en production** (`npx prisma migrate deploy`, puis compteur facture 2026 = 22).
 
-### Étape 1 — Page Réglages → Documents
-- [ ] Page réservée aux admins, onglets BL / Facture / Proforma.
-- [ ] Interrupteurs de blocs, édition des textes, colonnes, champs personnalisés, aperçu, retour au modèle d'origine.
-- [ ] Infos PSI, désignation par catégorie, compteurs, taux.
+### Étape 1 — Page Réglages → Documents ✅
+- [x] Page réservée aux admins, onglets BL / Facture / Proforma.
+- [x] Interrupteurs de blocs, édition des textes, colonnes, champs personnalisés, aperçu, retour au modèle d'origine.
+- [x] Infos PSI, désignation par catégorie, compteurs, taux.
 
-### Étape 2 — Bon de livraison
-- [ ] Modèle BL fidèle au PDF + QR de réception (même QR que l'étiquette).
-- [ ] Numéro proposé = celui de la future facture ; « bis » proposé quand le numéro est déjà pris ; modifiable.
-- [ ] Bouton « Imprimer le BL » dans le panneau d'une commande + impression en lot depuis la liste.
-- [ ] Saisie avant impression : observation (cartons), date / lieu de livraison, champs personnalisés.
-- [ ] Désignation construite depuis la catégorie/produit, références liées (réf site + code interne) modifiables.
-- [ ] État « à facturer » sur les BL pour retrouver ceux qui n'ont pas encore de facture.
+### Étape 2 — Bon de livraison ✅
+- [x] Modèle BL fidèle au PDF + QR de réception (même QR que l'étiquette).
+- [x] Numéro proposé = celui de la future facture ; « bis » proposé quand le numéro est déjà pris ; modifiable.
+- [x] Bouton « Imprimer le BL » dans le panneau d'une commande + impression en lot depuis la liste.
+- [x] Saisie avant impression : observation (cartons), date / lieu de livraison, champs personnalisés.
+- [x] Désignation construite depuis la catégorie/produit, références liées (réf site + code interne) modifiables.
+- [x] État « à facturer » sur les BL pour retrouver ceux qui n'ont pas encore de facture.
 
-### Étape 3 — Facture
-- [ ] Champs client : RC, NIF, NIS, AI (fiche client + pop-up de saisie si manquants).
-- [ ] Création depuis un ou plusieurs BL ; **« Regrouper en facture »** (même client, lignes identiques additionnées, avertissement si prix différents ; un BL ne peut être que dans une facture).
-- [ ] Totaux HT / TVA 19 % / TTC, **timbre selon les paliers si espèces**, montant en lettres, échéance facultative.
-- [ ] Numérotation « F 021/2026 », par année, modifiable par les admins ; reprise des anciens numéros (F 001 à F 021…) pour éviter les doublons.
-- [ ] Facture modifiable par les admins après émission, avec historique (qui, quoi, quand).
-- [ ] Envoi par mail avec aperçu (destinataire, objet, texte, PDF joint), journal de l'envoi.
-- [ ] Export PDF ou Excel au choix.
+### Étape 3 — Facture ✅
+- [x] Champs client : RC, NIF, NIS, AI (fiche client + pop-up de saisie si manquants).
+- [x] Création depuis un ou plusieurs BL ; **« Regrouper en facture »** (même client, lignes identiques additionnées, avertissement si prix différents ; un BL ne peut être que dans une facture).
+- [x] Totaux HT / TVA 19 % / TTC, **timbre selon les paliers si espèces**, montant en lettres, échéance facultative.
+- [x] Numérotation « F 021/2026 », par année, modifiable par les admins ; reprise des anciens numéros (F 001 à F 021…) pour éviter les doublons.
+- [x] Facture modifiable par les admins après émission, avec historique (qui, quoi, quand).
+- [x] Envoi par mail avec aperçu (destinataire, objet, texte, PDF joint), journal de l'envoi.
+- [x] Export PDF ou Excel au choix.
 
-### Étape 4 — Proforma
-- [ ] Même moteur, numéro **FP-xx-2026**, compteur propre ; produits sur devis : prix saisi à la main.
+### Étape 4 — Proforma ✅
+- [x] Même moteur, numéro **FP-xx-2026**, compteur propre ; produits sur devis : prix saisi à la main.
 
 ### Vérifications
 - [ ] Impression fidèle (comparaison avec les PDF d'origine), A4.
@@ -145,3 +145,10 @@ Même principe que les étiquettes : un modèle fidèle, rempli avec les donnée
 3. **Proforma devenue facture** : réponse « oui » ambiguë → à reposer : la facture a-t-elle son **propre numéro F xx/2026** (la proforma FP reste en référence) ?
 4. ✅ **Adresse mail** : Contact@psi.dz, la même que les récaps.
 5. ✅ **PDF** : l'existant (impression → « Enregistrer en PDF »). Conséquence : pas de PDF joint automatiquement au mail → proposer : lien sécurisé vers le document (comme la page de réception par QR) et/ou **Excel en pièce jointe**. À valider.
+
+## 7. Où trouver quoi (code)
+- Réglages : `/admin/settings/documents` (admins). Liste : `/admin/documents`. Création : section « Documents » du détail d'une commande/devis.
+- Lien public envoyé par mail : `/d/[token]` (+ `/d/[token]/excel`). Mail : aperçu avant envoi, lien + Excel en pièce jointe (pas de PDF automatique : pas de librairie PDF).
+- Code : `src/lib/documents/` (types, defaults, calc, numbering, render, excel, service), `src/components/documents/`, `src/app/api/documents/`.
+- Droits : BL = toute personne qui voit les commandes ; facture, proforma, modèles, compteurs, modification, suppression, e-mail = admins.
+- Règle des numéros : le compteur = plus grand numéro émis ; un 2e BL du même client encore « à facturer » prend « bis » ; la facture reprend le n° du BL si libre.

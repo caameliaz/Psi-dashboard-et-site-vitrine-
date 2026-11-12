@@ -26,6 +26,12 @@ une divergence entre le schéma et la base).
   (booléen, `DEFAULT true`) : indépendant de `active`, contrôle si le produit
   est affiché sur le site public sans toucher à sa disponibilité dans le
   dashboard. Non-destructive, tous les produits existants restent visibles.
+- `20261112120000_documents_bl_facture` et `20261113090000_document_share_token` —
+  BL / factures / proformas : tables `DocumentTemplate`, `DocumentSettings`,
+  `DocumentCounter`, `Document` (+ lien public `shareToken`), colonnes `Client.rc/nif/nis/ai`,
+  `Category.documentDesignation`, `Product.documentDesignation`, valeur `DOCUMENT` de l'historique.
+  Additives uniquement. **Après `migrate deploy`, initialiser le compteur de facture 2026 à 22**
+  (Réglages → Documents → Compteurs, ou `DocumentCounter` FACTURE 2026 = 22) et saisir le dernier n° de BL réel.
 
 Si d'autres migrations sont ajoutées plus tard sur cette branche, elles seront
 listées ici aussi — mais `prisma migrate deploy` les applique de toute façon

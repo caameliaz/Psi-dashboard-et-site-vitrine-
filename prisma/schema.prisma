@@ -909,6 +909,8 @@ model Document {
   templateSnapshot Json
   customFields     Json? // champs ajoutés (libellé + valeur)
   createdById      String?
+  // Jeton aléatoire (64 hex) du lien public /d/[token] envoyé au client par mail (même principe que Order.receiptToken)
+  shareToken       String   @unique @default(dbgenerated("(replace((gen_random_uuid())::text, '-'::text, ''::text) || replace((gen_random_uuid())::text, '-'::text, ''::text))"))
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 

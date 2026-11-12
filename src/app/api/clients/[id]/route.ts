@@ -118,6 +118,13 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
         ...(body.commune !== undefined && { commune: body.commune }),
         ...(body.sectorId !== undefined && { sectorId: body.sectorId || null }),
         ...(body.address !== undefined && { address: body.address }),
+        // Identifiants fiscaux (factures) : modifiables par les admins uniquement
+        ...(session.user.role === 'ADMIN' && {
+          ...(body.rc !== undefined && { rc: body.rc || null }),
+          ...(body.nif !== undefined && { nif: body.nif || null }),
+          ...(body.nis !== undefined && { nis: body.nis || null }),
+          ...(body.ai !== undefined && { ai: body.ai || null }),
+        }),
         ...(body.photo !== undefined && { photo: body.photo }),
         // Responsable habituel du client (cf. src/lib/leave.ts pour la bascule pendant un congé)
         ...(body.assignedToId !== undefined && { assignedToId: body.assignedToId || null }),
