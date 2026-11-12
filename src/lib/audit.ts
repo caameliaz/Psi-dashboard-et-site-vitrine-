@@ -33,7 +33,7 @@ export const RESET_REMINDER_THRESHOLD = 2;
 // — toutes comptent comme du « bruit », pas de l'activité (suppression de compte, cf. api/users/[id]).
 export const OWNER_ONLY_ACTIONS = [LOGIN_ACTION, PAGE_VIEW_ACTION, PASSWORD_CHANGED_ACTION];
 
-type Entity = 'COMMANDE' | 'DEVIS' | 'PRODUIT' | 'CLIENT' | 'UTILISATEUR' | 'CONTENU' | 'TEMPLATE' | 'STATUT' | 'STOCK' | 'MATIERE';
+type Entity = 'COMMANDE' | 'DEVIS' | 'PRODUIT' | 'CLIENT' | 'UTILISATEUR' | 'CONTENU' | 'TEMPLATE' | 'STATUT' | 'STOCK' | 'MATIERE' | 'DOCUMENT';
 
 export function createAudit({
   userId,

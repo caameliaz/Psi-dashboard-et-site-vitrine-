@@ -27,6 +27,9 @@ model Category {
   // Catégorie « sur devis » (ex: papier médical) : sur le site public, prix masqués et « Ajouter au
   // panier » remplacé par « Demander un devis ». Les prix ne sont même pas envoyés au navigateur.
   quoteOnly   Boolean   @default(false)
+  // Désignation imprimée sur les BL / factures pour les produits de cette catégorie (texte multi-lignes, modifiable
+  // dans Réglages → Documents). Un produit peut avoir la sienne (Product.documentDesignation), elle prime.
+  documentDesignation String?
   products    Product[]
   createdAt   DateTime  @default(now())
 }
@@ -56,6 +59,7 @@ model Product {
   // commandes...) sans être affiché sur le site vitrine public. Le site public filtre
   // sur active ET visibleOnSite ; le dashboard continue de n'utiliser que `active`.
   visibleOnSite Boolean             @default(true)
+  documentDesignation String? // prime sur celle de la catégorie (BL / factures)
   category     Category             @relation(fields: [categoryId], references: [id])
   categoryId   String
   customFields ProductCustomField[]
@@ -303,6 +307,12 @@ model Client {
   quotes            Quote[]
   contacts          ContactRequest[]
   notes             ClientNote[]
+  documents         Document[]
+  // Identifiants fiscaux (factures) : saisis par les admins, demandés par un pop-up s'ils manquent à la génération
+  rc                String? // N° de registre du commerce
+  nif               String? // identification fiscale
+  nis               String? // identification statistique
+  ai                String? // article d'imposition
   // Responsable habituel du client (hors période de congé — cf. LeaveAssignment).
   // Restauré automatiquement au retour de congé de son titulaire.
   assignedTo        User?            @relation("ClientAssignedTo", fields: [assignedToId], references: [id])
@@ -423,6 +433,7 @@ model Order {
   receiptSeenAt      DateTime? // « Vu » coché par un membre de l'équipe (double confirmation, non bloquante)
   notifications   Notification[]
   auditLogs       AuditLog[]     @relation("AuditOrder")
+  documents       Document[]
   requestNotes    RequestNote[]
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
@@ -516,6 +527,7 @@ model Quote {
   receiptSeenAt      DateTime? // « Vu » coché par un membre de l'équipe (double confirmation, non bloquante)
   notifications   Notification[]
   auditLogs       AuditLog[]     @relation("AuditQuote")
+  documents       Document[]
   requestNotes    RequestNote[]
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
@@ -805,6 +817,7 @@ enum AuditEntity {
   STATUT
   STOCK
   MATIERE
+  DOCUMENT
 }
 
 // ─── PANIERS DU SITE PUBLIC (suivi anonyme, pas d'identité) ──────────────────
@@ -832,4 +845,76 @@ enum CartSessionStatus {
   EN_COURS
   ABANDONNE
   CONVERTI
+}
+
+// ─── DOCUMENTS : BL, FACTURES, PROFORMAS (cf. TODO-FACTURES-BL.md) ──────────────
+enum DocumentType {
+  BL
+  FACTURE
+  PROFORMA
+}
+
+// Modèle modifiable (Réglages → Documents, admins) : blocs activables, textes, colonnes, champs ajoutés.
+// Un seul par type. La mise en page reste fixe ; chaque document émis garde une COPIE du modèle utilisé.
+model DocumentTemplate {
+  id          String       @id @default(cuid())
+  type        DocumentType @unique
+  config      Json
+  updatedById String?
+  updatedAt   DateTime     @updatedAt
+}
+
+// Réglages communs (une seule ligne, id = "default") : infos PSI (raison sociale, adresse, RC, NIF, NIS, RIB…),
+// TVA, paliers du timbre (paiement en espèces), formats de numéro.
+model DocumentSettings {
+  id          String   @id @default("default")
+  data        Json
+  updatedById String?
+  updatedAt   DateTime @updatedAt
+}
+
+// Dernier numéro utilisé par type et par année (modifiable par les admins : les suivants se recalculent).
+model DocumentCounter {
+  id         String       @id @default(cuid())
+  type       DocumentType
+  year       Int
+  lastNumber Int          @default(0)
+  updatedAt  DateTime     @updatedAt
+
+  @@unique([type, year])
+}
+
+model Document {
+  id        String       @id @default(cuid())
+  type      DocumentType
+  // Numéro tel qu'imprimé (« F 023/2026 », « BL023-2026 », « BL023 bis-2026 », « FP-01-2026 ») — modifiable par les admins.
+  number    String
+  year      Int
+  seq       Int? // partie numérique (pour proposer le suivant)
+  suffix    String? // « bis »…
+  issuedAt  DateTime     @default(now())
+  order     Order?       @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  orderId   String?
+  quote     Quote?       @relation(fields: [quoteId], references: [id], onDelete: SetNull)
+  quoteId   String?
+  client    Client?      @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  clientId  String?
+  // BL → facture qui le regroupe (une facture peut regrouper plusieurs BL ; null = « à facturer »)
+  invoice   Document?    @relation("DocumentInvoice", fields: [invoiceId], references: [id], onDelete: SetNull)
+  invoiceId String?
+  bls       Document[]   @relation("DocumentInvoice")
+  // Contenu figé à l'émission : client (avec RC/NIF/NIS/AI), lignes, totaux, dates, mode de règlement, échéance…
+  data             Json
+  // Copie du modèle utilisé : modifier le modèle plus tard ne change jamais un document déjà émis
+  templateSnapshot Json
+  customFields     Json? // champs ajoutés (libellé + valeur)
+  createdById      String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@unique([type, number])
+  @@index([clientId])
+  @@index([orderId])
+  @@index([quoteId])
+  @@index([invoiceId])
 }

@@ -1,14 +1,15 @@
-# TODO — Factures et bons de livraison automatiques
+# TODO — Factures, bons de livraison (BL) et proformas automatiques
 
-Statut (9 nov. 2026) : **en attente des décisions de l'entreprise** (numérotation, nommage, règles). Rien n'est codé.
+Statut (12 nov. 2026) : **étape 0 faite** (base de données + calculs, migration `20261112120000_documents_bl_facture` appliquée sur la base du `.env`, **à rejouer en production**). Prochaine : étape 1 (page Réglages → Documents). Points à confirmer en section 6.
 Documents de référence (à la racine) : `F021-2026 Moon Mobil.pdf` / `.xlsx` (facture + classeur Excel actuel), `BL 016-2026 Assiloucom.pdf` (bon de livraison).
 
 ---
 
 ## 1. Objectif
 
-Imprimer directement, depuis une commande, une **facture** et un **bon de livraison (BL)** identiques aux documents actuels de PSI, sans les retaper à la main dans Excel.
+Imprimer, envoyer et exporter depuis une commande une **facture**, un **bon de livraison (BL)** et une **proforma** identiques aux documents actuels de PSI, sans les retaper à la main dans Excel.
 Même principe que les étiquettes : un modèle fidèle, rempli avec les données de la commande, imprimé en un clic (aussi en lot depuis la liste).
+**Les modèles sont modifiables par les admins** dans Réglages → Documents (voir 5.1).
 
 ## 2. Ce qu'on a vu dans les documents
 
@@ -18,100 +19,129 @@ Même principe que les étiquettes : un modèle fidèle, rempli avec les donnée
 - Deux cadres : **Entreprise** (PSI : adresse, tél, RC, NIF, NIS, RIB) et **Client** (nom, adresse, RC, NIF, NIS, **AI**).
 - « Commande du jj/mm/aaaa ».
 - Tableau : Références · Désignation (4 lignes : « Rouleau papier thermique blanc / Grammage papier : 55 gr/m² / Origine papier Europe (Germany) / Mandrin en plastique ») · Laize (mm) · Métrage (m) · Quantité (nbre rouleaux) · PU HT · Montant HT.
-- Totaux : TOTAL HT, TVA 19 %, TOTAL TTC (calculs simples : PU × quantité, HT × 19 %).
+- Totaux : TOTAL HT, TVA 19 %, TOTAL TTC.
 - Cadre « Arrêtée la présente facture à la somme de : … Dinars Algérien et XX Centimes » → **montant en toutes lettres** (à générer).
-- Pied de page : raison sociale, RC, NIF, NIS, RIB, adresse, tél. **Pas de timbre fiscal** sur l'exemple.
+- Pied de page : raison sociale, RC, NIF, NIS, RIB, adresse, tél.
 
 ### Bon de livraison (ex. BL016-2026)
 - Logo, titre « BON DE LIVRAISON », N° BL, Date.
 - Cadres **Fournisseur** (PSI) et **Client** (nom, adresse). Pas de RC/NIF du client.
 - « Commande du jj/mm/aaaa ».
-- Tableau : Références · Désignation · Laize (mm) · Quantité (nbre rlx) · **Observation** (ex. « 100 Cartons de 30 rouleaux », « 46 cartons de 64 rouleaux + 01 carton de 56 »). **Aucun prix.**
+- Tableau : Références (ex. PT-06) · Désignation · Laize (mm) (ex. « 57/41 metres ») · Quantité (nbre rlx) · **Observation** (ex. « 100 Cartons de 30 rouleaux »). **Aucun prix.**
 - Anciens BL : « Date de livraison » et « Lieu de livraison » sous le tableau.
 - « Signature et cachet du Client » (gauche) / « Fournisseur » (droite). Pied de page avec les mentions légales.
 
 ### Dans le classeur Excel actuel
-- Un classeur par client avec **une feuille par BL et par facture**, retapées à la main.
-- Facture et BL ont **chacun leur compteur** (ex. facture 021, BL 016 : pas les mêmes numéros).
+- Un classeur par client, **une feuille par BL et par facture**, retapées à la main.
+- Facture et BL ont chacun leur compteur actuel (facture 021, BL 016 ; Camélia pense que le dernier BL est le 22).
 - **Une facture peut regrouper plusieurs BL** : la F 013/2026 additionne 3200 + 640 rouleaux (BL 013 et BL 013 bis).
-- Variantes de BL : « BL006Bis-2026 », « BL 013 bis-2026 » (livraison complémentaire).
 
 ## 3. Ce qui manque dans le site aujourd'hui
 
-- **Fiche client** : pas de champs **RC, NIF, NIS, AI** → à ajouter (une saisie par client).
-- **Infos PSI** (RC, NIF, NIS, RIB, adresse) : fixes, à mettre dans un seul endroit (réglages ou constantes).
-- **N° de facture** : champ texte saisi à la main sur la commande → à remplacer par une numérotation automatique.
+- **Fiche client** : pas de champs **RC, NIF, NIS, AI**.
+- **Infos PSI** (RC, NIF, NIS, RIB, adresse) : à mettre dans Réglages → Documents.
+- **N° de facture** : champ texte saisi à la main → remplacer par une numérotation automatique (modifiable par les admins).
 - **N° de BL** : n'existe pas.
 - **Montant en lettres** : à coder (français, dinars + centimes).
-- **Nombre de cartons / rouleaux par carton** (Observation du BL) : pas stocké. Les colis des étiquettes (`labelCount`) donnent le nombre de cartons, pas le contenu de chacun.
-- **Date / lieu de livraison** : à voir si on les garde.
-- **TVA** : le site a déjà un interrupteur TVA 19 % (« montant saisi final ») ; à vérifier comment il s'articule avec HT/TTC de la facture.
+- **Contenu des cartons** (Observation du BL) : pas stocké.
+- **PDF** : décision = **ce qui existe déjà** (aucune librairie) : fenêtre d'impression du navigateur → « Enregistrer en PDF », comme les étiquettes (`src/lib/label-print.ts`), la fiche client et le PDF du dashboard. Conséquence : on ne peut pas générer un PDF à joindre automatiquement à un mail (voir 6).
+- **Excel** : `xlsx-js-style` est déjà dans le projet (et `docx` pour Word) → pas de nouvelle dépendance.
+- **Envoi par mail** : `sendEmail()` existe déjà (`src/lib/email/send.ts`, pièces jointes possibles). Expéditeur = **Contact@psi.dz**, le même que celui des récaps (via Brevo, cf. commentaires de `send.ts`) → rien à changer.
+- **TVA** : le site a déjà un interrupteur TVA 19 % ; à relier aux totaux de la facture.
 
-## 4. Décisions déjà prises
+## 4. Décisions de l'entreprise (reçues le 12 nov. 2026)
 
+### Numérotation
 | Sujet | Décision |
 |---|---|
-| Ordre | **BL d'abord**, facture ensuite |
-| QR sur le BL | **Oui** (même QR « Valider la réception » que l'étiquette) |
-| TVA | **19 %**, comme sur la facture |
-| Timbre fiscal | **Non** (absent de l'exemple), sauf demande contraire de l'entreprise |
-| Qui peut émettre une facture | **Admins seulement** pour l'instant — **à retravailler plus tard** (décision de l'entreprise) |
-| Facture émise | Doit être **figée** (plus modifiable) ; correction par avoir — à confirmer |
-
-## 5. Questions à poser à l'entreprise (leur logique)
-
-### Numérotation et nommage
-1. **Facture** : quel format exact ? (« F 021/2026 » sur la facture, « F006-2026 » dans l'import des ventes.) Le compteur repart-il à 001 chaque année ?
-2. **BL** : quel format ? (« BL016-2026 », « BL 013-2026 », « BL006Bis-2026 » : lequel fait foi ?) Compteur séparé de la facture ?
-3. **Derniers numéros utilisés** à ce jour (facture après F 021/2026 ; BL après BL 016-2026 ou plus récent) pour que le compteur démarre juste après.
-4. Les « **bis** » : à quoi servent-ils exactement (livraison complémentaire du même BL) ? Faut-il les gérer ?
-5. **Y a-t-il aussi** des devis / proformas numérotés (avec leur propre compteur) ?
-   - Si oui : un exemple de **facture proforma** / de devis, le format du numéro, et sa durée de validité ?
-   - Une proforma devient-elle la facture (même numéro) ou une facture à part ?
-   - Les produits **sur devis** (papier médical, sans prix sur le site) : le prix est-il saisi à la main sur la commande/proforma au moment de la facture ?
+| Facture | Format **« F 021/2026 »** (le premier format), compteur **par année** (repart à 1), numéros qui se suivent. **Modifiable par les admins.** |
+| BL | Le numéro **essaie de coïncider avec la facture** (BL 1 ↔ F 1). **Modifiable par les admins.** Compteur de départ réglable. |
+| « Bis » | Quand un client veut un BL avant la facture / plusieurs BL pour une même facture : le BL s'appelle « bis ». L'app **propose** le nom (ex. BL 13 bis) et l'utilisateur peut le changer. |
+| Proforma | Les devis sont des proformas, numérotées **FP-xx-2026**, compteur propre. |
+| Compteurs | Les derniers numéros ne sont pas certains (facture : F 021 vu ; BL : peut-être 22) → **compteurs modifiables dans Réglages → Documents** : on saisit le dernier numéro utilisé, les **numéros suivants se recalculent à partir de là** (les documents déjà émis ne changent pas ; alerte si un numéro existe déjà). |
 
 ### Règles de gestion
-6. Une facture = **une commande**, ou plusieurs BL regroupés sur une seule facture (cas F 013) ?
-7. Peut-on **facturer sans BL** (et livrer sans facture) ? Quel est l'ordre habituel : BL puis facture ?
-8. Une facture émise peut-elle être **modifiée / annulée** ? Comment (avoir, nouvelle facture) ?
-9. **Qui** peut émettre une facture / un BL (admins seulement, commerciaux aussi) ?
-10. **Échéance de règlement** : toujours vide, ou parfois remplie ? Quelle règle ?
-11. **Mode de règlement** : toujours « Virement/Chèque » ? Et en espèces (timbre fiscal à ajouter ?) ?
-12. **TVA** : toujours 19 % ? Des clients exonérés ?
+| Sujet | Décision |
+|---|---|
+| Ordre | **BL d'abord**, facture ensuite. |
+| Facture sans BL | **Non.** On peut **livrer sans facture** (la facture vient après). |
+| Regroupement | **Oui** : sélectionner plusieurs BL du même client puis « Regrouper en facture ». |
+| Qui émet / modifie une facture | **Les admins**, y compris après émission (avec historique des modifications). Remplace l'ancienne idée « figée + avoir ». |
+| Envoi au client | **Par mail, avec aperçu d'abord** (destinataire, objet, texte, PDF joint) ; rien ne part avant le clic sur « Envoyer ». |
+| Échéance de règlement | **Facultative**, selon les clients. |
+| Mode de règlement | Lié à la facture, modifiable. **Espèces → timbre calculé selon un palier de montant** (pas un taux fixe) : **tableau de paliers modifiable** par les admins dans Réglages → Documents. |
+| TVA | **Toujours 19 %.** |
+| Infos client (RC, NIF, NIS, AI) | Le client les envoie, les admins les saisissent ; **pop-up** si elles manquent à la génération (et enregistrement sur la fiche client). |
 
 ### Contenu des documents
-13. **Références** (« PT-07 », « PT-06 ») : quelle est la source ? Réf produit du site (dans la base de test : « 57/30 », « PT-007 ») ou un code interne de famille ?
-14. **Désignation** : le texte « Rouleau papier thermique blanc / Grammage 55 / Origine Europe (Germany) / Mandrin plastique » est-il le même pour tous les produits, ou dépend-il du produit ? (pour les autres produits : quel texte ?)
-15. **Observation du BL** (cartons de 64 rouleaux, etc.) : comment est-elle déterminée ? Saisie à la main à chaque BL, ou calculée (quantité ÷ rouleaux par carton) ?
-16. **Date et lieu de livraison** : à garder sur le BL ?
-17. **Adresse de PSI** : « niveau M1 » (en-tête) ou « Niveau 5 » (pied de page) ? « Paper Solution**s** Industry » avec ou sans « s » (le BL a « Solution ») ?
-18. **Logo** : le logo couleur actuel (celui des documents) à garder ?
-19. Faut-il garder une **copie Excel** (export) en plus du PDF imprimé ?
+| Sujet | Décision |
+|---|---|
+| QR sur le BL | **Oui par défaut**, désactivable (modèle + à chaque impression). |
+| Références | Réf du site et code interne (PT-xx) **liés mais modifiables** sur le document. |
+| Désignation | **Par catégorie**, modifiable (et par produit si besoin). |
+| Date et lieu de livraison | Gardés. Observation (cartons) modifiable. |
+| Adresse / nom de PSI | Modifiables dans Réglages → Documents. |
+| Logo | Inchangé. |
+| Format de sortie | **PDF ou Excel au choix.** |
+| Papier médical | On ne touche à rien. |
 
-## 6. Plan de réalisation (une fois les réponses reçues)
+## 5. Plan de réalisation
 
-### Étape 1 — Bon de livraison
-- [ ] Modèle BL fidèle au PDF (A4, logo, cadres, tableau, signatures, pied de page) + QR de réception
-- [ ] Numérotation BL automatique par année (compteur de départ réglable)
-- [ ] Bouton « Imprimer le BL » dans le panneau d'une commande + impression en lot depuis la liste
-- [ ] Saisie facultative avant impression : observation (cartons), date / lieu de livraison
-- [ ] Désignation construite à partir des champs du produit (grammage, origine, mandrin) avec saisie des valeurs manquantes
+### 5.1 Principe des modèles modifiables (Réglages → Documents)
+- Nouvelle page **Réglages → Documents**, **réservée aux admins**.
+- Un modèle par type : **BL, Facture, Proforma**.
+- Par modèle : activer/désactiver chaque **bloc** (QR, cadre Client, observation, date et lieu de livraison, signatures, pied de page…), modifier **tous les textes et titres**, **renommer / masquer / ajouter des colonnes** du tableau, **ajouter des champs personnalisés** (libellé + valeur par défaut, ex. « N° bon de commande client »).
+- **Mentions légales non verrouillées** : les admins peuvent les ajuster depuis les modèles (mêmes droits que le reste).
+- La **mise en page reste fixe** (fidèle aux PDF actuels) : pas d'éditeur libre par glisser-déposer.
+- **Aperçu en direct** + bouton « Revenir au modèle d'origine ».
+- **Un document émis garde une copie du modèle utilisé** : modifier un modèle plus tard ne change jamais les documents déjà émis.
+- À l'impression : petite fenêtre (comme celle des étiquettes) : QR oui/non, PDF ou Excel, exemplaires ; reprend les choix du modèle, modifiables à chaque fois.
+- Aussi dans cette page : **infos PSI** (raison sociale, adresse, tél, RC, NIF, NIS, RIB, pied de page), **désignation par catégorie**, **compteurs** (dernier n° de BL, de facture, de proforma : modifiables, les suivants se recalculent), **taux** (TVA 19 %) et **paliers du timbre** (de / à / taux, + minimum éventuel).
 
-### Étape 2 — Facture
-- [ ] Champs client : RC, NIF, NIS, AI (fiche client + formulaire)
-- [ ] Infos PSI fixes (RC, NIF, NIS, RIB, adresse)
-- [ ] Modèle facture fidèle au PDF + totaux HT / TVA 19 % / TTC
-- [ ] Montant en toutes lettres (français, dinars + centimes)
-- [ ] Numérotation facture automatique, sans trou, par année
-- [ ] Facture figée après émission ; règle de correction (avoir) selon l'entreprise
-- [ ] Bouton « Générer / Imprimer la facture » (admins) + lien avec le champ N° de facture existant
-- [ ] Reprise des anciens numéros (F 001 à F 021…) pour ne pas créer de doublon
+### Étape 0 — Base de données et moteur ✅ (12 nov. 2026)
+- [x] Tables `DocumentTemplate`, `DocumentSettings`, `DocumentCounter`, `Document` ; colonnes client RC / NIF / NIS / AI ; `documentDesignation` sur catégorie et produit ; `DOCUMENT` ajouté à l'historique.
+- [x] Compteurs par type et par année (`src/lib/documents/numbering.ts`) ; compteur facture 2026 initialisé à **22** (prochaine : F 023/2026).
+- [x] Montant en toutes lettres (`amount-in-words.ts`), testé contre la F 021 ; timbre par paliers (`stamp-duty.ts`, valeurs à confirmer).
+- [x] Modèles et réglages par défaut repris des PDF (`defaults.ts`, `types.ts`).
+- [ ] Moteur de rendu unique (modèle + données → impression / Excel) : à faire avec l'étape 2 (BL).
+- [ ] PDF : fenêtre d'impression existante (aucune librairie). Excel : `xlsx-js-style` déjà présent.
+- [ ] **Migration à rejouer en production** et à ajouter à la liste de `TODO.md` §0 (`npx prisma migrate deploy`, puis initialiser le compteur facture à 22).
 
-### Étape 3 — Devis / proforma (si l'entreprise en fait)
-- [ ] Même moteur, numérotation propre
+### Étape 1 — Page Réglages → Documents
+- [ ] Page réservée aux admins, onglets BL / Facture / Proforma.
+- [ ] Interrupteurs de blocs, édition des textes, colonnes, champs personnalisés, aperçu, retour au modèle d'origine.
+- [ ] Infos PSI, désignation par catégorie, compteurs, taux.
+
+### Étape 2 — Bon de livraison
+- [ ] Modèle BL fidèle au PDF + QR de réception (même QR que l'étiquette).
+- [ ] Numéro proposé = celui de la future facture ; « bis » proposé quand le numéro est déjà pris ; modifiable.
+- [ ] Bouton « Imprimer le BL » dans le panneau d'une commande + impression en lot depuis la liste.
+- [ ] Saisie avant impression : observation (cartons), date / lieu de livraison, champs personnalisés.
+- [ ] Désignation construite depuis la catégorie/produit, références liées (réf site + code interne) modifiables.
+- [ ] État « à facturer » sur les BL pour retrouver ceux qui n'ont pas encore de facture.
+
+### Étape 3 — Facture
+- [ ] Champs client : RC, NIF, NIS, AI (fiche client + pop-up de saisie si manquants).
+- [ ] Création depuis un ou plusieurs BL ; **« Regrouper en facture »** (même client, lignes identiques additionnées, avertissement si prix différents ; un BL ne peut être que dans une facture).
+- [ ] Totaux HT / TVA 19 % / TTC, **timbre selon les paliers si espèces**, montant en lettres, échéance facultative.
+- [ ] Numérotation « F 021/2026 », par année, modifiable par les admins ; reprise des anciens numéros (F 001 à F 021…) pour éviter les doublons.
+- [ ] Facture modifiable par les admins après émission, avec historique (qui, quoi, quand).
+- [ ] Envoi par mail avec aperçu (destinataire, objet, texte, PDF joint), journal de l'envoi.
+- [ ] Export PDF ou Excel au choix.
+
+### Étape 4 — Proforma
+- [ ] Même moteur, numéro **FP-xx-2026**, compteur propre ; produits sur devis : prix saisi à la main.
 
 ### Vérifications
-- [ ] Impression fidèle (comparaison PDF d'origine / PDF généré), A4
-- [ ] Cas : plusieurs produits, beaucoup de lignes (2e page), sans TVA, client sans RC/NIF
-- [ ] Migration à rejouer en production
-- [ ] Permissions (admins seulement pour l'instant)
+- [ ] Impression fidèle (comparaison avec les PDF d'origine), A4.
+- [ ] Cas : plusieurs produits, beaucoup de lignes (2e page), espèces (timbre), client sans RC/NIF, regroupement de BL, « bis ».
+- [ ] Modèle modifié → un ancien document émis ne bouge pas.
+- [ ] Permissions : admins seulement (modèles, émission, modification).
+- [ ] Migration rejouée en production ; commit/push **faits par toi** (Claude donne les commandes).
+
+## 6. Points encore à confirmer
+1. ✅ **Compteurs** : modifiables dans les réglages, les suivants se recalculent (dernier n° exact à vérifier avec l'admin au moment de les saisir).
+2. **Paliers du timbre** : valeurs de départ à faire confirmer par l'admin/comptable (à ma connaissance : 1 % jusqu'à 300 000 DA, 1,5 % de 300 000 à 30 millions, 2 % au-delà, minimum 5 DA — **non vérifié**). Base de calcul : TTC ?
+3. **Proforma devenue facture** : réponse « oui » ambiguë → à reposer : la facture a-t-elle son **propre numéro F xx/2026** (la proforma FP reste en référence) ?
+4. ✅ **Adresse mail** : Contact@psi.dz, la même que les récaps.
+5. ✅ **PDF** : l'existant (impression → « Enregistrer en PDF »). Conséquence : pas de PDF joint automatiquement au mail → proposer : lien sécurisé vers le document (comme la page de réception par QR) et/ou **Excel en pièce jointe**. À valider.
