@@ -24,7 +24,7 @@
     "jspdf": "^2.5.2",
     "next": "^16.3.5",
     "next-auth": "^5.0.0-beta.31",
-    "nodemailer": "^9.1.1",
+    "nodemailer": "^10.1.4",
     "pg": "^8.22.0",
     "prisma": "^6.19.3",
     "qrcode": "^1.5.4",
