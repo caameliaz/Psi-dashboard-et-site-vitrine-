@@ -73,7 +73,7 @@ export const DOCUMENT_CSS = `
 html,body{background:#fff}
 body{font-family:Arial,Helvetica,sans-serif;font-size:9pt;color:#000}
 .page{width:210mm;min-height:297mm;margin:0 auto;padding:14mm 14mm 10mm;display:flex;flex-direction:column;background:#fff}
-.top{display:flex;justify-content:space-between;align-items:flex-end;min-height:26mm}
+.top{display:flex;justify-content:space-between;align-items:flex-end;min-height:26mm;padding-bottom:1.5mm}
 .logo{height:24mm;width:auto;display:block}
 .qrbox{display:flex;align-items:center;gap:2mm;font-size:6.5pt;font-weight:700;text-align:right;line-height:1.25}
 .qrbox svg{width:22mm;height:22mm;display:block}

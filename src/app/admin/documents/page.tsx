@@ -7,6 +7,7 @@ import { api } from '@/lib/documents/client';
 import { fmtDate, fmtMoney } from '@/lib/documents/calc';
 import type { DocumentKind } from '@/lib/documents/types';
 import { DocumentFormModal } from '@/components/documents/DocumentFormModal';
+import { CreateDocumentModal, type CreateChoice } from '@/components/documents/CreateDocumentModal';
 import { DocumentRowActions, TYPE_STYLE, type DocListItem } from '@/components/documents/DocumentsSection';
 import { ghostBtn, inputCls } from '@/components/documents/WideModal';
 
@@ -26,6 +27,8 @@ function DocumentsPageInner() {
   const [onlyToInvoice, setOnlyToInvoice] = useState(false);
   const [sel, setSel] = useState<string[]>([]);
   const [group, setGroup] = useState<string[] | null>(null);
+  const [chooser, setChooser] = useState(false);
+  const [creating, setCreating] = useState<CreateChoice | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -55,8 +58,11 @@ function DocumentsPageInner() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-[20px] font-black text-[#0F172A]">Documents</h1>
-          <p className="text-[12px] text-[#8A9BB5]">Bons de livraison, factures et proformas. On les crée depuis une commande ou un devis (section « Documents » du détail).</p>
+          <p className="text-[12px] text-[#8A9BB5]">Bons de livraison, factures et proformas. Tu peux aussi les créer depuis le détail d&apos;une commande ou d&apos;un devis.</p>
         </div>
+        {!readOnly && (
+          <button type="button" onClick={() => setChooser(true)} className="px-4 py-2.5 rounded-lg text-[13px] font-bold text-white" style={{ background: '#4CAF4F' }}>+ Créer un document</button>
+        )}
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
@@ -126,9 +132,11 @@ function DocumentsPageInner() {
           </tbody>
         </table>
       </div>
-      <p className="text-[11px] text-[#8A9BB5]">« Imprimer / PDF » ouvre la fenêtre d&apos;impression : choisis « Enregistrer au format PDF » pour garder un fichier.</p>
+      <p className="text-[11px] text-[#8A9BB5]">« Télécharger PDF » enregistre directement le fichier ; « Imprimer » ouvre la fenêtre d&apos;impression.</p>
       <button type="button" onClick={load} className={`${ghostBtn} self-start`}>Actualiser</button>
 
+      {chooser && <CreateDocumentModal isAdmin={isAdmin} onClose={() => setChooser(false)} onChoose={(c) => { setChooser(false); setCreating(c); }} />}
+      {creating && <DocumentFormModal mode="create" kind={creating.kind} orderId={creating.orderId} quoteId={creating.quoteId} blIds={creating.blIds} isAdmin={isAdmin} onClose={() => setCreating(null)} onSaved={() => { setTab(creating.kind); load(); }} />}
       {group && <DocumentFormModal mode="create" kind="FACTURE" blIds={group} isAdmin={isAdmin} onClose={() => setGroup(null)} onSaved={() => { setSel([]); load(); }} />}
     </div>
   );

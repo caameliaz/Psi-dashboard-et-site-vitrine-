@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import { api, downloadExcel, printDocumentById } from '@/lib/documents/client';
+import { downloadDocumentPdf } from '@/lib/documents/pdf';
+import type { RenderableDocument } from '@/lib/documents/types';
 import { WideModal, inputCls, labelCls, ghostBtn, greenBtn } from './WideModal';
 
 // Aperçu du mail avant envoi : destinataire, objet, texte, lien et pièce jointe visibles ; rien ne part avant « Envoyer ».
@@ -73,8 +75,15 @@ export function DocumentActions({ id, isAdmin, onChanged, compact = false }: { i
   const [mail, setMail] = useState(false);
   const [err, setErr] = useState('');
   const [copied, setCopied] = useState(false);
+  const [pdfBusy, setPdfBusy] = useState(false);
   const btn = `${compact ? 'px-2 py-1 text-[11px]' : 'px-3 py-1.5 text-[12px]'} rounded-lg border border-[#E2E8F0] bg-white font-bold text-[#2563EB] hover:bg-[#F8FAFC] transition-colors`;
 
+  const pdf = async () => {
+    setErr(''); setPdfBusy(true);
+    try { const { doc } = await api<{ doc: RenderableDocument }>(`/api/documents/${id}`); await downloadDocumentPdf(doc); }
+    catch (e) { setErr(e instanceof Error ? e.message : 'Erreur PDF'); }
+    finally { setPdfBusy(false); }
+  };
   const print = async () => { setErr(''); try { await printDocumentById(id); } catch (e) { setErr(e instanceof Error ? e.message : 'Erreur'); } };
   const copyLink = async () => {
     try {
@@ -87,7 +96,8 @@ export function DocumentActions({ id, isAdmin, onChanged, compact = false }: { i
   return (
     <>
       <div className="flex flex-wrap gap-1.5 items-center">
-        <button type="button" onClick={print} className={btn}>Imprimer / PDF</button>
+        <button type="button" onClick={pdf} disabled={pdfBusy} className={btn}>{pdfBusy ? 'PDF…' : 'Télécharger PDF'}</button>
+        <button type="button" onClick={print} className={btn}>Imprimer</button>
         <button type="button" onClick={() => downloadExcel(id)} className={btn}>Excel</button>
         {isAdmin && <button type="button" onClick={() => setMail(true)} className={btn}>E-mail</button>}
         {isAdmin && <button type="button" onClick={copyLink} className={btn}>{copied ? 'Lien copié ✓' : 'Copier le lien'}</button>}
