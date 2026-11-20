@@ -6,6 +6,12 @@ import { useRole } from '@/lib/role-context';
 import { RequirePerm } from '@/components/RequirePerm';
 import { apiError } from '@/lib/api-error';
 import { resizeImageToDataUrl } from '@/lib/resize-image';
+import {
+  CategoryTrFields, LangTabs, RefTrFields,
+  catTrFromStore, defTrFromStore, emptyCatTr, emptyRefTr, refTrFromStore, saveCatTr, saveDefTr, saveRefTr,
+  type CatTr, type DefTr, type EditLang, type RefTr,
+} from '@/components/admin/CatalogTranslation';
+import { emptyStore, type TrStore } from '@/lib/i18n/translations-shared';
 
 function IconPencil() {
   return (
@@ -100,8 +106,11 @@ function dbToRef(p: any): Ref {
 const inputClass = "w-full px-3 py-2.5 rounded-lg border border-[#E2E8F0] text-sm text-[#0F172A] focus:outline-none focus:border-[#4CAF4F] focus:ring-1 focus:ring-[#4CAF4F] transition-colors bg-[#F8FAFC]";
 
 // ── Modale "Nouvelle référence" — pour la catégorie sélectionnée ────────────
-interface RefForm { name: string; width: string; length: string; metrage: string; usage: string; price: string; customFields: Record<string, string>; mode: 'ACHETE' | 'FABRIQUE' | 'LES_DEUX'; purchasePrice: string; stockMax: string; visibleOnSite: boolean; }
-const emptyRefForm: RefForm = { name: '', width: '', length: '', metrage: '', usage: '', price: '', customFields: {}, mode: 'FABRIQUE', purchasePrice: '', stockMax: '', visibleOnSite: true };
+interface RefForm { name: string; width: string; length: string; metrage: string; usage: string; price: string; customFields: Record<string, string>; mode: 'ACHETE' | 'FABRIQUE' | 'LES_DEUX'; purchasePrice: string; stockMax: string; visibleOnSite: boolean; tr: RefTr; }
+const emptyRefForm: RefForm = { name: '', width: '', length: '', metrage: '', usage: '', price: '', customFields: {}, mode: 'FABRIQUE', purchasePrice: '', stockMax: '', visibleOnSite: true, tr: emptyRefTr() };
+
+const hasRefTr = (t: RefTr) => JSON.stringify(t) !== JSON.stringify(emptyRefTr());
+const hasCatTr = (t: CatTr) => JSON.stringify(t) !== JSON.stringify(emptyCatTr());
 
 const MODE_OPTIONS: { value: RefForm['mode']; label: string }[] = [
   { value: 'FABRIQUE', label: 'Fabriqué' },
@@ -109,7 +118,18 @@ const MODE_OPTIONS: { value: RefForm['mode']; label: string }[] = [
   { value: 'LES_DEUX', label: 'Les deux' },
 ];
 
-function RefFormFields({ form, setForm, fieldDefs }: { form: RefForm; setForm: (f: RefForm) => void; fieldDefs: FieldDef[] }) {
+function RefFormFields({ form, setForm, fieldDefs, lang = 'fr', defTr, setDefTr }: {
+  form: RefForm; setForm: (f: RefForm) => void; fieldDefs: FieldDef[];
+  // Langue de saisie : français = formulaire d'origine ; English / العربية = textes traduits (nom, utilisation, fiche technique)
+  lang?: EditLang; defTr?: DefTr; setDefTr?: (d: DefTr) => void;
+}) {
+  if (lang !== 'fr' && defTr && setDefTr) {
+    return (
+      <RefTrFields lang={lang} value={form.tr[lang]} onChange={(v) => setForm({ ...form, tr: { ...form.tr, [lang]: v } })}
+        original={{ name: form.name, usage: form.usage, fields: form.customFields }}
+        fieldDefs={fieldDefs} defTr={defTr} setDefTr={setDefTr} />
+    );
+  }
   return (
     <div className="space-y-4">
       <div>
@@ -254,11 +274,16 @@ function DeleteModal({ label, onDeactivate, onDelete, onClose }: {
 }
 
 // ── Modale "Nouveau produit" — crée une catégorie + ses références ─────────
-interface NewCatForm { name: string; prefix: string; photo: string; description: string; refs: RefForm[]; }
-const emptyNewCatForm: NewCatForm = { name: '', prefix: '', photo: '', description: '', refs: [{ ...emptyRefForm }] };
+interface NewCatForm { name: string; prefix: string; photo: string; description: string; refs: RefForm[]; tr: CatTr; }
+const emptyNewCatForm: NewCatForm = { name: '', prefix: '', photo: '', description: '', refs: [{ ...emptyRefForm }], tr: emptyCatTr() };
 
-function NewCategoryModal({ onClose, onCreated, fieldDefs, existingPrefixes }: { onClose: () => void; onCreated: (catId: string) => void; fieldDefs: FieldDef[]; existingPrefixes: string[] }) {
+function NewCategoryModal({ onClose, onCreated, fieldDefs, existingPrefixes, trStore, defTr, setDefTr }: {
+  onClose: () => void; onCreated: (catId: string) => void; fieldDefs: FieldDef[]; existingPrefixes: string[];
+  trStore: TrStore; defTr: DefTr; setDefTr: (d: DefTr) => void;
+}) {
   const [form, setForm] = useState<NewCatForm>({ ...emptyNewCatForm, prefix: existingPrefixes[0] ?? '' });
+  // Langue de saisie de l'overlay : français (original) ou traduction English / العربية
+  const [lang, setLang] = useState<EditLang>('fr');
   const [saving, setSaving] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   // Choisir un préfixe déjà utilisé (la numérotation continue après ce qui existe, cf. API) ou
@@ -292,6 +317,9 @@ function NewCategoryModal({ onClose, onCreated, fieldDefs, existingPrefixes }: {
         return;
       }
       const cat = await catRes.json();
+      // Traductions de la catégorie (nom, description) saisies dans les onglets English / العربية
+      let trFailed = false;
+      if (hasCatTr(form.tr) && !(await saveCatTr(cat.id, form.tr))) trFailed = true;
 
       const validRefs = form.refs.filter((r) => r.width.trim() && r.length.trim());
       const refResults = await Promise.all(validRefs.map((r) => fetch('/api/products', {
@@ -325,7 +353,12 @@ function NewCategoryModal({ onClose, onCreated, fieldDefs, existingPrefixes }: {
             body: JSON.stringify({ definitionId, value: value.trim() }),
           })
         ));
+        // Traductions de la référence (nom, utilisation, valeurs de la fiche technique)
+        if (hasRefTr(validRefs[i].tr) && !(await saveRefTr(created.id, validRefs[i].tr))) trFailed = true;
       }));
+      // Libellés traduits de la fiche technique (communs à toutes les références)
+      if (!(await saveDefTr(defTr, trStore))) trFailed = true;
+      if (trFailed) alert('Le produit est créé, mais une partie des traductions n\u2019a pas pu être enregistrée. Rouvrez la catégorie (Modifier) pour la saisir à nouveau.');
 
       onCreated(cat.id);
     } finally {
@@ -336,6 +369,15 @@ function NewCategoryModal({ onClose, onCreated, fieldDefs, existingPrefixes }: {
   return (
     <Modal title="Nouveau produit" onClose={onClose}>
       <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-1">
+        {/* Bouton traduction : choisir la langue de saisie (nom, description, références…) */}
+        <LangTabs value={lang} onChange={setLang} />
+
+        {lang !== 'fr' && (
+          <CategoryTrFields lang={lang} value={form.tr[lang]} onChange={(v) => setForm({ ...form, tr: { ...form.tr, [lang]: v } })}
+            original={{ name: form.name, description: form.description }} />
+        )}
+
+        {lang === 'fr' && <>
         {/* Photo catégorie */}
         <div>
           <label className="block text-[12px] font-semibold text-[#374151] mb-1.5">Photo de la catégorie</label>
@@ -395,20 +437,21 @@ function NewCategoryModal({ onClose, onCreated, fieldDefs, existingPrefixes }: {
           <textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={3}
             placeholder="Description affichée sur le site public" className={inputClass + ' resize-none'} />
         </div>
+        </>}
 
         <div>
           <div className="flex items-center justify-between mb-2">
             <label className="block text-[12px] font-semibold text-[#374151]">Références</label>
-            <button type="button" onClick={addRef} className="text-[12px] font-bold text-[#4CAF4F] hover:text-[#388E3C]">+ Ajouter une référence</button>
+            {lang === 'fr' && <button type="button" onClick={addRef} className="text-[12px] font-bold text-[#4CAF4F] hover:text-[#388E3C]">+ Ajouter une référence</button>}
           </div>
           <div className="flex flex-col gap-3">
             {form.refs.map((r, i) => (
               <div key={i} className="rounded-xl border border-[#E2E8F0] p-3 relative">
-                {form.refs.length > 1 && (
+                {lang === 'fr' && form.refs.length > 1 && (
                   <button type="button" onClick={() => removeRef(i)} title="Retirer"
                     className="absolute top-2 right-2 w-6 h-6 flex items-center justify-center rounded-lg text-[#EF4444] hover:bg-[#FEF2F2] text-xs font-bold">×</button>
                 )}
-                <RefFormFields form={r} setForm={(nf) => setRef(i, nf)} fieldDefs={fieldDefs} />
+                <RefFormFields form={r} setForm={(nf) => setRef(i, nf)} fieldDefs={fieldDefs} lang={lang} defTr={defTr} setDefTr={setDefTr} />
               </div>
             ))}
           </div>
@@ -521,6 +564,12 @@ function ProductsPageInner() {
   const [newRefForm, setNewRefForm] = useState<RefForm>(emptyRefForm);
   const [editRef, setEditRef] = useState<Ref | null>(null);
   const [editRefForm, setEditRefForm] = useState<RefForm>(emptyRefForm);
+  // Traductions du catalogue (English / العربية) : tout ce qui est enregistré + libellés de la fiche technique en cours de saisie
+  const [trStore, setTrStore] = useState<TrStore>(emptyStore());
+  const [defTr, setDefTr] = useState<DefTr>({});
+  const [refLang, setRefLang] = useState<EditLang>('fr');
+  const [catLang, setCatLang] = useState<EditLang>('fr');
+  const [catTrDraft, setCatTrDraft] = useState<CatTr>(emptyCatTr());
   const [deleteRef, setDeleteRef] = useState<Ref | null>(null);
 
   const [editingDesc, setEditingDesc] = useState(false);
@@ -552,7 +601,14 @@ function ProductsPageInner() {
     }
   }, []);
 
-  useEffect(() => { fetchProducts(); fetchCategories(); }, [fetchProducts, fetchCategories]);
+  const loadTr = useCallback(async () => {
+    try {
+      const res = await fetch('/api/translations');
+      if (res.ok) { const st: TrStore = await res.json(); setTrStore(st); setDefTr(defTrFromStore(st)); }
+    } catch { /* traductions indisponibles : l'overlay s'ouvre vide */ }
+  }, []);
+
+  useEffect(() => { fetchProducts(); fetchCategories(); loadTr(); }, [fetchProducts, fetchCategories, loadTr]);
   // La référence sélectionnée appartient à la catégorie affichée — on la désélectionne
   // en changeant de catégorie, sinon son panneau photo resterait affiché à tort.
   useEffect(() => { setSelectedRefId(null); }, [selectedCatId]);
@@ -609,7 +665,8 @@ function ProductsPageInner() {
   const openEditRef = (r: Ref) => {
     const customFields: Record<string, string> = {};
     r.customFields.forEach((cf) => { customFields[cf.definitionId] = cf.value; });
-    setEditRefForm({ name: r.name ?? '', width: String(r.width), length: String(r.length), metrage: r.metrage != null ? String(r.metrage) : '', usage: r.usage, price: String(r.price), customFields, mode: r.mode, purchasePrice: r.purchasePrice != null ? String(r.purchasePrice) : '', stockMax: String(r.stockMax), visibleOnSite: r.visibleOnSite });
+    setEditRefForm({ name: r.name ?? '', width: String(r.width), length: String(r.length), metrage: r.metrage != null ? String(r.metrage) : '', usage: r.usage, price: String(r.price), customFields, mode: r.mode, purchasePrice: r.purchasePrice != null ? String(r.purchasePrice) : '', stockMax: String(r.stockMax), visibleOnSite: r.visibleOnSite, tr: refTrFromStore(trStore, r.id) });
+    setRefLang('fr');
     setEditRef(r);
   };
 
@@ -650,6 +707,9 @@ function ProductsPageInner() {
       return;
     }
     await saveCustomFields(editRef.id, editRefForm.customFields);
+    const trOk = (await saveRefTr(editRef.id, editRefForm.tr)) && (await saveDefTr(defTr, trStore));
+    if (!trOk) alert('La référence est enregistrée, mais une partie des traductions n\u2019a pas pu l\u2019être. Rouvrez-la pour réessayer.');
+    await loadTr();
     await fetchProducts();
     setEditRef(null);
   };
@@ -678,6 +738,9 @@ function ProductsPageInner() {
     }
     const created = await res.json();
     await saveCustomFields(created.id, newRefForm.customFields);
+    const trOk = (!hasRefTr(newRefForm.tr) || (await saveRefTr(created.id, newRefForm.tr))) && (await saveDefTr(defTr, trStore));
+    if (!trOk) alert('La référence est créée, mais une partie des traductions n\u2019a pas pu être enregistrée. Ouvrez-la (Modifier) pour réessayer.');
+    await loadTr();
     await fetchProducts();
     await fetchCategories();
     setNewRefForm(emptyRefForm);
@@ -709,7 +772,7 @@ function ProductsPageInner() {
     setDeleteRef(null);
   };
 
-  const startEditDesc = () => { setDescDraft(selectedCat?.description ?? ''); setPrefixDraft(selectedCat?.prefix ?? ''); setQuoteOnlyDraft(Boolean(selectedCat?.quoteOnly)); setEditingDesc(true); };
+  const startEditDesc = () => { setCatLang('fr'); setCatTrDraft(selectedCatId ? catTrFromStore(trStore, selectedCatId) : emptyCatTr()); setDescDraft(selectedCat?.description ?? ''); setPrefixDraft(selectedCat?.prefix ?? ''); setQuoteOnlyDraft(Boolean(selectedCat?.quoteOnly)); setEditingDesc(true); };
   const saveDesc = async () => {
     if (!selectedCatId) return;
     const res = await fetch(`/api/categories/${selectedCatId}`, {
@@ -721,6 +784,8 @@ function ProductsPageInner() {
       alert(err.error ?? 'Impossible d\'enregistrer la description.');
       return;
     }
+    if (!(await saveCatTr(selectedCatId, catTrDraft))) alert('La catégorie est enregistrée, mais les traductions n\u2019ont pas pu l\u2019être. Réessayez.');
+    await loadTr();
     await fetchCategories();
     setEditingDesc(false);
   };
@@ -807,6 +872,7 @@ function ProductsPageInner() {
                   visibleOnSite: model.visibleOnSite,
                   customFields: Object.fromEntries(model.customFields.map((c) => [c.definitionId, c.value])),
                 } : emptyRefForm);
+                setRefLang('fr');
                 setShowNewRef(true);
               }}
                 className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold border border-[#4CAF4F] text-[#4CAF4F] hover:bg-[#F0FDF4] transition-colors">
@@ -878,6 +944,13 @@ function ProductsPageInner() {
               </div>
               {editingDesc ? (
                 <div className="flex flex-col gap-2">
+                  {/* Bouton traduction : nom et description de la catégorie en English / العربية */}
+                  <LangTabs value={catLang} onChange={setCatLang} />
+                  {catLang !== 'fr' && selectedCat && (
+                    <CategoryTrFields lang={catLang} value={catTrDraft[catLang]} onChange={(v) => setCatTrDraft({ ...catTrDraft, [catLang]: v })}
+                      original={{ name: selectedCat.name, description: selectedCat.description ?? '' }} />
+                  )}
+                  {catLang === 'fr' && <>
                   <div>
                     <label className="block text-[11px] font-semibold text-[#374151] mb-1">Préfixe des références <span className="text-[#ABBED1] font-normal">(facultatif — ex: PTT)</span></label>
                     <input value={prefixDraft} onChange={(e) => setPrefixDraft(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))} maxLength={6} placeholder="ex: PTT" className={inputClass} />
@@ -887,6 +960,7 @@ function ProductsPageInner() {
                     <input type="checkbox" checked={quoteOnlyDraft} onChange={(e) => setQuoteOnlyDraft(e.target.checked)} className="mt-0.5 accent-[#4CAF4F]" />
                     <span className="text-[12px] text-[#374151]"><b>Sur devis uniquement</b> — sur le site public : prix masqués et « Demander un devis » à la place de « Ajouter au panier » (ex : papier médical).</span>
                   </label>
+                  </>}
                   <div className="flex gap-2">
                     <button onClick={() => setEditingDesc(false)} className="flex-1 px-3 py-2 rounded-lg border border-[#E2E8F0] text-[12px] font-semibold text-[#374151] hover:bg-[#F8FAFC]">Annuler</button>
                     <button onClick={saveDesc} className="flex-1 px-3 py-2 rounded-lg text-[12px] font-bold text-white" style={{ background: '#4CAF4F' }}>Enregistrer</button>
@@ -1098,13 +1172,17 @@ function ProductsPageInner() {
           }}
           fieldDefs={fieldDefs}
           existingPrefixes={existingPrefixes}
+          trStore={trStore}
+          defTr={defTr}
+          setDefTr={setDefTr}
         />
       )}
 
       {showNewRef && (
         <Modal title="Nouvelle référence" onClose={() => setShowNewRef(false)}>
           <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-1">
-            <RefFormFields form={newRefForm} setForm={setNewRefForm} fieldDefs={fieldDefs} />
+            <LangTabs value={refLang} onChange={setRefLang} />
+            <RefFormFields form={newRefForm} setForm={setNewRefForm} fieldDefs={fieldDefs} lang={refLang} defTr={defTr} setDefTr={setDefTr} />
             <div className="flex gap-3 pt-2">
               <button onClick={() => setShowNewRef(false)} className="flex-1 px-4 py-2.5 rounded-lg border border-[#E2E8F0] text-sm font-semibold text-[#374151] hover:bg-[#F8FAFC] transition-colors">Annuler</button>
               <button onClick={handleCreateRef} className="flex-1 px-4 py-2.5 rounded-lg text-sm font-bold text-white transition-colors" style={{ background: '#4CAF4F' }}>Ajouter</button>
@@ -1116,8 +1194,9 @@ function ProductsPageInner() {
       {editRef && (
         <Modal title="Modifier la référence" onClose={() => setEditRef(null)}>
           <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-1">
-            <RefFormFields form={editRefForm} setForm={setEditRefForm} fieldDefs={fieldDefs} />
-            {(editRefForm.mode === 'FABRIQUE' || editRefForm.mode === 'LES_DEUX') && (
+            <LangTabs value={refLang} onChange={setRefLang} />
+            <RefFormFields form={editRefForm} setForm={setEditRefForm} fieldDefs={fieldDefs} lang={refLang} defTr={defTr} setDefTr={setDefTr} />
+            {refLang === 'fr' && (editRefForm.mode === 'FABRIQUE' || editRefForm.mode === 'LES_DEUX') && (
               <RecipeSection
                 productId={editRef.id}
                 initialItems={editRef.recipeItems}

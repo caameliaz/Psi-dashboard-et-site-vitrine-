@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { revalidatePublicSite } from '@/lib/revalidate-site';
 import { prisma } from '@/lib/prisma';
 import { requirePermission } from '@/lib/permissions';
+import { deleteTranslations } from '@/lib/i18n/translations';
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -54,10 +55,13 @@ export async function DELETE(_request: NextRequest, { params }: Ctx) {
     // Les produits désactivés restants ne bloquent plus la suppression — ils sont
     // supprimés avec la catégorie (les commandes/devis passés les référencent encore
     // via une relation optionnelle, donc leur historique n'est pas affecté).
+    const doomed = await prisma.product.findMany({ where: { categoryId: id, active: false }, select: { id: true } });
     await prisma.$transaction([
       prisma.product.deleteMany({ where: { categoryId: id, active: false } }),
       prisma.category.delete({ where: { id } }),
     ]);
+    await deleteTranslations('category', id);
+    await Promise.all(doomed.map((p) => deleteTranslations('product', p.id)));
     revalidatePublicSite();
     return NextResponse.json({ success: true });
   } catch (e) {

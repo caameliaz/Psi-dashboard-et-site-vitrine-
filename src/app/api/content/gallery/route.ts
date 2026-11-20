@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { imageVersion } from '@/lib/image-version';
+import { loadStore } from '@/lib/i18n/translations';
+import { isTrLang } from '@/lib/i18n/translations-shared';
 
 // Photos supplémentaires d'une page catégorie (miniatures sous la photo principale).
 // Stockées dans SiteContent sous la clé `category_gallery_<categoryId>` (JSON : tableau de { src, productId } — `productId` null = photo de la catégorie entière ;
@@ -26,6 +28,12 @@ export async function GET(request: NextRequest) {
       const parsed = u ? JSON.parse(u.value) : [];
       usages = (Array.isArray(parsed) ? parsed : []).map((x) => String(x).trim()).filter(Boolean).slice(0, 3);
     } catch { usages = []; }
+    // ?lang=en|ar : usages traduits (s'il y en a), sinon ceux en français
+    const langParam = request.nextUrl.searchParams.get('lang');
+    if (isTrLang(langParam) && request.nextUrl.searchParams.get('full') !== 'true') {
+      const tr = (await loadStore()).category[categoryId]?.[langParam]?.usages;
+      if (tr?.length) usages = tr;
+    }
     // ?full=true (gestion admin, Contenu) : base64 complet pour pouvoir modifier puis ré-enregistrer, jamais en cache.
     if (request.nextUrl.searchParams.get('full') === 'true') return NextResponse.json({ photos, usages });
     // Public : l'URL de chaque photo (fichier image mis en cache par le navigateur) au lieu du base64 dans le JSON.

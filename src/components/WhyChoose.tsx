@@ -5,6 +5,7 @@ import { Reveal } from '@/components/Reveal';
 import { ScrollUnderline } from '@/components/ScrollUnderline';
 import { ArrowButton } from '@/components/ArrowButton';
 import { useTranslation } from '@/lib/i18n';
+import { pickContent } from '@/lib/i18n/config';
 
 // Seuls 2 des 4 arguments d'origine sont gardés (compatibilité imprimantes + qualité/savoir-faire).
 // Chaque carte a une liste de caractéristiques (éditable depuis Contenu > why_{n}_liste, une par
@@ -13,12 +14,12 @@ const ITEMS = [
   {
     n: 3,
     icon: '/icons8-imprimante-50-v2.png',
-    defaultListFr: ['Commerces & points de vente', 'Banques & terminaux de paiement (TPE)', 'Restaurants & cafés', 'Pharmacies', 'Logistique & transport', 'Grande distribution'],
+    defaultListKey: 'why.list3',
   },
   {
     n: 2,
     icon: '/icons8-attestation-48.png',
-    defaultListFr: ['Grammage 55 g/m² premium', '100% sans BPA', 'Matières premières européennes certifiées', 'Transformé et conditionné en Algérie', 'Qualité constante garantie', 'Impression nette et longue durée'],
+    defaultListKey: 'why.list2',
   },
 ] as const;
 
@@ -44,8 +45,8 @@ function MaskIcon({ src, color }: { src: string; color: string }) {
 // retourne au survol pour révéler la liste complète des caractéristiques/secteurs couverts.
 export function WhyChoose({ content = {} }: { content?: Record<string, string> }) {
   const { t, lang } = useTranslation();
-  // Textes modifiables depuis le dashboard (français uniquement, comme le reste du contenu éditable).
-  const pick = (key: string, fallback: string) => (lang === 'fr' && content[key]) || fallback;
+  // Textes modifiables depuis le dashboard (Réglages > Contenu), dans la langue de la page.
+  const pick = (key: string, fallback: string) => pickContent(content, key, lang, fallback);
 
   // Écrans tactiles (pas de survol) : à l'arrivée sur la section, les cartes se retournent l'une après
   // l'autre, restent quelques secondes sur leur face arrière, puis reviennent — un tap les retourne ensuite.
@@ -84,7 +85,7 @@ export function WhyChoose({ content = {} }: { content?: Record<string, string> }
 
           <div ref={gridRef} className="grid grid-cols-1 sm:grid-cols-2 gap-6">
             {ITEMS.map((item, i) => {
-              const listRaw = pick(`why_${item.n}_liste`, item.defaultListFr.join('\n'));
+              const listRaw = pick(`why_${item.n}_liste`, t(item.defaultListKey));
               const list = listRaw.split('\n').map((s) => s.trim()).filter(Boolean);
               return (
                 <Reveal key={item.n} delayMs={i * 120} className="h-[340px] md:h-[380px]">

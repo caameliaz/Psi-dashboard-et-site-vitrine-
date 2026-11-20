@@ -56,11 +56,15 @@ export const fr = {
     stat1_label: 'Clients satisfaits',
     stat2_label: 'Références produits',
     cta: 'Nous contacter',
+    clients_label: 'Nos clients',
   },
   why: {
     title: 'Pourquoi nous choisir ?',
     subtitle: 'Qualité constante, matières premières européennes et service de proximité.',
     cta: 'Demander un devis',
+    // Listes affichées au dos des cartes (une ligne = un point) tant qu'elles ne sont pas modifiées depuis Contenu
+    list2: 'Grammage 55 g/m² premium\n100% sans BPA\nMatières premières européennes certifiées\nTransformé et conditionné en Algérie\nQualité constante garantie\nImpression nette et longue durée',
+    list3: 'Commerces & points de vente\nBanques & terminaux de paiement (TPE)\nRestaurants & cafés\nPharmacies\nLogistique & transport\nGrande distribution',
   },
   home_quote: {
     title: 'Demandez votre devis',
@@ -182,6 +186,11 @@ export const fr = {
     success_btn: "Retour à l'accueil",
     error: "Erreur lors de l'envoi. Veuillez réessayer.",
     error_empty: 'Sélectionnez au moins une référence ou laissez un message.',
+    err_company: "Nom de l'entreprise requis",
+    err_phone: 'Numéro de téléphone requis',
+    err_wilaya: 'Wilaya requise',
+    err_commune: 'Commune requise',
+    err_products: 'Décrivez-nous ici vos besoins ou choisissez un produit de notre catalogue',
   },
   contact: {
     back: 'Retour',
@@ -205,6 +214,8 @@ export const fr = {
     hours: 'Dim – Jeu : 8h00 – 17h00',
     copyright: '© 2026 PSI — Paper Solutions Industry. Tous droits réservés.',
     legal: 'RC Alger · NIF · Registre du commerce',
+    facebook_title: 'PSI sur Facebook',
+    instagram_title: '@psi04_2026 sur Instagram',
   },
   common: {
     ref: 'Réf.',
@@ -217,6 +228,24 @@ export const fr = {
     whatsapp_aria: 'Nous contacter sur WhatsApp',
     custom_dim: 'Dimension personnalisée',
     loading: 'Chargement…',
+    no_ref_selected: 'Aucune réf sélectionnée',
+    product_alt: 'Produit',
+    preview: 'Aperçu',
+    remove: 'Retirer',
+    prev_photo: 'Photo précédente',
+    next_photo: 'Photo suivante',
+  },
+  // Unités affichées à côté des chiffres (prix, dimensions)
+  units: { currency: 'DA', m: 'm', mm: 'mm', per_unit: '/u.' },
+  selects: {
+    select_wilaya: 'Sélectionner une wilaya',
+    search: 'Rechercher…',
+    no_result: 'Aucun résultat',
+    select_commune: 'Sélectionner une commune',
+    wilaya_first: 'Choisir la wilaya d’abord',
+    no_commune: 'Aucune commune trouvée',
+    wilaya_first_long: 'Choisissez d’abord une wilaya',
+    manual: 'Ou saisir un nom manuellement…',
   },
   quote_cta: {
     title: 'Vous avez un besoin spécifique ?',
@@ -243,6 +272,22 @@ export const fr = {
     spec_width: 'Largeur',
     specs_title: 'Détails du produit',
     metrage_label: 'Métrage',
+  },
+  // Référencement (SEO) : titres et descriptions des pages (le nom de l'entreprise est ajouté par le code)
+  meta: {
+    site_desc: 'PSI fabrique des rouleaux thermiques pour terminaux de paiement (TPE) et caisses enregistreuses, pour les entreprises en Algérie.',
+    home_title: 'Rouleaux thermiques TPE et caisses enregistreuses en Algérie',
+    home_desc: "PSI fabrique des rouleaux thermiques pour terminaux de paiement (TPE) et caisses enregistreuses. Vente aux entreprises dans toute l'Algérie, demandez votre devis en ligne.",
+    products_title: 'Nos produits : rouleaux thermiques TPE et caisses',
+    products_desc: 'Rouleaux thermiques pour terminaux de paiement (TPE) et caisses enregistreuses, fabriqués par PSI. Choisissez vos formats et commandez en ligne.',
+    quote_title: 'Demande de devis',
+    quote_desc: "Demandez un devis gratuit pour vos rouleaux thermiques (TPE, caisses enregistreuses). Réponse rapide de l'équipe PSI, livraison en Algérie.",
+    contact_title: 'Contact',
+    contact_desc: 'Contactez PSI : téléphone, WhatsApp, e-mail et adresse à Chéraga (Alger). Nous répondons à vos questions sur nos rouleaux thermiques.',
+    cart_title: 'Panier',
+    checkout_title: 'Validation de la commande',
+    product_title: 'Rouleaux thermiques',
+    product_desc: '{name} fabriqués par PSI. Choisissez votre format et demandez un devis ou commandez en ligne (livraison en Algérie).',
   },
   // Messages d'erreur des formulaires (validation des saisies)
   errors: {

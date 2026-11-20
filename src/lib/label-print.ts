@@ -108,10 +108,82 @@ const FORMAT_CSS: Record<LabelFormat, string> = {
 };
 
 /**
- * Écrit les étiquettes dans la fenêtre `w` (ouverte par le clic, pour ne pas être bloquée par le navigateur)
- * puis lance l'impression une fois les images chargées. `labels[i].count` = nombre d'exemplaires.
+ * Où imprimer. PC : une fenêtre dédiée (ouverte par le clic pour ne pas être bloquée). Téléphone / tablette : la PAGE
+ * COURANTE — les navigateurs mobiles bloquent ou masquent les pop-ups, et `print()` n'y ouvre alors aucun dialogue.
  */
-export async function printLabels(w: Window, labels: LabelData[], format: LabelFormat, siteUrl: string): Promise<void> {
+export interface PrintTarget { popup: Window | null }
+
+/** Téléphone / tablette : écran tactile ou écran étroit (même seuil que la mise en page mobile du dashboard). */
+export function isMobileDevice(): boolean {
+  if (typeof window === 'undefined') return false;
+  return window.matchMedia('(pointer: coarse)').matches || window.innerWidth < 768;
+}
+
+/** À appeler DANS le clic. Renvoie null si le navigateur a bloqué la fenêtre (PC uniquement). */
+export function openPrintTarget(): PrintTarget | null {
+  if (isMobileDevice()) return { popup: null };
+  const w = window.open('', '_blank', 'width=900,height=900');
+  if (!w) return null;
+  w.document.write('<p style="font-family:sans-serif;padding:24px">Préparation des étiquettes…</p>');
+  return { popup: w };
+}
+
+export function closePrintTarget(t: PrintTarget) {
+  t.popup?.close();
+}
+
+const HOST_ID = 'psi-print-host';
+
+/**
+ * Impression dans la page courante : les étiquettes sont posées dans un bloc isolé (Shadow DOM, donc sans conflit
+ * de styles avec l'application) que seule l'impression affiche, puis `window.print()` ouvre le dialogue d'impression
+ * du téléphone (aperçu, choix de l'imprimante, enregistrement en PDF).
+ */
+async function printInPage(body: string, format: LabelFormat) {
+  document.getElementById(HOST_ID)?.remove();
+  document.getElementById(`${HOST_ID}-css`)?.remove();
+
+  // `@page` (taille du papier) doit être dans la page elle-même ; le reste du CSS reste isolé dans le Shadow DOM.
+  const fmt = FORMAT_CSS[format];
+  const pageRule = (fmt.match(/@page\{[^}]*\}/) ?? [''])[0];
+  const shadowCss = CSS.replace('html,body{', ':host{display:block;').replace('body{font-family', ':host{font-family') + fmt.replace(pageRule, '');
+
+  const css = document.createElement('style');
+  css.id = `${HOST_ID}-css`;
+  css.textContent = `${pageRule}
+#${HOST_ID}{position:fixed;left:-10000px;top:0;width:210mm}
+@media print{
+  html,body{margin:0!important;padding:0!important;background:#fff!important;height:auto!important;min-height:0!important;overflow:visible!important}
+  body > *:not(#${HOST_ID}){display:none!important}
+  #${HOST_ID}{position:static!important;left:auto!important;width:auto!important;display:block!important}
+}`;
+  document.head.appendChild(css);
+
+  const host = document.createElement('div');
+  host.id = HOST_ID;
+  host.setAttribute('aria-hidden', 'true');
+  host.attachShadow({ mode: 'open' }).innerHTML = `<style>${shadowCss}</style>${body}`;
+  document.body.appendChild(host);
+
+  // Attendre logo + schéma (sinon l'impression part avec des images vides), 4 s maximum.
+  const imgs = Array.from(host.shadowRoot!.querySelectorAll('img'));
+  await Promise.race([
+    Promise.all(imgs.map((im) => (im.complete ? Promise.resolve() : new Promise<void>((r) => { im.onload = im.onerror = () => r(); })))),
+    new Promise<void>((r) => setTimeout(r, 4000)),
+  ]);
+
+  // Nettoyage une fois le dialogue fermé (certains mobiles n'émettent pas « afterprint » : filet de sécurité à 5 min).
+  const cleanup = () => { host.remove(); css.remove(); window.removeEventListener('afterprint', cleanup); };
+  window.addEventListener('afterprint', cleanup);
+  setTimeout(cleanup, 5 * 60_000);
+  window.print();
+}
+
+/**
+ * Prépare les étiquettes puis lance l'impression (dialogue du navigateur) une fois les images chargées.
+ * `labels[i].count` = nombre d'exemplaires.
+ */
+export async function printLabels(target: PrintTarget, labels: LabelData[], format: LabelFormat, siteUrl: string): Promise<void> {
   const origin = window.location.origin;
   const cells: string[] = [];
   for (const d of labels) {
@@ -127,6 +199,9 @@ export async function printLabels(w: Window, labels: LabelData[], format: LabelF
   } else {
     body = cells.map((c) => `<div class="sheet">${c}</div>`).join('');
   }
+
+  const w = target.popup;
+  if (!w) { await printInPage(body, format); return; }
 
   w.document.open();
   w.document.write(`<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Étiquettes PSI</title><style>${CSS}${FORMAT_CSS[format]}</style></head><body>${body}</body></html>`);
