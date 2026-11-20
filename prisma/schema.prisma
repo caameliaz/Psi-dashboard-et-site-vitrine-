@@ -24,6 +24,12 @@ model Category {
   prefix      String? // préfixe des références produit auto (ex: PTT, IMP)
   refCounter  Int       @default(0) // dernier numéro utilisé pour l'auto-incrément
   order       Int       @default(0)
+  // Catégorie « sur devis » (ex: papier médical) : sur le site public, prix masqués et « Ajouter au
+  // panier » remplacé par « Demander un devis ». Les prix ne sont même pas envoyés au navigateur.
+  quoteOnly   Boolean   @default(false)
+  // Désignation imprimée sur les BL / factures pour les produits de cette catégorie (texte multi-lignes, modifiable
+  // dans Réglages → Documents). Un produit peut avoir la sienne (Product.documentDesignation), elle prime.
+  documentDesignation String?
   products    Product[]
   createdAt   DateTime  @default(now())
 }
@@ -53,6 +59,7 @@ model Product {
   // commandes...) sans être affiché sur le site vitrine public. Le site public filtre
   // sur active ET visibleOnSite ; le dashboard continue de n'utiliser que `active`.
   visibleOnSite Boolean             @default(true)
+  documentDesignation String? // prime sur celle de la catégorie (BL / factures)
   category     Category             @relation(fields: [categoryId], references: [id])
   categoryId   String
   customFields ProductCustomField[]
@@ -105,6 +112,10 @@ model RawMaterial {
   purchaseThreshold Int                @default(70) // seuil sur `available` déclenchant le réassort préventif en liste d'achat
   available         Float              @default(0) // Disponible
   reserved          Float              @default(0) // Réservé (rattaché à une recette/commande en cours, aucun mouvement réel encore)
+  // Deuxième unité facultative (ex. « bobine » en plus de `unit` = kg) : le nombre de bobines n'est pas stocké, il est
+  // DÉDUIT du poids via `primaryPerSecondary` (kg par bobine) — cf. src/lib/dual-unit.ts
+  secondaryUnit       String?
+  primaryPerSecondary Float?
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
   recipeItems       RecipeItem[]
@@ -121,7 +132,11 @@ model RawMaterial {
 model FreeTextRecipe {
   id        String               @id @default(cuid())
   label     String               @unique
-  available Float                @default(0) // stock disponible de cette réf libre (section « Réfs libres » de la page Stock)
+  // Statuts de stock de cette réf libre — mêmes colonnes/sens que Product (section « Réfs libres » de la page Stock)
+  available  Float               @default(0) // Disponible
+  reserved   Float               @default(0) // Réservé — rattaché à une commande confirmée
+  inDelivery Float               @default(0) // En livraison
+  returned   Float               @default(0) // En retour
   createdAt DateTime             @default(now())
   updatedAt DateTime             @updatedAt
   items     FreeTextRecipeItem[]
@@ -292,6 +307,12 @@ model Client {
   quotes            Quote[]
   contacts          ContactRequest[]
   notes             ClientNote[]
+  documents         Document[]
+  // Identifiants fiscaux (factures) : saisis par les admins, demandés par un pop-up s'ils manquent à la génération
+  rc                String? // N° de registre du commerce
+  nif               String? // identification fiscale
+  nis               String? // identification statistique
+  ai                String? // article d'imposition
   // Responsable habituel du client (hors période de congé — cf. LeaveAssignment).
   // Restauré automatiquement au retour de congé de son titulaire.
   assignedTo        User?            @relation("ClientAssignedTo", fields: [assignedToId], references: [id])
@@ -339,6 +360,33 @@ model RequestNote {
   createdAt DateTime @default(now())
 }
 
+// ─── NOTES SUR LES RÉFÉRENCES DU STOCK (admins uniquement) ───────────────────
+// Une note libre sur un produit fini, une matière première ou une référence libre.
+// `kind` = PRODUCT | MATERIAL | FREE ; `refKey` = id du produit / de la matière, ou libellé de la réf libre
+// (pas de clé étrangère : une réf libre n'a pas de fiche). Lecture et écriture réservées aux comptes ADMIN.
+model StockNote {
+  id        String   @id @default(cuid())
+  kind      String
+  refKey    String
+  content   String
+  author    User     @relation("StockNoteAuthor", fields: [authorId], references: [id])
+  authorId  String
+  createdAt DateTime @default(now())
+
+  @@index([kind, refKey])
+}
+
+// Dernier niveau d'alerte connu d'une référence du stock (OK | LOW | OUT) — évite d'envoyer deux fois la même
+// alerte « stock faible / rupture » aux admins (cf. src/lib/low-stock.ts). `refKey` = id du produit / de la matière.
+model StockAlertState {
+  kind      String
+  refKey    String
+  level     String
+  updatedAt DateTime @updatedAt
+
+  @@id([kind, refKey])
+}
+
 // ─── COMMANDE ────────────────────────────────────────────────────────────────
 model Order {
   id              String         @id @default(cuid())
@@ -376,8 +424,16 @@ model Order {
   // quantité est automatiquement créditée dans StockAssignment pour `assignedToId` (cf.
   // syncCommercialAssignment, order-stock.ts). Statuts EN_ATTENTE et VALIDE uniquement.
   autoAssignStock Boolean        @default(false)
+  // ── Réception par le client (QR code collé sur le colis — cf. src/lib/receipt.ts) ──
+  // Jeton aléatoire (64 hex) dans le QR : jamais la référence ni l'id (non devinable). Généré par la base.
+  receiptToken       String    @unique @default(dbgenerated("(replace((gen_random_uuid())::text, '-'::text, ''::text) || replace((gen_random_uuid())::text, '-'::text, ''::text))"))
+  labelCount         Int       @default(0) // nombre de colis / étiquettes générés à la dernière impression
+  receiptScannedAt   DateTime? // 1re ouverture de la page du QR par le client
+  receiptConfirmedAt DateTime? // « Valider la réception » cliqué par le client → statut Livré
+  receiptSeenAt      DateTime? // « Vu » coché par un membre de l'équipe (double confirmation, non bloquante)
   notifications   Notification[]
   auditLogs       AuditLog[]     @relation("AuditOrder")
+  documents       Document[]
   requestNotes    RequestNote[]
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
@@ -462,8 +518,16 @@ model Quote {
   assignedTo      User?          @relation("QuoteAssignedTo", fields: [assignedToId], references: [id])
   assignedToId    String? // "pris en charge par"
   autoAssignStock Boolean        @default(false) // cf. Order.autoAssignStock
+  // ── Réception par le client (QR code collé sur le colis — cf. src/lib/receipt.ts) ──
+  // Jeton aléatoire (64 hex) dans le QR : jamais la référence ni l'id (non devinable). Généré par la base.
+  receiptToken       String    @unique @default(dbgenerated("(replace((gen_random_uuid())::text, '-'::text, ''::text) || replace((gen_random_uuid())::text, '-'::text, ''::text))"))
+  labelCount         Int       @default(0) // nombre de colis / étiquettes générés à la dernière impression
+  receiptScannedAt   DateTime? // 1re ouverture de la page du QR par le client
+  receiptConfirmedAt DateTime? // « Valider la réception » cliqué par le client → statut Livré
+  receiptSeenAt      DateTime? // « Vu » coché par un membre de l'équipe (double confirmation, non bloquante)
   notifications   Notification[]
   auditLogs       AuditLog[]     @relation("AuditQuote")
+  documents       Document[]
   requestNotes    RequestNote[]
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
@@ -595,6 +659,9 @@ model User {
   sessionVersion     Int                @default(0) // incrémenté pour invalider tous les cookies
   resetRequested     Boolean            @default(false) // l'utilisateur a demandé une réinit. de mot de passe
   resetRequestedAt   DateTime?
+  // Limite des réinitialisations publiques : 2 demandes max par compte et par fenêtre de 30 min (cf. /api/password-reset)
+  resetWindowStart   DateTime?
+  resetWindowCount   Int       @default(0)
   twoFactorCode      String? // code 2FA à 6 chiffres en attente de validation (usage unique)
   twoFactorExpires   DateTime? // expiration du code 2FA (5 min)
   twoFactorAttempts  Int                @default(0) // tentatives échouées sur le code courant (invalide après 5)
@@ -609,6 +676,7 @@ model User {
   clientNotes        ClientNote[]       @relation("ClientNoteAuthor")
   clientsDeactivated Client[]           @relation("ClientDeactivatedBy")
   requestNotes       RequestNote[]      @relation("RequestNoteAuthor")
+  stockNotes         StockNote[]        @relation("StockNoteAuthor")
   notifications      NotificationRead[]
   auditLogs          AuditLog[]
   pushSubscriptions  PushSubscription[]
@@ -749,6 +817,7 @@ enum AuditEntity {
   STATUT
   STOCK
   MATIERE
+  DOCUMENT
 }
 
 // ─── PANIERS DU SITE PUBLIC (suivi anonyme, pas d'identité) ──────────────────
@@ -776,4 +845,78 @@ enum CartSessionStatus {
   EN_COURS
   ABANDONNE
   CONVERTI
+}
+
+// ─── DOCUMENTS : BL, FACTURES, PROFORMAS (cf. TODO-FACTURES-BL.md) ──────────────
+enum DocumentType {
+  BL
+  FACTURE
+  PROFORMA
+}
+
+// Modèle modifiable (Réglages → Documents, admins) : blocs activables, textes, colonnes, champs ajoutés.
+// Un seul par type. La mise en page reste fixe ; chaque document émis garde une COPIE du modèle utilisé.
+model DocumentTemplate {
+  id          String       @id @default(cuid())
+  type        DocumentType @unique
+  config      Json
+  updatedById String?
+  updatedAt   DateTime     @updatedAt
+}
+
+// Réglages communs (une seule ligne, id = "default") : infos PSI (raison sociale, adresse, RC, NIF, NIS, RIB…),
+// TVA, paliers du timbre (paiement en espèces), formats de numéro.
+model DocumentSettings {
+  id          String   @id @default("default")
+  data        Json
+  updatedById String?
+  updatedAt   DateTime @updatedAt
+}
+
+// Dernier numéro utilisé par type et par année (modifiable par les admins : les suivants se recalculent).
+model DocumentCounter {
+  id         String       @id @default(cuid())
+  type       DocumentType
+  year       Int
+  lastNumber Int          @default(0)
+  updatedAt  DateTime     @updatedAt
+
+  @@unique([type, year])
+}
+
+model Document {
+  id        String       @id @default(cuid())
+  type      DocumentType
+  // Numéro tel qu'imprimé (« F 023/2026 », « BL023-2026 », « BL023 bis-2026 », « FP-01-2026 ») — modifiable par les admins.
+  number    String
+  year      Int
+  seq       Int? // partie numérique (pour proposer le suivant)
+  suffix    String? // « bis »…
+  issuedAt  DateTime     @default(now())
+  order     Order?       @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  orderId   String?
+  quote     Quote?       @relation(fields: [quoteId], references: [id], onDelete: SetNull)
+  quoteId   String?
+  client    Client?      @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  clientId  String?
+  // BL → facture qui le regroupe (une facture peut regrouper plusieurs BL ; null = « à facturer »)
+  invoice   Document?    @relation("DocumentInvoice", fields: [invoiceId], references: [id], onDelete: SetNull)
+  invoiceId String?
+  bls       Document[]   @relation("DocumentInvoice")
+  // Contenu figé à l'émission : client (avec RC/NIF/NIS/AI), lignes, totaux, dates, mode de règlement, échéance…
+  data             Json
+  // Copie du modèle utilisé : modifier le modèle plus tard ne change jamais un document déjà émis
+  templateSnapshot Json
+  customFields     Json? // champs ajoutés (libellé + valeur)
+  createdById      String?
+  // Jeton aléatoire (64 hex) du lien public /d/[token] envoyé au client par mail (même principe que Order.receiptToken)
+  shareToken       String   @unique @default(dbgenerated("(replace((gen_random_uuid())::text, '-'::text, ''::text) || replace((gen_random_uuid())::text, '-'::text, ''::text))"))
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@unique([type, number])
+  @@index([clientId])
+  @@index([orderId])
+  @@index([quoteId])
+  @@index([invoiceId])
 }

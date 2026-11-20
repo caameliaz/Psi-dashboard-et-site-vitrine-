@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { scanLowStock } from '@/lib/low-stock';
 import { prisma } from '@/lib/prisma';
 import { fixerReferenceProduit, fixerReferenceMatiere } from '@/lib/stock-reference';
 import { requirePermission } from '@/lib/permissions';
@@ -57,15 +58,19 @@ export async function POST(request: NextRequest) {
           await reassessProductReserved(product.id);
         }
       }
+      await scanLowStock();
       return NextResponse.json({ ok: true });
     }
 
     if (body.type === 'material') {
       if (!MATERIAL_FIELDS.includes(body.field)) return NextResponse.json({ error: 'Champ invalide' }, { status: 400 });
       const before = ['available', 'reserved'].includes(body.field)
-        ? await prisma.rawMaterial.findUnique({ where: { id: body.id }, select: { available: true, reserved: true } })
+        ? await prisma.rawMaterial.findUnique({ where: { id: body.id }, select: { available: true, reserved: true, secondaryUnit: true } })
         : null;
-      const material = await prisma.rawMaterial.update({ where: { id: body.id }, data: { [body.field]: qty } });
+      // 2e unité : poids ET bobines donnés → le rapport kg/bobine est recalé (ex. 99 kg pour 1/2 bobine = 198 kg/bobine)
+      const secQty = Number(body.secondaryQuantity);
+      const ratioData = body.field === 'available' && before?.secondaryUnit && secQty > 0 && qty > 0 ? { primaryPerSecondary: qty / secQty } : {};
+      const material = await prisma.rawMaterial.update({ where: { id: body.id }, data: { [body.field]: qty, ...ratioData } });
       createAudit({ userId: session?.user?.id, action: `Correction stock matière — ${FIELD_LABELS[body.field]}`, entity: 'MATIERE', entityId: material.id, detail: `${material.name} → ${qty}` });
       if (body.field === 'available') {
         if (before && qty > before.available) {
@@ -90,6 +95,7 @@ export async function POST(request: NextRequest) {
           await resyncMaterialPurchaseNeed(material.id);
         }
       }
+      await scanLowStock();
       return NextResponse.json({ ok: true });
     }
 

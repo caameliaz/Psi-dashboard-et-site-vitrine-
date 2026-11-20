@@ -199,6 +199,8 @@ export async function POST(request: NextRequest) {
         commune: body.commune ?? null,
         sectorId: body.sectorId || null,
         address: body.address ?? null,
+        // Identifiants fiscaux : saisis par les admins uniquement
+        ...(session.user.role === 'ADMIN' ? { rc: body.rc || null, nif: body.nif || null, nis: body.nis || null, ai: body.ai || null } : {}),
         ...(body.phone ? {
           phones: { create: [{ number: body.phone, label: 'Principal', primary: true }] },
         } : {}),

@@ -21,6 +21,26 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
   try {
     const body = await request.json();
 
+    // Anti-escalade de privilèges : seul un ADMIN peut toucher à un compte ADMIN, créer/devenir ADMIN,
+    // ou modifier ses PROPRES droits (rôle, permissions, statut). Un non-admin ayant « gerer_utilisateurs »
+    // ne peut accorder que des permissions qu'il possède lui-même.
+    if (session.user.role !== 'ADMIN') {
+      const cible = await prisma.user.findUnique({ where: { id }, select: { role: true } });
+      if (!cible) return NextResponse.json({ error: 'Utilisateur introuvable' }, { status: 404 });
+      if (cible.role === 'ADMIN' || body.role === 'ADMIN') {
+        return NextResponse.json({ error: 'Seul un administrateur peut modifier un compte administrateur.' }, { status: 403 });
+      }
+      if (id === session.user.id && (body.role !== undefined || body.permissions !== undefined || body.active !== undefined || body.customRoleId !== undefined)) {
+        return NextResponse.json({ error: 'Vous ne pouvez pas modifier vos propres droits.' }, { status: 403 });
+      }
+      if (Array.isArray(body.permissions)) {
+        const miennes = new Set(session.user.permissions ?? []);
+        if (body.permissions.some((p: string) => !miennes.has(p))) {
+          return NextResponse.json({ error: 'Vous ne pouvez accorder que des permissions que vous possédez.' }, { status: 403 });
+        }
+      }
+    }
+
     // Désactivation (ex. licenciement) avec reprise des clients :
     //  • reassignClientsTo : commercial par défaut (clients non répartis, congés, autres commandes) ;
     //  • reassignClients   : { clientId: userId | null } pour répartir client par client.
@@ -206,14 +226,15 @@ export async function DELETE(_request: NextRequest, { params }: Ctx) {
     }
 
     // Blocage si l'utilisateur a de l'activité (préserve l'historique) — proposer la désactivation
-    const [orders, quotes, notes, logs] = await Promise.all([
+    const [orders, quotes, notes, stockNotes, logs] = await Promise.all([
       prisma.order.count({ where: { createdById: id } }),
       prisma.quote.count({ where: { createdById: id } }),
       prisma.clientNote.count({ where: { authorId: id } }),
+      prisma.stockNote.count({ where: { authorId: id } }).catch(() => 0), // table absente avant la migration
       // les simples lignes « Connexion » ne comptent pas comme de l'activité (cf. LOGIN_ACTION)
       prisma.auditLog.count({ where: { userId: id, NOT: { action: { in: OWNER_ONLY_ACTIONS } } } }),
     ]);
-    if (orders + quotes + notes + logs > 0) {
+    if (orders + quotes + notes + stockNotes + logs > 0) {
       return NextResponse.json(
         { error: "Impossible de supprimer : cet utilisateur a de l'activité (commandes, devis, notes ou journal). Désactivez-le plutôt." },
         { status: 409 }

@@ -1,18 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requirePermission } from '@/lib/permissions';
+import { guardClientAccess } from '@/lib/access';
 import { prisma } from '@/lib/prisma';
 
 type Ctx = { params: Promise<{ id: string; noteId: string }> };
 
 // DELETE /api/clients/[id]/notes/[noteId] — supprimer une note (permission modifier_clients)
 export async function DELETE(_request: NextRequest, { params }: Ctx) {
-  const guard = await requirePermission('modifier_clients');
+  const { id: clientId, noteId } = await params;
+  const guard = await guardClientAccess('modifier_clients', clientId);
   if (guard.error) return guard.error;
 
-  const { noteId } = await params;
-
   try {
-    await prisma.clientNote.delete({ where: { id: noteId } });
+    // deleteMany avec clientId : on ne supprime que si la note appartient bien à CE client
+    await prisma.clientNote.deleteMany({ where: { id: noteId, clientId } });
     return NextResponse.json({ success: true });
   } catch (e) {
     console.error(e);

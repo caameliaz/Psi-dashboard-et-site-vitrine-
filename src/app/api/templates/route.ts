@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
+import { requirePermission } from '@/lib/permissions';
 import { prisma } from '@/lib/prisma';
 
 // GET /api/templates — liste tous les templates (admin + employé)
@@ -20,8 +21,9 @@ export async function GET() {
 
 // POST /api/templates — créer un template (admin uniquement)
 export async function POST(request: NextRequest) {
-  const session = await auth();
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const guard = await requirePermission('modifier_contenu');
+  if (guard.error) return guard.error;
+  const session = guard.session;
 
   try {
     const body = await request.json();

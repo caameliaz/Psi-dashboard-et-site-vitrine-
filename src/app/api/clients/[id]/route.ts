@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requirePermission, seesAll } from '@/lib/permissions';
+import { guardClientAccess } from '@/lib/access';
 import { prisma } from '@/lib/prisma';
 import { createAudit } from '@/lib/audit';
 import { notifyDeletion } from '@/lib/notify-activity';
@@ -90,11 +91,10 @@ export async function GET(_request: NextRequest, { params }: Ctx) {
 
 // PATCH /api/clients/[id] — modifier infos client (permission modifier_clients)
 export async function PATCH(request: NextRequest, { params }: Ctx) {
-  const guard = await requirePermission('modifier_clients');
+  const { id } = await params;
+  const guard = await guardClientAccess('modifier_clients', id);
   if (guard.error) return guard.error;
   const session = guard.session;
-
-  const { id } = await params;
 
   try {
     const body = await request.json();
@@ -118,6 +118,13 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
         ...(body.commune !== undefined && { commune: body.commune }),
         ...(body.sectorId !== undefined && { sectorId: body.sectorId || null }),
         ...(body.address !== undefined && { address: body.address }),
+        // Identifiants fiscaux (factures) : modifiables par les admins uniquement
+        ...(session.user.role === 'ADMIN' && {
+          ...(body.rc !== undefined && { rc: body.rc || null }),
+          ...(body.nif !== undefined && { nif: body.nif || null }),
+          ...(body.nis !== undefined && { nis: body.nis || null }),
+          ...(body.ai !== undefined && { ai: body.ai || null }),
+        }),
         ...(body.photo !== undefined && { photo: body.photo }),
         // Responsable habituel du client (cf. src/lib/leave.ts pour la bascule pendant un congé)
         ...(body.assignedToId !== undefined && { assignedToId: body.assignedToId || null }),
@@ -149,12 +156,11 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
 //   Body { reason } obligatoire. Les admins reçoivent une notif.
 //   ?definitif=true (ADMIN uniquement) → suppression réelle.
 export async function DELETE(request: NextRequest, { params }: Ctx) {
-  const guard = await requirePermission('modifier_clients');
+  const { id } = await params;
+  const guard = await guardClientAccess('modifier_clients', id);
   if (guard.error) return guard.error;
   const session = guard.session;
   const definitif = request.nextUrl.searchParams.get('definitif') === 'true';
-
-  const { id } = await params;
 
   try {
     const target = await prisma.client.findUnique({ where: { id }, select: { name: true, company: true } });

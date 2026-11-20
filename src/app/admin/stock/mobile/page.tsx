@@ -10,11 +10,13 @@ import { useState, useEffect, useCallback } from 'react';
 import { useRole } from '@/lib/role-context';
 import { StockListsWidget } from '@/components/ui/StockListsWidget';
 import { MobileNavbar } from '@/components/MobileNavbar';
+import { NotesPencil, NotesModal, useStockNoteCounts, noteKey } from '@/components/ui/StockNotes';
 
 interface StockProduct {
   id: string; reference: string; name: string | null;
   mode: 'ACHETE' | 'FABRIQUE' | 'LES_DEUX';
   available: number; reserved: number; inDelivery: number; returned: number; assignedToCommercials: number;
+  reservedRollink?: number; rollinkFromStock?: number; rollinkPending?: number; // part du Réservé venant de commandes RollLink actives (interrupteur ci-dessous)
   purchaseThreshold: number; productionThreshold: number;
 }
 
@@ -26,8 +28,9 @@ function statusBadge(available: number, threshold: number) {
 
 // Carte produit repliée par défaut — un tap révèle En livraison/En retour, moins
 // utiles au quotidien terrain (cf. décision actée dans STOCK-MOBILE.md).
-function ProductCard({ p }: { p: StockProduct }) {
+function ProductCard({ p, isAdmin, noteCount, onNotesChange }: { p: StockProduct; isAdmin: boolean; noteCount: number; onNotesChange: () => void }) {
   const [expanded, setExpanded] = useState(false);
+  const [showNotes, setShowNotes] = useState(false);
   const threshold = p.mode === 'ACHETE' ? p.purchaseThreshold : p.productionThreshold;
   const horsCommerciaux = Math.max(0, p.available + p.reserved - p.assignedToCommercials);
 
@@ -39,8 +42,12 @@ function ProductCard({ p }: { p: StockProduct }) {
           <p className="text-[13px] font-bold text-[#0F172A]">{p.reference}</p>
           {p.name && <p className="text-[11px] text-[#8A9BB5] truncate">{p.name}</p>}
         </div>
-        {statusBadge(p.available, threshold)}
+        <div className="flex items-center gap-2 flex-shrink-0">
+          {isAdmin && <NotesPencil count={noteCount} onClick={() => setShowNotes(true)} />}
+          {statusBadge(p.available, threshold)}
+        </div>
       </div>
+      {showNotes && <div onClick={(e) => e.stopPropagation()}><NotesModal title={p.reference} kind="PRODUCT" keyId={p.id} onClose={() => setShowNotes(false)} onChange={onNotesChange} /></div>}
       <div className="grid grid-cols-3 gap-2 mt-3">
         <div>
           <p className="text-[10px] font-bold text-[#ABBED1] uppercase">Disponible</p>
@@ -76,10 +83,21 @@ function ProductCard({ p }: { p: StockProduct }) {
 // carte a besoin de plus de place qu'un simple flex-1 ne peut lui donner sans devenir
 // minuscule — on repasse alors la PAGE en scroll normal (cf. `open`/`onToggle` remontés
 // au parent, qui bascule le conteneur racine entre hauteur fixe et hauteur libre).
-function CurrentStockCard({ open, onToggle }: { open: boolean; onToggle: () => void }) {
-  const [products, setProducts] = useState<StockProduct[]>([]);
+function CurrentStockCard({ open, onToggle, withRollink, setWithRollink }: { open: boolean; onToggle: () => void; withRollink: boolean; setWithRollink: (v: boolean | ((x: boolean) => boolean)) => void }) {
+  const { isAdmin } = useRole();
+  const { counts: noteCounts, refresh: refreshNotes } = useStockNoteCounts(isAdmin);
+  const [rawProducts, setProducts] = useState<StockProduct[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  // Interrupteur RollLink — désactivé par défaut (même règle que la page Stock sur ordinateur) : désactivé = sans RollLink ;
+  // activé = SIMULATION des commandes RollLink en test (calcul à l'écran, rien n'est écrit en base).
+  const products = withRollink ? rawProducts.map((p) => {
+    const sim = Math.min(Math.max(0, p.available), p.rollinkPending ?? 0);
+    return sim > 0 ? { ...p, available: p.available - sim, reserved: p.reserved + sim } : p;
+  }) : rawProducts.map((p) => {
+    const rl = p.reservedRollink ?? 0;
+    return rl > 0 ? { ...p, available: p.available + (p.rollinkFromStock ?? 0), reserved: p.reserved - rl } : p;
+  });
 
   const fetchProducts = useCallback(async () => {
     setLoading(true);
@@ -108,6 +126,13 @@ function CurrentStockCard({ open, onToggle }: { open: boolean; onToggle: () => v
       </button>
       {open && (
         <div className="px-4 pb-4 flex-1 min-h-0">
+          <div className="flex items-center gap-2 mb-3">
+            <button type="button" role="switch" aria-checked={withRollink} onClick={() => setWithRollink((v) => !v)}
+              className="relative flex-shrink-0 rounded-full transition-colors duration-200" style={{ width: 40, height: 24, background: withRollink ? '#4CAF4F' : '#D0D5DD' }}>
+              <span className="absolute top-[3px] left-[3px] w-[18px] h-[18px] rounded-full bg-white shadow-sm transition-all duration-200" style={{ transform: withRollink ? 'translateX(16px)' : 'translateX(0px)' }} />
+            </button>
+            <span className="text-[13px] font-semibold text-[#374151]">RollLink {withRollink ? 'activé (simulation)' : 'désactivé'}</span>
+          </div>
           <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Rechercher une référence..."
             className="w-full mb-3 px-3 py-2 rounded-lg border border-[#E2E8F0] text-[13px] text-[#0F172A] focus:outline-none focus:border-[#4CAF4F] sticky top-0 bg-white" />
           {loading ? (
@@ -116,7 +141,7 @@ function CurrentStockCard({ open, onToggle }: { open: boolean; onToggle: () => v
             <p className="text-[13px] text-[#8A9BB5] text-center py-6">Aucun produit.</p>
           ) : (
             <div className="flex flex-col gap-2 pb-2">
-              {filtered.map((p) => <ProductCard key={p.id} p={p} />)}
+              {filtered.map((p) => <ProductCard key={p.id} p={p} isAdmin={isAdmin} noteCount={noteCounts[noteKey('PRODUCT', p.id)] ?? 0} onNotesChange={refreshNotes} />)}
             </div>
           )}
         </div>
@@ -154,6 +179,8 @@ function AccessGate({ children }: { children: React.ReactNode }) {
 function StockMobilePageInner() {
   const { can } = useRole();
   const [stockOpen, setStockOpen] = useState(false);
+  // Interrupteur RollLink (désactivé par défaut) : commun au stock et aux listes d'achat/production
+  const [withRollink, setWithRollink] = useState(false);
 
   return (
     // Repliée (par défaut) : page FIXE, pas de scroll global — hauteur = écran moins
@@ -173,7 +200,7 @@ function StockMobilePageInner() {
       {/* Carte "Stock actuel" — gatée par voir_stock, indépendante de voir_listes_stock
           (cf. STOCK-MOBILE.md : un employé "production" peut avoir accès aux listes
           sans voir les chiffres de stock global). */}
-      {can('voir_stock') && <CurrentStockCard open={stockOpen} onToggle={() => setStockOpen((v) => !v)} />}
+      {can('voir_stock') && <CurrentStockCard open={stockOpen} onToggle={() => setStockOpen((v) => !v)} withRollink={withRollink} setWithRollink={setWithRollink} />}
 
       {/* Listes d'achat / production — gatées par voir_listes_stock, indépendante de
           voir_stock (même logique inverse). En page fixe (Stock actuel repliée), sa
@@ -181,10 +208,10 @@ function StockMobilePageInner() {
           suit le scroll normal de la page (pas de hauteur contrainte en plus). */}
       {can('voir_listes_stock') && (
         stockOpen ? (
-          <StockListsWidget />
+          <StockListsWidget withRollink={withRollink} />
         ) : (
           <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar">
-            <StockListsWidget />
+            <StockListsWidget withRollink={withRollink} />
           </div>
         )
       )}

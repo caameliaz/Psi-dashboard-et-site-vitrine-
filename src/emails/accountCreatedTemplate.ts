@@ -55,7 +55,9 @@ export function renderWelcomeEmail(params: {
       </table>
     </div>
 
-    <p style="margin:0 0 20px;font-size:12px;color:#8A9BB5">Vous pouvez modifier ce mot de passe à tout moment depuis votre profil. En cas d'oubli, cliquez sur « Mot de passe oublié » sur la page de connexion : un administrateur vous en transmettra un nouveau.</p>
+    <p style="margin:0 0 12px;font-size:12px;color:#8A9BB5">À la connexion, après avoir saisi ce mot de passe, vous recevrez un code à 6 chiffres par e-mail (valable 5 minutes) : saisissez-le pour terminer la connexion.</p>
+
+    <p style="margin:0 0 20px;font-size:12px;color:#8A9BB5">Vous pouvez modifier ce mot de passe à tout moment depuis votre profil. En cas d'oubli, cliquez sur « Mot de passe oublié » sur la page de connexion : un nouveau mot de passe vous sera envoyé automatiquement par e-mail.</p>
 
     <a href="${ADMIN_URL}/admin" style="display:inline-block;background:#4CAF4F;color:#fff;text-decoration:none;padding:11px 22px;border-radius:8px;font-size:13px;font-weight:700">Se connecter →</a>
   `;

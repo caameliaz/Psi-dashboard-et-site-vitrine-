@@ -29,7 +29,11 @@ export async function GET(request: NextRequest) {
       // produits à chaque appel avait causé un dépassement de quota Fast Origin Transfer Vercel.
       // `recipeItems` (coût/recette matière) n'est utile qu'aux 2 pages admin qui gèrent
       // les recettes (?all=true) — jamais exposé publiquement (donnée sensible en plus).
-      omit: withPhoto ? undefined : { photo: true },
+      // Vitrine publique (sans ?all=true) : jamais le prix d'achat, le stock ni les seuils (données internes).
+      omit: {
+        ...(withPhoto ? {} : { photo: true }),
+        ...(all ? {} : { purchasePrice: true, stockMax: true, purchaseThreshold: true, productionThreshold: true, available: true, reserved: true, inDelivery: true, returned: true }),
+      },
       include: {
         category: { omit: { photo: true } },
         customFields: { include: { definition: true } },
@@ -40,9 +44,11 @@ export async function GET(request: NextRequest) {
     // Vitrine publique : cache CDN 60 s (les pages admin passent ?all=true → jamais en cache).
     // Public avec photos : l'URL de l'image (cachée par le navigateur) au lieu du base64 dans le JSON.
     // Admin (?all=true) : base64 conservé (aperçu / modification de la photo de la référence).
+    // Vitrine publique : catégorie « sur devis » → prix jamais exposé (mis à 0, l'affichage le masque).
+    const masked = all ? products : products.map((p) => (p.category?.quoteOnly ? { ...p, price: 0 } : p));
     const payload = withPhoto && !all
-      ? products.map((p) => { const photo = (p as { photo?: string | null }).photo; return { ...p, photo: photo ? `/api/products/${p.id}/image?v=${imageVersion(photo)}` : null }; })
-      : products;
+      ? masked.map((p) => { const photo = (p as { photo?: string | null }).photo; return { ...p, photo: photo ? `/api/products/${p.id}/image?v=${imageVersion(photo)}` : null }; })
+      : masked;
     return NextResponse.json(payload, all ? undefined : { headers: { 'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300' } });
   } catch (e) {
     console.error(e);

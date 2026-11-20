@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requirePermission } from '@/lib/permissions';
+import { canAccessClient } from '@/lib/access';
 import { prisma } from '@/lib/prisma';
 import { createAudit } from '@/lib/audit';
 
@@ -18,6 +19,13 @@ export async function POST(request: NextRequest) {
 
     if (clientIds.length === 0) {
       return NextResponse.json({ error: 'Sélectionne au moins un client' }, { status: 400 });
+    }
+
+    // Un commercial ne peut (ré)assigner que les clients qu'il voit (les siens / confiés par un congé).
+    for (const cid of clientIds) {
+      if (!(await canAccessClient(session.user as never, cid))) {
+        return NextResponse.json({ error: 'Client introuvable' }, { status: 404 });
+      }
     }
 
     if (assignedToId) {

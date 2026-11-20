@@ -12,7 +12,7 @@ export default function robots(): MetadataRoute.Robots {
       // /cart et /checkout : volontairement ABSENTS tant que Google les a en index — ils portent un
       // « noindex » (cf. leur layout) que Google ne peut lire que s'il a le droit de les explorer.
       // Une fois disparus de Google (site:psi.dz), on peut les remettre ici.
-      disallow: ['/admin', '/api'],
+      disallow: ['/admin', '/api', '/d/'],
     },
     sitemap: `${SITE_URL}/sitemap.xml`,
   };

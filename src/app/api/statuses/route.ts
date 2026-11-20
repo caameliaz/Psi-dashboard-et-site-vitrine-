@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
+import { requireAdmin } from '@/lib/access';
 import { prisma } from '@/lib/prisma';
 
 // GET /api/statuses — liste tous les statuts personnalisés (admin + employé)
@@ -18,8 +19,9 @@ export async function GET() {
 
 // POST /api/statuses — créer un statut personnalisé (admin uniquement)
 export async function POST(request: NextRequest) {
-  const session = await auth();
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const guard = await requireAdmin();
+  if (guard.error) return guard.error;
+  const session = guard.session;
 
   try {
     const body = await request.json();

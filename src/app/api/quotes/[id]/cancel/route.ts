@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { scanLowStock } from '@/lib/low-stock';
 import { prisma } from '@/lib/prisma';
+import { guardRequestAccess } from '@/lib/access';
 import { requirePermission } from '@/lib/permissions';
 import { createAudit } from '@/lib/audit';
 import { cancelStock } from '@/lib/order-stock';
@@ -8,11 +10,10 @@ type Ctx = { params: Promise<{ id: string }> };
 
 // PATCH /api/quotes/[id]/cancel — annuler un devis (permission modifier_statuts)
 export async function PATCH(request: NextRequest, { params }: Ctx) {
-  const guard = await requirePermission('modifier_statuts');
+  const { id } = await params;
+  const guard = await guardRequestAccess('modifier_statuts', 'quote', id);
   if (guard.error) return guard.error;
   const session = guard.session;
-
-  const { id } = await params;
 
   try {
     const body = await request.json();
@@ -26,6 +27,10 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
 
     if (existing.status === 'ANNULE') {
       return NextResponse.json({ error: 'Devis déjà annulé' }, { status: 409 });
+    }
+    // Livré/retourné : la marchandise est déjà sortie, annuler remettrait du stock « fantôme » en disponible
+    if (existing.status === 'LIVRE' || existing.status === 'RETOURNE') {
+      return NextResponse.json({ error: 'Un devis livré ou retourné ne peut pas être annulé (utilisez « Retourné »)' }, { status: 409 });
     }
 
     const quote = await prisma.quote.update({
@@ -45,6 +50,7 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
 
     try { await cancelStock('quote', id); } catch (stockError) { console.error('[quotes/cancel] Erreur de mise à jour du stock :', stockError); }
 
+    await scanLowStock();
     return NextResponse.json(quote);
   } catch (e) {
     console.error(e);

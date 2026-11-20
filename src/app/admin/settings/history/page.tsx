@@ -10,7 +10,7 @@ import { AdminSelect } from '@/components/ui/AdminSelect';
 import { RequirePerm } from '@/components/RequirePerm';
 import { orderToDetail, quoteToDetail } from '@/lib/request-detail';
 
-type ActionType = 'commande' | 'devis' | 'produit' | 'client' | 'utilisateur' | 'contenu';
+type ActionType = 'commande' | 'devis' | 'produit' | 'client' | 'utilisateur' | 'contenu' | 'document';
 
 interface HistoryEntry {
   id: number;
@@ -34,6 +34,7 @@ function dbActionType(entity: string): ActionType {
   if (e === 'PRODUCT'  || e === 'PRODUIT')     return 'produit';
   if (e === 'CLIENT')                          return 'client';
   if (e === 'USER'     || e === 'UTILISATEUR') return 'utilisateur';
+  if (e === 'DOCUMENT')                        return 'document';
   return 'contenu';
 }
 
@@ -62,6 +63,7 @@ const typeConfig: Record<ActionType, { label: string; dot: string; bg: string; t
   client:      { label: 'Client',      dot: '#F59E0B', bg: '#FFFBEB', text: '#92400E' },
   utilisateur: { label: 'Utilisateur', dot: '#8B5CF6', bg: '#F3E8FF', text: '#6B21A8' },
   contenu:     { label: 'Contenu',     dot: '#6B7280', bg: '#F9FAFB', text: '#374151' },
+  document:    { label: 'Document',    dot: '#0EA5E9', bg: '#F0F9FF', text: '#0C4A6E' },
 };
 
 function HistoryPageInner() {

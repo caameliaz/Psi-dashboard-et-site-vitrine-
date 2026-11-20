@@ -19,6 +19,7 @@ import { useSession } from 'next-auth/react';
 import { useRole } from '@/lib/role-context';
 import { RequirePerm } from '@/components/RequirePerm';
 import { ImportVentesModal } from '@/components/ui/ImportVentesModal';
+import { LabelPrintModal, type LabelEntry } from '@/components/ui/LabelPrintModal';
 import { orderToDetail, quoteToDetail, DB_TO_UI, UI_TO_DB } from '@/lib/request-detail';
 import { validateEmail, validatePhone, validateQuantity, validatePositiveNumber, normalizeEmail, normalizePhone, firstError, messageErreur } from '@/lib/validation';
 
@@ -137,6 +138,8 @@ export async function submitNewRequest(
         assignedToId: item._assignedToId ?? undefined, source: 'AUTRE',
         invoiceNumber: item._invoiceNumber, paymentMethod: item._paymentMethod,
         paymentDate: item._paymentDate, vatEnabled: item._vatEnabled,
+        // Vente créée directement livrée : choix du pop-up « retirer du stock ? » (true / false / absent)
+        adjustStock: item._adjustStock,
       }
     : {
         // id transmis quand le devis est créé depuis une fiche client → pas de doublon
@@ -250,11 +253,17 @@ export function CreateForm({ defaultType, onClose, onSave, users, currentUserId,
   // Pop-up "enregistrer sur la fiche client ?" — infos saisies que la fiche existante n'a pas.
   const [profilePrompt, setProfilePrompt] = useState<{ clientLabel: string; gaps: string[] } | null>(null);
 
+  // Pop-up « vente livrée directement : retirer du stock ? » (date de règlement passée → créée Livrée).
+  // `current` = stock disponible actuel (absent si le compte n'a pas le droit de voir le stock).
+  const [stockPrompt, setStockPrompt] = useState<{ saveToProfile?: boolean; lines: { label: string; qty: number; current?: number }[] } | null>(null);
+
   // `saveToProfile` : undefined = pas encore demandé (on vérifie la fiche), true/false = choix fait.
-  const handleSave = async (saveToProfile?: boolean) => {
+  // `adjustStock`   : undefined = pas encore demandé (vente livrée directement), true = retirer du stock, false = ne pas y toucher.
+  const handleSave = async (saveToProfile?: boolean, adjustStock?: boolean) => {
     setFormError('');
     setFieldErrors({});
     setProfilePrompt(null);
+    setStockPrompt(null);
     // Champs obligatoires : entreprise, téléphone, wilaya, commune, ≥ 1 ligne.
     if (!entreprise.trim()) { setFieldErrors({ entreprise: "Nom de l'entreprise requis" }); setTimeout(() => document.querySelector('[placeholder="Nom entreprise"]')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100); return; }
     if (!telephone.trim()) { setFieldErrors({ telephone: 'Numéro de téléphone requis' }); setTimeout(() => document.querySelector('[placeholder="+213 5XX XXX XXX"]')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100); return; }
@@ -284,6 +293,23 @@ export function CreateForm({ defaultType, onClose, onSave, users, currentUserId,
           }
         }
       } catch { /* vérification facultative : en cas d'échec on crée quand même la commande */ }
+    }
+    // Commande avec date de règlement passée = créée directement « Livrée » : on demande si le stock doit baisser.
+    const aujourdhui = new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Algiers' });
+    if (type === 'Commande' && paymentDate && paymentDate < aujourdhui && adjustStock === undefined) {
+      const lignesStock = lignes.filter((l) => l.ref && l.productId && l.qte > 0);
+      if (lignesStock.length > 0) {
+        let stocks = new Map<string, number>();
+        try {
+          const r = await fetch('/api/stock/products');
+          if (r.ok) stocks = new Map((await r.json() as { id: string; available: number }[]).map((p) => [p.id, p.available]));
+        } catch { /* sans droit « voir le stock » : on affiche juste les quantités à retirer */ }
+        setStockPrompt({
+          saveToProfile,
+          lines: lignesStock.map((l) => ({ label: l.ref, qty: l.qte, current: stocks.get(l.productId as string) })),
+        });
+        return;
+      }
     }
     setSaving(true);
     const now = new Date();
@@ -319,6 +345,7 @@ export function CreateForm({ defaultType, onClose, onSave, users, currentUserId,
       _paymentDate: paymentDate || undefined,
       _vatEnabled: tva,
       _saveToProfile: saveToProfile === true,
+      _adjustStock: adjustStock,
     } as any);
     setSaving(false);
     // Échec (ex. erreur serveur, validation API) → on GARDE le formulaire ouvert
@@ -525,8 +552,9 @@ export function CreateForm({ defaultType, onClose, onSave, users, currentUserId,
                   <div className="flex items-end justify-end gap-2 mt-2">
                     <div className="w-[72px]">
                       <span className="block text-[10px] font-bold text-[#ABBED1] uppercase tracking-wide mb-1">Qté</span>
-                      <input type="number" inputMode="numeric" min={1} value={ligne.qte}
-                        onChange={e => setLigne(i, { qte: Math.max(1, Number(e.target.value)) })}
+                      <input type="number" inputMode="numeric" min={1} value={ligne.qte || ''}
+                        onChange={e => setLigne(i, { qte: Math.max(0, Math.floor(Number(e.target.value)) || 0) })}
+                        onBlur={() => { if (!ligne.qte) setLigne(i, { qte: 1 }); }}
                         className={ic + ' text-center'} />
                     </div>
                     <div className="w-[110px]">
@@ -619,9 +647,31 @@ export function CreateForm({ defaultType, onClose, onSave, users, currentUserId,
             </div>
           </div>
         )}
+        {stockPrompt && (
+          <div className="mx-6 mb-3 rounded-xl border-2 border-[#BFDBFE] bg-[#EFF6FF] p-3.5">
+            <p className="text-[13px] font-bold text-[#1E3A8A] mb-1">Vente livrée directement : toucher au stock ?</p>
+            <p className="text-[12px] text-[#1E3A8A] mb-2">Cette commande est créée directement « Livrée » (date de règlement passée). Faut-il retirer ces produits du stock disponible ?</p>
+            <ul className="mb-3 rounded-lg bg-white border border-[#DBEAFE] divide-y divide-[#EFF6FF]">
+              {stockPrompt.lines.map((l, i) => (
+                <li key={i} className="flex items-center justify-between gap-3 px-3 py-2 text-[12px] text-[#0F172A]">
+                  <span className="font-semibold">{l.label}</span>
+                  <span className="tabular-nums text-[#374151]">
+                    j&apos;enlève <b>{l.qty}</b> du stock
+                    {l.current !== undefined && <> · {l.current} → <b>{Math.max(0, l.current - l.qty)}</b>{l.current < l.qty && <span className="text-[#B91C1C]"> (il n&apos;y en a que {l.current})</span>}</>}
+                  </span>
+                </li>
+              ))}
+            </ul>
+            <div className="flex gap-2 flex-wrap">
+              <button onClick={() => setStockPrompt(null)} className="px-3 py-2 rounded-xl border border-[#E2E8F0] bg-white text-[12px] font-semibold text-[#374151]">Retour</button>
+              <button onClick={() => handleSave(stockPrompt.saveToProfile, false)} className="flex-1 px-3 py-2 rounded-xl border border-[#E2E8F0] bg-white text-[12px] font-bold text-[#374151]">Non, ne pas toucher au stock</button>
+              <button onClick={() => handleSave(stockPrompt.saveToProfile, true)} className="flex-1 px-3 py-2 rounded-xl text-[12px] font-bold text-white" style={{ background: '#4CAF4F' }}>Oui, retirer du stock</button>
+            </div>
+          </div>
+        )}
         <div className="flex gap-3 px-6 py-4 border-t border-[#F2F4F7]">
           <button onClick={onClose} className="flex-1 px-4 py-2.5 rounded-xl border border-[#E2E8F0] text-[13px] font-semibold text-[#374151] hover:bg-[#F8FAFC] transition-colors">Annuler</button>
-          <button onClick={() => handleSave()} disabled={saving || !!profilePrompt}
+          <button onClick={() => handleSave()} disabled={saving || !!profilePrompt || !!stockPrompt}
             className="flex-1 px-4 py-2.5 rounded-xl text-[13px] font-bold text-white disabled:opacity-40 transition-opacity"
             style={{ background: '#4CAF4F' }}>
             {saving ? 'Création…' : `Créer ${type === 'Commande' ? 'la commande' : 'le devis'}`}
@@ -669,6 +719,9 @@ function RequestsPageInner() {
   const [users, setUsers] = useState<{ id: string; name: string }[]>([]);
   const [selected, setSelected]   = useState<RequestDetail | null>(null);
   const [showCreate, setShowCreate] = useState(false);
+  // Sélection multiple (impression groupée des étiquettes) : clés « Type:id »
+  const [checked, setChecked] = useState<Set<string>>(new Set());
+  const [showLabels, setShowLabels] = useState(false);
   const [showImportVentes, setShowImportVentes] = useState(false);
   const [createPrefill, setCreatePrefill] = useState<{ client?: string; entreprise?: string; telephone?: string; email?: string; wilaya?: string; commune?: string } | undefined>(undefined);
   // "Marquer Produit" tombe sur un manquant réel (rien pour le couvrir, même après avoir
@@ -831,6 +884,16 @@ function RequestsPageInner() {
     return matchSearch && matchAssigne && matchPeriode && matchPaiement && matchFacture;
   };
   const filtered = sorted.filter((r) => matchHorsStatut(r) && (filterStatut === 'all' || r.statut === filterStatut));
+
+  // ── Étiquettes colis : sélection multiple ──
+  const rowKey = (r: RequestDetail) => `${r.type}:${r.id}`;
+  const selectableRows = filtered.filter((r) => r.id);
+  const allChecked = selectableRows.length > 0 && selectableRows.every((r) => checked.has(rowKey(r)));
+  const toggleRow = (r: RequestDetail) => setChecked((prev) => { const n = new Set(prev); if (n.has(rowKey(r))) n.delete(rowKey(r)); else n.add(rowKey(r)); return n; });
+  const toggleAll = () => setChecked(allChecked ? new Set() : new Set(selectableRows.map(rowKey)));
+  const labelEntries: LabelEntry[] = [...orders, ...quotes]
+    .filter((r) => r.id && checked.has(rowKey(r)))
+    .map((r) => ({ kind: r.type === 'Devis' ? 'quote' : 'order', id: r.id as string, ref: r.ref, sub: r.entreprise && r.entreprise !== '—' ? r.entreprise : r.client, count: r.labelCount && r.labelCount > 0 ? r.labelCount : 1 }));
 
   // Montant total des demandes affichées (selon TOUS les filtres). Annulé / Retourné exclus,
   // comme dans l'export Excel ; « Sur devis » / « — » (pas de prix) comptent 0.
@@ -1296,10 +1359,23 @@ function RequestsPageInner() {
         )}
       </div>
 
+      {checked.size > 0 && (
+        <div className="flex items-center justify-between gap-3 flex-wrap rounded-xl border-2 border-[#4CAF4F] bg-[#F0FDF4] px-4 py-2.5">
+          <span className="text-[13px] font-bold text-[#166534]">{checked.size} sélectionnée{checked.size > 1 ? 's' : ''}</span>
+          <div className="flex items-center gap-2">
+            <button onClick={() => setChecked(new Set())} className="px-3 py-1.5 rounded-lg border border-[#BBF7D0] bg-white text-[12px] font-semibold text-[#374151] hover:bg-[#F8FAFC]">Tout désélectionner</button>
+            <button onClick={() => setShowLabels(true)} className="px-3 py-1.5 rounded-lg text-[12px] font-bold text-white" style={{ background: '#4CAF4F' }}>Imprimer les étiquettes</button>
+          </div>
+        </div>
+      )}
+
       <div className="rounded-2xl border-2 border-[#E2E8F0] overflow-x-auto shadow-sm bg-white [scrollbar-width:none] [&::-webkit-scrollbar]:hidden min-h-[50vh]">
         <table className="w-full min-w-[980px]" style={{ borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ background: '#F8FAFC' }}>
+              <th className="pl-5 pr-1 py-3.5 w-8">
+                <input type="checkbox" checked={allChecked} onChange={toggleAll} aria-label="Tout sélectionner" className="w-4 h-4 accent-[#4CAF4F] cursor-pointer" />
+              </th>
               {['N°', 'Type', 'Source', 'Entreprise', 'Client', 'Responsable', 'Date', 'Total', 'Paiement', 'Facture', 'Statut'].map((h) => (
                 <th key={h} className="px-5 py-3.5 text-left font-semibold text-[#8A9BB5] uppercase tracking-wider" style={{ fontSize: 11 }}>{h}</th>
               ))}
@@ -1307,9 +1383,9 @@ function RequestsPageInner() {
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={11} className="px-6 py-14 text-center text-[13px] text-[#8A9BB5]">Chargement…</td></tr>
+              <tr><td colSpan={12} className="px-6 py-14 text-center text-[13px] text-[#8A9BB5]">Chargement…</td></tr>
             ) : filtered.length === 0 ? (
-              <tr><td colSpan={11} className="px-6 py-14 text-center text-[13px] text-[#8A9BB5]">Aucune demande trouvée</td></tr>
+              <tr><td colSpan={12} className="px-6 py-14 text-center text-[13px] text-[#8A9BB5]">Aucune demande trouvée</td></tr>
             ) : filtered.map((row, i) => {
               const isEnAttente = row.statut === 'En attente';
               const isArchived  = ARCHIVED.includes(row.statut);
@@ -1323,6 +1399,9 @@ function RequestsPageInner() {
                   style={{ background: rowBg, borderTop: '1px solid #F2F4F7' }}
                   onMouseEnter={(e) => (e.currentTarget.style.background = rowBgHover)}
                   onMouseLeave={(e) => (e.currentTarget.style.background = rowBg)}>
+                  <td className="pl-5 pr-1 py-3.5 w-8" onClick={(e) => e.stopPropagation()}>
+                    {row.id && <input type="checkbox" checked={checked.has(rowKey(row))} onChange={() => toggleRow(row)} aria-label={`Sélectionner ${row.ref}`} className="w-4 h-4 accent-[#4CAF4F] cursor-pointer" />}
+                  </td>
                   <td className="px-5 py-3.5 text-[12px] font-mono font-bold" style={{ color: isCommande ? '#4CAF4F' : '#8B5CF6' }}>{row.ref}</td>
                   <td className="px-5 py-3.5">
                     <span className="whitespace-nowrap" style={{ display: 'inline-flex', alignItems: 'center', padding: '3px 10px', borderRadius: 8, fontSize: 12, fontWeight: 700, border: `2px solid ${isCommande ? '#4CAF4F' : '#8B5CF6'}`, background: isCommande ? '#F0FDF4' : '#F5F3FF', color: isCommande ? '#166534' : '#5B21B6' }}>
@@ -1346,7 +1425,19 @@ function RequestsPageInner() {
                   <td className="px-5 py-3.5 text-[13px] font-semibold text-[#0F172A] tabular-nums whitespace-nowrap">{row.montant}</td>
                   <td className="px-5 py-3.5 text-[13px] text-[#374151] whitespace-nowrap">{paiementDe(row) ?? <span className="text-[#CBD5E1]">—</span>}</td>
                   <td className="px-5 py-3.5 text-[13px] whitespace-nowrap">{aUneFacture(row.invoiceNumber) ? <span className="font-semibold text-[#166534]">Avec</span> : <span className="text-[#8A9BB5]">Sans</span>}</td>
-                  <td className="px-5 py-3.5"><StatusPill status={row.statut} /></td>
+                  <td className="px-5 py-3.5">
+                    <StatusPill status={row.statut} />
+                    {row.receiptConfirmedAt && (
+                      <span
+                        title={row.receiptSeenAt ? 'Réception confirmée par le client (QR) — vue par l\'équipe' : 'Réception confirmée par le client (QR) — pas encore vue par l\'équipe'}
+                        className="mt-1 flex items-center gap-1 text-[10px] font-bold whitespace-nowrap"
+                        style={{ color: row.receiptSeenAt ? '#166534' : '#B45309' }}
+                      >
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none"><path d="M4 12.5l4.5 4.5L14 11.5M10 16.5l1 1L20 8.5" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                        Reçu client{row.receiptSeenAt ? '' : ' · à vérifier'}
+                      </span>
+                    )}
+                  </td>
                 </tr>
               );
             })}
@@ -1364,6 +1455,13 @@ function RequestsPageInner() {
           onAssign={handleAssign}
           onReassigned={() => { fetchAll(true); }}
           onToggleAutoAssign={handleToggleAutoAssign}
+        />
+      )}
+      {showLabels && labelEntries.length > 0 && (
+        <LabelPrintModal
+          entries={labelEntries}
+          onClose={() => setShowLabels(false)}
+          onDone={() => { setChecked(new Set()); fetchAll(true); }}
         />
       )}
       {showImportVentes && (

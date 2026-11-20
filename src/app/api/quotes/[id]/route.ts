@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { scanLowStock } from '@/lib/low-stock';
 import { prisma } from '@/lib/prisma';
+import { guardRequestAccess } from '@/lib/access';
 import { requirePermission, hasPermission } from '@/lib/permissions';
 import { createAudit, statusLabel } from '@/lib/audit';
 import { createNotif } from '@/lib/notifications';
@@ -18,10 +20,10 @@ type Ctx = { params: Promise<{ id: string }> };
 
 // GET /api/quotes/[id] — détail devis (permission voir_commandes)
 export async function GET(_request: NextRequest, { params }: Ctx) {
-  const guard = await requirePermission('voir_commandes');
-  if (guard.error) return guard.error;
-
   const { id } = await params;
+  const guard = await guardRequestAccess('voir_commandes', 'quote', id);
+  if (guard.error) return guard.error;
+  const session = guard.session;
 
   try {
     const quote = await prisma.quote.findUnique({
@@ -51,14 +53,22 @@ export async function GET(_request: NextRequest, { params }: Ctx) {
 
 // PATCH /api/quotes/[id] — modifier statut / champs admin / notes (permission modifier_statuts)
 export async function PATCH(request: NextRequest, { params }: Ctx) {
-  const guard = await requirePermission('modifier_statuts');
+  const { id } = await params;
+  const guard = await guardRequestAccess('modifier_statuts', 'quote', id);
   if (guard.error) return guard.error;
   const session = guard.session;
 
-  const { id } = await params;
-
   try {
     const body = await request.json();
+
+    // Statut AVANT cette requête : les effets sur le stock ne se rejouent que si le statut CHANGE vraiment
+    // (sinon un double clic / une requête répétée « Livré » retirait deux fois le réservé du produit).
+    const statusBefore = body.status !== undefined ? (await prisma.quote.findUnique({ where: { id }, select: { status: true } }))?.status : undefined;
+    const statusChanged = body.status !== undefined && body.status !== statusBefore;
+    // Un devis livré ou retourné ne s'annule pas : la marchandise est déjà sortie (cf. commandes).
+    if (body.status === 'ANNULE' && (statusBefore === 'LIVRE' || statusBefore === 'RETOURNE')) {
+      return NextResponse.json({ error: 'Un devis livré ou retourné ne peut pas être annulé (utilisez « Retourné »)' }, { status: 409 });
+    }
 
     // Changement d'assignation ("pris en charge par") → nécessite la permission assign_commandes
     if (body.assignedToId !== undefined && !hasPermission(session.user as any, 'assign_commandes')) {
@@ -191,6 +201,8 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
         // Lignes "libres" (sans productId) : jamais réutilisées, toujours recréées entièrement —
         // mais si l'une d'elles avait déjà déclenché sa propre ligne de production (cf.
         // confirmStock), il faut la supprimer explicitement ici, sinon elle reste orpheline.
+        // Leur stock réservé (stock existant / pièces produites) est d'abord remis en Disponible.
+        for (const e of existingItems) if (!e.productId) await releaseOrderItemStock('quote', e.id);
         const freeTextToRemove = existingItems.filter((e) => !e.productId && e.productionListItemId);
         if (freeTextToRemove.length > 0) {
           await prisma.productionListItem.deleteMany({ where: { id: { in: freeTextToRemove.map((e) => e.productionListItemId!) }, productId: null } });
@@ -324,9 +336,9 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
         await syncCommercialAssignmentForParent('quote', id);
       }
 
-      if (body.status === 'VALIDE') {
+      if (statusChanged && body.status === 'VALIDE') {
         await confirmStock('quote', id);
-      } else if (body.status === 'PRODUITE') {
+      } else if (statusChanged && body.status === 'PRODUITE') {
         // "Marquer Produit" — résout la part manquante de chaque article (réallocation de stock
         // produit existant SEULEMENT, jamais de fabrication), la confirmation d'un éventuel
         // manquant a déjà eu lieu plus haut (cf. previewForceCompleteShortfall). `force: true`
@@ -339,11 +351,11 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
           });
         }
         await resolveFreeTextItems('quote', id, { force: !!body.force });
-      } else if (body.status === 'ANNULE') {
+      } else if (statusChanged && body.status === 'ANNULE') {
         await cancelStock('quote', id);
-      } else if (body.status === 'LIVRE') {
+      } else if (statusChanged && body.status === 'LIVRE') {
         await deliverStock('quote', id);
-      } else if (body.status === 'RETOURNE') {
+      } else if (statusChanged && body.status === 'RETOURNE') {
         await returnStock('quote', id);
       } else if (body.items !== undefined && (current?.status === 'VALIDE' || current?.status === 'PRODUITE')) {
         await confirmStock('quote', id);
@@ -393,6 +405,7 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
       }).catch(() => {});
     }
 
+    await scanLowStock();
     return NextResponse.json(stockWarning ? { ...quote, stockWarning } : quote);
   } catch (e) {
     console.error(e);

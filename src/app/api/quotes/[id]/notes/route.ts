@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { guardRequestAccess } from '@/lib/access';
 import { requirePermission } from '@/lib/permissions';
 import { prisma } from '@/lib/prisma';
 import { createNotif } from '@/lib/notifications';
@@ -9,9 +10,10 @@ type Ctx = { params: Promise<{ id: string }> };
 
 // GET /api/quotes/[id]/notes — fil des notes d'un devis (permission voir_commandes)
 export async function GET(_request: NextRequest, { params }: Ctx) {
-  const guard = await requirePermission('voir_commandes');
-  if (guard.error) return guard.error;
   const { id: quoteId } = await params;
+  const guard = await guardRequestAccess('voir_commandes', 'quote', quoteId);
+  if (guard.error) return guard.error;
+  const session = guard.session;
   try {
     const notes = await prisma.requestNote.findMany({
       where: { quoteId },
@@ -27,10 +29,10 @@ export async function GET(_request: NextRequest, { params }: Ctx) {
 
 // POST /api/quotes/[id]/notes — ajouter une note (permission modifier_statuts)
 export async function POST(request: NextRequest, { params }: Ctx) {
-  const guard = await requirePermission('modifier_statuts');
+  const { id: quoteId } = await params;
+  const guard = await guardRequestAccess('modifier_statuts', 'quote', quoteId);
   if (guard.error) return guard.error;
   const session = guard.session;
-  const { id: quoteId } = await params;
   try {
     const body = await request.json();
     const content = (body?.content ?? '').trim();

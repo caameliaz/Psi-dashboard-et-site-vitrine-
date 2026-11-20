@@ -8,7 +8,9 @@ export const maxDuration = 60; // Vercel Pro: garde la connexion jusqu'à 60s (g
 
 export async function GET(request: NextRequest) {
   const session = await auth();
-  const userId = session?.user?.id ?? 'anonymous';
+  // Flux réservé aux comptes connectés (plus de connexion anonyme).
+  if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const userId = session.user.id;
   const encoder = new TextEncoder();
 
   const stream = new ReadableStream({

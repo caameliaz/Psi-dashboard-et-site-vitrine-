@@ -26,6 +26,12 @@ une divergence entre le schéma et la base).
   (booléen, `DEFAULT true`) : indépendant de `active`, contrôle si le produit
   est affiché sur le site public sans toucher à sa disponibilité dans le
   dashboard. Non-destructive, tous les produits existants restent visibles.
+- `20261112120000_documents_bl_facture` et `20261113090000_document_share_token` —
+  BL / factures / proformas : tables `DocumentTemplate`, `DocumentSettings`,
+  `DocumentCounter`, `Document` (+ lien public `shareToken`), colonnes `Client.rc/nif/nis/ai`,
+  `Category.documentDesignation`, `Product.documentDesignation`, valeur `DOCUMENT` de l'historique.
+  Additives uniquement. **Après `migrate deploy`, initialiser le compteur de facture 2026 à 22**
+  (Réglages → Documents → Compteurs, ou `DocumentCounter` FACTURE 2026 = 22) et saisir le dernier n° de BL réel.
 
 Si d'autres migrations sont ajoutées plus tard sur cette branche, elles seront
 listées ici aussi — mais `prisma migrate deploy` les applique de toute façon
@@ -134,3 +140,11 @@ puis trancher manuellement les cas ambigus comme Aquarium.
 **Reste à faire une fois la vraie base de prod migrée** : rejouer le même
 rattrapage ponctuel sur les commandes/devis de prod qui auraient été importés
 sans `ref` avant ce correctif (si applicable).
+
+---
+
+## Fait le 31 octobre 2026 : notifications de stock faible pour les admins
+
+Les admins reçoivent (dans l'app + push) « Stock faible » quand une référence passe sous son seuil et « Rupture de stock » quand elle tombe à 0, **une seule fois par passage**. Elle se réarme quand le stock remonte. Produits finis et matières premières. Une référence vue pour la première fois est enregistrée sans alerte (pas de rafale pour les produits jamais approvisionnés). Contrôle après chaque action de stock, plus un contrôle quotidien à 6 h (UTC) : `/api/cron/stock-alerts`. Code : `src/lib/low-stock.ts`. **Nécessite la migration `20261031190000_stock_alert_state`** (appliquée au déploiement).
+
+Reste possible plus tard : ajouter les références sous le seuil au récap quotidien par email.

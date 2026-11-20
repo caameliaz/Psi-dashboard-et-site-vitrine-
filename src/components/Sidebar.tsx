@@ -79,6 +79,7 @@ function IconChevron({ collapsed }: { collapsed: boolean }) {
 const navItems: { href: string; label: string; Icon: typeof IconHome; perm: PermKey | PermKey[] | null }[] = [
   { href: '/admin/dashboard', label: 'Dashboard',    Icon: IconHome,     perm: null },
   { href: '/admin/requests',  label: 'Commandes',    Icon: IconDocument, perm: 'voir_commandes' },
+  { href: '/admin/documents', label: 'Documents',    Icon: IconEdit,     perm: 'voir_commandes' },
   { href: '/admin/products',  label: 'Produits',     Icon: IconLayers,   perm: 'voir_produits' },
   { href: '/admin/stock',     label: 'Stock',        Icon: IconBox,      perm: 'voir_stock' },
   { href: '/admin/recipes',   label: 'Recettes',     Icon: IconFlask,    perm: 'voir_stock' },

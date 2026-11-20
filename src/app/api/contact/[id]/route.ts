@@ -1,13 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
+import { requirePermission } from '@/lib/permissions';
 import { prisma } from '@/lib/prisma';
 
 type Ctx = { params: Promise<{ id: string }> };
 
 // PATCH /api/contact/[id] — modifier statut / notes (admin + employé)
 export async function PATCH(request: NextRequest, { params }: Ctx) {
-  const session = await auth();
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const guard = await requirePermission('modifier_contenu');
+  if (guard.error) return guard.error;
+  const session = guard.session;
 
   const { id } = await params;
 

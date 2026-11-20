@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
+import { requireAnyPermission } from '@/lib/access';
 import { getSiteDetails, getMonthlyVisits, rangeFromSearchParams } from '@/lib/ga4';
 import { getCartStats } from '@/lib/cart-stats';
 
@@ -9,8 +10,9 @@ import { getCartStats } from '@/lib/cart-stats';
 // (pas dans le polling du dashboard) ; c'est aussi ici, à la demande, que les paniers
 // inactifs depuis 24h basculent "abandonné" (cf. getCartStats — pas de cron).
 export async function GET(request: NextRequest) {
-  const session = await auth();
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const guard = await requireAnyPermission(['voir_contenu', 'modifier_contenu']);
+  if (guard.error) return guard.error;
+  const session = guard.session;
 
   const range = rangeFromSearchParams(request.nextUrl.searchParams);
   const now = new Date();

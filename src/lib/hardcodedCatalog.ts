@@ -1,7 +1,7 @@
-export interface Cat { id: string; name: string; photo: string | null; description?: string | null }
+export interface Cat { id: string; name: string; photo: string | null; description?: string | null; quoteOnly?: boolean; photos?: string[] }
 export interface Prod {
   id: string; reference: string; width: number; length: number; usage: string; price: number;
-  photo?: string | null; category?: { id: string; name: string } | null;
+  photo?: string | null; category?: { id: string; name: string; quoteOnly?: boolean } | null;
   customFields?: { value: string; definition: { label: string } }[];
   metrage?: number | null;
 }

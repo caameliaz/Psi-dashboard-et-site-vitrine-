@@ -12,9 +12,10 @@ export function imageVersion(dataUrl: string): string {
 
 // Réponse HTTP d'une data URL (image/xxx;base64) en vrai fichier image, cachée 24 h (l'URL est versionnée).
 export function dataUrlToImageResponse(dataUrl: string | null | undefined): Response {
-  const m = dataUrl?.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,([\s\S]*)$/);
+  // Formats raster uniquement : jamais de SVG (peut contenir du script, exécuté dans l'origine du site).
+  const m = dataUrl?.match(/^data:(image\/(?:png|jpeg|jpg|webp|gif));base64,([\s\S]*)$/);
   if (!m) return new Response(null, { status: 404 });
   return new Response(Buffer.from(m[2], 'base64'), {
-    headers: { 'Content-Type': m[1], 'Cache-Control': 'public, max-age=86400, s-maxage=86400, stale-while-revalidate=604800' },
+    headers: { 'Content-Type': m[1], 'Content-Security-Policy': "default-src 'none'; sandbox", 'X-Content-Type-Options': 'nosniff', 'Cache-Control': 'public, max-age=86400, s-maxage=86400, stale-while-revalidate=604800' },
   });
 }

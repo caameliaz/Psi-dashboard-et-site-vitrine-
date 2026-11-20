@@ -7,6 +7,9 @@ import { StockListsWidget } from '@/components/ui/StockListsWidget';
 import { ManqueMatiereModal, type ManqueMatiere } from '@/components/ui/ManqueMatiereModal';
 import { useRole } from '@/lib/role-context';
 import { RequirePerm } from '@/components/RequirePerm';
+import { FreeRefEditModal } from '@/components/ui/FreeRefEditModal';
+import { parseFraction, formatSecondary } from '@/lib/dual-unit';
+import { NotesPencil, NotesModal, NotesPanel, useStockNoteCounts, noteKey, type NoteKind } from '@/components/ui/StockNotes';
 
 const inputClass = "w-full px-3 py-2.5 rounded-lg border border-[#E2E8F0] text-sm text-[#0F172A] focus:outline-none focus:border-[#4CAF4F] focus:ring-1 focus:ring-[#4CAF4F] transition-colors bg-[#F8FAFC]";
 
@@ -19,6 +22,9 @@ interface StockProduct {
   // tout ce qui est physiquement en entrepôt OU engagé sur une commande, moins ce qui est
   // chez un commercial.
   available: number; reserved: number; inDelivery: number; returned: number; assignedToCommercials: number;
+  // Part du Réservé qui vient de commandes RollLink actives (interrupteur « RollLink » : voir avec / sans)
+  reservedRollink?: number; rollinkFromStock?: number; // dont : ce que RollLink a pris au stock libre
+  rollinkPending?: number; // quantités de commandes RollLink en test (rien réservé) — sert à la simulation
   purchaseThreshold: number; productionThreshold: number;
   category: { name: string } | null;
   recipeItems: { id: string }[];
@@ -26,38 +32,56 @@ interface StockProduct {
 interface StockMaterial {
   id: string; reference: string; name: string; unit: string; price: number;
   purchaseThreshold: number; available: number; reserved: number;
+  // 2e unité facultative (ex. « bobine ») : le nombre est déduit du poids via ce rapport (cf. src/lib/dual-unit.ts)
+  secondaryUnit?: string | null; primaryPerSecondary?: number | null;
 }
+
+// « · 2 ½ bobines » pour une quantité de l'unité principale (vide si la matière n'a pas de 2e unité ou de rapport connu)
+const secText = (m: StockMaterial | null | undefined, valeur: number) =>
+  m?.secondaryUnit && m.primaryPerSecondary ? ` · ${formatSecondary(valeur / m.primaryPerSecondary)} ${m.secondaryUnit}` : '';
 interface EmployeeAssignment { id: string; name: string; totalAssigned: number; }
 interface AssignmentLine {
   assignmentId: string; productId: string; productReference: string; productName: string | null;
   quantity: number; remainingStock: number; assignedAt: string;
 }
 
-interface FreeRef { label: string; available: number; }
+interface FreeRef { label: string; available: number; reserved: number; inDelivery: number; returned: number; }
+type FreeRefField = 'available' | 'reserved' | 'inDelivery' | 'returned';
+const FREE_REF_FIELD_LABELS: Record<FreeRefField, string> = { available: 'Disponible', reserved: 'Réservé', inDelivery: 'En livraison', returned: 'En retour' };
 
 // ── Overlay : stock d'une réf libre (hors catalogue) — Réapprovisionner (ajoute) / Corriger (fixe) ───
-function FreeRefModal({ item, onClose, onSave }: {
-  item: FreeRef; onClose: () => void; onSave: (label: string, action: 'restock' | 'correction', qty: number) => Promise<boolean>;
+function FreeRefModal({ item, onClose, onSave, onNotesChange }: {
+  item: FreeRef; onClose: () => void; onNotesChange?: () => void; onSave: (label: string, action: 'restock' | 'correction', qty: number, field: FreeRefField) => Promise<boolean>;
 }) {
   const [action, setAction] = useState<'restock' | 'correction'>('restock');
+  const [field, setField] = useState<FreeRefField>('available');
   const [qty, setQty] = useState('');
   const [saving, setSaving] = useState(false);
+  const { isAdmin } = useRole();
   const n = Number(qty);
   const valid = qty !== '' && !Number.isNaN(n) && n >= 0 && (action === 'correction' || n > 0);
   return (
-    <Modal title={`Stock — ${item.label}`} onClose={onClose}>
-      <p className="text-[12px] text-[#8A9BB5] mb-3">Actuellement disponible : <span className="font-bold text-[#0F172A]">{item.available}</span></p>
+    <Modal title={`Stock — ${item.label}`} onClose={onClose} scrollable>
+      <p className="text-[12px] text-[#8A9BB5] mb-3">
+        {(Object.keys(FREE_REF_FIELD_LABELS) as FreeRefField[]).map((f) => `${FREE_REF_FIELD_LABELS[f]} : ${item[f]}`).join(' · ')}
+      </p>
+      {isAdmin && <div className="mb-4"><NotesPanel kind="FREE" keyId={item.label} onChange={onNotesChange} /></div>}
       <div className="flex gap-1 p-1 rounded-lg bg-[#F1F5F9] mb-3">
         {([['restock', 'Réapprovisionner'], ['correction', 'Correction']] as const).map(([val, lbl]) => (
           <button key={val} onClick={() => setAction(val)} className={`flex-1 py-1.5 rounded-md text-[12px] font-bold transition-colors ${action === val ? 'bg-white text-[#0F172A] shadow-sm' : 'text-[#8A9BB5]'}`}>{lbl}</button>
         ))}
       </div>
-      <label className="text-[12px] font-semibold text-[#374151] mb-1 block">{action === 'restock' ? 'Quantité à ajouter' : 'Nouvelle quantité disponible'}</label>
+      {action === 'correction' && (
+        <select value={field} onChange={(e) => setField(e.target.value as FreeRefField)} className={`${inputClass} mb-3`}>
+          {(Object.keys(FREE_REF_FIELD_LABELS) as FreeRefField[]).map((f) => <option key={f} value={f}>{FREE_REF_FIELD_LABELS[f]}</option>)}
+        </select>
+      )}
+      <label className="text-[12px] font-semibold text-[#374151] mb-1 block">{action === 'restock' ? 'Quantité à ajouter' : `Nouvelle quantité — ${FREE_REF_FIELD_LABELS[field].toLowerCase()}`}</label>
       <input value={qty} onChange={(e) => setQty(e.target.value.replace(/[^\d.]/g, ''))} inputMode="decimal" className={inputClass} autoFocus />
       <div className="flex gap-3 mt-4">
         <button onClick={onClose} className="flex-1 px-4 py-2.5 rounded-xl border border-[#E2E8F0] text-[13px] font-semibold text-[#374151]">Annuler</button>
         <button disabled={!valid || saving}
-          onClick={async () => { setSaving(true); const ok = await onSave(item.label, action, n); setSaving(false); if (ok) onClose(); }}
+          onClick={async () => { setSaving(true); const ok = await onSave(item.label, action, n, action === 'correction' ? field : 'available'); setSaving(false); if (ok) onClose(); }}
           className="flex-1 px-4 py-2.5 rounded-xl text-[13px] font-bold text-white bg-[#4CAF4F] disabled:opacity-50">
           {saving ? '…' : 'Valider'}
         </button>
@@ -101,12 +125,12 @@ function MatiereRestanteChamps({ materials, restes, setRestes }: {
 }
 
 // ── Overlay : Restock (Disponible uniquement) / Correction (champ exact) ───
-function StockActionModal({ label, unit, item, isProduct, needsMode, materials, onClose, onRestock, onCorrection }: {
-  label: string; unit: string; item: StockProduct | StockMaterial; isProduct: boolean; needsMode: boolean;
+function StockActionModal({ label, unit, item, isProduct, needsMode, materials, onClose, onRestock, onCorrection, onNotesChange }: {
+  label: string; unit: string; item: StockProduct | StockMaterial; isProduct: boolean; needsMode: boolean; onNotesChange?: () => void;
   materials: StockMaterial[];
   onClose: () => void;
-  onRestock: (qty: number, mode?: 'produire' | 'acheter', matieresRestantes?: Record<string, number>, forcer?: boolean) => Promise<ManqueMatiere[] | null>;
-  onCorrection: (field: string, qty: number) => Promise<void>;
+  onRestock: (qty: number, mode?: 'produire' | 'acheter', matieresRestantes?: Record<string, number>, forcer?: boolean, secondaryQuantity?: number) => Promise<ManqueMatiere[] | null>;
+  onCorrection: (field: string, qty: number, secondaryQuantity?: number) => Promise<void>;
 }) {
   const [tab, setTab] = useState<'restock' | 'correction'>('restock');
   const [qty, setQty] = useState('');
@@ -122,6 +146,10 @@ function StockActionModal({ label, unit, item, isProduct, needsMode, materials, 
   const produit = isProduct && (needsMode ? mode === 'produire' : (item as StockProduct).mode === 'FABRIQUE');
 
   const currentFieldValue = (item as any)[field] as number;
+  // Matière à 2 unités (ex. kg + bobines)
+  const mat = isProduct ? null : (item as StockMaterial);
+  const hasSec = !!mat?.secondaryUnit;
+  const [secQty, setSecQty] = useState('');   // bobines reçues (réapprovisionnement) ou restantes (correction)
 
   const reapprovisionner = async (forcer = false) => {
     const matieresRestantes: Record<string, number> = {};
@@ -131,7 +159,7 @@ function StockActionModal({ label, unit, item, isProduct, needsMode, materials, 
         if (v.trim() && !Number.isNaN(r) && r >= 0) matieresRestantes[id] = r;
       }
     }
-    const manquants = await onRestock(Number(qty), needsMode ? mode : undefined, Object.keys(matieresRestantes).length ? matieresRestantes : undefined, forcer);
+    const manquants = await onRestock(Number(qty), needsMode ? mode : undefined, Object.keys(matieresRestantes).length ? matieresRestantes : undefined, forcer, hasSec ? (parseFraction(secQty) ?? undefined) : undefined);
     if (manquants) setManques(manquants);
     else onClose();
   };
@@ -142,7 +170,7 @@ function StockActionModal({ label, unit, item, isProduct, needsMode, materials, 
     setSaving(true);
     try {
       if (tab === 'restock') await reapprovisionner();
-      else { await onCorrection(field, n); onClose(); }
+      else { await onCorrection(field, n, hasSec && field === 'available' ? (parseFraction(secQty) ?? undefined) : undefined); onClose(); }
     } finally {
       setSaving(false);
     }
@@ -156,16 +184,18 @@ function StockActionModal({ label, unit, item, isProduct, needsMode, materials, 
   }
 
   return (
-    <Modal title={`Stock — ${label}`} onClose={onClose}>
+    <Modal title={`Stock — ${label}`} onClose={onClose} scrollable>
       <div className="space-y-4">
         <div className="grid grid-cols-2 gap-2">
           {Object.entries(fieldLabels).map(([key, lbl]) => (
             <div key={key} className="px-3 py-2 rounded-lg bg-[#F8FAFC] border border-[#F0F4F8]">
               <p className="text-[10px] font-bold text-[#8A9BB5] uppercase">{lbl}</p>
-              <p className="text-[14px] font-bold text-[#0F172A] tabular-nums">{(item as any)[key]} {unit}</p>
+              <p className="text-[14px] font-bold text-[#0F172A] tabular-nums">{(item as any)[key]} {unit}{secText(mat, (item as any)[key])}</p>
             </div>
           ))}
         </div>
+
+        {isAdmin && <NotesPanel kind={isProduct ? 'PRODUCT' : 'MATERIAL'} keyId={item.id} onChange={onNotesChange} />}
 
         <div className="flex gap-2 p-1 rounded-lg bg-[#F1F5F9]">
           <button onClick={() => setTab('restock')} className={`flex-1 py-1.5 rounded-md text-[12px] font-bold transition-colors ${tab === 'restock' ? 'bg-white text-[#0F172A] shadow-sm' : 'text-[#8A9BB5]'}`}>Réapprovisionner</button>
@@ -188,6 +218,12 @@ function StockActionModal({ label, unit, item, isProduct, needsMode, materials, 
               <label className="block text-[12px] font-semibold text-[#374151] mb-1.5">Quantité à ajouter ({unit})</label>
               <input value={qty} onChange={(e) => setQty(e.target.value.replace(/[^\d.]/g, ''))} inputMode="decimal" placeholder="ex: 50" className={inputClass} autoFocus />
             </div>
+            {hasSec && (
+              <div>
+                <label className="block text-[12px] font-semibold text-[#374151] mb-1.5">Nombre de {mat?.secondaryUnit} reçu(es) <span className="font-normal text-[#8A9BB5]">— entier (ex: 3), pour mémoriser le poids d'une {mat?.secondaryUnit}</span></label>
+                <input value={secQty} onChange={(e) => setSecQty(e.target.value.replace(/[^\d.,/ ]/g, ''))} inputMode="decimal" placeholder="ex: 3" className={inputClass} />
+              </div>
+            )}
             {produit && materials.length > 0 && (
               <MatiereRestanteChamps materials={materials} restes={restes} setRestes={setRestes} />
             )}
@@ -205,6 +241,20 @@ function StockActionModal({ label, unit, item, isProduct, needsMode, materials, 
               <label className="block text-[12px] font-semibold text-[#374151] mb-1.5">Nouvelle valeur ({unit}) — actuel : {currentFieldValue}</label>
               <input value={qty} onChange={(e) => setQty(e.target.value.replace(/[^\d.]/g, ''))} inputMode="decimal" placeholder="ex: 50" className={inputClass} autoFocus />
             </div>
+            {hasSec && field === 'available' && (
+              <div>
+                <label className="block text-[12px] font-semibold text-[#374151] mb-1.5">Il reste combien de {mat?.secondaryUnit} ? <span className="font-normal text-[#8A9BB5]">— ex: 2 1/2, 1/3, 2/3, 0.5</span></label>
+                <input value={secQty} onChange={(e) => {
+                    const v = e.target.value.replace(/[^\d.,/ ]/g, ''); setSecQty(v);
+                    // Seul le nombre de bobines est donné → le poids est calculé avec le poids moyen d'une bobine (modifiable)
+                    const n = parseFraction(v);
+                    if (n !== null && mat?.primaryPerSecondary) setQty(String(Math.round(n * mat.primaryPerSecondary * 100) / 100));
+                  }} placeholder="ex: 1/2" className={inputClass} />
+                {mat?.primaryPerSecondary
+                  ? <p className="text-[11px] text-[#8A9BB5] mt-1">Poids moyen d'une {mat.secondaryUnit} : {Math.round(mat.primaryPerSecondary * 100) / 100} {mat.unit}. Le poids ci-dessus se recalcule tout seul, vous pouvez le modifier.</p>
+                  : <p className="text-[11px] text-[#B45309] mt-1">Poids d'une {mat?.secondaryUnit} encore inconnu : indiquez le poids ET le nombre de {mat?.secondaryUnit}, il sera mémorisé.</p>}
+              </div>
+            )}
           </>
         )}
 
@@ -269,9 +319,9 @@ function AssignModal({ employees, products, onClose, onSave }: {
                   <select value={l.productId} onChange={(e) => setLine(i, { productId: e.target.value })} className={inputClass}>
                     <option value="">Choisir une référence</option>
                     {/* Toutes les références : celles sans stock libre restent visibles mais grisées */}
-                    {availableProducts.map((p) => <option key={p.id} value={p.id}>{p.name || p.reference} ({p.reference}) — {horsCommerciaux(p)} disponible(s)</option>)}
+                    {availableProducts.map((p) => <option key={p.id} value={p.id}>{p.name || p.reference} ({p.reference}) — {horsCommerciaux(p)} attribuable(s){p.reserved > 0 ? ` (dont ${Math.min(p.reserved, horsCommerciaux(p))} réservé(s) pour des commandes)` : ''}</option>)}
                     {products.filter((p) => horsCommerciaux(p) <= 0).map((p) => (
-                      <option key={p.id} value={p.id} disabled>{p.name || p.reference} ({p.reference}) — 0 disponible, réapprovisionner d&apos;abord</option>
+                      <option key={p.id} value={p.id} disabled>{p.name || p.reference} ({p.reference}) — rien d&apos;attribuable, réapprovisionner d&apos;abord</option>
                     ))}
                   </select>
                   <input value={l.quantity} onChange={(e) => setLine(i, { quantity: e.target.value.replace(/[^\d.]/g, '') })} inputMode="decimal"
@@ -299,8 +349,9 @@ function AssignModal({ employees, products, onClose, onSave }: {
 function RestockOnlyModal({ products, materials, onClose, onRestock }: {
   products: StockProduct[]; materials: StockMaterial[];
   onClose: () => void;
-  onRestock: (type: 'product' | 'material', id: string, qty: number, mode?: 'produire' | 'acheter', matieresRestantes?: Record<string, number>, forcer?: boolean) => Promise<ManqueMatiere[] | null>;
+  onRestock: (type: 'product' | 'material', id: string, qty: number, mode?: 'produire' | 'acheter', matieresRestantes?: Record<string, number>, forcer?: boolean, secondaryQuantity?: number) => Promise<ManqueMatiere[] | null>;
 }) {
+  const [secQty, setSecQty] = useState('');
   const [type, setType] = useState<'product' | 'material'>('product');
   const [id, setId] = useState('');
   const [qty, setQty] = useState('');
@@ -324,7 +375,8 @@ function RestockOnlyModal({ products, materials, onClose, onRestock }: {
         if (v.trim() && !Number.isNaN(r) && r >= 0) matieresRestantes[mid] = r;
       }
     }
-    const manquants = await onRestock(type, id, Number(qty), needsMode ? mode : undefined, Object.keys(matieresRestantes).length ? matieresRestantes : undefined, forcer);
+    const secMat = type === 'material' ? materials.find((m) => m.id === id) : undefined;
+    const manquants = await onRestock(type, id, Number(qty), needsMode ? mode : undefined, Object.keys(matieresRestantes).length ? matieresRestantes : undefined, forcer, secMat?.secondaryUnit ? (parseFraction(secQty) ?? undefined) : undefined);
     if (manquants) setManques(manquants);
     else onClose();
   };
@@ -372,6 +424,12 @@ function RestockOnlyModal({ products, materials, onClose, onRestock }: {
           <label className="block text-[12px] font-semibold text-[#374151] mb-1.5">Quantité à ajouter</label>
           <input value={qty} onChange={(e) => setQty(e.target.value.replace(/[^\d.]/g, ''))} inputMode="decimal" placeholder="ex: 50" className={inputClass} autoFocus />
         </div>
+        {type === 'material' && materials.find((m) => m.id === id)?.secondaryUnit && (
+          <div>
+            <label className="block text-[12px] font-semibold text-[#374151] mb-1.5">Nombre de {materials.find((m) => m.id === id)?.secondaryUnit} reçu(es) <span className="font-normal text-[#8A9BB5]">— entier (ex: 3)</span></label>
+            <input value={secQty} onChange={(e) => setSecQty(e.target.value.replace(/[^\d.,/ ]/g, ''))} inputMode="decimal" placeholder="ex: 3" className={inputClass} />
+          </div>
+        )}
         {produit && materials.length > 0 && (
           <MatiereRestanteChamps materials={materials} restes={restes} setRestes={setRestes} />
         )}
@@ -387,13 +445,33 @@ function RestockOnlyModal({ products, materials, onClose, onRestock }: {
 }
 
 function StockPageInner() {
-  const { can } = useRole();
+  const { can, isAdmin } = useRole();
   const canEdit = can('modifier_stock');
+  // Notes sur les références : comptes ADMIN seulement (crayon à côté de « Gérer le stock »)
+  const { counts: noteCounts, refresh: refreshNotes } = useStockNoteCounts(isAdmin);
+  const [notesTarget, setNotesTarget] = useState<{ kind: NoteKind; keyId: string; title: string } | null>(null);
 
   const [tab, setTab] = useState<'produits' | 'matieres' | 'libres' | 'commercial'>('produits');
   const [freeRefs, setFreeRefs] = useState<FreeRef[]>([]);
   const [freeTarget, setFreeTarget] = useState<FreeRef | null>(null);
-  const [products, setProducts] = useState<StockProduct[]>([]);
+  const [freeEdit, setFreeEdit] = useState<string | null>(null); // libellé de la réf libre à modifier (texte + métrage)
+  const [rawProducts, setProducts] = useState<StockProduct[]>([]);
+  // Interrupteur RollLink — DÉSACTIVÉ par défaut (RollLink est encore en test) :
+  //  - désactivé : tout ce qui vient de RollLink est ignoré (ce qu'il a pris au stock libre retourne en Disponible ;
+  //    ce qui a été fabriqué pour ses commandes disparaît du Réservé ET du Total) ;
+  //  - activé = SIMULATION : les commandes RollLink reçues en mode test sont comptées comme si elles étaient
+  //    confirmées (le disponible passe en Réservé). Calcul à l'écran SEULEMENT : rien n'est écrit en base.
+  const [withRollink, setWithRollink] = useState(false);
+  const rollinkTotal = useMemo(() => rawProducts.reduce((n, p) => n + (p.reservedRollink ?? 0), 0), [rawProducts]);
+  const simulated = (p: StockProduct) => Math.min(Math.max(0, p.available), p.rollinkPending ?? 0);
+  const simTotal = useMemo(() => rawProducts.reduce((n, p) => n + simulated(p), 0), [rawProducts]);
+  const products = useMemo(() => withRollink ? rawProducts.map((p) => {
+    const sim = simulated(p);
+    return sim > 0 ? { ...p, available: p.available - sim, reserved: p.reserved + sim } : p;
+  }) : rawProducts.map((p) => {
+    const rl = p.reservedRollink ?? 0;
+    return rl > 0 ? { ...p, available: p.available + (p.rollinkFromStock ?? 0), reserved: p.reserved - rl } : p;
+  }), [rawProducts, withRollink]);
   const [materials, setMaterials] = useState<StockMaterial[]>([]);
   const [employees, setEmployees] = useState<EmployeeAssignment[]>([]);
   const [search, setSearch] = useState('');
@@ -433,10 +511,10 @@ function StockPageInner() {
 
   const filteredFreeRefs = useMemo(() => freeRefs.filter((f) => !search || f.label.toLowerCase().includes(search.toLowerCase())), [freeRefs, search]);
 
-  const saveFreeRef = async (label: string, action: 'restock' | 'correction', quantity: number): Promise<boolean> => {
+  const saveFreeRef = async (label: string, action: 'restock' | 'correction', quantity: number, field: FreeRefField): Promise<boolean> => {
     const res = await fetch('/api/stock/free-refs', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ label, action, quantity }),
+      body: JSON.stringify({ label, action, quantity, field }),
     });
     if (!res.ok) { const err = await res.json().catch(() => ({})); alert(err.error ?? 'Échec de la mise à jour du stock'); return false; }
     await fetchAll();
@@ -449,10 +527,10 @@ function StockPageInner() {
   };
 
   // Renvoie la matière manquante si la production est refusée (l'overlay prend le relais), sinon null
-  const doRestock = async (type: 'product' | 'material', id: string, quantity: number, mode?: 'produire' | 'acheter', matieresRestantes?: Record<string, number>, forcer?: boolean): Promise<ManqueMatiere[] | null> => {
+  const doRestock = async (type: 'product' | 'material', id: string, quantity: number, mode?: 'produire' | 'acheter', matieresRestantes?: Record<string, number>, forcer?: boolean, secondaryQuantity?: number): Promise<ManqueMatiere[] | null> => {
     const res = await fetch('/api/stock/restock', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type, id, quantity, mode, matieresRestantes, forcer }),
+      body: JSON.stringify({ type, id, quantity, mode, matieresRestantes, forcer, secondaryQuantity }),
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
@@ -464,10 +542,10 @@ function StockPageInner() {
     await fetchAll();
     return null;
   };
-  const doCorrection = async (type: 'product' | 'material', id: string, field: string, quantity: number) => {
+  const doCorrection = async (type: 'product' | 'material', id: string, field: string, quantity: number, secondaryQuantity?: number) => {
     const res = await fetch('/api/stock/correction', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type, id, field, quantity }),
+      body: JSON.stringify({ type, id, field, quantity, secondaryQuantity }),
     });
     if (!res.ok) { const err = await res.json().catch(() => ({})); alert(err.error ?? 'Échec de la correction'); return; }
     await fetchAll();
@@ -499,20 +577,37 @@ function StockPageInner() {
           <h1 className="text-[22px] font-bold text-[#0F172A]">Stock</h1>
           <p className="text-[13px] text-[#8A9BB5] mt-0.5">{loading ? 'Chargement…' : `${products.length} produit(s) · ${materials.length} matière(s) première(s)`}</p>
         </div>
-        {canEdit && (
-          <div className="flex items-center gap-2">
-            <Link href="/admin/stock/thresholds" className="px-4 py-2 rounded-lg text-sm font-semibold border border-[#E2E8F0] text-[#374151] hover:bg-[#F8FAFC] transition-colors">
-              Seuils
-            </Link>
-            <button onClick={() => setShowRestock(true)} className="px-4 py-2 rounded-lg text-sm font-semibold border border-[#4CAF4F] text-[#4CAF4F] hover:bg-[#F0FDF4] transition-colors">
-              Restocker
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="flex items-center gap-2" title="Interrupteur d'affichage : désactivé = stock sans RollLink ; activé = SIMULATION de ce que donneraient les commandes RollLink en test. N'écrit rien en base.">
+            <button type="button" role="switch" aria-checked={withRollink} onClick={() => setWithRollink((v) => !v)}
+              className="relative flex-shrink-0 rounded-full transition-colors duration-200" style={{ width: 40, height: 24, background: withRollink ? '#4CAF4F' : '#D0D5DD' }}>
+              <span className="absolute top-[3px] left-[3px] w-[18px] h-[18px] rounded-full bg-white shadow-sm transition-all duration-200" style={{ transform: withRollink ? 'translateX(16px)' : 'translateX(0px)' }} />
             </button>
-            <button onClick={() => setShowAssign(true)} className="px-4 py-2 rounded-lg text-sm font-semibold text-white transition-colors" style={{ background: '#4CAF4F' }}>
-              + Attribuer du stock
-            </button>
+            <span className="text-[13px] font-semibold text-[#374151]">RollLink {withRollink ? 'activé (simulation)' : 'désactivé'}</span>
           </div>
-        )}
+          {canEdit && (
+            <div className="flex items-center gap-2">
+              <Link href="/admin/stock/thresholds" className="px-4 py-2 rounded-lg text-sm font-semibold border border-[#E2E8F0] text-[#374151] hover:bg-[#F8FAFC] transition-colors">
+                Seuils
+              </Link>
+              <button onClick={() => setShowRestock(true)} className="px-4 py-2 rounded-lg text-sm font-semibold border border-[#4CAF4F] text-[#4CAF4F] hover:bg-[#F0FDF4] transition-colors">
+                Restocker
+              </button>
+              <button onClick={() => setShowAssign(true)} className="px-4 py-2 rounded-lg text-sm font-semibold text-white transition-colors" style={{ background: '#4CAF4F' }}>
+                + Attribuer du stock
+              </button>
+            </div>
+          )}
+        </div>
       </div>
+
+      {(rollinkTotal > 0 || simTotal > 0) && (
+        <p className="text-[12px] text-[#64748B] mb-4 -mt-3">
+          {withRollink
+            ? `Simulation RollLink : ${simTotal > 0 ? `${simTotal} rouleau(x) de commandes RollLink en test sont comptés comme réservés. ` : ''}Rien n'est enregistré ; les vraies valeurs sont inchangées.`
+            : `RollLink désactivé : tout ce qui vient de RollLink est ignoré${rollinkTotal > 0 ? ` (${rollinkTotal} rouleau(x) déjà réservé(s) par ses commandes)` : ''}, Total compris.`}
+        </p>
+      )}
 
       <div className="flex items-start gap-2.5 px-4 py-3 mb-5 rounded-xl border border-[#FED7AA] bg-[#FFF7ED] text-[#9A3412]">
         <svg width={16} height={16} viewBox="0 0 24 24" fill="none" className="flex-shrink-0 mt-0.5"><path d="M12 9v4M12 17h.01M10.29 3.86l-8.18 14a1 1 0 00.87 1.5h16.02a1 1 0 00.87-1.5l-8.18-14a1 1 0 00-1.74 0z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
@@ -546,11 +641,12 @@ function StockPageInner() {
               <tr className="bg-[#F8FAFC] border-b border-[#E2E8F0]">
                 <th className="px-4 py-3 text-[11px] font-bold text-[#8A9BB5] uppercase">Référence</th>
                 <th className="px-4 py-3 text-[11px] font-bold text-[#8A9BB5] uppercase">Mode</th>
-                <th className="px-4 py-3 text-[11px] font-bold text-[#8A9BB5] uppercase text-right">Disponible</th>
-                <th className="px-4 py-3 text-[11px] font-bold text-[#8A9BB5] uppercase text-right">Réservé</th>
-                <th className="px-4 py-3 text-[11px] font-bold text-[#8A9BB5] uppercase text-right">Total</th>
-                <th className="px-4 py-3 text-[11px] font-bold text-[#8A9BB5] uppercase text-right">Hors commerciaux</th>
-                <th className="px-4 py-3 text-[11px] font-bold text-[#8A9BB5] uppercase text-right">En retour</th>
+                <th title="Prêt à vendre, pas encore rattaché à une commande. Inclut ce qui est chez les commerciaux." className="px-4 py-3 text-[11px] font-bold text-[#8A9BB5] uppercase text-right cursor-help">Disponible</th>
+                <th title="Mis de côté pour des commandes/devis confirmés, pas encore livrés (les rouleaux existent déjà ou sont en cours de fabrication)." className="px-4 py-3 text-[11px] font-bold text-[#8A9BB5] uppercase text-right cursor-help">Réservé</th>
+                <th title="Disponible + Réservé : tout le stock physique." className="px-4 py-3 text-[11px] font-bold text-[#8A9BB5] uppercase text-right cursor-help">Total</th>
+                <th title="Stock confié aux commerciaux (onglet « Stock par commercial »). Baisse quand ils livrent." className="px-4 py-3 text-[11px] font-bold text-[#8A9BB5] uppercase text-right cursor-help">Attribué</th>
+                <th title="Total − Attribué : ce qui est à l'entrepôt ou engagé sur une commande. C'est le maximum qu'on peut encore attribuer." className="px-4 py-3 text-[11px] font-bold text-[#8A9BB5] uppercase text-right cursor-help">Hors commerciaux</th>
+                <th title="Colis revenus après livraison (remise en stock à faire à la main via Correction)." className="px-4 py-3 text-[11px] font-bold text-[#8A9BB5] uppercase text-right cursor-help">En retour</th>
                 <th className="px-4 py-3 text-[11px] font-bold text-[#8A9BB5] uppercase">Statut</th>
                 {canEdit && <th className="px-4 py-3"></th>}
               </tr>
@@ -570,12 +666,14 @@ function StockPageInner() {
                       moins ce qui est actuellement chez un commercial (StockAssignment) —
                       jamais négatif à l'affichage (une incohérence de données ne doit jamais
                       remonter un total halluciné). */}
+                  <td className="px-4 py-3 text-[13px] text-[#374151] text-right tabular-nums">{p.assignedToCommercials}</td>
                   <td className="px-4 py-3 text-[13px] text-[#374151] text-right tabular-nums">{Math.max(0, p.available + p.reserved - p.assignedToCommercials)}</td>
                   <td className="px-4 py-3 text-[13px] text-[#374151] text-right tabular-nums">{p.returned}</td>
                   <td className="px-4 py-3">{statusBadge(p.available, p.mode === 'ACHETE' ? p.purchaseThreshold : p.productionThreshold)}</td>
                   {canEdit && (
                     <td className="px-4 py-3 text-right">
-                      <button onClick={() => setActionTarget({ type: 'product', item: p, label: p.reference, unit: '', needsMode: p.mode === 'LES_DEUX' })}
+                      {isAdmin && <NotesPencil className="mr-2" count={noteCounts[noteKey('PRODUCT', p.id)] ?? 0} onClick={() => setNotesTarget({ kind: 'PRODUCT', keyId: p.id, title: p.reference })} />}
+                      <button onClick={() => setActionTarget({ type: 'product', item: rawProducts.find((x) => x.id === p.id) ?? p, label: p.reference, unit: '', needsMode: p.mode === 'LES_DEUX' })}
                         className="px-3 py-1.5 rounded-lg border border-[#E2E8F0] text-[12px] font-semibold text-[#374151] hover:bg-[#F8FAFC]">
                         Gérer le stock
                       </button>
@@ -584,7 +682,7 @@ function StockPageInner() {
                 </tr>
               ))}
               {filteredProducts.length === 0 && !loading && (
-                <tr><td colSpan={9} className="px-4 py-10 text-center text-[13px] text-[#8A9BB5]">Aucun produit.</td></tr>
+                <tr><td colSpan={10} className="px-4 py-10 text-center text-[13px] text-[#8A9BB5]">Aucun produit.</td></tr>
               )}
             </tbody>
           </table>
@@ -612,12 +710,13 @@ function StockPageInner() {
                     <span className="text-[11px] font-bold px-2 py-0.5 rounded-md bg-[#EEF2FF] text-[#4F46E5] tabular-nums">{m.reference}</span>
                   </td>
                   <td className="px-4 py-3 text-[13px] font-semibold text-[#0F172A]">{m.name}</td>
-                  <td className="px-4 py-3 text-[13px] font-semibold text-[#0F172A] text-right tabular-nums">{m.available} {m.unit}</td>
-                  <td className="px-4 py-3 text-[13px] text-[#374151] text-right tabular-nums">{m.reserved} {m.unit}</td>
-                  <td className="px-4 py-3 text-[13px] font-semibold text-[#0F172A] text-right tabular-nums">{m.available + m.reserved} {m.unit}</td>
+                  <td className="px-4 py-3 text-[13px] font-semibold text-[#0F172A] text-right tabular-nums">{m.available} {m.unit}{secText(m, m.available) && <span className="block text-[11px] font-normal text-[#8A9BB5]">{secText(m, m.available).slice(3)}</span>}</td>
+                  <td className="px-4 py-3 text-[13px] text-[#374151] text-right tabular-nums">{m.reserved} {m.unit}{secText(m, m.reserved) && <span className="block text-[11px] text-[#8A9BB5]">{secText(m, m.reserved).slice(3)}</span>}</td>
+                  <td className="px-4 py-3 text-[13px] font-semibold text-[#0F172A] text-right tabular-nums">{m.available + m.reserved} {m.unit}{secText(m, m.available + m.reserved) && <span className="block text-[11px] font-normal text-[#8A9BB5]">{secText(m, m.available + m.reserved).slice(3)}</span>}</td>
                   <td className="px-4 py-3">{statusBadge(m.available, m.purchaseThreshold)}</td>
                   {canEdit && (
                     <td className="px-4 py-3 text-right">
+                      {isAdmin && <NotesPencil className="mr-2" count={noteCounts[noteKey('MATERIAL', m.id)] ?? 0} onClick={() => setNotesTarget({ kind: 'MATERIAL', keyId: m.id, title: m.name || m.reference })} />}
                       <button onClick={() => setActionTarget({ type: 'material', item: m, label: m.name, unit: m.unit, needsMode: false })}
                         className="px-3 py-1.5 rounded-lg border border-[#E2E8F0] text-[12px] font-semibold text-[#374151] hover:bg-[#F8FAFC]">
                         Gérer le stock
@@ -642,6 +741,10 @@ function StockPageInner() {
               <tr className="bg-[#F8FAFC] border-b border-[#E2E8F0]">
                 <th className="px-4 py-3 text-[11px] font-bold text-[#8A9BB5] uppercase">Référence</th>
                 <th className="px-4 py-3 text-[11px] font-bold text-[#8A9BB5] uppercase text-right">Disponible</th>
+                <th className="px-4 py-3 text-[11px] font-bold text-[#8A9BB5] uppercase text-right">Réservé</th>
+                <th className="px-4 py-3 text-[11px] font-bold text-[#8A9BB5] uppercase text-right">Total</th>
+                <th className="px-4 py-3 text-[11px] font-bold text-[#8A9BB5] uppercase text-right">En livraison</th>
+                <th className="px-4 py-3 text-[11px] font-bold text-[#8A9BB5] uppercase text-right">En retour</th>
                 <th className="px-4 py-3 text-[11px] font-bold text-[#8A9BB5] uppercase">Statut</th>
                 {canEdit && <th className="px-4 py-3"></th>}
               </tr>
@@ -651,9 +754,17 @@ function StockPageInner() {
                 <tr key={f.label} className="border-b border-[#F0F4F8] last:border-0">
                   <td className="px-4 py-3 text-[13px] font-bold text-[#0F172A]">{f.label}</td>
                   <td className="px-4 py-3 text-[13px] font-semibold text-[#0F172A] text-right tabular-nums">{f.available}</td>
+                  <td className="px-4 py-3 text-[13px] text-[#374151] text-right tabular-nums">{f.reserved}</td>
+                  <td className="px-4 py-3 text-[13px] font-semibold text-[#0F172A] text-right tabular-nums">{f.available + f.reserved}</td>
+                  <td className="px-4 py-3 text-[13px] text-[#374151] text-right tabular-nums">{f.inDelivery}</td>
+                  <td className="px-4 py-3 text-[13px] text-[#374151] text-right tabular-nums">{f.returned}</td>
                   <td className="px-4 py-3">{statusBadge(f.available, 0)}</td>
                   {canEdit && (
                     <td className="px-4 py-3 text-right">
+                      {isAdmin && <NotesPencil className="mr-2" count={noteCounts[noteKey('FREE', f.label)] ?? 0} onClick={() => setNotesTarget({ kind: 'FREE', keyId: f.label, title: f.label })} />}
+                      <button onClick={() => setFreeEdit(f.label)} title="Modifier le texte et le métrage de cette référence" className="mr-2 px-3 py-1.5 rounded-lg border border-[#E2E8F0] text-[12px] font-semibold text-[#374151] hover:bg-[#F8FAFC]">
+                        Modifier
+                      </button>
                       <button onClick={() => setFreeTarget(f)} className="px-3 py-1.5 rounded-lg border border-[#E2E8F0] text-[12px] font-semibold text-[#374151] hover:bg-[#F8FAFC]">
                         Gérer le stock
                       </button>
@@ -662,14 +773,16 @@ function StockPageInner() {
                 </tr>
               ))}
               {filteredFreeRefs.length === 0 && !loading && (
-                <tr><td colSpan={4} className="px-4 py-10 text-center text-[13px] text-[#8A9BB5]">Aucune référence libre.</td></tr>
+                <tr><td colSpan={8} className="px-4 py-10 text-center text-[13px] text-[#8A9BB5]">Aucune référence libre.</td></tr>
               )}
             </tbody>
           </table>
         </div>
       )}
 
-      {freeTarget && <FreeRefModal item={freeTarget} onClose={() => setFreeTarget(null)} onSave={saveFreeRef} />}
+      {freeTarget && <FreeRefModal item={freeTarget} onClose={() => setFreeTarget(null)} onSave={saveFreeRef} onNotesChange={refreshNotes} />}
+      {freeEdit && <FreeRefEditModal label={freeEdit} onClose={() => setFreeEdit(null)} onSaved={fetchAll} />}
+      {notesTarget && <NotesModal title={notesTarget.title} kind={notesTarget.kind} keyId={notesTarget.keyId} onClose={() => setNotesTarget(null)} onChange={refreshNotes} />}
 
       {tab === 'commercial' && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -717,10 +830,10 @@ function StockPageInner() {
       {actionTarget && (
         <StockActionModal
           label={actionTarget.label} unit={actionTarget.unit} item={actionTarget.item} isProduct={actionTarget.type === 'product'} needsMode={actionTarget.needsMode}
-          materials={materials}
+          materials={materials} onNotesChange={refreshNotes}
           onClose={() => setActionTarget(null)}
-          onRestock={(qty, mode, restes, forcer) => doRestock(actionTarget.type, actionTarget.item.id, qty, mode, restes, forcer)}
-          onCorrection={(field, qty) => doCorrection(actionTarget.type, actionTarget.item.id, field, qty)}
+          onRestock={(qty, mode, restes, forcer, sec) => doRestock(actionTarget.type, actionTarget.item.id, qty, mode, restes, forcer, sec)}
+          onCorrection={(field, qty, sec) => doCorrection(actionTarget.type, actionTarget.item.id, field, qty, sec)}
         />
       )}
       {showAssign && (
@@ -728,7 +841,7 @@ function StockPageInner() {
       )}
       {showRestock && (
         <RestockOnlyModal products={products} materials={materials} onClose={() => setShowRestock(false)}
-          onRestock={(type, id, qty, mode, restes, forcer) => doRestock(type, id, qty, mode, restes, forcer)} />
+          onRestock={(type, id, qty, mode, restes, forcer, sec) => doRestock(type, id, qty, mode, restes, forcer, sec)} />
       )}
       {showLists && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
@@ -739,7 +852,7 @@ function StockPageInner() {
               <button onClick={() => setShowLists(false)} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-[#E2E8F0] text-[#8A9BB5] transition-colors text-lg">&#x2715;</button>
             </div>
             <div className="p-5 overflow-y-auto">
-              <StockListsWidget />
+              <StockListsWidget withRollink={withRollink} />
             </div>
           </div>
         </div>

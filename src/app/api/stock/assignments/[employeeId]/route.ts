@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { auth } from '@/lib/auth';
+import { hasPermission } from '@/lib/permissions';
 
 type Ctx = { params: Promise<{ employeeId: string }> };
 
@@ -10,6 +11,11 @@ export async function GET(_request: Request, { params }: Ctx) {
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const { employeeId } = await params;
+  // Le stock d'un commercial n'est visible que par lui-même et par ceux qui gèrent le stock.
+  const user = session.user as never;
+  if (employeeId !== session.user.id && !hasPermission(user, 'voir_stock_commercial') && !hasPermission(user, 'voir_stock')) {
+    return NextResponse.json({ error: "Vous n'avez pas la permission pour cette action" }, { status: 403 });
+  }
 
   try {
     const employee = await prisma.user.findFirst({ where: { id: employeeId }, select: { id: true, name: true } });

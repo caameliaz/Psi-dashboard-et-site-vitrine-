@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
+import { requireAnyPermission } from '@/lib/access';
 import { getCountryVisits, rangeFromSearchParams } from '@/lib/ga4';
 
 // GET /api/analytics/countries?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD — visites par pays du site public
 // (bloc « Pays » de la fenêtre « Site public », qui a sa propre période). Période obligatoire.
 export async function GET(request: NextRequest) {
-  const session = await auth();
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const guard = await requireAnyPermission(['voir_contenu', 'modifier_contenu']);
+  if (guard.error) return guard.error;
+  const session = guard.session;
 
   const range = rangeFromSearchParams(request.nextUrl.searchParams);
   if (!range) return NextResponse.json({ error: 'startDate et endDate requis' }, { status: 400 });

@@ -1,4 +1,6 @@
 'use client';
+import { ReceiptSection } from '@/components/ui/ReceiptSection';
+import { DocumentsSection } from '@/components/documents/DocumentsSection';
 
 import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
@@ -122,6 +124,12 @@ export interface RequestDetail {
   raw?: { createdAt: string; deliveredAt: string; paymentDate: string; notes: string; source: string; clientName: string; clientCompany: string; clientPhone: string; clientCommune: string };
   salesRepName?: string | null;   // commercial importé, avant rattachement à un compte
   priority?: boolean;             // commande/devis prioritaire (passe en tête des FIFO du stock)
+  // Réception par le client (QR code sur le colis) — cf. src/lib/receipt.ts
+  receiptToken?: string;
+  labelCount?: number;
+  receiptScannedAt?: string | null;
+  receiptConfirmedAt?: string | null;
+  receiptSeenAt?: string | null;
 }
 
 function getSourceLabel(src: string) { return src === 'SITE' ? 'Site web' : src === 'ROLLINK' ? 'RollLink' : 'Manuel'; }
@@ -289,12 +297,12 @@ async function printDoc(item: RequestDetail) {
       r.onload = () => res(r.result as string);
       r.readAsDataURL(blob);
     });
-    logoHtml = `<img src="${b64}" alt="PSI" style="height:52px;filter:grayscale(100%) contrast(110%);display:block;margin-bottom:4px"/>`;
+    logoHtml = `<img src="${b64}" alt="PSI" style="height:52px;display:block;margin-bottom:4px"/>`;
   } catch { /* garde le fallback texte */ }
 
   const html = `<!DOCTYPE html><html><head><meta charset="utf-8"/>
 <style>
-  *{margin:0;padding:0;box-sizing:border-box}
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}
   body{font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:12px;color:#111;background:#fff;padding:40px 48px}
   .header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:32px}
   .brand{font-size:20px;font-weight:800;letter-spacing:-0.5px}
@@ -1566,6 +1574,28 @@ export function RequestPanel({ item, onClose, onStatusChange, onConfirmQuoteWith
                   })}
                 </div>
               </div>
+
+              {/* Colis & documents (QR + étiquette) puis Preuve de livraison (QR scanné / réception confirmée) */}
+              {item.id && (
+                <ReceiptSection
+                  kind={item.type === 'Devis' ? 'quote' : 'order'}
+                  id={item.id}
+                  refLabel={item.ref}
+                  sub={item.entreprise && item.entreprise !== '—' ? item.entreprise : item.client}
+                  token={item.receiptToken}
+                  labelCount={item.labelCount}
+                  scannedAt={item.receiptScannedAt}
+                  confirmedAt={item.receiptConfirmedAt}
+                  seenAt={item.receiptSeenAt}
+                  rolllink={item.source === 'ROLLINK'}
+                  onChanged={onReassigned}
+                />
+              )}
+
+              {/* Documents : bon de livraison, facture (depuis les BL), proforma */}
+              {item.id && item.source !== 'ROLLINK' && (
+                <DocumentsSection kind={item.type === 'Devis' ? 'quote' : 'order'} id={item.id} />
+              )}
 
               {/* Facturation & règlement — affiché seulement si au moins une info existe */}
               {(item.invoiceNumber || item.paymentMethod || item.paymentDate || item.vatEnabled || item.salesRepName) && (

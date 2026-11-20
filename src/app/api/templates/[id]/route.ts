@@ -1,13 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
+import { requirePermission } from '@/lib/permissions';
 import { prisma } from '@/lib/prisma';
 
 type Ctx = { params: Promise<{ id: string }> };
 
 // PATCH /api/templates/[id] — modifier un template (admin uniquement)
 export async function PATCH(request: NextRequest, { params }: Ctx) {
-  const session = await auth();
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const guard = await requirePermission('modifier_contenu');
+  if (guard.error) return guard.error;
+  const session = guard.session;
 
   const { id } = await params;
 
@@ -33,8 +35,9 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
 
 // DELETE /api/templates/[id] — supprimer un template (admin uniquement)
 export async function DELETE(_request: NextRequest, { params }: Ctx) {
-  const session = await auth();
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const guard = await requirePermission('modifier_contenu');
+  if (guard.error) return guard.error;
+  const session = guard.session;
 
   const { id } = await params;
 

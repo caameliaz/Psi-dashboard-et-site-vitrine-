@@ -124,7 +124,7 @@ export async function printClientDoc(c: ClientExportData) {
       r.onload = () => res(r.result as string);
       r.readAsDataURL(blob);
     });
-    logoHtml = `<img src="${b64}" alt="PSI" style="height:52px;filter:grayscale(100%) contrast(110%);display:block;margin-bottom:4px"/>`;
+    logoHtml = `<img src="${b64}" alt="PSI" style="height:52px;display:block;margin-bottom:4px"/>`;
   } catch { /* fallback texte */ }
 
   const total = c.historique.filter(compte).reduce((acc, h) => acc + montantToNum(h.montant), 0);
@@ -142,7 +142,7 @@ export async function printClientDoc(c: ClientExportData) {
 
   const html = `<!DOCTYPE html><html><head><meta charset="utf-8"/>
 <style>
-  *{margin:0;padding:0;box-sizing:border-box}
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}
   body{font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:12px;color:#111;background:#fff;padding:40px 48px}
   .header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:32px}
   .brand-addr{font-size:10px;color:#999;margin-top:6px;line-height:1.5}

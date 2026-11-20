@@ -13,6 +13,12 @@ import { rateLimit } from '@/lib/rate-limit';
 
 type IncomingLine = { productId?: string; quantite?: number };
 
+// ⚠️ MODE TEST (par défaut) : RollLink est encore en phase de test. Tant que la variable d'environnement
+// ROLLLINK_AFFECTE_STOCK n'est pas « oui », une commande RollLink est ENREGISTRÉE (référence, lignes) mais ne touche
+// JAMAIS au vrai stock : aucune réservation, aucune ligne d'achat/production, aucune matière réservée. Elle reste
+// « En attente » pour qu'aucun écran ne la traite comme confirmée. Au lancement officiel : ROLLLINK_AFFECTE_STOCK=oui.
+const rollLinkAffecteLeStock = () => (process.env.ROLLLINK_AFFECTE_STOCK ?? '').trim().toLowerCase() === 'oui';
+
 export async function POST(request: NextRequest) {
   const authError = checkRollLinkApiKey(request);
   if (authError) return authError;
@@ -65,7 +71,9 @@ export async function POST(request: NextRequest) {
       data: {
         ref: referenceCommande,
         source: 'ROLLINK',
-        status: 'VALIDE', // pas de circuit de validation manuelle pour RollLink — confirmé directement
+        // Production : pas de circuit de validation manuelle pour RollLink — confirmé directement.
+        // Test : « En attente », sans aucun effet sur le stock (cf. rollLinkAffecteLeStock).
+        status: rollLinkAffecteLeStock() ? 'VALIDE' : 'EN_ATTENTE',
         items: {
           create: validLines.map((l) => ({
             productId: l.productId as string,
@@ -77,13 +85,27 @@ export async function POST(request: NextRequest) {
       include: { items: true },
     });
 
-    // Logique de stock existante — réserve/production/achat selon dispo, inchangée.
-    await confirmStock('order', order.id);
+    // Logique de stock existante — réserve/production/achat selon dispo, inchangée. Sautée en mode test.
+    if (rollLinkAffecteLeStock()) await confirmStock('order', order.id);
 
     const items = await prisma.orderItem.findMany({
       where: { orderId: order.id },
-      select: { productId: true, stockPath: true },
+      select: { productId: true, stockPath: true, quantity: true },
     });
+
+    if (!rollLinkAffecteLeStock()) {
+      // SIMULATION : on répond à RollLink ce que la confirmation AURAIT décidé (mêmes règles que confirmStock),
+      // pour que ses tests soient réalistes, SANS rien écrire dans le stock.
+      const dispo = new Map((await prisma.product.findMany({ where: { id: { in: productIds } }, select: { id: true, available: true, mode: true } })).map((p) => [p.id, { available: p.available, mode: p.mode }]));
+      const lignes = items.map((i) => {
+        const p = dispo.get(i.productId as string);
+        const pris = Math.min(p?.available ?? 0, i.quantity);
+        if (p) p.available -= pris; // plusieurs lignes du même produit : le stock simulé baisse au fil des lignes
+        const stockPath = pris >= i.quantity ? 'FROM_STOCK' : p?.mode === 'ACHETE' ? 'PURCHASE_PENDING' : 'IN_PRODUCTION';
+        return { productId: i.productId, stockPath };
+      });
+      return NextResponse.json({ lignes, simulation: true });
+    }
 
     return NextResponse.json({
       lignes: items.map((i) => ({ productId: i.productId, stockPath: i.stockPath })),

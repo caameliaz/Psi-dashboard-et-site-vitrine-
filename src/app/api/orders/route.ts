@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { scanLowStock } from '@/lib/low-stock';
 import { auth } from '@/lib/auth';
 import { requirePermission, seesAll } from '@/lib/permissions';
 import { prisma } from '@/lib/prisma';
@@ -184,8 +185,15 @@ export async function POST(request: NextRequest) {
     // recalculé depuis la base pour empêcher une manipulation du prix côté client.
     const productIds = [...new Set(validItems.filter((i) => i.productId).map((i) => i.productId as string))];
     const dbProducts = productIds.length
-      ? await prisma.product.findMany({ where: { id: { in: productIds } }, select: { id: true, price: true } })
+      ? await prisma.product.findMany({ where: { id: { in: productIds } }, select: { id: true, price: true, reference: true, category: { select: { quoteOnly: true } } } })
       : [];
+    // Catégorie « sur devis » (ex: papier médical) : pas de commande directe depuis le site public.
+    if (!session?.user?.id) {
+      const quoteOnlyRef = dbProducts.find((p) => p.category?.quoteOnly);
+      if (quoteOnlyRef) {
+        return NextResponse.json({ error: `Le produit ${quoteOnlyRef.reference} est disponible sur devis uniquement. Merci de faire une demande de devis.` }, { status: 400 });
+      }
+    }
     const priceById = new Map(dbProducts.map((p) => [p.id, p.price]));
     // Utilisateur connecté (admin/commercial) : son prix saisi prime sur le catalogue (remise,
     // prix négocié…). Commande du site public (pas de session) : prix catalogue imposé.
@@ -236,6 +244,26 @@ export async function POST(request: NextRequest) {
       include: { items: true, client: { omit: { photo: true }, include: { phones: true } } },
     });
 
+    // Vente créée directement Livrée : le pop-up du formulaire demande si on retire les produits du stock.
+    // `adjustStock: true` → Disponible baisse de la quantité (plafonné à ce qui existe) ; sinon rien n'est touché.
+    let stockDetail = '';
+    if (paidInPast) {
+      if (body.adjustStock === true) {
+        const retraits: string[] = [];
+        for (const it of order.items) {
+          if (!it.productId) continue;
+          const p = await prisma.product.findUnique({ where: { id: it.productId }, select: { reference: true, name: true, available: true } });
+          if (!p) continue;
+          const take = Math.min(Math.max(0, p.available), it.quantity);
+          if (take > 0) await prisma.product.update({ where: { id: it.productId }, data: { available: { decrement: take } } });
+          retraits.push(`${p.name || p.reference} −${take}${take < it.quantity ? ` (manque ${it.quantity - take})` : ''}`);
+        }
+        stockDetail = retraits.length ? ` — stock retiré : ${retraits.join(', ')}` : '';
+      } else {
+        stockDetail = ' — stock non modifié';
+      }
+    }
+
     const isAdmin = body.source !== 'SITE';
     const actorName = session?.user?.name ?? session?.user?.email ?? 'Agent';
     const clientLabel = client.company ?? client.name;
@@ -263,9 +291,10 @@ export async function POST(request: NextRequest) {
       action: 'Commande créée',
       entity: 'COMMANDE',
       entityId: order.id,
-      detail: `${client.company ?? client.name} — ${validItems.length} article(s)${paidInPast ? ' — créée directement Livrée (date de règlement passée)' : ''}`,
+      detail: `${client.company ?? client.name} — ${validItems.length} article(s)${paidInPast ? ' — créée directement Livrée (date de règlement passée)' : ''}${stockDetail}`,
       orderId: order.id,
     });
+    if (paidInPast && body.adjustStock === true) await scanLowStock(); // vente livrée directement : le stock a baissé
     return NextResponse.json(order, { status: 201 });
   } catch (error: any) {
     console.error('[POST /api/orders] ERROR:', error);
