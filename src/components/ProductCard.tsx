@@ -13,7 +13,7 @@ export function ProductCard({ product }: { product: Product }) {
       {/* Image */}
       <div className="bg-[#F5F7FA] h-28 md:h-52 flex items-center justify-center overflow-hidden">
         {product.photo ? (
-          <img src={product.photo} alt={`Produit ${product.reference}`} className="w-full h-full object-cover" />
+          <img src={product.photo} alt={`${t('common.product_alt')} ${product.reference}`} className="w-full h-full object-cover" />
         ) : (
           <div className="relative w-12 h-12 md:w-24 md:h-24">
             <div className="absolute inset-0 rounded-full bg-[#E8F5E9] border-2 border-[#4CAF4F]" />
@@ -28,10 +28,10 @@ export function ProductCard({ product }: { product: Product }) {
       <div className="p-3 md:p-4 flex flex-col gap-2 md:gap-3 flex-1">
         <div className="flex flex-col gap-0.5 md:gap-1">
           <h3 className="text-[13px] md:text-[20px] font-semibold text-[#263238] leading-5 md:leading-7">
-            Réf. {product.reference}
+            {t('common.ref')} {product.reference}
           </h3>
           <p className="text-[11px] md:text-[14px] font-medium text-[#4D4D4D] leading-4 md:leading-5">
-            {product.width}/{product.length} m
+            {product.width}/{product.length} {t('units.m')}
           </p>
           <p className="text-[11px] md:text-[14px] text-[#717171] leading-4 md:leading-5">
             {product.usage}

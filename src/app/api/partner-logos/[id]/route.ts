@@ -25,7 +25,7 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
         ...(body.photo !== undefined && { photo: body.photo || null }),
       },
     });
-    revalidatePath('/');
+    revalidatePath('/[lang]', 'layout');
     return NextResponse.json(logo);
   } catch (e) {
     console.error(e);
@@ -41,7 +41,7 @@ export async function DELETE(_request: NextRequest, { params }: Ctx) {
   const { id } = await params;
   try {
     await prisma.partnerLogo.delete({ where: { id } });
-    revalidatePath('/');
+    revalidatePath('/[lang]', 'layout');
     return NextResponse.json({ ok: true });
   } catch (e) {
     console.error(e);

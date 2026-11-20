@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import Link from 'next/link';
+import Link from '@/components/LocaleLink';
 import { ArrowButton } from '@/components/ArrowButton';
 import { useTranslation } from '@/lib/i18n';
 

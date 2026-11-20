@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import Link from 'next/link';
+import Link from '@/components/LocaleLink';
 import { useTranslation } from '@/lib/i18n';
 
 export function Footer() {
@@ -36,14 +36,14 @@ export function Footer() {
           <div className="flex items-center gap-3">
             <a href={facebook} target="_blank" rel="noopener noreferrer"
               className="w-9 h-9 rounded-lg bg-white/10 hover:bg-[#1877F2]/30 flex items-center justify-center transition-colors group"
-              title="PSI sur Facebook">
+              title={t('footer.facebook_title')}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
                 <path d="M18 2h-3a5 5 0 00-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 011-1h3z" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
               </svg>
             </a>
             <a href={instagram} target="_blank" rel="noopener noreferrer"
               className="w-9 h-9 rounded-lg bg-white/10 hover:bg-[#E1306C]/30 flex items-center justify-center transition-colors group"
-              title="@psi04_2026 sur Instagram">
+              title={t('footer.instagram_title')}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
                 <rect x="2" y="2" width="20" height="20" rx="5" stroke="white" strokeWidth="1.5"/>
                 <circle cx="12" cy="12" r="4" stroke="white" strokeWidth="1.5"/>

@@ -1,12 +1,13 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useTranslation } from '@/lib/i18n';
 
 const DEFAULT_PHONE = '+213770150656';
-const WHATSAPP_MSG = encodeURIComponent('Bonjour, je souhaite obtenir des informations sur vos produits PSI.');
 
 // Bouton WhatsApp flottant. Le numéro vient du dashboard (Réglages > Contenu > téléphone).
 export function WhatsAppFloat() {
+  const { t } = useTranslation();
   const [phone, setPhone] = useState(DEFAULT_PHONE);
 
   useEffect(() => {
@@ -20,12 +21,12 @@ export function WhatsAppFloat() {
 
   return (
     <a
-      href={`https://wa.me/${digits}?text=${WHATSAPP_MSG}`}
+      href={`https://wa.me/${digits}?text=${encodeURIComponent(t('common.whatsapp_msg'))}`}
       target="_blank"
       rel="noopener noreferrer"
       dir="ltr"
       className="group fixed bottom-24 right-4 md:bottom-6 md:right-6 z-50 flex items-center h-12 md:h-14 rounded-full border border-white/30 bg-gradient-to-br from-[#2BD46B] to-[#128C4A] text-white shadow-[0_8px_24px_rgba(18,140,74,0.45)] hover:shadow-[0_12px_32px_rgba(18,140,74,0.6)] active:scale-95 transition-all duration-300"
-      aria-label="Nous contacter sur WhatsApp"
+      aria-label={t('common.whatsapp_aria')}
     >
       <span className="max-w-0 overflow-hidden whitespace-nowrap text-[14px] font-semibold opacity-0 transition-all duration-500 ease-out group-hover:max-w-[120px] group-hover:opacity-100 group-hover:ps-5">
         WhatsApp

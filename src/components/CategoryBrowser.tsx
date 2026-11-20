@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import Link from 'next/link';
+import Link from '@/components/LocaleLink';
 import { useCartStore } from '@/store/cartStore';
 import { ArrowButton } from './ArrowButton';
 import { PhotoSlider } from './PhotoSlider';
@@ -19,7 +19,7 @@ export function CategoryBrowser({
   initialCategories?: Cat[];
   initialProducts?: Prod[];
 }) {
-  const { t } = useTranslation();
+  const { t, lang } = useTranslation();
   const [cats, setCats] = useState<Cat[]>([]);
   const [products, setProducts] = useState<Prod[]>([]);
 
@@ -32,11 +32,11 @@ export function CategoryBrowser({
     }
     
     // Sinon comportement actuel : fetch côté client (rétrocompatible)
-    fetch('/api/categories?withPhoto=true').then(r => r.ok ? r.json() : []).then((data: any[]) =>
+    fetch(`/api/categories?withPhoto=true&lang=${lang}`).then(r => r.ok ? r.json() : []).then((data: any[]) =>
       setCats(data.map(c => ({ id: c.id, name: c.name, photo: c.photo ?? null, description: c.description ?? null, quoteOnly: !!c.quoteOnly })))
     ).catch(() => {});
-    fetch('/api/products').then(r => r.ok ? r.json() : []).then(setProducts).catch(() => {});
-  }, [initialCategories, initialProducts]);
+    fetch(`/api/products?lang=${lang}`).then(r => r.ok ? r.json() : []).then(setProducts).catch(() => {});
+  }, [initialCategories, initialProducts, lang]);
 
   // Masque les catégories qui n'ont AUCUN produit actif (ex: catégorie entièrement désactivée)
   const catsWithProducts = cats.filter((c) =>
@@ -143,7 +143,7 @@ function CategoryCard({ category, products }: { category: Cat; products: Prod[] 
     const hasSelection = Object.values(quantities).some(qty => qty > 0);
     
     if (!hasSelection) {
-      setErrorMessage('Aucune réf sélectionnée');
+      setErrorMessage(t('common.no_ref_selected'));
       return;
     }
     
@@ -191,7 +191,7 @@ function CategoryCard({ category, products }: { category: Cat; products: Prod[] 
           </div>
         )}
         <span className="absolute bottom-3 left-3 text-[12px] font-semibold text-[#4CAF4F] bg-white/90 px-2.5 py-1 rounded-lg shadow-[0_2px_8px_rgba(171,190,209,0.4)] opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-          Aperçu
+          {t('common.preview')}
         </span>
       </Link>
 
@@ -223,7 +223,7 @@ function CategoryCard({ category, products }: { category: Cat; products: Prod[] 
                     {/* Info produit */}
                     <div className="flex-1 min-w-0">
                       <p className="text-[12px] md:text-[13px] font-semibold text-[#263238] truncate">
-                        {product.width}/{product.length} m
+                        {product.width}/{product.length} {t('units.m')}
                       </p>
                       {quoteOnly && product.reference && (
                         <p className="text-[11px] md:text-[12px] font-bold text-[#4CAF4F] truncate">
@@ -232,7 +232,7 @@ function CategoryCard({ category, products }: { category: Cat; products: Prod[] 
                       )}
                       {!quoteOnly && (
                         <p className="text-[11px] md:text-[12px] font-bold text-[#4CAF4F]">
-                          {product.price.toFixed(2)} DA
+                          {product.price.toFixed(2)} {t('units.currency')}
                         </p>
                       )}
                     </div>

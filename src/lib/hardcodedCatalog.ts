@@ -1,12 +1,14 @@
-export interface Cat { id: string; name: string; photo: string | null; description?: string | null; quoteOnly?: boolean; photos?: string[] }
+// `originalName` / `descriptionTr` : renseignés quand le catalogue est servi dans une autre langue (cf. lib/i18n/translations) —
+// `originalName` = nom français (clé des textes de secours, envoyé tel quel dans les devis), `descriptionTr` = la description est une traduction.
+export interface Cat { id: string; name: string; photo: string | null; description?: string | null; quoteOnly?: boolean; photos?: string[]; originalName?: string; descriptionTr?: boolean }
 export interface Prod {
   id: string; reference: string; width: number; length: number; usage: string; price: number;
   photo?: string | null; category?: { id: string; name: string; quoteOnly?: boolean } | null;
-  customFields?: { value: string; definition: { label: string } }[];
+  customFields?: { value: string; definition: { label: string; originalLabel?: string } }[];
   metrage?: number | null;
 }
 
-type Lang = 'fr' | 'ar';
+import type { Lang } from '@/lib/i18n/config';
 
 // Description de secours tant que la catégorie n'a pas de description en base.
 // Les catégories viennent de la DB et n'ont qu'un nom en français (pas de modèle
@@ -21,6 +23,17 @@ const FALLBACK_DESCRIPTIONS_AR: Record<string, string> = {
   'Étiquettes thermiques': 'ملصقات حرارية لاصقة للاستخدام المهني — متوافقة مع طابعات النقل الحراري المباشر، مثالية للوجستيك والصيدليات وتجارة التوزيع الكبرى.',
 };
 
+const FALLBACK_DESCRIPTIONS_EN: Record<string, string> = {
+  'Papier thermique standard': 'High-quality 55 gsm thermal paper rolls, BPA-free, for all types of point-of-sale printers, payment terminals and cash registers.',
+  'Étiquettes thermiques': 'Self-adhesive thermal labels for professional labelling — compatible with direct thermal printers, ideal for logistics, pharmacies and large retail.',
+};
+
+const FALLBACK_BY_LANG: Record<Lang, Record<string, string>> = {
+  fr: FALLBACK_DESCRIPTIONS_FR,
+  en: FALLBACK_DESCRIPTIONS_EN,
+  ar: FALLBACK_DESCRIPTIONS_AR,
+};
+
 export function getFallbackDescription(categoryName: string, lang: Lang): string {
-  return (lang === 'ar' ? FALLBACK_DESCRIPTIONS_AR : FALLBACK_DESCRIPTIONS_FR)[categoryName] ?? '';
+  return FALLBACK_BY_LANG[lang][categoryName] ?? '';
 }

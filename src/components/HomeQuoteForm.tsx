@@ -6,12 +6,13 @@ import { ArrowButton } from '@/components/ArrowButton';
 import { WilayaSelect } from '@/components/ui/WilayaSelect';
 import { CommuneSelect } from '@/components/ui/CommuneSelect';
 import { useTranslation } from '@/lib/i18n';
+import { pickContent } from '@/lib/i18n/config';
 
 const MAX_LINES = 5;
 
 const INPUT = 'w-full rounded-xl border border-[#E4EBF5] bg-[#F8FAFC] px-4 py-3 text-[15px] text-[#263238] placeholder:text-[#263238]/40 outline-none transition-all focus:border-[#4CAF4F] focus:bg-white focus:ring-4 focus:ring-[#4CAF4F]/15';
 
-interface CatOption { id: string; name: string }
+interface CatOption { id: string; name: string; originalName?: string }
 interface ProdOption { id: string; reference: string; width: number; length: number; category?: CatOption | null }
 interface Line { categoryId: string; dimChoice: string; quantity: string }
 const emptyLine = (): Line => ({ categoryId: '', dimChoice: '', quantity: '' });
@@ -20,8 +21,8 @@ const emptyLine = (): Line => ({ categoryId: '', dimChoice: '', quantity: '' });
 // Le formulaire détaillé (produits, wilaya...) s'ouvre sur place, sans changer de page.
 export function HomeQuoteForm({ phone: CONTACT_PHONE, content = {} }: { phone: string; content?: Record<string, string> }) {
   const { t, lang } = useTranslation();
-  // Textes modifiables depuis le dashboard (français uniquement).
-  const pick = (key: string, fallback: string) => (lang === 'fr' && content[key]) || fallback;
+  // Textes modifiables depuis le dashboard (Réglages > Contenu), dans la langue de la page.
+  const pick = (key: string, fallback: string) => pickContent(content, key, lang, fallback);
   const [form, setForm] = useState({ name: '', phone: '', company: '', message: '', email: '', wilaya: '', commune: '' });
   const [lines, setLines] = useState<Line[]>([emptyLine()]);
   const [categories, setCategories] = useState<CatOption[]>([]);
@@ -43,7 +44,7 @@ export function HomeQuoteForm({ phone: CONTACT_PHONE, content = {} }: { phone: s
     // Catalogue chargé au premier déploiement seulement
     if (!loaded) {
       setLoaded(true);
-      fetch('/api/categories').then((r) => (r.ok ? r.json() : [])).then((d: CatOption[]) => setCategories(d.map((c) => ({ id: c.id, name: c.name })))).catch(() => {});
+      fetch(`/api/categories?lang=${lang}`).then((r) => (r.ok ? r.json() : [])).then((d: CatOption[]) => setCategories(d.map((c) => ({ id: c.id, name: c.name, originalName: c.originalName ?? c.name })))).catch(() => {});
       fetch('/api/products').then((r) => (r.ok ? r.json() : [])).then((d: ProdOption[]) => setProducts(d)).catch(() => {});
     }
   };
@@ -63,7 +64,7 @@ export function HomeQuoteForm({ phone: CONTACT_PHONE, content = {} }: { phone: s
             }
             if (l.categoryId) {
               const cat = categories.find((c) => c.id === l.categoryId);
-              if (cat) return { description: cat.name, quantity: qty };
+              if (cat) return { description: cat.originalName ?? cat.name, quantity: qty };
             }
             return null;
           })

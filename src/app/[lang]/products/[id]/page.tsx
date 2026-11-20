@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams } from 'next/navigation';
-import Link from 'next/link';
+import Link from '@/components/LocaleLink';
 import { useCartStore } from '@/store/cartStore';
 import { ArrowButton } from '@/components/ArrowButton';
 import { SlideInList } from '@/components/SlideInList';
@@ -56,11 +56,12 @@ export default function ProductDetailPage() {
   };
 
   useEffect(() => {
-    fetch('/api/categories?withPhoto=true').then(r => r.ok ? r.json() : []).then((data: any[]) =>
-      setCats(data.map(c => ({ id: c.id, name: c.name, photo: c.photo ?? null, description: c.description ?? null, quoteOnly: !!c.quoteOnly })))
+    // Catalogue dans la langue de la page (noms, descriptions, fiche technique traduits depuis le dashboard)
+    fetch(`/api/categories?withPhoto=true&lang=${lang}`).then(r => r.ok ? r.json() : []).then((data: any[]) =>
+      setCats(data.map(c => ({ id: c.id, name: c.name, photo: c.photo ?? null, description: c.description ?? null, quoteOnly: !!c.quoteOnly, originalName: c.originalName ?? c.name, descriptionTr: !!c.descriptionTr })))
     ).catch(() => {});
-    fetch('/api/products?withPhoto=true').then(r => r.ok ? r.json() : []).then(setProducts).catch(() => {});
-  }, []);
+    fetch(`/api/products?withPhoto=true&lang=${lang}`).then(r => r.ok ? r.json() : []).then(setProducts).catch(() => {});
+  }, [lang]);
 
   // Photos supplémentaires de la catégorie (gérées depuis Dashboard > Contenu du site)
   const [gallery, setGallery] = useState<{ src: string; productId: string | null }[]>([]);
@@ -69,9 +70,9 @@ export default function ProductDetailPage() {
   const [catUsages, setCatUsages] = useState<string[]>([]);
   useEffect(() => {
     setGallery([]); setPhotoIdx(0); setCatUsages([]);
-    fetch(`/api/content/gallery?categoryId=${id}`).then(r => r.ok ? r.json() : { photos: [] })
+    fetch(`/api/content/gallery?categoryId=${id}&lang=${lang}`).then(r => r.ok ? r.json() : { photos: [] })
       .then(d => { setGallery(d.photos ?? []); setCatUsages(d.usages ?? []); }).catch(() => {});
-  }, [id]);
+  }, [id, lang]);
 
   const category = cats.find(c => c.id === id);
   // Masque les catégories sans aucun produit visible sur le site (ex: catégorie
@@ -116,16 +117,20 @@ export default function ProductDetailPage() {
     return <div className="min-h-[50vh] flex items-center justify-center text-[#717171]">{t('common.loading')}</div>;
   }
 
-  const description = category.description || getFallbackDescription(category.name, lang) || '';
+  // Description : celle saisie (traduite si elle existe) ; à défaut le texte de secours de la langue (clé = nom français), puis le texte en base
+  const description = lang === 'fr'
+    ? (category.description || getFallbackDescription(category.name, 'fr') || '')
+    : (category.descriptionTr ? category.description : (getFallbackDescription(category.originalName ?? category.name, lang) || category.description)) || '';
 
   // Fiche technique : Largeur (toujours dispo) + champs personnalisés du produit (Diamètre, Mandrin, Papier, Grammage, Couleur…)
   // On filtre le champ "ORIGINE" pour ne plus l'afficher
   const specRows = current
     ? [
-        { key: 'largeur', label: t('product_detail.spec_width'), value: `${current.width} mm` },
+        { key: 'largeur', label: t('product_detail.spec_width'), icon: 'largeur', value: `${current.width} ${t('units.mm')}` },
         ...(current.customFields ?? [])
-          .filter((cf) => !cf.definition.label.toLowerCase().includes('origine'))
-          .map((cf) => ({ key: cf.definition.label, label: cf.definition.label, value: cf.value })),
+          .filter((cf) => !(cf.definition.originalLabel ?? cf.definition.label).toLowerCase().includes('origine'))
+          // `icon` : l'icône se choisit d'après le libellé français d'origine (le libellé affiché peut être traduit)
+          .map((cf) => ({ key: cf.definition.originalLabel ?? cf.definition.label, label: cf.definition.label, icon: cf.definition.originalLabel ?? cf.definition.label, value: cf.value })),
       ]
     : [];
   const total = current ? current.price * qty : 0;
@@ -166,7 +171,7 @@ export default function ProductDetailPage() {
                       items: [{
                         item_id: p.id,
                         item_name: p.metrage != null ? `${p.reference} · ${p.metrage} m` : p.reference,
-                        item_category: category.name,
+                        item_category: category.originalName ?? category.name,
                       }],
                     });
                   }
@@ -180,7 +185,7 @@ export default function ProductDetailPage() {
                 }`}
               >
                 {/* Format « 57/50 mm » — le métrage a sa propre ligne plus bas */}
-                {p.width}/{p.length} m
+                {p.width}/{p.length} {t('units.m')}
                 {quoteOnly && p.reference && (
                   <span className="block text-[11px] font-bold text-[#4CAF4F] leading-tight">{p.reference.replace(/-\d+$/, '')}</span>
                 )}
@@ -215,7 +220,7 @@ export default function ProductDetailPage() {
         {specRows.map((row) => (
           <div key={row.key} className="flex items-center gap-2.5 min-w-0">
             <div className="w-7 h-7 rounded-full border border-[#4CAF4F]/30 flex items-center justify-center flex-shrink-0 text-[#4CAF4F]">
-              {specIcon(row.label)}
+              {specIcon(row.icon)}
             </div>
             <div className="flex flex-col leading-tight min-w-0">
               <span className="text-[10px] font-bold text-[#8A9BB5] uppercase tracking-wide truncate">{row.label}</span>
@@ -246,20 +251,20 @@ export default function ProductDetailPage() {
       <div className="flex items-center justify-between text-[14px]">
         <span className="text-[#717171]">{t('product_detail.ref_label')}</span>
         <span className="font-semibold text-[#263238]">
-          {current.width}/{current.length} m
+          {current.width}/{current.length} {t('units.m')}
           {quoteOnly && current.reference ? ` · ${current.reference.replace(/-\d+$/, '')}` : ''}
         </span>
       </div>
       {current.metrage != null && (
         <div className="flex items-center justify-between text-[14px]">
           <span className="text-[#717171]">{t('product_detail.metrage_label')}</span>
-          <span className="font-semibold text-[#263238]">{current.metrage} m</span>
+          <span className="font-semibold text-[#263238]">{current.metrage} {t('units.m')}</span>
         </div>
       )}
       {!quoteOnly && (
       <div className="flex items-center justify-between text-[14px]">
         <span className="text-[#717171]">{t('product_detail.unit_price_label')}</span>
-        <span className="font-semibold text-[#263238]">{current.price.toFixed(2)} DA</span>
+        <span className="font-semibold text-[#263238]">{current.price.toFixed(2)} {t('units.currency')}</span>
       </div>
       )}
       <div className="flex items-center justify-between text-[14px]">
@@ -286,7 +291,7 @@ export default function ProductDetailPage() {
       {!quoteOnly && (
       <div className="border-t border-[#E0E0E0] pt-4 flex items-center justify-between">
         <span className="text-[15px] font-bold text-[#4CAF4F]">{t('cart.total')}</span>
-        <span className="text-[20px] font-extrabold text-[#4CAF4F]">{total.toFixed(2)} DA</span>
+        <span className="text-[20px] font-extrabold text-[#4CAF4F]">{total.toFixed(2)} {t('units.currency')}</span>
       </div>
       )}
 
@@ -320,7 +325,7 @@ export default function ProductDetailPage() {
           <button
             key={dir}
             type="button"
-            aria-label={dir === 'prev' ? 'Photo précédente' : 'Photo suivante'}
+            aria-label={dir === 'prev' ? t('common.prev_photo') : t('common.next_photo')}
             onClick={() => setPhotoIdx(((photoIdx < allPhotos.length ? photoIdx : 0) + (dir === 'prev' ? -1 : 1) + allPhotos.length) % allPhotos.length)}
             className={`absolute top-1/2 -translate-y-1/2 ${dir === 'prev' ? 'left-2' : 'right-2'} w-9 h-9 rounded-full bg-white/90 border border-[#E0E0E0] shadow-[0_2px_8px_rgba(171,190,209,0.5)] flex items-center justify-center text-[#263238] hover:text-[#4CAF4F] hover:border-[#4CAF4F] transition-colors`}
           >

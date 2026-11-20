@@ -1,20 +1,21 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import Link from 'next/link';
+import Link from '@/components/LocaleLink';
 import { useCartStore } from '@/store/cartStore';
 import { useRouter } from 'next/navigation';
 import { inputClass, labelClass } from '@/lib/utils';
 import { WilayaSelect } from '@/components/ui/WilayaSelect';
 import { CommuneSelect } from '@/components/ui/CommuneSelect';
 import { ArrowButton } from '@/components/ArrowButton';
-import { useTranslation } from '@/lib/i18n';
+import { useLocalePath, useTranslation } from '@/lib/i18n';
 import { validateEmail, validatePhone, firstError } from '@/lib/validation';
 import { reportCartConverted } from '@/lib/cart-tracking';
 
 export default function CheckoutPage() {
   const { t } = useTranslation();
   const router = useRouter();
+  const lp = useLocalePath();
   const items = useCartStore((state) => state.items);
   const clearCart = useCartStore((state) => state.clearCart);
   const getTotalPrice = useCartStore((state) => state.getTotalPrice);
@@ -37,8 +38,8 @@ export default function CheckoutPage() {
     // Ne pas rediriger si le panier est vide PARCE QU'ON VIENT DE VALIDER la commande
     // (clearCart() vide le panier juste avant d'afficher l'écran de confirmation) —
     // sinon ça renvoie aussitôt vers /cart et l'écran "commande envoyée" ne s'affiche jamais.
-    if (items.length === 0 && !submitted) router.replace('/cart');
-  }, [items, submitted, router]);
+    if (items.length === 0 && !submitted) router.replace(lp('/cart'));
+  }, [items, submitted, router, lp]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -206,8 +207,8 @@ export default function CheckoutPage() {
                       <p className="text-[12px] text-[#89939E]">× {item.quantity}</p>
                     </div>
                     <div className="text-right">
-                      <p className="text-[11px] text-[#89939E]">{item.unitPrice} DA/u.</p>
-                      <p className="text-[14px] font-bold text-[#263238]">{item.unitPrice * item.quantity} DA</p>
+                      <p className="text-[11px] text-[#89939E]">{item.unitPrice} {t('units.currency')}{t('units.per_unit')}</p>
+                      <p className="text-[14px] font-bold text-[#263238]">{item.unitPrice * item.quantity} {t('units.currency')}</p>
                     </div>
                   </div>
                 ))}
@@ -215,7 +216,7 @@ export default function CheckoutPage() {
 
               <div className="mt-5 pt-5 border-t border-[#F0F4F8] flex justify-between items-center">
                 <span className="text-[16px] font-semibold text-[#263238]">{t('checkout.total')}</span>
-                <span className="text-[24px] font-bold text-[#4CAF4F]">{totalPrice} DA</span>
+                <span className="text-[24px] font-bold text-[#4CAF4F]">{totalPrice} {t('units.currency')}</span>
               </div>
 
               <div className="mt-5 pt-5 border-t border-[#F0F4F8] flex flex-col gap-3">

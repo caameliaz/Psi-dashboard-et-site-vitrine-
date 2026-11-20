@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import Link from 'next/link';
+import Link from '@/components/LocaleLink';
 import { inputClass, labelClass } from '@/lib/utils';
 import { WilayaSelect } from '@/components/ui/WilayaSelect';
 import { CommuneSelect } from '@/components/ui/CommuneSelect';
@@ -15,13 +15,13 @@ const WHATSAPP_NUMBER = '213770150656';
 const PHONE = '+213770150656';
 const EMAIL = 'Contact@psi.dz';
 
-interface CatOption { id: string; name: string; }
+interface CatOption { id: string; name: string; originalName?: string; }
 interface ProdOption { id: string; reference: string; width: number; length: number; category?: CatOption | null; }
 interface QuoteLine { categoryId: string; dimChoice: string; customDim: string; quantity: string; metrage: string; }
 const emptyLine = (): QuoteLine => ({ categoryId: '', dimChoice: '', customDim: '', quantity: '', metrage: '' });
 
 export default function QuotePage() {
-  const { t } = useTranslation();
+  const { t, lang } = useTranslation();
   const cartItems = useCartStore((s) => s.items);
   const clearCart = useCartStore((s) => s.clearCart);
   const [formData, setFormData] = useState({
@@ -45,8 +45,8 @@ export default function QuotePage() {
   const WHATSAPP_MSG = encodeURIComponent(t('common.whatsapp_msg'));
 
   useEffect(() => {
-    fetch('/api/categories').then(r => r.ok ? r.json() : []).then((data: any[]) =>
-      setCategories(data.map((c) => ({ id: c.id, name: c.name })))
+    fetch(`/api/categories?lang=${lang}`).then(r => r.ok ? r.json() : []).then((data: any[]) =>
+      setCategories(data.map((c) => ({ id: c.id, name: c.name, originalName: c.originalName ?? c.name })))
     ).catch(() => {});
     fetch('/api/products').then(r => r.json()).then((data: ProdOption[]) => {
       setProducts(data);
@@ -92,10 +92,10 @@ export default function QuotePage() {
     const errors: Record<string, string> = {};
     
     if (!formData.company.trim()) {
-      errors.company = "Nom de l'entreprise requis";
+      errors.company = t('quote.err_company');
     }
     if (!formData.phone.trim()) {
-      errors.phone = 'Numéro de téléphone requis';
+      errors.phone = t('quote.err_phone');
     } else {
       // Vérifie le format du téléphone s'il est fourni
       const phoneErr = validatePhone(formData.phone, true);
@@ -104,10 +104,10 @@ export default function QuotePage() {
       }
     }
     if (!formData.wilaya.trim()) {
-      errors.wilaya = 'Wilaya requise';
+      errors.wilaya = t('quote.err_wilaya');
     }
     if (!formData.commune.trim()) {
-      errors.commune = 'Commune requise';
+      errors.commune = t('quote.err_commune');
     }
     
     // Vérifie le format de l'email s'il est fourni
@@ -145,7 +145,7 @@ export default function QuotePage() {
     const hasMessage = formData.message.trim().length > 0;
     
     if (!hasProducts && !hasMessage) {
-      setProductsError('Décrivez-nous ici vos besoins ou choisissez un produit de notre catalogue');
+      setProductsError(t('quote.err_products'));
       setLoading(false);
       // Scroll vers le champ message
       const messageField = document.querySelector('[name="message"]');
@@ -169,7 +169,7 @@ export default function QuotePage() {
         // Catégorie choisie mais pas de référence précise → ligne "libre" avec le nom de la catégorie
         if (l.categoryId) {
           const cat = categories.find(c => c.id === l.categoryId);
-          if (cat) return { description: cat.name, quantity: qty, metrage };
+          if (cat) return { description: cat.originalName ?? cat.name, quantity: qty, metrage };
         }
         return null;
       }).filter((x): x is NonNullable<typeof x> => x !== null);

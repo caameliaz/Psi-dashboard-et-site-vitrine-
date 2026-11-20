@@ -2,23 +2,32 @@ import type { Metadata } from 'next';
 import { HomeClient } from '@/components/HomeClient';
 import type { Cat, Prod } from '@/lib/hardcodedCatalog';
 import { prisma } from '@/lib/prisma';
+import { isLang, type Lang } from '@/lib/i18n/config';
+import { loadStore, localizeCategory, localizeProduct } from '@/lib/i18n/translations';
+import { isTrLang } from '@/lib/i18n/translations-shared';
+import { getDict } from '@/lib/i18n/server';
+import { localizedMetadata } from '@/lib/i18n/seo';
 
 // Fetch des données côté serveur pour performance (accès direct DB)
 async function getContent() {
   try {
-    const items = await prisma.siteContent.findMany();
+    // Sans les galeries photo (base64, lourdes) ni les traductions du catalogue : le texte du site seulement
+    const items = await prisma.siteContent.findMany({
+      where: { AND: [{ key: { not: { startsWith: 'category_gallery_' } } }, { key: { not: { startsWith: 'i18n:' } } }] },
+    });
     return Object.fromEntries(items.map(i => [i.key, i.value]));
   } catch {
     return {};
   }
 }
 
-// Accueil : titre complet (sans le suffixe du modèle) + adresse canonique
-export const metadata: Metadata = {
-  title: { absolute: 'Rouleaux thermiques TPE et caisses enregistreuses en Algérie | SARL Paper Solutions Industry' },
-  description: 'PSI fabrique des rouleaux thermiques pour terminaux de paiement (TPE) et caisses enregistreuses. Vente aux entreprises dans toute l\'Algérie, demandez votre devis en ligne.',
-  alternates: { canonical: '/' },
-};
+// Accueil : titre complet (sans le suffixe du modèle) + adresse canonique de la langue + hreflang
+export async function generateMetadata({ params }: { params: Promise<{ lang: string }> }): Promise<Metadata> {
+  const { lang } = await params;
+  if (!isLang(lang)) return {};
+  const m = getDict(lang).meta;
+  return localizedMetadata(lang, '/', { title: m.home_title, description: m.home_desc, absoluteTitle: true });
+}
 
 async function getPartnerLogos() {
   try {
@@ -61,13 +70,15 @@ async function getGalleryPhotos(): Promise<Record<string, string[]>> {
   }
 }
 
-async function getCategories(): Promise<Cat[]> {
+async function getCategories(lang: Lang): Promise<Cat[]> {
   try {
     const cats = await prisma.category.findMany({
       orderBy: { name: 'asc' },
     });
     const gallery = await getGalleryPhotos();
-    return cats.map((c: any) => ({ 
+    // Noms/descriptions dans la langue de la page (traductions saisies depuis le dashboard)
+    const store = isTrLang(lang) ? await loadStore() : null;
+    return cats.map((raw: any) => store ? localizeCategory(raw, store, lang as 'en' | 'ar') : raw).map((c: any) => ({ 
       id: c.id, 
       name: c.name, 
       // URL de l'image (cachée par le navigateur) plutôt que le base64 dans le HTML de l'accueil
@@ -85,7 +96,7 @@ async function getCategories(): Promise<Cat[]> {
   }
 }
 
-async function getProducts(): Promise<Prod[]> {
+async function getProducts(lang: Lang): Promise<Prod[]> {
   try {
     const products = await prisma.product.findMany({
       // Actif ET visible sur le site — indépendant l'un de l'autre (cf. Product.visibleOnSite).
@@ -99,17 +110,20 @@ async function getProducts(): Promise<Prod[]> {
       orderBy: { createdAt: 'desc' },
     });
     // Catégorie « sur devis » : le prix n'est jamais envoyé au navigateur (pas dans le HTML de la page).
-    return products.map((p) => (p.category?.quoteOnly ? { ...p, price: 0 } : p)) as any;
+    const store = isTrLang(lang) ? await loadStore() : null;
+    return products.map((p) => (p.category?.quoteOnly ? { ...p, price: 0 } : p)).map((p) => (store ? localizeProduct(p as any, store, lang as 'en' | 'ar') : p)) as any;
   } catch {
     return [];
   }
 }
 
-export default async function Home() {
+export default async function Home({ params }: { params: Promise<{ lang: string }> }) {
+  const { lang: langParam } = await params;
+  const lang: Lang = isLang(langParam) ? langParam : 'fr';
   const [content, categories, products, partnerLogos] = await Promise.all([
     getContent(),
-    getCategories(),
-    getProducts(),
+    getCategories(lang),
+    getProducts(lang),
     getPartnerLogos(),
   ]);
 

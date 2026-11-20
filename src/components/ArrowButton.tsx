@@ -1,4 +1,4 @@
-import Link from 'next/link';
+import Link from '@/components/LocaleLink';
 
 // Bouton pilule avec rond fléché: au survol, le rond s'étend sur tout le bouton.
 const VARIANTS = {

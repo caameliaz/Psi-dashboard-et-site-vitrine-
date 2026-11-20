@@ -1,11 +1,11 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import Link from 'next/link';
+import Link from '@/components/LocaleLink';
 import { useRouter } from 'next/navigation';
 import { useCartStore } from '@/store/cartStore';
 import { ArrowButton } from './ArrowButton';
-import { useTranslation } from '@/lib/i18n';
+import { useLocalePath, useTranslation } from '@/lib/i18n';
 
 interface ProductPhoto {
   id: string;
@@ -17,6 +17,7 @@ interface ProductPhoto {
 export function CartDropdown({ variant = 'desktop', light = false }: { variant?: 'desktop' | 'mobile'; light?: boolean }) {
   const { t } = useTranslation();
   const router = useRouter();
+  const lp = useLocalePath();
   const items = useCartStore((s) => s.items);
   const removeItem = useCartStore((s) => s.removeItem);
   const totalItems = useCartStore((s) => s.items.reduce((sum, i) => sum + i.quantity, 0));
@@ -59,7 +60,7 @@ export function CartDropdown({ variant = 'desktop', light = false }: { variant?:
   };
 
   const handleClick = () => {
-    router.push('/cart');
+    router.push(lp('/cart'));
   };
 
   const iconColor = light ? '#FFFFFF' : '#4D4D4D';
@@ -127,12 +128,12 @@ export function CartDropdown({ variant = 'desktop', light = false }: { variant?:
                       </div>
                       <div className="flex-1 min-w-0 flex flex-col justify-center">
                         <p className="text-[13px] font-semibold text-[#263238] truncate">{t('common.ref')} {item.reference}</p>
-                        <p className="text-[11px] text-[#8A9BB5]">{item.quantity} × {item.unitPrice} DA</p>
+                        <p className="text-[11px] text-[#8A9BB5]">{item.quantity} × {item.unitPrice} {t('units.currency')}</p>
                       </div>
                       <button
                         type="button"
                         onClick={() => removeItem(item.productId)}
-                        aria-label="Retirer"
+                        aria-label={t('common.remove')}
                         className="w-6 h-6 flex items-center justify-center rounded-lg text-[#ABBED1] hover:text-[#EF5350] hover:bg-[#FFF0F0] transition-colors shrink-0"
                       >
                         <svg width="11" height="11" viewBox="0 0 24 24" fill="none">
@@ -147,7 +148,7 @@ export function CartDropdown({ variant = 'desktop', light = false }: { variant?:
               <div className="p-4 border-t border-[#F0F4F8] flex flex-col gap-3">
                 <div className="flex items-center justify-between">
                   <span className="text-[13px] font-semibold text-[#263238]">{t('cart.total')}</span>
-                  <span className="text-[16px] font-bold text-[#4CAF4F]">{totalPrice} DA</span>
+                  <span className="text-[16px] font-bold text-[#4CAF4F]">{totalPrice} {t('units.currency')}</span>
                 </div>
                 <ArrowButton href="/cart" onClick={() => setOpen(false)} variant="green-white" className="w-full !text-[13px] !py-2.5">
                   {t('cart.title')}
