@@ -107,3 +107,4 @@ Dans la liste des produits de `/admin/stock/mobile`, un bouton **Gérer** (admin
 - Numéros de facture : le numéro est maintenant **réservé dès que la TVA est activée** (voir `TODO-FACTURES-BL.md` §4) ; l'overlay « Numéro de facture » à « Livré » ne s'affiche plus que pour les anciennes commandes sans numéro.
 - Page Stock (PC) : bannière « Page en cours de développement » retirée.
 - Stock mobile : « Gérer » propose maintenant « Produire quand même » (matière insuffisante) et la saisie de la matière restante, comme sur PC.
+- Panneau d'une commande / d'un devis (`RequestPanel`) : après une modification (fiche, TVA, lignes, documents…), il **recharge lui-même** la demande depuis le serveur. Avant, si la demande n'était pas dans la liste affichée (autre période) ou si la page parente ne rafraîchissait pas (Historique), l'écran gardait l'ancienne version (ex. total HT au lieu de TTC après activation de la TVA). `GET /api/orders/[id]` renvoie aussi `assignedTo`.

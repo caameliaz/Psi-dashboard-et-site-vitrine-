@@ -40,6 +40,7 @@ export async function GET(_request: NextRequest, { params }: Ctx) {
           },
         },
         createdBy: { select: { id: true, name: true } },
+        assignedTo: { select: { id: true, name: true } },
       },
     });
 

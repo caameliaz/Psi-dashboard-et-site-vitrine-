@@ -10,6 +10,7 @@ import { ClientAutocomplete } from './ClientAutocomplete';
 import { AdminSelect } from './AdminSelect';
 import { RefSelect } from './RefSelect';
 import { toWhatsAppNumber } from '@/lib/validation';
+import { orderToDetail, quoteToDetail } from '@/lib/request-detail';
 
 // Hook pour bloquer le scroll du body quand le panneau est ouvert
 function useLockBodyScroll() {
@@ -1191,9 +1192,28 @@ function ProgressSteps({ statut, sansLivraison = false }: { statut: string; sans
   );
 }
 
-export function RequestPanel({ item, onClose, onStatusChange, onConfirmQuoteWithPrice, users, onAssign, onReassigned, onToggleAutoAssign }: RequestPanelProps) {
+export function RequestPanel({ item: itemProp, onClose, onStatusChange, onConfirmQuoteWithPrice, users, onAssign, onReassigned: onReassignedProp, onToggleAutoAssign }: RequestPanelProps) {
   // Bloquer le scroll du body quand le panneau est ouvert
   useLockBodyScroll();
+
+  // Copie « fraîche » de la demande : après une modification (fiche, TVA, lignes, documents…), le panneau recharge
+  // LUI-MÊME sa demande depuis le serveur, au lieu d'attendre que la page parente lui renvoie une nouvelle version.
+  // (Avant : si la demande n'était pas dans la liste affichée — autre période, historique — ou si le parent ne
+  // rafraîchissait pas, l'écran gardait l'ancienne version même si l'enregistrement avait réussi.)
+  const [fresh, setFresh] = useState<RequestDetail | null>(null);
+  useEffect(() => { setFresh(null); }, [itemProp]); // le parent a renvoyé une version à jour → on la reprend
+  const item = fresh && fresh.id === itemProp.id ? fresh : itemProp;
+  const refreshSelf = async () => {
+    if (!itemProp.id) return;
+    const devis = itemProp.type === 'Devis';
+    try {
+      const res = await fetch(`/api/${devis ? 'quotes' : 'orders'}/${itemProp.id}`, { cache: 'no-store' });
+      if (!res.ok) return;
+      const raw = await res.json();
+      setFresh(devis ? quoteToDetail(raw) : orderToDetail(raw));
+    } catch { /* le parent (polling) rattrapera */ }
+  };
+  const onReassigned = () => { onReassignedProp?.(); refreshSelf(); };
   
   const { can, isAdmin } = useRole();
   const canModifierStatuts = can('modifier_statuts');
@@ -1275,7 +1295,7 @@ export function RequestPanel({ item, onClose, onStatusChange, onConfirmQuoteWith
     setShowReassign(false);
     // Refresh SANS rejouer un changement de statut (sinon notif parasite "mis en attente").
     // Fallback sur onStatusChange seulement si le parent n'a pas fourni onReassigned.
-    if (onReassigned) onReassigned();
+    if (onReassignedProp) onReassigned();
     else onStatusChange?.(item.ref, item.statut);
     onClose();
   };
