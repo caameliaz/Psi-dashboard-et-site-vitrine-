@@ -134,3 +134,8 @@ npx prisma studio
 ```
 
 Ouvre une interface web sur `http://localhost:5555` pour parcourir et modifier les données directement.
+
+## Numérotation des factures / BL (migration 20261126120000)
+- `Order.invoiceNumber` / `Quote.invoiceNumber` : numéro de facture **réservé automatiquement** quand la TVA est activée (format `F 023/2026`, réglable). `invoiceNumberReused` = numéro réattribué après une annulation (pastille « R »).
+- `Document.withInvoice` : BL « avec facture » (`BL-F 023/2026`, numéro de la facture) ou « sans facture » (compteur propre `BL 016-2026`).
+- `DocumentCounter.floor` : plancher du compteur (dernier numéro saisi par un admin). Au-dessus, le plus petit numéro libre est réutilisé.

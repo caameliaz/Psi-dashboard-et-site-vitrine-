@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { guardRequestAccess } from '@/lib/access';
 import { requirePermission, hasPermission } from '@/lib/permissions';
 import { createAudit, statusLabel } from '@/lib/audit';
+import { assertInvoiceReleasable, InvoiceNumberError, syncInvoiceNumber } from '@/lib/documents/reservation';
 import { createNotif } from '@/lib/notifications';
 import { notifyStatusChange, notifyAssignment } from '@/lib/notify-activity';
 import {
@@ -60,6 +61,12 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
 
   try {
     const body = await request.json();
+
+    // Annulation / TVA retirée : le numéro de facture réservé est libéré — sauf si la facture est déjà générée (à supprimer d'abord).
+    if (body.status === 'ANNULE' || body.vatEnabled === false || body.fiche?.vatEnabled === false) {
+      try { await assertInvoiceReleasable('quote', id); }
+      catch (e) { if (e instanceof InvoiceNumberError) return NextResponse.json({ error: e.message }, { status: 409 }); throw e; }
+    }
 
     // Statut AVANT cette requête : les effets sur le stock ne se rejouent que si le statut CHANGE vraiment
     // (sinon un double clic / une requête répétée « Livré » retirait deux fois le réservé du produit).
@@ -314,6 +321,9 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
         assignedTo: { select: { id: true, name: true } },
       },
     });
+
+    // Numéro de facture : réservé si la TVA est active (et non annulé), libéré sinon — le plus petit numéro libre est repris.
+    try { Object.assign(quote, await syncInvoiceNumber('quote', id)); } catch (e) { console.error('[quotes] numéro de facture non synchronisé', e); }
 
     const action = body.status !== undefined ? `Statut devis : ${statusLabel(body.status)}`
       : body.priority !== undefined ? (body.priority ? 'Devis marqué prioritaire' : 'Priorité retirée du devis')

@@ -55,8 +55,12 @@ Même principe que les étiquettes : un modèle fidèle, rempli avec les donnée
 | Sujet | Décision |
 |---|---|
 | Facture | Format **« F 021/2026 »** (le premier format), compteur **par année** (repart à 1), numéros qui se suivent. **Modifiable par les admins.** |
-| BL | Le numéro **essaie de coïncider avec la facture** (BL 1 ↔ F 1). **Modifiable par les admins.** Compteur de départ réglable. |
-| « Bis » | Quand un client veut un BL avant la facture / plusieurs BL pour une même facture : le BL s'appelle « bis ». L'app **propose** le nom (ex. BL 13 bis) et l'utilisateur peut le changer. |
+| Facture (réservation) | **Mise à jour 26 nov. 2026.** Dès qu'une commande ou un devis a la **TVA activée**, il reçoit **tout de suite** son numéro de facture (plus petit numéro libre, dans l'ordre), même si la facture n'est pas encore générée : fini le numéro « dépassé » parce que l'admin a oublié de générer. |
+| Pas de trou | Commande annulée / TVA retirée → le numéro est **libéré** et **réattribué** à la prochaine commande avec TVA (pastille **« R »** dans la fiche : numéro réattribué). Si la facture est déjà générée : la supprimer d'abord. Le compteur saisi dans Réglages fait office de **plancher** (rien en dessous n'est réattribué). Les anciens numéros (F2026-001…) restent tels quels. |
+| BL avec facture | Porte le numéro de la facture : **« BL-F 023/2026 »**. Plusieurs BL pour la même facture : « BL-F 023 bis/2026 », « bis 2 »… (regroupés dans UNE facture). |
+| BL sans facture | **Compteur propre** (« BL 016-2026 »), indépendant des factures, sans trou (un BL supprimé libère son numéro). Plus de calage BL ↔ facture. |
+| Regroupement | Une facture qui regroupe des BL de plusieurs commandes prend le n° du premier BL ; les commandes concernées prennent ce n° et leurs numéros réservés sont libérés. Facture supprimée → les autres commandes reprennent un numéro libre. |
+| `aUneFacture()` | Reste « commence par F » : un numéro « BL… » = **sans facture** (la modif de l'équipe qui comptait tout numéro non vide a été annulée). |
 | Proforma | Les devis sont des proformas, numérotées **FP-xx-2026**, compteur propre. |
 | Compteurs | Les derniers numéros ne sont pas certains (facture : F 021 vu ; BL : peut-être 22) → **compteurs modifiables dans Réglages → Documents** : on saisit le dernier numéro utilisé, les **numéros suivants se recalculent à partir de là** (les documents déjà émis ne changent pas ; alerte si un numéro existe déjà). |
 
@@ -151,4 +155,4 @@ Même principe que les étiquettes : un modèle fidèle, rempli avec les donnée
 - Lien public envoyé par mail : `/d/[token]` (+ `/d/[token]/excel`). Mail : aperçu avant envoi, lien + Excel en pièce jointe (pas de PDF automatique : pas de librairie PDF).
 - Code : `src/lib/documents/` (types, defaults, calc, numbering, render, excel, service), `src/components/documents/`, `src/app/api/documents/`.
 - Droits : BL = toute personne qui voit les commandes ; facture, proforma, modèles, compteurs, modification, suppression, e-mail = admins.
-- Règle des numéros : le compteur = plus grand numéro émis ; un 2e BL du même client encore « à facturer » prend « bis » ; la facture reprend le n° du BL si libre.
+- Règle des numéros (mise à jour 26 nov.) : voir §4 « Numérotation ». Code : `src/lib/documents/numbering.ts` (plus petit numéro libre, plancher), `src/lib/documents/reservation.ts` (réservation / libération, appelée par les routes commandes et devis), `src/lib/documents/service.ts` (émission, suppression, regroupement).

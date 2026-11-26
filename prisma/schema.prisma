@@ -409,7 +409,8 @@ model Order {
   // la commande n'est pas encore entièrement produite/livrée (uniquement pertinent si VALIDE).
   priority        Boolean        @default(false)
   // ── Facturation / règlement (renseignés à l'import Excel ou à la validation) ──
-  invoiceNumber   String? // N° de facture (en plus de la référence auto)
+  invoiceNumber   String? // N° de facture (en plus de la référence auto) — réservé automatiquement dès que la TVA est activée
+  invoiceNumberReused Boolean @default(false) // numéro réattribué (trou laissé par une annulation) → pastille « R »
   paymentMethod   String? // Espèces, Chèque, Virement, Versement, À crédit, Dépensé, Offert
   paymentDate     DateTime? // date de règlement (facultative, modifiable après validation)
   vatEnabled      Boolean        @default(false) // TVA appliquée (info seule — le montant saisi est final)
@@ -507,6 +508,7 @@ model Quote {
   notes           String? // notes internes
   // ── Facturation / règlement (mêmes champs que Order) ──
   invoiceNumber   String?
+  invoiceNumberReused Boolean @default(false)
   paymentMethod   String?
   paymentDate     DateTime?
   vatEnabled      Boolean        @default(false)
@@ -879,6 +881,9 @@ model DocumentCounter {
   type       DocumentType
   year       Int
   lastNumber Int          @default(0)
+  // Plancher : les numéros ≤ floor ne sont jamais réattribués (ex. déjà émis hors de PSI Dash). Posé par l'admin
+  // (« dernier numéro utilisé = N ») ; au-dessus, un numéro libéré est réutilisé (pas de trou).
+  floor      Int          @default(0)
   updatedAt  DateTime     @updatedAt
 
   @@unique([type, year])
@@ -892,6 +897,8 @@ model Document {
   year      Int
   seq       Int? // partie numérique (pour proposer le suivant)
   suffix    String? // « bis »…
+  // BL « avec facture » (BL-F 023/2026 : porte le numéro de la facture) ou « sans facture » (compteur propre)
+  withInvoice Boolean    @default(false)
   issuedAt  DateTime     @default(now())
   order     Order?       @relation(fields: [orderId], references: [id], onDelete: SetNull)
   orderId   String?

@@ -32,6 +32,11 @@ une divergence entre le schéma et la base).
   `Category.documentDesignation`, `Product.documentDesignation`, valeur `DOCUMENT` de l'historique.
   Additives uniquement. **Après `migrate deploy`, initialiser le compteur de facture 2026 à 22**
   (Réglages → Documents → Compteurs, ou `DocumentCounter` FACTURE 2026 = 22) et saisir le dernier n° de BL réel.
+- `20261126120000_invoice_number_reservation` — numéro de facture réservé dès que la TVA est activée :
+  colonnes `Order.invoiceNumberReused` et `Quote.invoiceNumberReused` (pastille « R »), `Document.withInvoice`
+  (BL-F vs BL sans facture), `DocumentCounter.floor` (plancher : les numéros ≤ plancher ne sont jamais réattribués ;
+  rempli avec `lastNumber` pour les compteurs existants). Additive. **À appliquer AVANT de relancer le site**
+  (`npx prisma migrate deploy`, puis `npx prisma generate`) : sans elle, les requêtes sur commandes / devis échouent.
 
 Si d'autres migrations sont ajoutées plus tard sur cette branche, elles seront
 listées ici aussi — mais `prisma migrate deploy` les applique de toute façon

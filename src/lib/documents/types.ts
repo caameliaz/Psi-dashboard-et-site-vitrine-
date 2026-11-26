@@ -54,7 +54,7 @@ export interface DocumentSettingsData {
   vatRate: number; // 19
   defaultPaymentMethod: string; // « Virement/Chèque »
   stampDuty: StampDutyConfig; // paliers du timbre (paiement en espèces)
-  numberFormats: Record<DocumentKind, string>; // ex. « F {seq:3}/{year} »
+  numberFormats: Record<DocumentKind | 'BL_FACTURE', string>; // ex. « F {seq:3}/{year} » ; BL_FACTURE = BL d'une commande avec facture
   defaultDesignation: string; // texte par défaut si ni le produit ni sa catégorie n'en ont
 }
 

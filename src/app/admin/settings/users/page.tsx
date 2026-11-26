@@ -31,6 +31,8 @@ interface User {
   permissions: PermKey[];
   resetRequested?: boolean;
   twoFactorDisabled?: boolean;
+  recapDaily?: boolean;
+  recapWeekly?: boolean;
   canHardDelete?: boolean;
 }
 
@@ -44,6 +46,8 @@ function dbUserToUser(u: any): User {
     statut: u.active ? 'Actif' : 'Inactif',
     resetRequested: !!u.resetRequested,
     twoFactorDisabled: !!u.twoFactorDisabled,
+    recapDaily: u.recapDaily ?? true,
+    recapWeekly: u.recapWeekly ?? true,
     canHardDelete: !!u.canHardDelete,
     // Un employé a EXACTEMENT ses permissions stockées (pas de fallback :
     // sinon décocher toutes les cases les ferait "revenir" à l'affichage).
@@ -420,7 +424,7 @@ interface LeaveInfo {
   allowFullHistory: boolean;
 }
 
-function UserSlideIn({ user, onClose, onDelete, onPermChange, onPermSetAll, customRoles, onSaveProfile, onResetPassword, onSendWelcome, onSendFixMail, onReactivate, onToggleTwoFactor, initialEditing = false }: {
+function UserSlideIn({ user, onClose, onDelete, onPermChange, onPermSetAll, customRoles, onSaveProfile, onResetPassword, onSendWelcome, onSendFixMail, onReactivate, onToggleTwoFactor, onToggleRecap, initialEditing = false }: {
   user: User; onClose: () => void; onDelete: () => void;
   onPermChange: (userId: number, perm: PermKey, value: boolean) => void;
   onPermSetAll: (userId: number, perms: PermKey[]) => void;
@@ -431,6 +435,7 @@ function UserSlideIn({ user, onClose, onDelete, onPermChange, onPermSetAll, cust
   onSendFixMail?: (user: User) => Promise<void>; // fourni UNIQUEMENT à la propriétaire du compte
   onReactivate: (user: User) => Promise<void>;
   onToggleTwoFactor: (user: User, disabled: boolean) => Promise<void>;
+  onToggleRecap: (user: User, patch: { recapDaily?: boolean; recapWeekly?: boolean }) => Promise<void>;
   initialEditing?: boolean;
 }) {
   const ac = avatarColor(user.role);
@@ -708,6 +713,17 @@ function UserSlideIn({ user, onClose, onDelete, onPermChange, onPermSetAll, cust
               {togglingTwoFactor ? 'Enregistrement…' : user.twoFactorDisabled ? '✓ Réactiver le code de connexion par email' : 'Désactiver le code de connexion par email'}
             </button>
             <p className="text-[11px] text-[#ABBED1] mt-2">À utiliser seulement si l&apos;utilisateur ne reçoit plus les codes par email, et temporairement.</p>
+
+            {/* Emails automatiques de récap : réglables ici par un admin (l'utilisateur peut aussi le faire depuis son profil) */}
+            <p className="text-[11px] font-bold text-[#0F172A] uppercase tracking-wide mt-5 mb-2">Emails automatiques</p>
+            {([['recapDaily', 'Récap quotidien (chaque soir à 20h)'], ['recapWeekly', 'Bilan hebdomadaire (jeudi 23h59)']] as const).map(([key, label]) => (
+              <label key={key} className="flex items-center gap-2 py-1 text-[13px] text-[#374151] cursor-pointer">
+                <input type="checkbox" className="accent-[#4CAF4F]" checked={user[key] !== false}
+                  onChange={(e) => onToggleRecap(user, { [key]: e.target.checked })} />
+                {label}
+              </label>
+            ))}
+            <p className="text-[11px] text-[#ABBED1] mt-1">Décoché = ce compte ne reçoit plus cet email. Réactivable ici à tout moment.</p>
           </div>
         </div>
 
@@ -1091,6 +1107,20 @@ function UsersPageInner() {
     }
   };
 
+  // Récaps par email (quotidien / hebdomadaire) d'un utilisateur — réglable par un admin
+  const handleToggleRecap = async (u: User, patch: { recapDaily?: boolean; recapWeekly?: boolean }) => {
+    const res = await fetch(`/api/users/${u.id}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(patch),
+    });
+    if (res.ok) {
+      await fetchUsers();
+      setProfilUser((prev) => prev && prev.id === u.id ? { ...prev, ...patch } : prev);
+    } else {
+      alert('Modification impossible.');
+    }
+  };
+
   // Réactive un compte désactivé (active: true)
   const handleReactivateUser = async (u: User) => {
     const res = await fetch(`/api/users/${u.id}`, {
@@ -1244,7 +1274,7 @@ function UsersPageInner() {
           onSendWelcome={handleSendWelcome}
           onSendFixMail={isOwnerAccount ? handleSendFixMail : undefined}
           onReactivate={handleReactivateUser}
-          onToggleTwoFactor={handleToggleTwoFactor} />
+          onToggleTwoFactor={handleToggleTwoFactor} onToggleRecap={handleToggleRecap} />
       )}
 
       {showAdd && (

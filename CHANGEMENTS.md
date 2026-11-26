@@ -100,3 +100,10 @@ Dans la liste des produits de `/admin/stock/mobile`, un bouton **Gérer** (admin
 1. `npm install`
 2. Redémarrer `npm run dev` (changement de layouts racine).
 3. Aucune migration de base ni `prisma generate` n'est nécessaire pour ces changements.
+
+## Corrections après relecture (26 nov. 2026)
+
+- `aUneFacture()` (`src/lib/payment-method.ts`) : retour à « commence par F » — un numéro « BL… » reste **sans facture**.
+- Numéros de facture : le numéro est maintenant **réservé dès que la TVA est activée** (voir `TODO-FACTURES-BL.md` §4) ; l'overlay « Numéro de facture » à « Livré » ne s'affiche plus que pour les anciennes commandes sans numéro.
+- Page Stock (PC) : bannière « Page en cours de développement » retirée.
+- Stock mobile : « Gérer » propose maintenant « Produire quand même » (matière insuffisante) et la saisie de la matière restante, comme sur PC.

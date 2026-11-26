@@ -11,6 +11,7 @@ import { useRole } from '@/lib/role-context';
 import { StockListsWidget } from '@/components/ui/StockListsWidget';
 import { MobileNavbar } from '@/components/MobileNavbar';
 import { Modal } from '@/components/ui/Modal';
+import { ManqueMatiereModal, type ManqueMatiere } from '@/components/ui/ManqueMatiereModal';
 import { NotesPencil, NotesModal, useStockNoteCounts, noteKey } from '@/components/ui/StockNotes';
 
 interface StockProduct {
@@ -39,17 +40,38 @@ function ManageStockModal({ p, onClose, onDone }: { p: StockProduct; onClose: ()
   const [field, setField] = useState<StockField>('available');
   const [mode, setMode] = useState<'produire' | 'acheter'>('produire');
   const [saving, setSaving] = useState(false);
+  // Production refusée faute de matière → overlay « Réapprovisionner / Produire quand même » (comme sur PC)
+  const [manques, setManques] = useState<ManqueMatiere[] | null>(null);
+  // Matière restante saisie à la main après une production (vide = inchangée)
+  const [materials, setMaterials] = useState<{ id: string; name: string; reference: string; unit: string; available: number }[]>([]);
+  const [restes, setRestes] = useState<Record<string, string>>({});
   const n = Number(qty);
   const valid = qty.trim() !== '' && !Number.isNaN(n) && n >= 0 && (tab === 'correction' || n > 0);
+  const produit = p.mode === 'FABRIQUE' || (p.mode === 'LES_DEUX' && mode === 'produire');
 
-  const submit = async () => {
+  useEffect(() => {
+    if (p.mode === 'ACHETE') return;
+    fetch('/api/stock/materials').then((r) => (r.ok ? r.json() : [])).then(setMaterials).catch(() => {});
+  }, [p.mode]);
+
+  const submit = async (forcer = false) => {
     if (!valid || saving) return;
     setSaving(true);
     try {
+      const matieresRestantes: Record<string, number> = {};
+      if (tab === 'restock' && produit) {
+        for (const [id, v] of Object.entries(restes)) {
+          const r = Number(v);
+          if (v.trim() && !Number.isNaN(r) && r >= 0) matieresRestantes[id] = r;
+        }
+      }
       const res = tab === 'restock'
         ? await fetch('/api/stock/restock', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ type: 'product', id: p.id, quantity: n, mode: p.mode === 'LES_DEUX' ? mode : undefined }),
+            body: JSON.stringify({
+              type: 'product', id: p.id, quantity: n, mode: p.mode === 'LES_DEUX' ? mode : undefined,
+              matieresRestantes: Object.keys(matieresRestantes).length ? matieresRestantes : undefined, forcer: forcer || undefined,
+            }),
           })
         : await fetch('/api/stock/correction', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -57,6 +79,7 @@ function ManageStockModal({ p, onClose, onDone }: { p: StockProduct; onClose: ()
           });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
+        if (err.code === 'MATIERE_INSUFFISANTE' && Array.isArray(err.shortfalls)) { setManques(err.shortfalls); return; }
         alert(err.error ?? (tab === 'restock' ? 'Échec du réapprovisionnement' : 'Échec de la correction'));
         return;
       }
@@ -66,6 +89,13 @@ function ManageStockModal({ p, onClose, onDone }: { p: StockProduct; onClose: ()
       setSaving(false);
     }
   };
+
+  if (manques) {
+    return (
+      <ManqueMatiereModal produit={p.name || p.reference} manques={manques} peutForcer
+        onReessayer={async () => { setManques(null); await submit(); }} onForcer={async () => { setManques(null); await submit(true); }} onClose={() => { setManques(null); onDone(); onClose(); }} />
+    );
+  }
 
   return (
     <Modal title={`Stock — ${p.reference}`} onClose={onClose} scrollable>
@@ -101,6 +131,21 @@ function ManageStockModal({ p, onClose, onDone }: { p: StockProduct; onClose: ()
               <label className="block text-[12px] font-semibold text-[#374151] mb-1.5">Quantité à ajouter</label>
               <input value={qty} onChange={(e) => setQty(e.target.value.replace(/[^\d.]/g, ''))} inputMode="decimal" placeholder="ex: 50" className={inputClass} autoFocus />
             </div>
+            {produit && materials.length > 0 && (
+              <div>
+                <p className="text-[12px] font-semibold text-[#374151] mb-0.5">Matière restante <span className="font-normal text-[#8A9BB5]">(optionnel)</span></p>
+                <p className="text-[11px] text-[#8A9BB5] mb-2">Ce qu&apos;il reste réellement après cette production. Laisser vide = inchangé.</p>
+                <ul className="flex flex-col gap-1.5 max-h-[180px] overflow-y-auto">
+                  {materials.map((m) => (
+                    <li key={m.id} className="flex items-center gap-2">
+                      <span className="flex-1 min-w-0 text-[12px] text-[#374151] truncate">{m.name} <span className="text-[#8A9BB5]">— actuel : {m.available} {m.unit}</span></span>
+                      <input value={restes[m.id] ?? ''} onChange={(e) => { const v = e.target.value.replace(/[^\d.]/g, ''); setRestes((r) => ({ ...r, [m.id]: v })); }}
+                        inputMode="decimal" placeholder="—" className="w-[80px] px-2 py-1.5 rounded-lg border border-[#E2E8F0] text-[12px] text-right bg-[#F8FAFC] focus:outline-none focus:border-[#4CAF4F]" />
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </>
         ) : (
           <>
@@ -120,7 +165,7 @@ function ManageStockModal({ p, onClose, onDone }: { p: StockProduct; onClose: ()
 
         <div className="flex gap-3 pt-1">
           <button onClick={onClose} className="flex-1 px-4 py-2.5 rounded-lg border border-[#E2E8F0] text-sm font-semibold text-[#374151]">Annuler</button>
-          <button onClick={submit} disabled={!valid || saving} className="flex-1 px-4 py-2.5 rounded-lg text-sm font-bold text-white disabled:opacity-60" style={{ background: '#4CAF4F' }}>
+          <button onClick={() => submit()} disabled={!valid || saving} className="flex-1 px-4 py-2.5 rounded-lg text-sm font-bold text-white disabled:opacity-60" style={{ background: '#4CAF4F' }}>
             {saving ? 'Enregistrement…' : 'Valider'}
           </button>
         </div>

@@ -23,7 +23,8 @@ export const DEFAULT_SETTINGS: DocumentSettingsData = {
   vatRate: 19,
   defaultPaymentMethod: 'Virement/Chèque',
   stampDuty: DEFAULT_STAMP_DUTY,
-  numberFormats: { FACTURE: 'F {seq:3}/{year}', BL: 'BL{seq:3}{suffix}-{year}', PROFORMA: 'FP-{seq:2}-{year}' },
+  // BL = bon de livraison SANS facture (compteur propre) ; BL_FACTURE = BL d'une commande avec facture (porte le n° de la facture)
+  numberFormats: { FACTURE: 'F {seq:3}/{year}', BL: 'BL{seq:3}{suffix}-{year}', BL_FACTURE: 'BL-F {seq:3}{suffix}/{year}', PROFORMA: 'FP-{seq:2}-{year}' },
   defaultDesignation: DEFAULT_DESIGNATION,
 };
 

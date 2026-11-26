@@ -29,7 +29,7 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: "Vous n'avez pas la permission pour cette action" }, { status: 403 });
     }
     const users = await prisma.user.findMany({
-      select: { id: true, name: true, email: true, role: true, customRoleId: true, active: true, permissions: true, resetRequested: true, twoFactorDisabled: true, canHardDelete: true },
+      select: { id: true, name: true, email: true, role: true, customRoleId: true, active: true, permissions: true, resetRequested: true, twoFactorDisabled: true, canHardDelete: true, recapDaily: true, recapWeekly: true },
       orderBy: { name: 'asc' },
     });
     return NextResponse.json(users);

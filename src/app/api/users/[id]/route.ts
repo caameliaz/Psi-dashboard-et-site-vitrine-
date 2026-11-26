@@ -76,6 +76,9 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
     if (body.photo !== undefined) data.photo = body.photo;
     if (body.permissions !== undefined) data.permissions = body.permissions;
     if (body.twoFactorDisabled !== undefined) data.twoFactorDisabled = Boolean(body.twoFactorDisabled);
+    // Récaps par e-mail (quotidien 20h / hebdomadaire) : réglables par un admin pour n'importe quel utilisateur
+    if (body.recapDaily !== undefined) data.recapDaily = Boolean(body.recapDaily);
+    if (body.recapWeekly !== undefined) data.recapWeekly = Boolean(body.recapWeekly);
     if (body.password !== undefined) {
       data.password = await bcrypt.hash(body.password, 10);
       // Réinitialiser le mot de passe efface la demande "mot de passe oublié"
@@ -96,6 +99,8 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
       : body.active === true ? 'Utilisateur activé'
       : body.twoFactorDisabled === true ? 'Code de connexion par email désactivé'
       : body.twoFactorDisabled === false ? 'Code de connexion par email réactivé'
+      : body.recapDaily !== undefined ? `Récap quotidien par email ${body.recapDaily ? 'activé' : 'désactivé'}`
+      : body.recapWeekly !== undefined ? `Bilan hebdomadaire par email ${body.recapWeekly ? 'activé' : 'désactivé'}`
       : body.permissions !== undefined && Object.keys(body).length === 1 ? 'Autorisations modifiées'
       : 'Utilisateur modifié';
     createAudit({ userId: session.user.id, action, entity: 'UTILISATEUR', entityId: id, detail: user.name });

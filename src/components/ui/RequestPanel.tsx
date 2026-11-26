@@ -115,6 +115,7 @@ export interface RequestDetail {
   autoAssignStock?: boolean;
   // Facturation / règlement
   invoiceNumber?: string | null;
+  invoiceNumberReused?: boolean; // numéro réattribué après une annulation → pastille « R »
   paymentMethod?: string | null;
   paymentDate?: string | null;
   vatEnabled?: boolean;
@@ -1605,7 +1606,13 @@ export function RequestPanel({ item, onClose, onStatusChange, onConfirmQuoteWith
                     {item.invoiceNumber && (
                       <div className="flex items-center justify-between gap-3">
                         <span className="text-[12px] text-[#8A9BB5]">N° facture</span>
-                        <span className="text-[13px] font-bold text-[#0F172A]">{item.invoiceNumber}</span>
+                        <span className="text-[13px] font-bold text-[#0F172A] flex items-center gap-1.5">
+                          {item.invoiceNumber}
+                          {item.invoiceNumberReused && (
+                            <span title="Numéro réattribué : il avait été libéré par une commande annulée ou supprimée, la numérotation reste sans trou."
+                              className="px-1.5 py-0.5 rounded-md bg-[#FEF3C7] text-[#92400E] text-[10px] font-bold cursor-help">R</span>
+                          )}
+                        </span>
                       </div>
                     )}
                     <div className="flex items-center justify-between gap-3">

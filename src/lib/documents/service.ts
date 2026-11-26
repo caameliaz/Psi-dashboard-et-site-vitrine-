@@ -8,7 +8,17 @@ import { qrSvg, receiptUrl } from '@/lib/label-print';
 import { computeTotals, fmtMoney, mergeSettings, mergeTemplate, round2 } from './calc';
 import { DEFAULT_DESIGNATION } from './defaults';
 import { bumpCounter, formatDocumentNumber, getNumberFormats, parseDocumentNumber, suggestBlNumber, suggestInvoiceNumberFromBls, suggestNumber } from './numbering';
+import { attachIssuedInvoiceNumber, syncInvoiceNumber, type RequestKind } from './reservation';
 import type { DocLine, DocParty, DocumentData, DocumentKind, DocumentSettingsData, DocumentTemplateConfig, RenderableDocument } from './types';
+
+/** Numéro imprimé → seq / année / suffixe, et « BL avec facture » (BL-F) ou non. */
+function parseNumberFor(kind: DocumentKind, formats: Awaited<ReturnType<typeof getNumberFormats>>, number: string) {
+  if (kind === 'BL') {
+    const pf = parseDocumentNumber(formats.BL_FACTURE, number);
+    if (pf) return { parsed: pf, withInvoice: true };
+  }
+  return { parsed: parseDocumentNumber(formats[kind], number), withInvoice: false };
+}
 
 export const DOC_LABEL: Record<DocumentKind, string> = { BL: 'BL', FACTURE: 'Facture', PROFORMA: 'Proforma' };
 
@@ -189,10 +199,16 @@ export async function prepareDraft(input: { kind: DocumentKind; orderId?: string
       lines, vatRate: settings.vatRate, paymentMethod: payment,
       blNumbers: bls.map((b) => b.number), totals: computeTotals(lines, settings.vatRate, payment, settings.stampDuty),
     };
-    suggested = await suggestInvoiceNumberFromBls(year, bls.map((b) => b.seq), formats);
+    suggested = await suggestInvoiceNumberFromBls(year, bls.map((b) => ({ seq: b.seq, withInvoice: b.withInvoice })), formats);
   } else {
-    const src = await loadSource(orderId, quoteId);
+    let src = await loadSource(orderId, quoteId);
     if (!src) throw new DocError('Commande ou devis introuvable.', 404);
+    // Commande / devis AVEC TVA sans numéro de facture (créés avant la réservation automatique) : on lui en réserve un maintenant,
+    // pour que le BL puisse porter ce numéro (BL-F).
+    if (kind === 'BL' && src.row.vatEnabled && !src.row.invoiceNumber) {
+      await syncInvoiceNumber(src.kind, src.row.id);
+      src = (await loadSource(orderId, quoteId)) ?? src;
+    }
     const row = src.row;
     if (src.kind === 'order') quoteId = null; else orderId = null;
     clientId = row.clientId ?? null;
@@ -214,9 +230,9 @@ export async function prepareDraft(input: { kind: DocumentKind; orderId?: string
       totals: computeTotals(lines, settings.vatRate, payment, settings.stampDuty),
     };
     if (kind === 'BL') {
-      const s = await suggestBlNumber(year, clientId, formats);
+      const s = await suggestBlNumber(year, { invoiceNumber: row.invoiceNumber, vatEnabled: !!row.vatEnabled }, formats);
       suggested = s;
-      if (s.bis) warnings.push('Ce client a déjà un BL à facturer : numéro « bis » proposé (modifiable).');
+      if (s.bis) warnings.push('Cette facture a déjà un BL : numéro « bis » proposé (les BL seront regroupés dans la même facture).');
     } else {
       suggested = await suggestNumber('PROFORMA', year, formats);
     }
@@ -285,7 +301,7 @@ export async function issueDocument(input: IssueInput) {
   const exists = await prisma.document.findUnique({ where: { type_number: { type: kind, number } }, select: { id: true } });
   if (exists) throw new DocError(`Le numéro « ${number} » existe déjà.`, 409);
 
-  const parsed = parseDocumentNumber(formats[kind], number);
+  const { parsed, withInvoice } = parseNumberFor(kind, formats, number);
   const blIds = [...new Set(input.blIds ?? [])];
   if (kind === 'FACTURE') {
     if (blIds.length === 0) throw new DocError('Une facture se crée à partir d\'un ou plusieurs BL.');
@@ -296,7 +312,7 @@ export async function issueDocument(input: IssueInput) {
   const created = await prisma.$transaction(async (tx) => {
     const doc = await tx.document.create({
       data: {
-        type: kind, number, year: parsed?.year ?? year, seq: parsed?.seq ?? null, suffix: parsed?.suffix ?? null,
+        type: kind, number, year: parsed?.year ?? year, seq: parsed?.seq ?? null, suffix: parsed?.suffix ?? null, withInvoice,
         orderId: input.orderId ?? null, quoteId: input.quoteId ?? null, clientId: input.clientId ?? null,
         data: data as unknown as Prisma.InputJsonValue,
         templateSnapshot: template as unknown as Prisma.InputJsonValue,
@@ -307,7 +323,19 @@ export async function issueDocument(input: IssueInput) {
     if (kind === 'FACTURE') await tx.document.updateMany({ where: { id: { in: blIds } }, data: { invoiceId: doc.id } });
     return doc;
   });
-  if (parsed) await bumpCounter(kind, parsed.year ?? year, parsed.seq).catch(console.error);
+  // Un BL « avec facture » suit le compteur des factures (déjà avancé à la réservation) : il ne touche pas au compteur des BL.
+  if (parsed && !withInvoice) await bumpCounter(kind, parsed.year ?? year, parsed.seq).catch(console.error);
+
+  // Facture émise : les commandes / devis concernés prennent le numéro RÉEL de la facture (regroupement de BL de plusieurs
+  // commandes, numéro modifié…). Leurs numéros réservés devenus inutiles sont ainsi libérés et réattribués.
+  if (kind === 'FACTURE' && blIds.length > 0) {
+    try {
+      const linked = await prisma.document.findMany({ where: { id: { in: blIds } }, select: { orderId: true, quoteId: true } });
+      const targets = new Map<string, RequestKind>();
+      for (const l of linked) { if (l.orderId) targets.set(l.orderId, 'order'); if (l.quoteId) targets.set(l.quoteId, 'quote'); }
+      for (const [id, k] of targets) await attachIssuedInvoiceNumber(k, id, number);
+    } catch (e) { console.error('[documents] numéro de facture non reporté sur la commande', e); }
+  }
 
   createAudit({
     userId: input.userId, action: `${DOC_LABEL[kind]} créé${kind === 'BL' ? '' : 'e'}`,
@@ -345,11 +373,12 @@ export async function updateDocument(id: string, patch: { number?: string; data?
     const clash = await prisma.document.findUnique({ where: { type_number: { type: cur.type, number } }, select: { id: true } });
     if (clash) throw new DocError(`Le numéro « ${number} » existe déjà.`, 409);
     const formats = await getNumberFormats();
-    const parsed = parseDocumentNumber(formats[cur.type], number);
+    const { parsed, withInvoice } = parseNumberFor(cur.type, formats, number);
     upd.number = number; upd.seq = parsed?.seq ?? null; upd.suffix = parsed?.suffix ?? null;
+    if (cur.type === 'BL') upd.withInvoice = withInvoice;
     if (parsed?.year) upd.year = parsed.year;
     changes.push(`numéro ${cur.number} → ${number}`);
-    if (parsed) await bumpCounter(cur.type, parsed.year ?? cur.year, parsed.seq).catch(console.error);
+    if (parsed && !withInvoice) await bumpCounter(cur.type, parsed.year ?? cur.year, parsed.seq).catch(console.error);
   }
   if (patch.data !== undefined) {
     const after = await normalizeData({ ...before, ...(patch.data as object) }, settings);
@@ -379,6 +408,26 @@ export async function deleteDocument(id: string, userId: string) {
   if (!cur) throw new DocError('Document introuvable.', 404);
   if (cur.type === 'BL' && cur.invoiceId) throw new DocError('Ce BL est inclus dans une facture : supprime d\'abord la facture.', 409);
   await prisma.document.delete({ where: { id } });
+  // Facture supprimée : si elle regroupait des BL de plusieurs commandes, celles-ci avaient pris SON numéro. Seule la première
+  // le garde ; les autres reprennent chacune un numéro libre (le leur, libéré au regroupement, est réattribué).
+  if (cur.type === 'FACTURE' && cur.bls.length > 0) {
+    try {
+      const linked = await prisma.document.findMany({
+        where: { id: { in: cur.bls.map((b) => b.id) } }, select: { orderId: true, quoteId: true }, orderBy: [{ seq: 'asc' }, { createdAt: 'asc' }],
+      });
+      const targets = new Map<string, RequestKind>();
+      for (const l of linked) { if (l.orderId) targets.set(l.orderId, 'order'); if (l.quoteId) targets.set(l.quoteId, 'quote'); }
+      let first = true;
+      for (const [rid, k] of targets) {
+        if (first) { first = false; continue; }
+        const row = k === 'order' ? await prisma.order.findUnique({ where: { id: rid }, select: { invoiceNumber: true } }) : await prisma.quote.findUnique({ where: { id: rid }, select: { invoiceNumber: true } });
+        if (row?.invoiceNumber !== cur.number) continue;
+        if (k === 'order') await prisma.order.update({ where: { id: rid }, data: { invoiceNumber: null, invoiceNumberReused: false } });
+        else await prisma.quote.update({ where: { id: rid }, data: { invoiceNumber: null, invoiceNumberReused: false } });
+        await syncInvoiceNumber(k, rid);
+      }
+    } catch (e) { console.error('[documents] numéros des commandes après suppression de la facture', e); }
+  }
   createAudit({ userId, action: `${DOC_LABEL[cur.type]} supprimé${cur.type === 'BL' ? '' : 'e'}`, entity: 'DOCUMENT', entityId: id, orderId: cur.orderId, quoteId: cur.quoteId, detail: cur.number });
 }
 

@@ -7,6 +7,7 @@ import { createNotif } from '@/lib/notifications';
 import { generateOrderRef } from '@/lib/generate-ref';
 import { pushSSE } from '@/lib/sse-bus';
 import { createAudit } from '@/lib/audit';
+import { syncInvoiceNumber } from '@/lib/documents/reservation';
 import { rateLimit } from '@/lib/rate-limit';
 import { validateEmail, validatePhone, validateText, validateQuantity, validatePositiveNumber, firstError } from '@/lib/validation';
 import { resolveClientVisibility } from '@/lib/leave';
@@ -243,6 +244,10 @@ export async function POST(request: NextRequest) {
       },
       include: { items: true, client: { omit: { photo: true }, include: { phones: true } } },
     });
+    // TVA activée → le numéro de facture est réservé tout de suite (dans l'ordre, sans attendre « générer la facture »)
+    if (order.vatEnabled && !order.invoiceNumber) {
+      try { Object.assign(order, await syncInvoiceNumber('order', order.id)); } catch (e) { console.error('[orders] numéro de facture non réservé', e); }
+    }
 
     // Vente créée directement Livrée : le pop-up du formulaire demande si on retire les produits du stock.
     // `adjustStock: true` → Disponible baisse de la quantité (plafonné à ce qui existe) ; sinon rien n'est touché.

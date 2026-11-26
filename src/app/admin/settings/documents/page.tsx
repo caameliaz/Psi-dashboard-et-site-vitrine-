@@ -144,9 +144,9 @@ export default function DocumentSettingsPage() {
           </Card>
 
           <Card title="Format des numéros" hint="{seq:3} = numéro sur 3 chiffres, {year} = année, {suffix} = « bis » éventuel.">
-            <div className="grid md:grid-cols-3 gap-3">
-              {(['FACTURE', 'BL', 'PROFORMA'] as DocumentKind[]).map((k) => (
-                <label key={k} className="block"><span className={labelCls}>{DOC_NAMES[k]}</span>
+            <div className="grid md:grid-cols-4 gap-3">
+              {(['FACTURE', 'BL_FACTURE', 'BL', 'PROFORMA'] as (DocumentKind | 'BL_FACTURE')[]).map((k) => (
+                <label key={k} className="block"><span className={labelCls}>{k === 'BL_FACTURE' ? 'BL avec facture' : k === 'BL' ? 'BL sans facture' : DOC_NAMES[k]}</span>
                   <input className={inputCls} value={settings.numberFormats[k]} onChange={(e) => setSettings({ ...settings, numberFormats: { ...settings.numberFormats, [k]: e.target.value } })} />
                   <span className="text-[11px] text-[#8A9BB5]">ex. {formatDocumentNumber(settings.numberFormats[k], 23, data.year)}</span></label>
               ))}
@@ -174,7 +174,7 @@ export default function DocumentSettingsPage() {
                 );
               })}
             </div>
-            <p className="text-[11px] text-[#8A9BB5]">Le BL cherche à avoir le même numéro que sa future facture ; un 2e BL du même client avant facturation prend « bis ».</p>
+            <p className="text-[11px] text-[#8A9BB5]">Le numéro de facture est réservé dès que la TVA est activée sur la commande (plus petit numéro libre au-dessus du dernier saisi ici). Le BL avec facture reprend ce numéro (« bis » s&apos;il y a plusieurs BL pour la même commande) ; le BL sans facture a son propre compteur. Un numéro libéré (annulation, suppression) est réattribué : pas de trou.</p>
           </Card>
 
           <Card title="Désignation par catégorie" hint="Texte imprimé dans la colonne « Désignation » (plusieurs lignes possibles). Vide = texte par défaut. Un produit peut avoir la sienne, modifiable aussi à chaque création.">

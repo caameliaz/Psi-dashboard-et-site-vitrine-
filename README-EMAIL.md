@@ -120,3 +120,12 @@ fonctionne donc dès maintenant, sans nom de domaine. Voir `src/emails/shared.ts
 référencé dans le HTML via `<img src="cid:psi-logo"/>`. Si un jour vous préférez
 une URL publique classique, il suffira de remplacer cette balise et de retirer
 `attachments: [logoAttachment]` des appels à `sendEmail()` dans `lib/recaps/*`.
+
+---
+
+## Qui reçoit les récaps, et qui peut le régler
+
+- Reçoivent le récap quotidien (20h) et le bilan hebdomadaire (jeudi 23h59) : les comptes **actifs**, **admins** ou ayant la permission `recevoir_recaps`, dont les cases `recapDaily` / `recapWeekly` sont cochées.
+- Réglage **par l'utilisateur** : son profil → Notifications.
+- Réglage **par un admin pour n'importe quel utilisateur** : Réglages → Utilisateurs → profil de l'utilisateur → Sécurité → **Emails automatiques** (deux cases, réactivables à tout moment). L'action est tracée dans l'historique.
+- Les autres emails (code de connexion, mot de passe oublié, mail de bienvenue, envoi d'un document) ne sont pas des « notifications » : ils partent sur action, pas automatiquement chaque jour.

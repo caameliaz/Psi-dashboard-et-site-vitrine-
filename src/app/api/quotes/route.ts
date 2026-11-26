@@ -6,6 +6,7 @@ import { createNotif } from '@/lib/notifications';
 import { generateQuoteRef } from '@/lib/generate-ref';
 import { pushSSE } from '@/lib/sse-bus';
 import { createAudit } from '@/lib/audit';
+import { syncInvoiceNumber } from '@/lib/documents/reservation';
 import { rateLimit } from '@/lib/rate-limit';
 import { validateEmail, validatePhone, validateText, validateQuantity, firstError } from '@/lib/validation';
 import { resolveClientVisibility } from '@/lib/leave';
@@ -200,6 +201,10 @@ export async function POST(request: NextRequest) {
       },
       include: { items: true, client: { omit: { photo: true }, include: { phones: true } } },
     });
+    // TVA activée → le numéro de facture est réservé tout de suite
+    if (quote.vatEnabled && !quote.invoiceNumber) {
+      try { Object.assign(quote, await syncInvoiceNumber('quote', quote.id)); } catch (e) { console.error('[quotes] numéro de facture non réservé', e); }
+    }
 
     const isAdmin = body.source !== 'SITE';
     const actorName = session?.user?.name ?? session?.user?.email ?? 'Agent';
