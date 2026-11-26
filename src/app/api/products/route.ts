@@ -5,12 +5,17 @@ import { imageVersion } from '@/lib/image-version';
 import { auth } from '@/lib/auth';
 import { requirePermission } from '@/lib/permissions';
 import { createAudit } from '@/lib/audit';
+import { loadStore, localizeProduct } from '@/lib/i18n/translations';
+import { isTrLang } from '@/lib/i18n/translations-shared';
 
 // GET /api/products — produits actifs (public)
 // GET /api/products?all=true — tous les produits (admin)
 export async function GET(request: NextRequest) {
   const all = request.nextUrl.searchParams.get('all') === 'true';
   const withPhoto = request.nextUrl.searchParams.get('withPhoto') === 'true';
+  // ?lang=en|ar (site public) : usage, fiche technique et catégorie traduits (cf. lib/i18n/translations)
+  const langParam = request.nextUrl.searchParams.get('lang');
+  const lang = !all && isTrLang(langParam) ? langParam : null;
 
   if (all) {
     const session = await auth();
@@ -46,9 +51,11 @@ export async function GET(request: NextRequest) {
     // Admin (?all=true) : base64 conservé (aperçu / modification de la photo de la référence).
     // Vitrine publique : catégorie « sur devis » → prix jamais exposé (mis à 0, l'affichage le masque).
     const masked = all ? products : products.map((p) => (p.category?.quoteOnly ? { ...p, price: 0 } : p));
-    const payload = withPhoto && !all
+    const withUrls = withPhoto && !all
       ? masked.map((p) => { const photo = (p as { photo?: string | null }).photo; return { ...p, photo: photo ? `/api/products/${p.id}/image?v=${imageVersion(photo)}` : null }; })
       : masked;
+    const store = lang ? await loadStore() : null;
+    const payload = store ? withUrls.map((p) => localizeProduct(p, store, lang)) : withUrls;
     return NextResponse.json(payload, all ? undefined : { headers: { 'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300' } });
   } catch (e) {
     console.error(e);

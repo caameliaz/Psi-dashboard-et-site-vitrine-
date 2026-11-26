@@ -10,6 +10,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useRole } from '@/lib/role-context';
 import { StockListsWidget } from '@/components/ui/StockListsWidget';
 import { MobileNavbar } from '@/components/MobileNavbar';
+import { Modal } from '@/components/ui/Modal';
 import { NotesPencil, NotesModal, useStockNoteCounts, noteKey } from '@/components/ui/StockNotes';
 
 interface StockProduct {
@@ -26,11 +27,114 @@ function statusBadge(available: number, threshold: number) {
   return <span className="px-2 py-0.5 rounded-md bg-[#F0FDF4] text-[#166534] text-[10px] font-bold">En stock</span>;
 }
 
+const FIELD_LABELS = { available: 'Disponible', reserved: 'Réservé', inDelivery: 'En livraison', returned: 'En retour' } as const;
+type StockField = keyof typeof FIELD_LABELS;
+const inputClass = "w-full px-3 py-2.5 rounded-lg border border-[#E2E8F0] text-sm text-[#0F172A] focus:outline-none focus:border-[#4CAF4F] focus:ring-1 focus:ring-[#4CAF4F] transition-colors bg-[#F8FAFC]";
+
+// Overlay « Gérer » (admin) — même logique que l'overlay de /admin/stock : Réapprovisionner
+// (ajoute au Disponible) ou Correction (fixe un statut à une valeur exacte).
+function ManageStockModal({ p, onClose, onDone }: { p: StockProduct; onClose: () => void; onDone: () => void }) {
+  const [tab, setTab] = useState<'restock' | 'correction'>('restock');
+  const [qty, setQty] = useState('');
+  const [field, setField] = useState<StockField>('available');
+  const [mode, setMode] = useState<'produire' | 'acheter'>('produire');
+  const [saving, setSaving] = useState(false);
+  const n = Number(qty);
+  const valid = qty.trim() !== '' && !Number.isNaN(n) && n >= 0 && (tab === 'correction' || n > 0);
+
+  const submit = async () => {
+    if (!valid || saving) return;
+    setSaving(true);
+    try {
+      const res = tab === 'restock'
+        ? await fetch('/api/stock/restock', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ type: 'product', id: p.id, quantity: n, mode: p.mode === 'LES_DEUX' ? mode : undefined }),
+          })
+        : await fetch('/api/stock/correction', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ type: 'product', id: p.id, field, quantity: n }),
+          });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        alert(err.error ?? (tab === 'restock' ? 'Échec du réapprovisionnement' : 'Échec de la correction'));
+        return;
+      }
+      onDone();
+      onClose();
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Modal title={`Stock — ${p.reference}`} onClose={onClose} scrollable>
+      <div className="space-y-4">
+        <div className="grid grid-cols-2 gap-2">
+          {(Object.keys(FIELD_LABELS) as StockField[]).map((k) => (
+            <div key={k} className="px-3 py-2 rounded-lg bg-[#F8FAFC] border border-[#F0F4F8]">
+              <p className="text-[10px] font-bold text-[#8A9BB5] uppercase">{FIELD_LABELS[k]}</p>
+              <p className="text-[14px] font-bold text-[#0F172A] tabular-nums">{p[k]}</p>
+            </div>
+          ))}
+        </div>
+
+        <div className="flex gap-2 p-1 rounded-lg bg-[#F1F5F9]">
+          {([['restock', 'Réapprovisionner'], ['correction', 'Correction']] as const).map(([val, lbl]) => (
+            <button key={val} onClick={() => { setTab(val); setQty(''); }}
+              className={`flex-1 py-1.5 rounded-md text-[12px] font-bold transition-colors ${tab === val ? 'bg-white text-[#0F172A] shadow-sm' : 'text-[#8A9BB5]'}`}>{lbl}</button>
+          ))}
+        </div>
+
+        {tab === 'restock' ? (
+          <>
+            <p className="text-[11px] text-[#8A9BB5]">Augmente uniquement le stock <strong>Disponible</strong> (et décrémente les matières premières si le produit est fabriqué).</p>
+            {p.mode === 'LES_DEUX' && (
+              <div className="flex gap-2">
+                {([['produire', 'Produire'], ['acheter', 'Acheter']] as const).map(([val, lbl]) => (
+                  <button key={val} onClick={() => setMode(val)}
+                    className={`flex-1 py-2 rounded-lg border text-[12px] font-bold ${mode === val ? 'border-[#4CAF4F] bg-[#F0FDF4] text-[#166534]' : 'border-[#E2E8F0] text-[#374151]'}`}>{lbl}</button>
+                ))}
+              </div>
+            )}
+            <div>
+              <label className="block text-[12px] font-semibold text-[#374151] mb-1.5">Quantité à ajouter</label>
+              <input value={qty} onChange={(e) => setQty(e.target.value.replace(/[^\d.]/g, ''))} inputMode="decimal" placeholder="ex: 50" className={inputClass} autoFocus />
+            </div>
+          </>
+        ) : (
+          <>
+            <p className="text-[11px] text-[#8A9BB5]">Fixe directement un statut à une valeur exacte, sans effet sur les autres statuts ni sur les matières premières.</p>
+            <div>
+              <label className="block text-[12px] font-semibold text-[#374151] mb-1.5">Statut à corriger</label>
+              <select value={field} onChange={(e) => setField(e.target.value as StockField)} className={inputClass}>
+                {(Object.keys(FIELD_LABELS) as StockField[]).map((k) => <option key={k} value={k}>{FIELD_LABELS[k]}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-[12px] font-semibold text-[#374151] mb-1.5">Nouvelle valeur — actuel : {p[field]}</label>
+              <input value={qty} onChange={(e) => setQty(e.target.value.replace(/[^\d.]/g, ''))} inputMode="decimal" placeholder="ex: 50" className={inputClass} autoFocus />
+            </div>
+          </>
+        )}
+
+        <div className="flex gap-3 pt-1">
+          <button onClick={onClose} className="flex-1 px-4 py-2.5 rounded-lg border border-[#E2E8F0] text-sm font-semibold text-[#374151]">Annuler</button>
+          <button onClick={submit} disabled={!valid || saving} className="flex-1 px-4 py-2.5 rounded-lg text-sm font-bold text-white disabled:opacity-60" style={{ background: '#4CAF4F' }}>
+            {saving ? 'Enregistrement…' : 'Valider'}
+          </button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
 // Carte produit repliée par défaut — un tap révèle En livraison/En retour, moins
 // utiles au quotidien terrain (cf. décision actée dans STOCK-MOBILE.md).
-function ProductCard({ p, isAdmin, noteCount, onNotesChange }: { p: StockProduct; isAdmin: boolean; noteCount: number; onNotesChange: () => void }) {
+function ProductCard({ p, isAdmin, noteCount, onNotesChange, onStockChange }: { p: StockProduct; isAdmin: boolean; noteCount: number; onNotesChange: () => void; onStockChange: () => void }) {
   const [expanded, setExpanded] = useState(false);
   const [showNotes, setShowNotes] = useState(false);
+  const [showManage, setShowManage] = useState(false);
   const threshold = p.mode === 'ACHETE' ? p.purchaseThreshold : p.productionThreshold;
   const horsCommerciaux = Math.max(0, p.available + p.reserved - p.assignedToCommercials);
 
@@ -44,9 +148,16 @@ function ProductCard({ p, isAdmin, noteCount, onNotesChange }: { p: StockProduct
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
           {isAdmin && <NotesPencil count={noteCount} onClick={() => setShowNotes(true)} />}
+          {isAdmin && (
+            <button onClick={(e) => { e.stopPropagation(); setShowManage(true); }}
+              className="px-2.5 py-1 rounded-lg border border-[#E2E8F0] text-[11px] font-semibold text-[#374151] active:bg-[#F8FAFC]">
+              Gérer
+            </button>
+          )}
           {statusBadge(p.available, threshold)}
         </div>
       </div>
+      {showManage && <div onClick={(e) => e.stopPropagation()}><ManageStockModal p={p} onClose={() => setShowManage(false)} onDone={onStockChange} /></div>}
       {showNotes && <div onClick={(e) => e.stopPropagation()}><NotesModal title={p.reference} kind="PRODUCT" keyId={p.id} onClose={() => setShowNotes(false)} onChange={onNotesChange} /></div>}
       <div className="grid grid-cols-3 gap-2 mt-3">
         <div>
@@ -141,7 +252,7 @@ function CurrentStockCard({ open, onToggle, withRollink, setWithRollink }: { ope
             <p className="text-[13px] text-[#8A9BB5] text-center py-6">Aucun produit.</p>
           ) : (
             <div className="flex flex-col gap-2 pb-2">
-              {filtered.map((p) => <ProductCard key={p.id} p={p} isAdmin={isAdmin} noteCount={noteCounts[noteKey('PRODUCT', p.id)] ?? 0} onNotesChange={refreshNotes} />)}
+              {filtered.map((p) => <ProductCard key={p.id} p={p} isAdmin={isAdmin} noteCount={noteCounts[noteKey('PRODUCT', p.id)] ?? 0} onNotesChange={refreshNotes} onStockChange={fetchProducts} />)}
             </div>
           )}
         </div>

@@ -13,10 +13,10 @@ export function QuoteCTA({ id, fullBleed = false }: { id?: string; fullBleed?: b
   const content = (
     <Reveal className={`flex flex-col items-center text-center gap-5 ${fullBleed ? 'max-w-[1280px] mx-auto px-6 md:px-12 py-10 md:py-12' : ''}`}>
       <h4 className="text-[26px] md:text-[34px] font-bold text-[#263238] leading-tight">
-        Vous avez un besoin spécifique ?
+        {t('quote_cta.title')}
       </h4>
       <p className="text-[16px] md:text-[18px] text-[#4D4D4D] leading-relaxed max-w-[780px]">
-        N&apos;hésitez pas à nous solliciter : notre équipe étudie votre demande et vous propose un devis adapté à vos quantités, vos dimensions et vos délais.
+        {t('quote_cta.desc')}
       </p>
       <ArrowButton href="/quote" variant="green-white">{t('quote_cta.btn')}</ArrowButton>
     </Reveal>

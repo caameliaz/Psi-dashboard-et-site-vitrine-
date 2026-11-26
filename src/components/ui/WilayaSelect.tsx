@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
+import { useTranslation } from '@/lib/i18n';
 
 const WILAYAS = [
   '01 - Adrar', '02 - Chlef', '03 - Laghouat', '04 - Oum El Bouaghi', '05 - Batna',
@@ -25,6 +26,7 @@ interface WilayaSelectProps {
 }
 
 export function WilayaSelect({ value, onChange, required, name }: WilayaSelectProps) {
+  const { t } = useTranslation(); // hors site public (dashboard) : français
   const [open, setOpen] = useState(false);
   // Ouvre le menu vers le HAUT quand le champ est trop bas dans la fenêtre
   // (sinon la liste est rognée par le conteneur qui défile).
@@ -114,7 +116,7 @@ export function WilayaSelect({ value, onChange, required, name }: WilayaSelectPr
             : 'border-[#E2E8F0] hover:border-[#ABBED1]'
         } ${value ? 'text-[#263238]' : 'text-[#9CA3AF]'}`}
       >
-        <span className="truncate">{value || 'Sélectionner une wilaya'}</span>
+        <span className="truncate">{value || t('selects.select_wilaya')}</span>
         <svg
           width="14" height="14" viewBox="0 0 16 16" fill="none"
           className={`shrink-0 transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
@@ -146,7 +148,7 @@ export function WilayaSelect({ value, onChange, required, name }: WilayaSelectPr
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Rechercher..."
+                placeholder={t('selects.search')}
                 className="flex-1 bg-transparent text-[13px] text-[#263238] outline-none placeholder:text-[#ABBED1]"
               />
               {search && (
@@ -162,7 +164,7 @@ export function WilayaSelect({ value, onChange, required, name }: WilayaSelectPr
           {/* List */}
           <ul className="max-h-[220px] overflow-y-auto py-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {filtered.length === 0 ? (
-              <li className="px-4 py-3 text-[13px] text-[#ABBED1] text-center">Aucun résultat</li>
+              <li className="px-4 py-3 text-[13px] text-[#ABBED1] text-center">{t('selects.no_result')}</li>
             ) : (
               filtered.map((w) => (
                 <li key={w}>

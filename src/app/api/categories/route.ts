@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { revalidatePublicSite } from '@/lib/revalidate-site';
 import { prisma } from '@/lib/prisma';
 import { requirePermission } from '@/lib/permissions';
+import { loadStore, localizeCategory } from '@/lib/i18n/translations';
+import { isTrLang } from '@/lib/i18n/translations-shared';
 
 // GET /api/categories — toutes les catégories (public)
 // `photo` (base64, souvent >10 Ko/catégorie) est omis par défaut : la plupart des appelants
@@ -11,6 +13,9 @@ export async function GET(request: NextRequest) {
   const withPhoto = request.nextUrl.searchParams.get('withPhoto') === 'true';
   // Gestion admin (?admin=true) : toujours frais. Le reste est mis en cache CDN 1 h (les catégories changent rarement ; navigateur 5 min).
   const admin = request.nextUrl.searchParams.get('admin') === 'true';
+  // ?lang=en|ar : noms et descriptions traduits (cf. lib/i18n/translations) ; `originalName` garde le nom français
+  const langParam = request.nextUrl.searchParams.get('lang');
+  const lang = !admin && isTrLang(langParam) ? langParam : null;
   try {
     const categories = await prisma.category.findMany({
       orderBy: { order: 'asc' },
@@ -19,9 +24,11 @@ export async function GET(request: NextRequest) {
     });
     // Public : l'URL de l'image (mise en cache par le navigateur) au lieu du base64 dans le JSON.
     // Admin : base64 conservé (aperçu / modification de la photo dans la gestion des catégories).
-    const payload = withPhoto && !admin
+    const withUrls = withPhoto && !admin
       ? categories.map((c) => { const photo = (c as { photo?: string | null }).photo; return { ...c, photo: photo ? `/api/categories/${c.id}/image?v=${photo.length}` : null }; })
       : categories;
+    const store = lang ? await loadStore() : null;
+    const payload = store ? withUrls.map((c) => localizeCategory(c, store, lang)) : withUrls;
     return NextResponse.json(payload, admin ? undefined : { headers: { 'Cache-Control': 'public, max-age=60, s-maxage=60, stale-while-revalidate=300' } });
   } catch (e) {
     console.error(e);

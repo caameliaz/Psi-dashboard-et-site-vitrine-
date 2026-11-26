@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
       // Logo facultatif : un client sans logo s'affiche avec un badge initiales (cf. PartnerLogosMarquee).
       data: { name: body.name, photo: body.photo || null, order },
     });
-    revalidatePath('/');
+    revalidatePath('/[lang]', 'layout');
     return NextResponse.json(logo, { status: 201 });
   } catch (e) {
     console.error(e);

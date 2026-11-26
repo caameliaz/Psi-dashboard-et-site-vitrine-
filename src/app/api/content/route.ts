@@ -7,7 +7,7 @@ export async function GET() {
   try {
     // Les galeries photo des catégories (lourdes, en base64) ont leur propre endpoint : /api/content/gallery
     const content = await prisma.siteContent.findMany({
-      where: { key: { not: { startsWith: 'category_gallery_' } } },
+      where: { AND: [{ key: { not: { startsWith: 'category_gallery_' } } }, { key: { not: { startsWith: 'i18n:' } } }] },
     });
 
     const contentMap = content.reduce(
@@ -44,9 +44,8 @@ export async function PUT(request: NextRequest) {
       });
     }
 
-    revalidatePath('/');
-    revalidatePath('/contact');
-    revalidatePath('/products/[id]', 'page');
+    // Le site public vit sous app/[lang] (fr / en / ar) : on invalide toutes ses pages d'un coup
+    revalidatePath('/[lang]', 'layout');
 
     return NextResponse.json({ success: true });
   } catch (error) {

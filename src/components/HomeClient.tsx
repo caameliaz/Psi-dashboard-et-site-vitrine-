@@ -11,6 +11,7 @@ import { ScrollUnderline } from '@/components/ScrollUnderline';
 import { AnimatedNumber } from '@/components/AnimatedNumber';
 import { Reveal } from '@/components/Reveal';
 import { useTranslation } from '@/lib/i18n';
+import { pickContent } from '@/lib/i18n/config';
 import type { Cat, Prod } from '@/lib/hardcodedCatalog';
 
 interface HomeClientProps {
@@ -20,10 +21,10 @@ interface HomeClientProps {
   initialPartnerLogos: PartnerLogo[];
 }
 
-// Met "papier thermique" en vert dans le titre du hero, que ce soit le texte
-// par défaut ou un titre personnalisé saisi depuis l'admin.
-function renderHeroTitle(text: string) {
-  const m = text.match(/papier thermique/i);
+// Met l'expression clé (« papier thermique », « thermal paper »…) en vert dans le titre du hero, que ce soit
+// le texte par défaut ou un titre personnalisé saisi depuis l'admin.
+function renderHeroTitle(text: string, highlight: string) {
+  const m = highlight ? text.match(new RegExp(highlight.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i')) : null;
   if (!m) return text;
   const i = m.index!;
   return (
@@ -40,11 +41,10 @@ export function HomeClient({ initialContent, initialCategories, initialProducts,
   const content = initialContent;
   const [quoteOpen, setQuoteOpen] = useState(false);
 
-  // Idem pour le titre : le contenu éditable est en français uniquement.
-  const heroTitre = (lang === 'fr' && content['hero_titre'])
-    || `${t('hero.title_pre')}${t('hero.title_highlight')}${t('hero.title_post')}`;
-  const heroSousTitre = (lang === 'fr' && content['hero_sous_titre']) || t('hero.subtitle');
-  const aboutTexte      = content['about_texte'] ?? '';
+  // Textes modifiables depuis Réglages > Contenu, dans la langue de la page (sinon : texte du dictionnaire).
+  const pick = (key: string, fallback: string) => pickContent(content, key, lang, fallback);
+  const heroTitre = pick('hero_titre', `${t('hero.title_pre')}${t('hero.title_highlight')}${t('hero.title_post')}`);
+  const heroSousTitre = pick('hero_sous_titre', t('hero.subtitle'));
   // Numéro modifiable depuis le dashboard (Réglages > Contenu), au format international sans « + ».
   const CONTACT_PHONE = (content['contact_telephone'] ?? '+213770150656').replace(/\D/g, '').replace(/^0/, '213');
 
@@ -65,7 +65,7 @@ export function HomeClient({ initialContent, initialCategories, initialProducts,
           <div className="max-w-[720px] flex flex-col gap-6">
             <Reveal className="flex flex-col gap-5">
               <h1 className="text-[40px] md:text-[64px] font-medium text-white leading-[1.1] tracking-tight">
-                {renderHeroTitle(heroTitre)}
+                {renderHeroTitle(heroTitre, t('hero.title_highlight'))}
               </h1>
               <p className="text-[15px] md:text-[17px] text-white/80 leading-relaxed max-w-[560px]">
                 {heroSousTitre}
@@ -86,7 +86,7 @@ export function HomeClient({ initialContent, initialCategories, initialProducts,
                   ))}
                 </div>
                 <Reveal x={-16} y={0} delayMs={150 + 5 * 90}>
-                  <p className="text-[15px] md:text-[16px] text-white/85">{(lang === 'fr' && content['hero_clients']) || t('hero.clients')}</p>
+                  <p className="text-[15px] md:text-[16px] text-white/85">{pick('hero_clients', t('hero.clients'))}</p>
                 </Reveal>
               </div>
             </Reveal>
@@ -182,7 +182,7 @@ export function HomeClient({ initialContent, initialCategories, initialProducts,
               {/* 2 lignes maximum (line-clamp) : le texte complet, quelle que soit sa longueur
                   (modifiable depuis Contenu), ne doit jamais pousser la grille plus bas. */}
               <p className="text-[16px] text-[#263238]/70 leading-[1.6] w-full line-clamp-2 mt-6">
-                {(aboutTexte && lang === 'fr' ? aboutTexte.replace(/\n\n/g, ' ') : t('about.p1'))}
+                {pick('about_texte', t('about.p1')).replace(/\n\n/g, ' ')}
               </p>
             </Reveal>
           </div>
@@ -206,15 +206,15 @@ export function HomeClient({ initialContent, initialCategories, initialProducts,
                 `-mx-3` : élargit juste le texte (pas la colonne) pour le rapprocher des photos
                 de chaque côté, sans changer la largeur des colonnes de la grille. */}
             <p className="text-[16px] text-[#263238]/70 leading-relaxed mb-4 md:mb-24 -mx-3 md:-mx-4">
-              {(lang === 'fr' && content['about_texte_2']) || t('about.p4')}
+              {pick('about_texte_2', t('about.p4'))}
             </p>
             <div className="flex gap-10">
               <div className="flex flex-col gap-0.5">
                 <span className="text-[26px] md:text-[32px] font-semibold text-[#263238]">
-                  <AnimatedNumber value={(lang === 'fr' && content['about_stat1_valeur']) || t('about.stat1_value')} />
+                  <AnimatedNumber value={content['about_stat1_valeur'] || t('about.stat1_value')} />
                 </span>
                 <span className="text-[13px] text-[#263238]/60">
-                  {(lang === 'fr' && content['about_stat1_label']) || t('about.stat1_label')}
+                  {pick('about_stat1_label', t('about.stat1_label'))}
                 </span>
               </div>
               <div className="flex flex-col gap-0.5">
@@ -222,7 +222,7 @@ export function HomeClient({ initialContent, initialCategories, initialProducts,
                   <AnimatedNumber value={`+${initialProducts.length}`} />
                 </span>
                 <span className="text-[13px] text-[#263238]/60">
-                  {(lang === 'fr' && content['about_stat2_label']) || t('about.stat2_label')}
+                  {pick('about_stat2_label', t('about.stat2_label'))}
                 </span>
               </div>
             </div>
@@ -252,7 +252,7 @@ export function HomeClient({ initialContent, initialCategories, initialProducts,
             {/* À droite de la bande : texte simple (pas de chiffre), même gris que le nom des clients. */}
             <div className="hidden md:flex items-center shrink-0 border-s border-[#E2E8F0] ps-8">
               <span className="text-[16px] font-semibold text-[#263238]/70 whitespace-nowrap">
-                Nos clients
+                {t('about.clients_label')}
               </span>
             </div>
           </Reveal>

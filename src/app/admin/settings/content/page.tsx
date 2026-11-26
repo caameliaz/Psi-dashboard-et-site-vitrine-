@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { RequirePerm } from '@/components/RequirePerm';
 import { useRole } from '@/lib/role-context';
-import { fr } from '@/lib/i18n/fr';
+import { dictionaries } from '@/lib/i18n/server';
+import { LANG_META, LOCALES, contentKey, type Lang } from '@/lib/i18n/config';
 import { compressImage } from '@/lib/compress-image';
 import { resizeImageToDataUrl } from '@/lib/resize-image';
 
@@ -30,7 +31,7 @@ const inputClass = "w-full px-3 py-2.5 rounded-lg border border-[#E2E8F0] text-s
 const MAX_GALLERY = 6;
 
 // Photos supplémentaires affichées en miniatures sous la photo principale d'une page catégorie.
-function CategoryGalleryCard() {
+function CategoryGalleryCard({ lang }: { lang: Lang }) {
   const [cats, setCats] = useState<{ id: string; name: string }[]>([]);
   const [catId, setCatId] = useState('');
   const [photos, setPhotos] = useState<{ src: string; productId: string | null }[]>([]);
@@ -38,6 +39,17 @@ function CategoryGalleryCard() {
   const [refs, setRefs] = useState<{ id: string; reference: string; categoryId: string | null }[]>([]);
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
+  // Usages dans une autre langue (English / العربية) : enregistrés avec les traductions du catalogue
+  const [usagesTr, setUsagesTr] = useState<string[]>(['', '', '']);
+
+  useEffect(() => {
+    if (lang === 'fr' || !catId) return;
+    setUsagesTr(['', '', '']);
+    fetch('/api/translations').then((r) => r.ok ? r.json() : null).then((st) => {
+      const u: string[] = st?.category?.[catId]?.[lang]?.usages ?? [];
+      setUsagesTr([u[0] ?? '', u[1] ?? '', u[2] ?? '']);
+    }).catch(() => {});
+  }, [lang, catId]);
 
   useEffect(() => {
     fetch('/api/categories').then((r) => r.ok ? r.json() : []).then((data: any[]) => {
@@ -87,6 +99,47 @@ function CategoryGalleryCard() {
       setBusy(false);
     }
   };
+
+  const saveUsagesTr = async () => {
+    if (lang === 'fr') return;
+    setBusy(true);
+    try {
+      const res = await fetch('/api/translations', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ kind: 'category', id: catId, lang, data: { usages: usagesTr.map((u) => u.trim()).filter(Boolean) } }),
+      });
+      if (!res.ok) { alert((await res.json().catch(() => null))?.error ?? `L'enregistrement a échoué (erreur ${res.status}).`); return; }
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Autre langue que le français : seuls les usages se traduisent (les photos sont communes à toutes les langues)
+  if (lang !== 'fr') {
+    return (
+      <div className="bg-white rounded-2xl border border-[#E2E8F0] p-6 shadow-sm">
+        <h2 className="text-[15px] font-bold text-[#0F172A] mb-1">Usages des catégories <span className="ms-1 align-middle text-[10px] font-bold px-1.5 py-0.5 rounded bg-[#F0FDF4] text-[#166534] border border-[#BBF7D0]">{LANG_META[lang].short}</span></h2>
+        <p className="text-[12px] text-[#8A9BB5] mb-5">Traduction des 3 usages affichés sur la page de la catégorie. Les photos sont communes à toutes les langues ; le nom et la description de la catégorie se traduisent depuis Produits (bouton de langue). Un champ vide reste en français.</p>
+        <div className="space-y-4">
+          <select value={catId} onChange={(e) => setCatId(e.target.value)} className={inputClass}>
+            {cats.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            {usagesTr.map((u, i) => (
+              <input key={i} value={u} maxLength={40} dir={lang === 'ar' ? 'rtl' : 'ltr'}
+                placeholder={usages[i] ? `FR : ${usages[i]}` : `Usage ${i + 1}`}
+                onChange={(e) => setUsagesTr((p) => p.map((x, j) => (j === i ? e.target.value : x)))} className={inputClass} />
+            ))}
+          </div>
+          <div className="flex justify-end pt-1">
+            <SaveButton onClick={saveUsagesTr} saved={saved} loading={busy} />
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="bg-white rounded-2xl border border-[#E2E8F0] p-6 shadow-sm">
@@ -160,43 +213,62 @@ function ContentPageInner() {
   const [saved,   setSaved]   = useState<Record<string, boolean>>({});
   const [saving,  setSaving]  = useState<Record<string, boolean>>({});
   const [loaded,  setLoaded]  = useState(false);
+  // Langue des textes en cours d'édition (fr | en | ar). Chaque texte est enregistré sous une clé propre à la langue
+  // (hero_titre, hero_titre__en, hero_titre__ar…) ; les infos de contact, logos et photos sont communes.
+  const [editLang, setEditLang] = useState<Lang>('fr');
+  const [raw, setRaw] = useState<Record<string, string>>({});
+  const snap = useRef<Record<string, string>>({});
+  // `ld` : éditer l'arabe → champs de droite à gauche
+  const rtlCls = editLang === 'ar' ? ' lang-rtl' : '';
+
+  const current = () => ({
+    hero: JSON.stringify(hero), about: JSON.stringify(about), why: JSON.stringify(why), devis: JSON.stringify(devis),
+  });
+
+  // Remplit les formulaires avec les textes enregistrés dans la langue choisie (à défaut : le texte d'origine du site dans cette langue)
+  const populate = useCallback((data: Record<string, string>, lang: Lang) => {
+    const d = dictionaries[lang];
+    const g = (key: string, fallback: string) => data[contentKey(key, lang)] ?? fallback;
+    const nHero = {
+      titre: g('hero_titre', `${d.hero.title_pre}${d.hero.title_highlight}${d.hero.title_post}`),
+      sousTitre: g('hero_sous_titre', d.hero.subtitle),
+    };
+    const nAbout = {
+      texte: g('about_texte', d.about.p1),
+      texte2: g('about_texte_2', d.about.p4),
+      // Commun à toutes les langues : bande de logos activée + valeur du chiffre 1
+      logosEnabled: data['about_logos_enabled'] === 'true',
+      stat1Valeur: data['about_stat1_valeur'] ?? d.about.stat1_value,
+      stat1Label: g('about_stat1_label', d.about.stat1_label),
+      stat2Label: g('about_stat2_label', d.about.stat2_label),
+    };
+    const badges = d.quality as Record<string, string>;
+    const defaultListes: Record<number, string> = { 2: d.why.list2, 3: d.why.list3 };
+    const nWhy = {
+      why_titre: g('why_titre', d.why.title),
+      why_sous_titre: g('why_sous_titre', d.why.subtitle),
+      ...Object.fromEntries([1, 2, 3, 4].flatMap((n) => [
+        [`why_${n}_titre`, g(`why_${n}_titre`, badges[`badge${n}_title`])],
+        [`why_${n}_desc`, g(`why_${n}_desc`, badges[`badge${n}_desc_short`])],
+        [`why_${n}_liste`, g(`why_${n}_liste`, defaultListes[n] ?? '')],
+      ])),
+    };
+    const nDevis = {
+      hero_clients: g('hero_clients', d.hero.clients),
+      devis_titre: g('devis_titre', d.home_quote.title),
+      devis_sous_titre: g('devis_sous_titre', d.home_quote.subtitle),
+      devis_point_1: g('devis_point_1', d.home_quote.point1),
+      devis_point_2: g('devis_point_2', d.home_quote.point2),
+      devis_point_3: g('devis_point_3', d.home_quote.point3),
+    };
+    setHero(nHero); setAbout(nAbout); setWhy(nWhy); setDevis(nDevis);
+    snap.current = { hero: JSON.stringify(nHero), about: JSON.stringify(nAbout), why: JSON.stringify(nWhy), devis: JSON.stringify(nDevis) };
+  }, []);
 
   useEffect(() => {
     fetch('/api/content').then((r) => r.json()).then((data: Record<string, string>) => {
-      setHero({
-        titre: data['hero_titre'] ?? 'Votre spécialiste du papier thermique en Algérie',
-        sousTitre: data['hero_sous_titre'] ?? "PSI fournit aux professionnels d'Algérie un papier thermique premium 55 gr/m², garanti 100% sans BPA.",
-      });
-      setAbout({
-        texte: data['about_texte'] ?? 'PSI (Paper Solutions Industry) est une entreprise algérienne spécialisée dans la transformation et la distribution de papier thermique professionnel. Basée à Alger, nous servons commerces, banques, restaurants et pharmacies à travers tout le territoire national.',
-        texte2: data['about_texte_2'] ?? 'Notre mission est d\'offrir des solutions papier fiables, rapides et accessibles à tous les professionnels qui en ont besoin, avec un service client réactif et de proximité.',
-        logosEnabled: data['about_logos_enabled'] === 'true',
-        stat1Valeur: data['about_stat1_valeur'] ?? '+100',
-        stat1Label: data['about_stat1_label'] ?? 'Clients satisfaits',
-        stat2Label: data['about_stat2_label'] ?? 'Références produits',
-      });
-      const badges = fr.quality as Record<string, string>;
-      const defaultListes: Record<number, string> = {
-        2: ['Grammage 55 g/m² premium', '100% sans BPA', 'Matières premières européennes certifiées', 'Transformé et conditionné en Algérie', 'Qualité constante garantie', 'Impression nette et longue durée'].join('\n'),
-        3: ['Commerces & points de vente', 'Banques & terminaux de paiement (TPE)', 'Restaurants & cafés', 'Pharmacies', 'Logistique & transport', 'Grande distribution'].join('\n'),
-      };
-      setWhy({
-        why_titre: data['why_titre'] ?? fr.why.title,
-        why_sous_titre: data['why_sous_titre'] ?? fr.why.subtitle,
-        ...Object.fromEntries([1, 2, 3, 4].flatMap((n) => [
-          [`why_${n}_titre`, data[`why_${n}_titre`] ?? badges[`badge${n}_title`]],
-          [`why_${n}_desc`, data[`why_${n}_desc`] ?? badges[`badge${n}_desc_short`]],
-          [`why_${n}_liste`, data[`why_${n}_liste`] ?? defaultListes[n] ?? ''],
-        ])),
-      });
-      setDevis({
-        hero_clients: data['hero_clients'] ?? fr.hero.clients,
-        devis_titre: data['devis_titre'] ?? fr.home_quote.title,
-        devis_sous_titre: data['devis_sous_titre'] ?? fr.home_quote.subtitle,
-        devis_point_1: data['devis_point_1'] ?? fr.home_quote.point1,
-        devis_point_2: data['devis_point_2'] ?? fr.home_quote.point2,
-        devis_point_3: data['devis_point_3'] ?? fr.home_quote.point3,
-      });
+      setRaw(data);
+      populate(data, 'fr');
       setContact({
         adresse:   data['contact_adresse']   ?? 'Centre El Qods, Niveau M1, Chéraga, Alger',
         email:     data['contact_email']     ?? 'Contact@psi.dz',
@@ -207,7 +279,18 @@ function ContentPageInner() {
       setLoaded(true);
     }).catch(() => setLoaded(true));
     fetch('/api/partner-logos').then((r) => r.ok ? r.json() : []).then(setLogos).catch(() => {});
-  }, []);
+  }, [populate]);
+
+  const changeLang = (l: Lang) => {
+    if (l === editLang) return;
+    const c = current();
+    if (Object.keys(c).some((k) => c[k as keyof typeof c] !== snap.current[k]) && !confirm('Des modifications non sauvegardées seront perdues en changeant de langue. Continuer ?')) return;
+    setEditLang(l);
+    populate(raw, l);
+  };
+
+  // Clés d'une section dans la langue éditée (hero_titre → hero_titre__en…)
+  const T = (obj: Record<string, string>) => Object.fromEntries(Object.entries(obj).map(([k, v]) => [contentKey(k, editLang), v]));
 
   const addLogo = async () => {
     if (!newLogoName.trim()) return;
@@ -286,6 +369,9 @@ function ContentPageInner() {
       });
       // Avant : « Enregistré ✓ » s'affichait même quand la sauvegarde avait échoué.
       if (!res.ok) { alert((await res.json().catch(() => null))?.error ?? `L'enregistrement a échoué (erreur ${res.status}).`); return; }
+      setRaw((p) => ({ ...p, ...updates }));
+      const c = current();
+      if (section in c) snap.current[section] = c[section as keyof typeof c];
       setSaved((p) => ({ ...p, [section]: true }));
       setTimeout(() => setSaved((p) => ({ ...p, [section]: false })), 2000);
     } finally {
@@ -298,22 +384,43 @@ function ContentPageInner() {
   }
 
   return (
-    <fieldset disabled={!canEdit} className="contents">
     <div className="w-full">
+      {/* Champs de droite à gauche quand on édite l'arabe */}
+      <style>{'.lang-rtl input, .lang-rtl textarea { direction: rtl; text-align: right; }'}</style>
       {!canEdit && <p className="mb-4 px-3 py-2 rounded-lg bg-[#EFF6FF] border border-[#BFDBFE] text-[12px] font-semibold text-[#1E40AF]">Mode lecture seule — consultation uniquement.</p>}
       <div className="mb-8">
         <h1 className="text-[22px] font-bold text-[#0F172A]">Contenu du site</h1>
         <p className="text-[13px] text-[#8A9BB5] mt-1">Modifiez les textes affichés sur le site public</p>
       </div>
 
+      <div className="mb-6 rounded-2xl border border-[#E2E8F0] bg-white p-4 shadow-sm flex flex-wrap items-center gap-x-6 gap-y-3">
+        <div className="min-w-0 flex-1 basis-[320px]">
+          <p className="text-[14px] font-bold text-[#0F172A]">Langue des textes</p>
+          <p className="text-[12px] text-[#8A9BB5] mt-0.5">
+            Choisissez la langue pour modifier la version correspondante du site (français, anglais, arabe).
+            Les sections marquées <span className="font-bold text-[#4CAF4F]">{LANG_META[editLang].short}</span> changent selon la langue ;
+            contact, logos et photos sont communs. Un champ laissé vide reprend le texte d&apos;origine du site.
+          </p>
+        </div>
+        <div className="flex gap-1 p-1 rounded-lg bg-[#F1F5F9]">
+          {LOCALES.map((l) => (
+            <button key={l} type="button" onClick={() => changeLang(l)} aria-pressed={editLang === l}
+              className={`px-4 py-1.5 rounded-md text-[13px] font-bold transition-colors ${editLang === l ? 'bg-white text-[#0F172A] shadow-sm' : 'text-[#8A9BB5] hover:text-[#374151]'}`}>
+              {LANG_META[l].native}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <fieldset disabled={!canEdit} className="contents">
       <div className="grid grid-cols-[3fr_2fr] gap-6 items-start">
 
         {/* Colonne gauche */}
         <div className="flex flex-col gap-6">
 
           {/* Hero */}
-          <div className="bg-white rounded-2xl border border-[#E2E8F0] p-6 shadow-sm">
-            <h2 className="text-[15px] font-bold text-[#0F172A] mb-5">Section Hero</h2>
+          <div className={`bg-white rounded-2xl border border-[#E2E8F0] p-6 shadow-sm${rtlCls}`}>
+            <h2 className="text-[15px] font-bold text-[#0F172A] mb-5">Section Hero<span className="ms-2 align-middle text-[10px] font-bold px-1.5 py-0.5 rounded bg-[#F0FDF4] text-[#166534] border border-[#BBF7D0]">{LANG_META[editLang].short}</span></h2>
             <div className="space-y-4">
               <div>
                 <label className="block text-[12px] font-semibold text-[#374151] mb-1.5">Titre principal</label>
@@ -325,15 +432,15 @@ function ContentPageInner() {
               </div>
               <div className="flex justify-end pt-1">
                 <SaveButton
-                  onClick={() => save('hero', { hero_titre: hero.titre, hero_sous_titre: hero.sousTitre })}
+                  onClick={() => save('hero', T({ hero_titre: hero.titre, hero_sous_titre: hero.sousTitre }))}
                   saved={!!saved['hero']} loading={!!saving['hero']} />
               </div>
             </div>
           </div>
 
           {/* A propos */}
-          <div className="bg-white rounded-2xl border border-[#E2E8F0] p-6 shadow-sm">
-            <h2 className="text-[15px] font-bold text-[#0F172A] mb-5">À propos</h2>
+          <div className={`bg-white rounded-2xl border border-[#E2E8F0] p-6 shadow-sm${rtlCls}`}>
+            <h2 className="text-[15px] font-bold text-[#0F172A] mb-5">À propos<span className="ms-2 align-middle text-[10px] font-bold px-1.5 py-0.5 rounded bg-[#F0FDF4] text-[#166534] border border-[#BBF7D0]">{LANG_META[editLang].short}</span></h2>
             <div className="space-y-4">
               <div>
                 <label className="block text-[12px] font-semibold text-[#374151] mb-1.5">Texte de présentation</label>
@@ -364,12 +471,15 @@ function ContentPageInner() {
               <div className="flex justify-end pt-1">
                 <SaveButton
                   onClick={() => save('about', {
-                    about_texte: about.texte,
-                    about_texte_2: about.texte2,
+                    ...T({
+                      about_texte: about.texte,
+                      about_texte_2: about.texte2,
+                      about_stat1_label: about.stat1Label,
+                      about_stat2_label: about.stat2Label,
+                    }),
+                    // communs à toutes les langues
                     about_logos_enabled: String(about.logosEnabled),
                     about_stat1_valeur: about.stat1Valeur,
-                    about_stat1_label: about.stat1Label,
-                    about_stat2_label: about.stat2Label,
                   })}
                   saved={!!saved['about']} loading={!!saving['about']} />
               </div>
@@ -454,8 +564,8 @@ function ContentPageInner() {
           </div>
 
           {/* Pourquoi nous choisir */}
-          <div className="bg-white rounded-2xl border border-[#E2E8F0] p-6 shadow-sm">
-            <h2 className="text-[15px] font-bold text-[#0F172A] mb-5">Section « Pourquoi nous choisir »</h2>
+          <div className={`bg-white rounded-2xl border border-[#E2E8F0] p-6 shadow-sm${rtlCls}`}>
+            <h2 className="text-[15px] font-bold text-[#0F172A] mb-5">Section « Pourquoi nous choisir »<span className="ms-2 align-middle text-[10px] font-bold px-1.5 py-0.5 rounded bg-[#F0FDF4] text-[#166534] border border-[#BBF7D0]">{LANG_META[editLang].short}</span></h2>
             <div className="space-y-4">
               <div>
                 <label className="block text-[12px] font-semibold text-[#374151] mb-1.5">Titre</label>
@@ -479,14 +589,14 @@ function ContentPageInner() {
                 </div>
               ))}
               <div className="flex justify-end pt-1">
-                <SaveButton onClick={() => save('why', why)} saved={!!saved['why']} loading={!!saving['why']} />
+                <SaveButton onClick={() => save('why', T(why))} saved={!!saved['why']} loading={!!saving['why']} />
               </div>
             </div>
           </div>
 
           {/* Bannière (texte sous le bouton) + bloc devis */}
-          <div className="bg-white rounded-2xl border border-[#E2E8F0] p-6 shadow-sm">
-            <h2 className="text-[15px] font-bold text-[#0F172A] mb-5">Bannière et bloc devis</h2>
+          <div className={`bg-white rounded-2xl border border-[#E2E8F0] p-6 shadow-sm${rtlCls}`}>
+            <h2 className="text-[15px] font-bold text-[#0F172A] mb-5">Bannière et bloc devis<span className="ms-2 align-middle text-[10px] font-bold px-1.5 py-0.5 rounded bg-[#F0FDF4] text-[#166534] border border-[#BBF7D0]">{LANG_META[editLang].short}</span></h2>
             <div className="space-y-4">
               <div>
                 <label className="block text-[12px] font-semibold text-[#374151] mb-1.5">Texte sous le bouton de la bannière</label>
@@ -507,7 +617,7 @@ function ContentPageInner() {
                 </div>
               ))}
               <div className="flex justify-end pt-1">
-                <SaveButton onClick={() => save('devis', devis)} saved={!!saved['devis']} loading={!!saving['devis']} />
+                <SaveButton onClick={() => save('devis', T(devis))} saved={!!saved['devis']} loading={!!saving['devis']} />
               </div>
             </div>
           </div>
@@ -516,11 +626,11 @@ function ContentPageInner() {
         {/* Colonne droite */}
         <div className="flex flex-col gap-6">
 
-          <CategoryGalleryCard />
+          <CategoryGalleryCard lang={editLang} />
 
           {/* Contact */}
           <div className="bg-white rounded-2xl border border-[#E2E8F0] p-6 shadow-sm">
-            <h2 className="text-[15px] font-bold text-[#0F172A] mb-5">Informations de contact</h2>
+            <h2 className="text-[15px] font-bold text-[#0F172A] mb-5">Informations de contact <span className="ms-1 text-[11px] font-medium text-[#8A9BB5]">(communes à toutes les langues)</span></h2>
             <div className="space-y-4">
               <div>
                 <label className="block text-[12px] font-semibold text-[#374151] mb-1.5">Adresse</label>
@@ -551,8 +661,8 @@ function ContentPageInner() {
           </div>
         </div>
       </div>
+      </fieldset>
     </div>
-    </fieldset>
   );
 }
 

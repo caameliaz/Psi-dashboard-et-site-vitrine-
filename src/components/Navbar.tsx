@@ -1,9 +1,11 @@
 'use client';
 
-import Link from 'next/link';
+import Link from '@/components/LocaleLink';
 import { useState, useEffect, useRef } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
-import { useTranslation } from '@/lib/i18n';
+import { useLocalePath, useTranslation } from '@/lib/i18n';
+import { stripLang } from '@/lib/i18n/config';
+import { LanguageSwitcher } from './LanguageSwitcher';
 import { CartDropdown } from './CartDropdown';
 import { ArrowButton } from './ArrowButton';
 
@@ -16,10 +18,12 @@ const NAV_LINKS = [
 ];
 
 export function Navbar() {
-  const { t, lang, setLang } = useTranslation();
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
-  const pathname = usePathname();
+  // Chemin SANS préfixe de langue (/en/products → /products) : les tests « accueil / page active » restent valables dans les 3 langues.
+  const pathname = stripLang(usePathname() ?? '/').path;
   const router = useRouter();
+  const lp = useLocalePath();
   const [activeSection, setActiveSection] = useState<string | null>(null);
   const observerRef = useRef<IntersectionObserver | null>(null);
   const navRef = useRef<HTMLElement>(null);
@@ -118,10 +122,10 @@ export function Navbar() {
     if (isHome && l.sectionId) {
       scrollTo(l.sectionId, 'center' in l && l.center);
     } else if (!isHome && l.sectionId) {
-      router.push('/');
+      router.push(lp('/'));
       setTimeout(() => scrollTo(l.sectionId!, 'center' in l && l.center), 400);
     } else {
-      router.push(l.href);
+      router.push(lp(l.href));
     }
   };
 
@@ -187,24 +191,8 @@ export function Navbar() {
         </div>
       </div>
 
-      {/* ── Toggle langue flottant (bas droite) ── */}
-      <div
-        className="fixed bottom-6 left-4 z-50 flex items-center gap-0.5 bg-white rounded-full px-1 py-1 border border-[#E2E8F0]"
-        style={{ boxShadow: '0 2px 8px rgba(76,175,79,0.18)' }}
-      >
-        <button
-          onClick={() => setLang('fr')}
-          className={`px-3 py-1.5 text-[12px] font-bold rounded-full transition-all ${lang === 'fr' ? 'bg-[#4CAF4F] text-white' : 'text-[#717171] hover:text-[#263238]'}`}
-        >
-          FR
-        </button>
-        <button
-          onClick={() => setLang('ar')}
-          className={`px-3 py-1.5 text-[12px] font-bold rounded-full transition-all ${lang === 'ar' ? 'bg-[#4CAF4F] text-white' : 'text-[#717171] hover:text-[#263238]'}`}
-        >
-          AR
-        </button>
-      </div>
+      {/* ── Sélecteur de langue flottant (bas gauche) : icône + nom de la langue, menu au survol ── */}
+      <LanguageSwitcher />
 
       {/* ── Mobile menu ── */}
       {open && (

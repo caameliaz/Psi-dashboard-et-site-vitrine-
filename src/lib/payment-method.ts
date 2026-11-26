@@ -14,8 +14,12 @@ export function canonPaiement(v: string | null | undefined): string | null {
 
 // Numéro de facture : seul un numéro commençant par « F » (F004-2026…) est une vraie facture.
 // « BL… » = bon de livraison, ou tout autre format → compte comme SANS facture.
+// Avant : n'était compté comme "avec facture" que si le numéro commençait par "F" (ancien
+// format auto F{année}-{séquence}). Depuis qu'un numéro de facture peut être saisi librement
+// (overlay à "Livré", ou tout format externe à l'entreprise), n'importe quelle valeur non vide
+// compte comme "a une facture" — le préfixe "F" n'est plus une condition.
 export function aUneFacture(invoiceNumber: string | null | undefined): boolean {
-  return /^f/i.test((invoiceNumber ?? '').trim());
+  return (invoiceNumber ?? '').trim() !== '';
 }
 
 // Mode de paiement à afficher/filtrer d'une demande : un numéro en « BL » (bon de livraison)

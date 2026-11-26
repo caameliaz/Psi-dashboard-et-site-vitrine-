@@ -1,6 +1,6 @@
 'use client';
 
-import Link from 'next/link';
+import Link from '@/components/LocaleLink';
 import { useCartStore } from '@/store/cartStore';
 import { ArrowButton } from '@/components/ArrowButton';
 import { useTranslation } from '@/lib/i18n';
@@ -96,7 +96,7 @@ export default function CartPage() {
                 </div>
 
                 <div className="text-right shrink-0 min-w-[60px] md:min-w-[80px]">
-                  <p className="text-[12px] md:text-[16px] font-bold text-[#263238]">{item.unitPrice} DA</p>
+                  <p className="text-[12px] md:text-[16px] font-bold text-[#263238]">{item.unitPrice} {t('units.currency')}</p>
                 </div>
 
                 <button
@@ -121,8 +121,8 @@ export default function CartPage() {
                   <div key={item.productId} className="flex justify-between text-[#717171]">
                     <span>{item.quantity}× {t('common.ref')} {item.reference}</span>
                     <div className="text-right font-medium text-[#4D4D4D]">
-                      <div className="text-[12px] text-[#ABBED1]">{item.unitPrice} DA/u.</div>
-                      <div className="text-[14px] font-bold">{item.unitPrice * item.quantity} DA</div>
+                      <div className="text-[12px] text-[#ABBED1]">{item.unitPrice} {t('units.currency')}{t('units.per_unit')}</div>
+                      <div className="text-[14px] font-bold">{item.unitPrice * item.quantity} {t('units.currency')}</div>
                     </div>
                   </div>
                 ))}
@@ -130,7 +130,7 @@ export default function CartPage() {
 
               <div className="pt-4 border-t border-[#F0F4F8] flex justify-between items-center">
                 <span className="text-[16px] font-semibold text-[#263238]">{t('cart.total')}</span>
-                <span className="text-[22px] font-bold text-[#4CAF4F]">{totalPrice} DA</span>
+                <span className="text-[22px] font-bold text-[#4CAF4F]">{totalPrice} {t('units.currency')}</span>
               </div>
 
               <ArrowButton href="/checkout" variant="green-white" className="w-full">{t('cart.checkout_btn')}</ArrowButton>

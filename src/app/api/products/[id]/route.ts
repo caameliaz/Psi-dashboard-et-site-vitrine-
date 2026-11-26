@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { fixerReferenceProduit } from '@/lib/stock-reference';
 import { requirePermission } from '@/lib/permissions';
 import { createAudit } from '@/lib/audit';
+import { deleteTranslations } from '@/lib/i18n/translations';
 import { resyncProductionLine, resyncPurchaseLineForProduct, reallocateAvailableStock } from '@/lib/order-stock';
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -104,6 +105,7 @@ export async function DELETE(_request: NextRequest, { params }: Ctx) {
     }
 
     await prisma.product.delete({ where: { id } });
+    await deleteTranslations('product', id);
     const prodLabel = product.name ? `${product.name} (${product.reference})` : product.reference;
     createAudit({ userId: session?.user?.id, action: 'Produit supprimé', entity: 'PRODUIT', entityId: id, detail: prodLabel });
     revalidatePublicSite();

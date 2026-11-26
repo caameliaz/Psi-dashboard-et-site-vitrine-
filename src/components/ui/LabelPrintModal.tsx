@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { Modal } from '@/components/ui/Modal';
 import { useRole } from '@/lib/role-context';
-import { LABEL_FORMATS, printLabels, type LabelData, type LabelFormat } from '@/lib/label-print';
+import { LABEL_FORMATS, closePrintTarget, openPrintTarget, printLabels, type LabelData, type LabelFormat, type PrintTarget } from '@/lib/label-print';
 
 export interface LabelEntry {
   kind: 'order' | 'quote';
@@ -77,10 +77,10 @@ export function LabelPrintModal({ entries, onClose, onDone }: { entries: LabelEn
   const total = entries.reduce((s, e) => s + Math.min(200, Math.max(1, Math.floor(Number(counts[e.id]) || 1))), 0);
   const body = (dryRun: boolean) => JSON.stringify({ dryRun, entries: entries.map((e) => ({ kind: e.kind, id: e.id, count: Math.floor(Number(counts[e.id]) || 1) })) });
   const openWindow = () => {
-    // Fenêtre ouverte DANS le clic (sinon bloquée comme pop-up), remplie une fois les données reçues.
-    const w = window.open('', '_blank', 'width=900,height=900');
+    // PC : fenêtre ouverte DANS le clic (sinon bloquée comme pop-up), remplie une fois les données reçues.
+    // Téléphone : impression dans la page elle-même (pas de pop-up) — le dialogue d'impression du téléphone s'ouvre.
+    const w = openPrintTarget();
     if (!w) { setError('Le navigateur a bloqué la fenêtre d\'impression : autorisez les pop-ups pour ce site.'); return null; }
-    w.document.write('<p style="font-family:sans-serif;padding:24px">Préparation des étiquettes…</p>');
     return w;
   };
   const post = async (url: string, payload: string) => {
@@ -91,7 +91,7 @@ export function LabelPrintModal({ entries, onClose, onDone }: { entries: LabelEn
   };
 
   // Impression finale. `values` = grammages/mandrins saisis ; `save` = les écrire aussi sur les produits (admin).
-  const run = async (values: Vals, save: boolean, existing?: Window) => {
+  const run = async (values: Vals, save: boolean, existing?: PrintTarget) => {
     setError('');
     const w = existing ?? openWindow();
     if (!w) return;
@@ -117,7 +117,7 @@ export function LabelPrintModal({ entries, onClose, onDone }: { entries: LabelEn
       onDone?.();
       if (!saveFailed) onClose(); // sinon la fenêtre reste ouverte pour afficher l'erreur
     } catch (e) {
-      w.close();
+      closePrintTarget(w);
       setError(e instanceof Error ? e.message : 'Erreur');
     } finally {
       setBusy(false);
@@ -138,12 +138,12 @@ export function LabelPrintModal({ entries, onClose, onDone }: { entries: LabelEn
         await run({}, false, w); // même fenêtre : rien ne manque
         return;
       }
-      w.close();
+      closePrintTarget(w);
       setMissing(miss);
       setVals((prev) => ({ ...Object.fromEntries(miss.map((m) => [m.productId, { grammage: '', mandrin: '' }])), ...prev }));
       setStep('fill');
     } catch (e) {
-      w.close();
+      closePrintTarget(w);
       setError(e instanceof Error ? e.message : 'Erreur');
     } finally {
       setBusy(false);

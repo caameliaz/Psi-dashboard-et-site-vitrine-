@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { communesForWilaya } from '@/lib/data/wilayas-communes';
+import { useTranslation } from '@/lib/i18n';
 
 interface CommuneSelectProps {
   wilaya: string;              // wilaya sélectionnée (libellé "NN - Nom")
@@ -14,6 +15,7 @@ interface CommuneSelectProps {
 // Select des communes filtré par wilaya, + petit champ de saisie manuelle en dessous
 // pour les communes absentes de la liste.
 export function CommuneSelect({ wilaya, value, onChange, required, name }: CommuneSelectProps) {
+  const { t } = useTranslation(); // hors site public (dashboard) : français
   const [open, setOpen] = useState(false);
   // Ouvre le menu vers le HAUT quand le champ est trop bas dans la fenêtre
   // (sinon la liste est rognée par le conteneur qui défile).
@@ -95,7 +97,7 @@ export function CommuneSelect({ wilaya, value, onChange, required, name }: Commu
           open ? 'border-[#4CAF4F] ring-[3px] ring-[#4CAF4F]/15' : 'border-[#E2E8F0] hover:border-[#ABBED1]'
         } ${value && !isManualValue ? 'text-[#263238]' : 'text-[#9CA3AF]'}`}
       >
-        <span className="truncate">{(value && !isManualValue) ? value : (wilaya ? 'Sélectionner une commune' : 'Choisir la wilaya d’abord')}</span>
+        <span className="truncate">{(value && !isManualValue) ? value : (wilaya ? t('selects.select_commune') : t('selects.wilaya_first'))}</span>
         <svg width="14" height="14" viewBox="0 0 16 16" fill="none"
           className={`shrink-0 transition-transform duration-200 ${open ? 'rotate-180' : ''}`}>
           <path d="M4 6l4 4 4-4" stroke="#ABBED1" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
@@ -123,7 +125,7 @@ export function CommuneSelect({ wilaya, value, onChange, required, name }: Commu
                 type="text"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Rechercher…"
+                placeholder={t('selects.search')}
                 className="flex-1 bg-transparent text-[13px] text-[#263238] outline-none placeholder:text-[#ABBED1]"
               />
               {query && (
@@ -139,7 +141,7 @@ export function CommuneSelect({ wilaya, value, onChange, required, name }: Commu
           <ul className="max-h-[220px] overflow-y-auto py-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {filtered.length === 0 ? (
               <li className="px-4 py-3 text-[13px] text-[#ABBED1] text-center">
-                {wilaya ? 'Aucune commune trouvée' : 'Choisissez d’abord une wilaya'}
+                {wilaya ? t('selects.no_commune') : t('selects.wilaya_first_long')}
               </li>
             ) : (
               filtered.map((c) => (
@@ -163,7 +165,7 @@ export function CommuneSelect({ wilaya, value, onChange, required, name }: Commu
         value={isManualValue ? value : ''}
         onChange={(e) => onChange(e.target.value)}
         disabled={!wilaya}
-        placeholder="Ou saisir un nom manuellement…"
+        placeholder={t('selects.manual')}
         className="w-full px-3 py-1.5 rounded-lg border border-[#E2E8F0] bg-white text-[12px] text-[#263238] placeholder:text-[#ABBED1] outline-none transition-all focus:border-[#4CAF4F] focus:ring-[2px] focus:ring-[#4CAF4F]/15 disabled:bg-[#F5F7FA] disabled:cursor-not-allowed"
       />
     </div>
